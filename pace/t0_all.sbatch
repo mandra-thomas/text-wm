@@ -13,8 +13,9 @@
 # Or set defaults in pace/pace.env and wrap with a submit helper.
 
 set -euo pipefail
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 # shellcheck disable=SC1091
-source "$(dirname "$0")/_common.sh"
+source "${SLURM_SUBMIT_DIR:-$(pwd)}/pace/_common.sh"
 
 echo "=== Tier 0 START $(date) host=$(hostname) ==="
 nvidia-smi || true

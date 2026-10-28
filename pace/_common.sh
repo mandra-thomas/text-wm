@@ -35,6 +35,27 @@ activate_serve() {
     eval "$(conda shell.bash hook)"
     conda activate "${SERVE_ENV}"
   fi
+  # Prefer pip-bundled CUDA libs over older module CUDA (nvJitLink clash)
+  if command -v python >/dev/null 2>&1; then
+    local _nvlibs
+    _nvlibs="$(python - <<'PY' 2>/dev/null || true
+import os, glob
+roots=[]
+try:
+    import nvidia.nvjitlink as m
+    roots.append(os.path.join(os.path.dirname(m.__file__), "lib"))
+except Exception:
+    pass
+pref = os.environ.get("CONDA_PREFIX") or os.environ.get("VIRTUAL_ENV") or ""
+if pref:
+    roots.extend(glob.glob(os.path.join(pref, "lib/python*/site-packages/nvidia/*/lib")))
+print(":".join(dict.fromkeys([r for r in roots if r])))
+PY
+)"
+    if [[ -n "${_nvlibs}" ]]; then
+      export LD_LIBRARY_PATH="${_nvlibs}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+  fi
 }
 
 start_alfworld_server() {

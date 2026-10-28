@@ -10,8 +10,9 @@
 #SBATCH --error=logs/pilotB_%j.err
 
 set -euo pipefail
+cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 # shellcheck disable=SC1091
-source "$(dirname "$0")/_common.sh"
+source "${SLURM_SUBMIT_DIR:-$(pwd)}/pace/_common.sh"
 
 if [[ ! -f "${RUNS_DIR}/FILED.txt" ]]; then
   echo "ERROR: ${RUNS_DIR}/FILED.txt missing — Pilot B refuses to run (protocol §6)." >&2
