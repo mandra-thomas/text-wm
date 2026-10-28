@@ -28,7 +28,12 @@ mkdir -p "${RUNS_DIR}" "${PROJECT_ROOT}/logs"
 cd "${PROJECT_ROOT}"
 
 activate_serve() {
-  if [[ -n "${SERVE_ENV:-}" && -f "${SERVE_ENV}/bin/activate" ]]; then
+  # Conda prefix envs often lack bin/activate — put env bin first on PATH.
+  module load anaconda3/2023.03 2>/dev/null || true
+  if [[ -n "${SERVE_ENV:-}" && -x "${SERVE_ENV}/bin/python" ]]; then
+    export PATH="${SERVE_ENV}/bin:${PATH}"
+    export CONDA_PREFIX="${SERVE_ENV}"
+  elif [[ -n "${SERVE_ENV:-}" && -f "${SERVE_ENV}/bin/activate" ]]; then
     # shellcheck disable=SC1091
     source "${SERVE_ENV}/bin/activate"
   elif [[ -n "${SERVE_ENV:-}" ]] && command -v conda >/dev/null 2>&1; then
@@ -56,11 +61,15 @@ PY
       export LD_LIBRARY_PATH="${_nvlibs}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     fi
   fi
+  hash -r 2>/dev/null || true
+  echo "python=$(command -v python) ($(python -c 'import sys; print(sys.version.split()[0])' 2>/dev/null || echo missing))"
 }
 
 start_alfworld_server() {
   local log="${PROJECT_ROOT}/logs/alfworld_${SLURM_JOB_ID:-local}.log"
-  if [[ -x "${WORD2WORLD_ROOT}/scripts/env_server/start_alfworld.sh" ]]; then
+  local script="${WORD2WORLD_ROOT}/scripts/env_server/start_alfworld.sh"
+  if [[ -f "${script}" ]]; then
+    chmod +x "${script}" 2>/dev/null || true
     (
       cd "${WORD2WORLD_ROOT}"
       bash scripts/env_server/start_alfworld.sh
@@ -69,7 +78,7 @@ start_alfworld_server() {
     echo "ALFWorld server starting (log=${log})"
     sleep 15
   else
-    echo "WARN: Word2World ALFWorld server script missing at ${WORD2WORLD_ROOT}; runs needing env will fail."
+    echo "WARN: Word2World ALFWorld server script missing at ${script}; runs needing env will fail."
   fi
 }
 
