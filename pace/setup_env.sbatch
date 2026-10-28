@@ -44,14 +44,21 @@ PY
 echo "=== prefetch models ==="
 python - <<'PY'
 from huggingface_hub import snapshot_download
+
 for repo in [
     "Qwen/Qwen3-8B",
     "X1AOX1A/WorldModel-Alfworld-Qwen2.5-7B",
-    "X1AOX1A/LLMasWorldModels",
 ]:
-    print("fetch", repo, flush=True)
+    print("fetch model", repo, flush=True)
     snapshot_download(repo)
     print("done", repo, flush=True)
+
+print("fetch dataset X1AOX1A/LLMasWorldModels", flush=True)
+try:
+    snapshot_download("X1AOX1A/LLMasWorldModels", repo_type="dataset")
+    print("done dataset", flush=True)
+except Exception as e:
+    print("WARN dataset download failed:", e, flush=True)
 PY
 
 echo "=== Word2World ==="
