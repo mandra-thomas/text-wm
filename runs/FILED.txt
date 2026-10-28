@@ -1,0 +1,4 @@
+filed_date: 2026-10-28
+constants_commit: unknown
+RETENTION_MARGIN: 1.0
+note: mock filing for pipeline dry-run; replace with real filing date before ICE Pilot A/B

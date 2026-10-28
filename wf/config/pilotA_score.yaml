@@ -1,0 +1,6 @@
+run_id: pilotA_score
+split: train
+step_cap: 30
+vllm_base_url: http://127.0.0.1:8000/v1
+alfworld_base_url: http://127.0.0.1:36001
+rng_seed: 20260924

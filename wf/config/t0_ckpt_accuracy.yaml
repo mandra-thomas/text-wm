@@ -1,0 +1,4 @@
+run_id: t0_ckpt_accuracy
+split: valid_unseen
+n_items: 200
+note: "Read-only valid_unseen check only — do not use for Pilot A/B items."

@@ -1,0 +1,43 @@
+# Secrets / local PACE config
+pace/pace.env
+.env
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+wishful_foresight.egg-info/
+.pytest_cache/
+.venv/
+venv/
+.envs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runs: keep status/report markers, ignore bulky JSONL / caches
+runs/**
+!runs/
+!runs/.gitkeep
+!runs/*/
+!runs/**/REPORT.md
+!runs/**/STATUS.md
+!runs/FILED.txt
+!runs/PILOT_REPORT.md
+!runs/env.json
+
+# Caches / third party on cluster
+hfcache/
+third_party/
+logs/
+*.out
+*.err
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Proposal / prereg PDFs (keep local)
+*.pdf

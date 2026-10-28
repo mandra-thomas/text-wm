@@ -1,0 +1,6 @@
+run_id: t0_smoke
+split: train
+n_games: 5
+step_cap: 30
+vllm_base_url: http://127.0.0.1:8000/v1
+alfworld_base_url: http://127.0.0.1:36001

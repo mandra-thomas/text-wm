@@ -1,0 +1,4 @@
+run_id: pilotB_retention_minirun
+split: train
+n_games: 30
+schedule_seed: 20260924

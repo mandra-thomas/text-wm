@@ -1,0 +1,4 @@
+run_id: pilotA_transitions
+split: train
+n_games: 40
+step_cap: 12

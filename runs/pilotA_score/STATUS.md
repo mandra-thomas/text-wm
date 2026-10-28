@@ -1,0 +1,4 @@
+# STATUS — pilotA_score — PASS
+
+PILOT_RULE_GOAL_CHANNEL=not fired; ELIGIBLE_SET_TARGET=1000
+{'qwen3-8b-fewshot': {'delta_p_agnostic': 18.180167349974955, 'ci': (18.180167349974955, 18.180167349974955), 'perm_p': 0.15384615384615385, 'icc': nan, 'A': {'A': nan, 'false_success_rate': 0.5454545454545454, 'false_failure_rate': nan, 'n_fail': 55, 'n_succ': 0}, 'n_agnostic': 55, 'n_revealing': 0, 'se_at_1000': nan, 'se_at_2000': nan, 'se_at_3000': nan}, 'w2w-qwen2.5-7b': {'delta_p_agnostic': 9.090083674987477, 'ci': (9.090083674987477, 9.090083674987477), 'perm_p': 0.4915084915084915, 'icc': nan, 'A': {'A': nan, 'false_success_rate': 0.45454545454545453, 'false_failure_rate': nan, 'n_fail': 55, 'n_succ': 0}, 'n_agnostic': 55, 'n_revealing': 0, 'se_at_1000': nan, 'se_at_2000': nan, 'se_at_3000': nan}}

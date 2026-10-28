@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wishful-foresight"
+version = "0.1.0"
+description = "Wishful Foresight pilot — ALFWorld text world-model goal conditioning"
+readme = "PILOT_PROTOCOL.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "pyyaml>=6.0",
+  "requests>=2.31",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+serve = [
+  "torch>=2.2",
+  "transformers>=4.51",
+  "accelerate>=0.27",
+  "datasets>=2.18",
+  "vllm>=0.6",
+  "openai>=1.30",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+wf-run = "wf.runs:main"
+
+[tool.setuptools.packages.find]
+include = ["wf*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
