@@ -93,7 +93,16 @@ start_vllm() {
   local model="${VLLM_MODEL:-Qwen/Qwen3-8B}"
   local log="${PROJECT_ROOT}/logs/vllm_${SLURM_JOB_ID:-local}.log"
   activate_serve
+  # Prefer configured port; if busy, fall back to 8000+job offset and export it
+  if curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1 \
+    || ss -ltn 2>/dev/null | grep -q ":${VLLM_PORT} "; then
+    VLLM_PORT=$((8000 + (${SLURM_JOB_ID:-0} % 1000)))
+    export VLLM_PORT
+    echo "WARN: default vLLM port busy; using ${VLLM_PORT}"
+  fi
+  export VLLM_BASE_URL="http://127.0.0.1:${VLLM_PORT}/v1"
   python -m vllm.entrypoints.openai.api_server \
+    --host 127.0.0.1 \
     --model "${model}" \
     --max-model-len "${VLLM_MAX_MODEL_LEN:-8192}" \
     --enable-prefix-caching \
@@ -102,11 +111,16 @@ start_vllm() {
   echo $! >"${PROJECT_ROOT}/logs/vllm.pid"
   echo "vLLM starting model=${model} port=${VLLM_PORT} (log=${log})"
   # Wait until healthy or timeout
-  for _ in $(seq 1 90); do
+  for _ in $(seq 1 120); do
     if curl -sf "http://127.0.0.1:${VLLM_PORT}/health" >/dev/null 2>&1 \
       || curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
-      echo "vLLM ready"
+      echo "vLLM ready at ${VLLM_BASE_URL}"
       return 0
+    fi
+    # Fail fast if process died
+    if [[ -f "${PROJECT_ROOT}/logs/vllm.pid" ]] && ! kill -0 "$(cat "${PROJECT_ROOT}/logs/vllm.pid")" 2>/dev/null; then
+      echo "ERROR: vLLM process exited early; see ${log}" >&2
+      return 1
     fi
     sleep 5
   done
