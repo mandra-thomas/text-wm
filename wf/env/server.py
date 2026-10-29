@@ -149,9 +149,18 @@ class AlfworldClient:
         return p if p.is_dir() else None
 
     def _alfworld_data(self) -> Path | None:
-        raw = os.environ.get("ALFWORLD_DATA") or str(Path.home() / ".cache" / "alfworld")
-        p = Path(os.path.expandvars(raw)).expanduser()
-        return p if p.is_dir() else None
+        candidates = []
+        if os.environ.get("ALFWORLD_DATA"):
+            candidates.append(os.environ["ALFWORLD_DATA"])
+        candidates.append(str(Path.home() / ".cache" / "alfworld"))
+        root = os.environ.get("WORD2WORLD_ROOT") or os.environ.get("WF_WORD2WORLD_ROOT")
+        if root:
+            candidates.append(str(Path(root) / "data" / "alfworld"))
+        for raw in candidates:
+            p = Path(os.path.expandvars(raw)).expanduser()
+            if p.is_dir() and (p / "json_2.1.1").is_dir():
+                return p
+        return None
 
     def solvable_local_indices(self, split: str) -> list[int]:
         """Local indices within AgentGym's mapping whose game.tw-pddl has solvable=true.
