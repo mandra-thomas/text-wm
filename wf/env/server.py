@@ -1,9 +1,11 @@
 """AgentGym ALFWorld HTTP client + optional mock backend for unit tests."""
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -11,17 +13,37 @@ import requests
 from wf.constants import ALFWORLD_BASE_URL_DEFAULT
 
 # AgentGym loads games in this order into one flat list (env_wrapper.py).
+# Raw mapping sizes include unsolvable PDDL games that raise KeyError('val1') on reset.
 SPLIT_SIZES = {
     "train": 2420,
     "valid_train": 200,  # mappings_test.json
     "valid_seen": 187,
     "valid_unseen": 195,
 }
+# Solvable-only counts (matches PILOT_PROTOCOL / AlfredTWEnv collect_game_files).
+SPLIT_SOLVABLE_SIZES = {
+    "train": 2179,
+    "valid_train": 197,
+    "valid_seen": 140,
+    "valid_unseen": 134,
+}
 SPLIT_OFFSETS = {
     "train": 0,
     "valid_train": 2420,
     "valid_seen": 2420 + 200,
     "valid_unseen": 2420 + 200 + 187,
+}
+SPLIT_MAPPING_FILES = {
+    "train": "mappings_train.json",
+    "valid_train": "mappings_test.json",
+    "valid_seen": "mappings_valid_seen.json",
+    "valid_unseen": "mappings_valid_unseen.json",
+}
+SPLIT_DATA_DIRS = {
+    "train": "train",
+    "valid_train": "valid_train",
+    "valid_seen": "valid_seen",
+    "valid_unseen": "valid_unseen",
 }
 
 
@@ -79,6 +101,7 @@ class AlfworldClient:
         self._session = requests.Session()
         self._env_id: int | None = None
         self._mock_games: dict[str, GameState] = {}
+        self._solvable_local: dict[str, list[int]] = {}
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
@@ -118,11 +141,65 @@ class AlfworldClient:
             pass
         self._env_id = None
 
+    def _mapping_config_dir(self) -> Path | None:
+        root = os.environ.get("WORD2WORLD_ROOT") or os.environ.get("WF_WORD2WORLD_ROOT")
+        if not root:
+            return None
+        p = Path(root) / "AgentGym" / "agentenv-alfworld" / "configs"
+        return p if p.is_dir() else None
+
+    def _alfworld_data(self) -> Path | None:
+        raw = os.environ.get("ALFWORLD_DATA") or str(Path.home() / ".cache" / "alfworld")
+        p = Path(os.path.expandvars(raw)).expanduser()
+        return p if p.is_dir() else None
+
+    def solvable_local_indices(self, split: str) -> list[int]:
+        """Local indices within AgentGym's mapping whose game.tw-pddl has solvable=true.
+
+        AgentGym's flat `games` list includes unsolvable files; resetting those raises
+        KeyError('val1') (broken PDDL). Protocol split sizes are the solvable subset.
+        """
+        if split in self._solvable_local:
+            return self._solvable_local[split]
+        cfg_dir = self._mapping_config_dir()
+        data = self._alfworld_data()
+        mapping_name = SPLIT_MAPPING_FILES.get(split)
+        data_subdir = SPLIT_DATA_DIRS.get(split)
+        if not cfg_dir or not data or not mapping_name or not data_subdir:
+            # Fall back to all raw indices if paths unavailable (mock/dev).
+            idxs = list(range(SPLIT_SIZES.get(split, 0)))
+            self._solvable_local[split] = idxs
+            return idxs
+        mapping_path = cfg_dir / mapping_name
+        if not mapping_path.is_file():
+            idxs = list(range(SPLIT_SIZES.get(split, 0)))
+            self._solvable_local[split] = idxs
+            return idxs
+        mappings = json.loads(mapping_path.read_text())
+        good: list[int] = []
+        for i, m in enumerate(mappings):
+            game_path = (
+                data
+                / "json_2.1.1"
+                / data_subdir
+                / m["task_type"]
+                / m["task_id"]
+                / "game.tw-pddl"
+            )
+            try:
+                meta = json.loads(game_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            if meta.get("solvable") is True:
+                good.append(i)
+        self._solvable_local[split] = good
+        return good
+
     def list_games(self, split: str) -> list[str]:
         if self.mock:
             return [f"{split}/{i}" for i in range(5)]
-        n = SPLIT_SIZES.get(split, 0)
-        return [f"{split}/{i}" for i in range(n)]
+        # Prefer solvable-only indices so reset does not hit broken PDDL ('val1').
+        return [f"{split}/{i}" for i in self.solvable_local_indices(split)]
 
     def reset(self, game_id: str, split: str) -> GameState:
         if self.mock:

@@ -284,9 +284,19 @@ def run_t0_ckpt_accuracy(cfg: dict) -> int:
         except Exception:
             os.environ["WF_MOCK_ENV"] = "1"
             client = _client(cfg)
-    games = _games(client, "valid_unseen", min(20, n), {**cfg, "games": cfg.get("valid_unseen_games")})
+    # Sample more than n games so we can skip any residual unsolvable resets.
+    games = _games(
+        client,
+        "valid_unseen",
+        min(len(client.list_games("valid_unseen")), max(40, n)),
+        {**cfg, "games": cfg.get("valid_unseen_games")},
+    )
     for gid in games:
-        st = client.reset(gid, "valid_unseen")
+        try:
+            st = client.reset(gid, "valid_unseen")
+        except Exception as exc:
+            print(f"WARN t0_ckpt_accuracy: skip {gid}: {exc}", flush=True)
+            continue
         for act in (st.admissible or ["look"])[:5]:
             h = replay(client, gid, [], "valid_unseen")
             obs, _ = step_counterfactual(h, act)
@@ -304,6 +314,9 @@ def run_t0_ckpt_accuracy(cfg: dict) -> int:
         if len(items) >= n:
             break
     items = items[:n]
+    if not items:
+        write_status(run_id, "no valid_unseen items collected — FAIL", ok=False)
+        return 1
     det_correct = det_n = und_correct = und_n = 0
     for it in items:
         gen = scorer.free_generate(it["history"], it["action"])
