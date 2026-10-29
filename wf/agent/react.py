@@ -109,7 +109,7 @@ def run_episode(
     schedule_seed: int | None = None,
     success_cache: dict | None = None,
 ) -> dict[str, Any]:
-    if not env._env_id and not env.mock:
+    if env._env_id is None and not env.mock:
         env.create()
     state = env.reset(game_id, split)
     prefix: list[str] = []

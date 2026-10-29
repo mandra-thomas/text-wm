@@ -10,6 +10,20 @@ import requests
 
 from wf.constants import ALFWORLD_BASE_URL_DEFAULT
 
+# AgentGym loads games in this order into one flat list (env_wrapper.py).
+SPLIT_SIZES = {
+    "train": 2420,
+    "valid_train": 200,  # mappings_test.json
+    "valid_seen": 187,
+    "valid_unseen": 195,
+}
+SPLIT_OFFSETS = {
+    "train": 0,
+    "valid_train": 2420,
+    "valid_seen": 2420 + 200,
+    "valid_unseen": 2420 + 200 + 187,
+}
+
 
 @dataclass
 class GameState:
@@ -28,24 +42,42 @@ class GameState:
     meta: dict[str, Any] = field(default_factory=dict)
 
 
-class AlfworldClient:
-    """Thin client over Word2World/AgentGym ALFWorld server.
+def parse_game_id(game_id: str) -> tuple[str, int]:
+    """Parse 'train/12' or bare '12' into (split, global_game_index)."""
+    if "/" in game_id:
+        split, local = game_id.split("/", 1)
+        # local may be an int index within split, or a legacy path-like id
+        try:
+            local_i = int(local)
+            return split, SPLIT_OFFSETS.get(split, 0) + local_i
+        except ValueError:
+            # fallback: hash into train range for unknown string ids
+            return split, SPLIT_OFFSETS.get(split, 0)
+    return "train", int(game_id)
 
-    Expected HTTP surface (AgentGym-style):
-      POST /create  {"env_name": "alfworld", ...} -> {"id": ...}
-      POST /reset   {"id": ..., "game": ..., "split": ...}
-      POST /step    {"id": ..., "action": ...}
-      POST /close   {"id": ...}
+
+class AlfworldClient:
+    """Client for Word2World AgentGym ALFWorld FastAPI server.
+
+    API (agentenv_alfworld/server.py):
+      POST /create -> {"id": int}
+      POST /reset  {"id": int, "game": int, "world_type": "Text"}
+      POST /step   {"id": int, "action": str}
+      POST /close  {"id": int}
+      GET  /available_actions?id=
+      GET  /observation?id=
 
     If WF_MOCK_ENV=1, uses an in-process mock (no server).
     """
 
     def __init__(self, base_url: str | None = None, timeout: float = 120.0):
-        self.base_url = (base_url or os.environ.get("ALFWORLD_BASE_URL") or ALFWORLD_BASE_URL_DEFAULT).rstrip("/")
+        self.base_url = (
+            base_url or os.environ.get("ALFWORLD_BASE_URL") or ALFWORLD_BASE_URL_DEFAULT
+        ).rstrip("/")
         self.timeout = timeout
         self.mock = os.environ.get("WF_MOCK_ENV", "0") == "1"
         self._session = requests.Session()
-        self._env_id: str | None = None
+        self._env_id: int | None = None
         self._mock_games: dict[str, GameState] = {}
 
     def _url(self, path: str) -> str:
@@ -58,124 +90,86 @@ class AlfworldClient:
             r = self._session.get(self._url("/"), timeout=5)
             return r.status_code < 500
         except Exception:
-            try:
-                r = self._session.get(self._url("/list_envs"), timeout=5)
-                return r.status_code < 500
-            except Exception:
-                return False
+            return False
 
     def create(self) -> str:
         if self.mock:
-            self._env_id = "mock-0"
-            return self._env_id
-        payload = {"env_type": "alfworld", "env_name": "alfworld"}
-        for path in ("/create", "/env/create"):
-            try:
-                r = self._session.post(self._url(path), json=payload, timeout=self.timeout)
-                if r.ok:
-                    data = r.json()
-                    self._env_id = str(data.get("id") or data.get("env_id") or data.get("instance_id"))
-                    return self._env_id
-            except Exception:
-                continue
-        raise RuntimeError(f"Could not create ALFWorld env at {self.base_url}")
+            self._env_id = 0
+            return "0"
+        r = self._session.post(self._url("/create"), timeout=self.timeout)
+        r.raise_for_status()
+        data = r.json()
+        if "error" in data:
+            raise RuntimeError(f"create failed: {data['error']}")
+        self._env_id = int(data["id"])
+        return str(self._env_id)
 
     def close(self) -> None:
-        if self.mock or not self._env_id:
+        if self.mock or self._env_id is None:
             self._env_id = None
             return
-        for path in ("/close", "/env/close"):
-            try:
-                self._session.post(
-                    self._url(path),
-                    json={"id": self._env_id, "env_id": self._env_id},
-                    timeout=self.timeout,
-                )
-            except Exception:
-                pass
+        try:
+            self._session.post(
+                self._url("/close"),
+                json={"id": int(self._env_id)},
+                timeout=self.timeout,
+            )
+        except Exception:
+            pass
         self._env_id = None
 
     def list_games(self, split: str) -> list[str]:
         if self.mock:
-            return [f"{split}/pick_and_place_simple-MockGame-Mug" for _ in range(5)]
-        for path in (f"/games/{split}", "/list_games", "/alfworld/games"):
-            try:
-                r = self._session.get(
-                    self._url(path),
-                    params={"split": split},
-                    timeout=self.timeout,
-                )
-                if r.ok:
-                    data = r.json()
-                    if isinstance(data, list):
-                        return [str(x) for x in data]
-                    if isinstance(data, dict) and "games" in data:
-                        return [str(x) for x in data["games"]]
-            except Exception:
-                continue
-        # Fallback: caller supplies game ids from config / dataset
-        return []
+            return [f"{split}/{i}" for i in range(5)]
+        n = SPLIT_SIZES.get(split, 0)
+        return [f"{split}/{i}" for i in range(n)]
 
     def reset(self, game_id: str, split: str) -> GameState:
         if self.mock:
             return self._mock_reset(game_id, split)
-        assert self._env_id, "call create() first"
+        if self._env_id is None:
+            self.create()
+        split_name, global_idx = parse_game_id(game_id if "/" in game_id else f"{split}/{game_id}")
         payload = {
-            "id": self._env_id,
-            "env_id": self._env_id,
-            "game": game_id,
-            "game_id": game_id,
-            "split": split,
+            "id": int(self._env_id),
+            "game": int(global_idx),
+            "world_type": "Text",
         }
-        last_err: Exception | None = None
-        for path in ("/reset", "/env/reset"):
-            try:
-                r = self._session.post(self._url(path), json=payload, timeout=self.timeout)
-                if r.ok:
-                    return self._parse_obs(game_id, split, r.json(), step=0, history=[])
-            except Exception as e:
-                last_err = e
-        raise RuntimeError(f"reset failed for {game_id}: {last_err}")
+        r = self._session.post(self._url("/reset"), json=payload, timeout=self.timeout)
+        r.raise_for_status()
+        data = r.json()
+        if "error" in data:
+            raise RuntimeError(f"reset failed for {game_id}: {data['error']}")
+        return self._parse_obs(
+            game_id=f"{split_name}/{global_idx - SPLIT_OFFSETS.get(split_name, 0)}",
+            split=split_name,
+            data=data,
+            step=0,
+            history=[],
+        )
 
     def step(self, state: GameState, action: str) -> GameState:
         if self.mock:
             return self._mock_step(state, action)
-        assert self._env_id, "call create() first"
-        payload = {
-            "id": self._env_id,
-            "env_id": self._env_id,
-            "action": action,
-        }
-        last_err: Exception | None = None
-        for path in ("/step", "/env/step"):
-            try:
-                r = self._session.post(self._url(path), json=payload, timeout=self.timeout)
-                if r.ok:
-                    data = r.json()
-                    hist = list(state.history) + [(action, self._extract_obs_text(data))]
-                    return self._parse_obs(
-                        state.game_id,
-                        state.split,
-                        data,
-                        step=state.step + 1,
-                        history=hist,
-                        prev=state,
-                    )
-            except Exception as e:
-                last_err = e
-        raise RuntimeError(f"step failed action={action!r}: {last_err}")
-
-    def _extract_obs_text(self, data: dict) -> str:
-        if "observation" in data:
-            return str(data["observation"])
-        if "obs" in data:
-            o = data["obs"]
-            if isinstance(o, (list, tuple)):
-                return str(o[0])
-            return str(o)
-        if "state" in data and isinstance(data["state"], str):
-            return data["state"]
-        return str(data)
+        assert self._env_id is not None, "call create() first"
+        r = self._session.post(
+            self._url("/step"),
+            json={"id": int(self._env_id), "action": action},
+            timeout=self.timeout,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if "error" in data:
+            raise RuntimeError(f"step failed action={action!r}: {data['error']}")
+        hist = list(state.history) + [(action, str(data.get("observation", "")))]
+        return self._parse_obs(
+            game_id=state.game_id,
+            split=state.split,
+            data=data,
+            step=state.step + 1,
+            history=hist,
+            prev=state,
+        )
 
     def _parse_obs(
         self,
@@ -186,48 +180,39 @@ class AlfworldClient:
         history: list[tuple[str, str]],
         prev: GameState | None = None,
     ) -> GameState:
-        obs = self._extract_obs_text(data)
-        info = data.get("info") or data.get("infos") or {}
-        if isinstance(info, list):
-            info = info[0] if info else {}
-        admissible = (
-            info.get("admissible_commands")
-            or info.get("admissible")
-            or data.get("admissible_commands")
-            or (prev.admissible if prev else [])
-        )
+        obs = str(data.get("observation") or "")
+        admissible = data.get("available_actions") or data.get("admissible_commands") or []
+        if prev and not admissible:
+            admissible = prev.admissible
         task_line = ""
         if prev and prev.task_line:
             task_line = prev.task_line
         else:
             m = re.search(r"Your task is to:.*", obs)
-            task_line = m.group(0).strip() if m else (prev.task_line if prev else "")
-        scene = info.get("scene_objects") or info.get("objects") or (prev.scene_objects if prev else [])
-        won = bool(info.get("won") or data.get("won") or False)
-        done = bool(data.get("done") or info.get("done") or won)
-        reward = float(data.get("reward") or info.get("reward") or (1.0 if won else 0.0))
+            task_line = m.group(0).strip() if m else ""
+        reward = float(data.get("reward") or 0.0)
+        done = bool(data.get("done") or False)
+        won = reward >= 1.0 or bool(data.get("won") or False)
         return GameState(
             game_id=game_id,
             split=split,
             task_line=task_line,
             observation=obs,
             admissible=[str(a) for a in admissible],
-            inventory=list(info.get("inventory") or (prev.inventory if prev else [])),
+            inventory=list(prev.inventory) if prev else [],
             done=done,
             reward=reward,
             won=won,
             step=step,
             history=history,
-            scene_objects=[str(x) for x in scene],
-            meta=dict(info) if isinstance(info, dict) else {},
+            scene_objects=list(prev.scene_objects) if prev else [],
+            meta={"task_type": data.get("task_type"), "raw": {k: data[k] for k in data if k != "observation"}},
         )
 
-    # --- mock backend (deterministic, for tests / dry runs) ---
+    # --- mock backend ---
 
     def _mock_reset(self, game_id: str, split: str) -> GameState:
         goal = "mug"
-        if "Apple" in game_id or "apple" in game_id.lower():
-            goal = "apple"
         task = f"Your task is to: put a {goal} in coffeemachine."
         obs = (
             f"You are in the middle of a room. Looking quickly around you, you see a drawer 1, "
@@ -241,7 +226,6 @@ class AlfworldClient:
             "look",
             "help",
             f"take {goal} 1 from drawer 1",
-            f"take {goal} 1 from countertop 1",
             "open drawer 1",
             "close drawer 1",
             f"move {goal} 1 to coffeemachine 1",
@@ -279,7 +263,6 @@ class AlfworldClient:
                 meta["drawer_open"] = False
                 obs = "You close the drawer 1."
         elif a.startswith("take "):
-            # succeed only if taking mug from drawer while open and not holding
             if holding:
                 obs = "Nothing happens."
             elif "mug" in a and "drawer 1" in a and meta.get("drawer_open") and meta.get("mug_loc") == "drawer 1":
@@ -300,13 +283,12 @@ class AlfworldClient:
 
         won = meta.get("mug_loc") == "coffeemachine 1"
         hist = list(state.history) + [(action, obs)]
-        adm = list(state.admissible)
         st = GameState(
             game_id=state.game_id,
             split=state.split,
             task_line=state.task_line,
             observation=obs,
-            admissible=adm,
+            admissible=list(state.admissible),
             inventory=[holding] if holding else [],
             done=won,
             reward=1.0 if won else 0.0,

@@ -26,7 +26,7 @@ def on_expert_path(
         return action.strip().lower() in plan
 
     # HTTP expert endpoint if server exposes it
-    if not client.mock and client._env_id:
+    if not client.mock and client._env_id is not None:
         for path in ("/expert", "/env/expert", "/alfworld/expert"):
             try:
                 r = client._session.post(
@@ -71,7 +71,7 @@ def expert_available(client: AlfworldClient) -> bool:
         games = client.list_games("train")
         if not games:
             return False
-        if not client._env_id:
+        if client._env_id is None:
             client.create()
         st = client.reset(games[0], "train")
         label = on_expert_path(client, st, st.admissible[0] if st.admissible else "look")

@@ -27,7 +27,7 @@ class EnvHandle:
 
 def replay(client: AlfworldClient, game_id: str, prefix_actions: list[str], split: str = "train") -> EnvHandle:
     """Reset game and re-execute prefix_actions; return handle at resulting state."""
-    if not client._env_id and not client.mock:
+    if client._env_id is None and not client.mock:
         client.create()
     state = client.reset(game_id, split)
     for action in prefix_actions:
