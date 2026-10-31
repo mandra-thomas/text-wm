@@ -96,4 +96,4 @@ sbatch pace/pilotB.sbatch
 
 - Prefer **A100 / L40S / H100**. V100 is incompatible with modern vLLM.
 - Keep weights under `$HF_HOME` on project/scratch storage.
-- ALFWorld server and vLLM usually share one GPU job: start env server on CPU localhost, then vLLM on the GPU.
+- ALFWorld stays up for the whole job (CPU/localhost). vLLM and HF scoring take turns on the GPU (see §6).
