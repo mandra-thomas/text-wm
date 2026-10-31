@@ -129,10 +129,39 @@ start_vllm() {
 }
 
 stop_vllm() {
+  # Tear down the OpenAI server so HF scoring can own the GPU (no CPU offload).
+  local pid=""
   if [[ -f "${PROJECT_ROOT}/logs/vllm.pid" ]]; then
-    kill -2 "$(cat "${PROJECT_ROOT}/logs/vllm.pid")" 2>/dev/null || true
+    pid="$(cat "${PROJECT_ROOT}/logs/vllm.pid")"
     rm -f "${PROJECT_ROOT}/logs/vllm.pid"
   fi
+  if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+    echo "Stopping vLLM pid=${pid}"
+    kill -TERM "${pid}" 2>/dev/null || true
+    # Also stop any orphaned vLLM workers bound to our port.
+    if [[ -n "${VLLM_PORT:-}" ]]; then
+      pkill -f "vllm.entrypoints.openai.api_server.*--port ${VLLM_PORT}" 2>/dev/null || true
+    fi
+    for _ in $(seq 1 60); do
+      if ! kill -0 "${pid}" 2>/dev/null; then
+        break
+      fi
+      sleep 1
+    done
+    kill -KILL "${pid}" 2>/dev/null || true
+  fi
+  # Give the driver a moment to release VRAM before HF loads.
+  sleep 5
+  nvidia-smi || true
+}
+
+ensure_vllm() {
+  if [[ -f "${PROJECT_ROOT}/logs/vllm.pid" ]] && kill -0 "$(cat "${PROJECT_ROOT}/logs/vllm.pid")" 2>/dev/null; then
+    if curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+  start_vllm
 }
 
 run_wf() {

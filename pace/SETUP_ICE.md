@@ -28,6 +28,9 @@ bash scripts/env_setup/uv_alfworld.sh
 python scripts/download_data/download_data.py
 # Confirm server script exists:
 ls scripts/env_server/start_alfworld.sh
+# Data usually lands in ~/.cache/alfworld (or set ALFWORLD_DATA).
+# Expect solvable counts: train≈2179, valid_seen=140, valid_unseen=134
+# (AgentGym mappings are larger; unsolvable PDDL is excluded by wf/env/server.py — PILOT_PROTOCOL §5.1).
 ```
 
 ## 3. Serve env (vLLM + transformers)
@@ -75,7 +78,11 @@ python scripts/smoke_vllm_thinking.py --base-url "http://127.0.0.1:${VLLM_PORT}/
 # Expect: no <think> blocks in 20 samples. Kill the server when done.
 ```
 
-## 6. Submit runs
+## 6. GPU ownership (1×A100)
+
+Tier 0 / pilots must not co-reside vLLM (agent) and HF transformers (WM scoring) on one GPU — HF will CPU-offload and generation becomes ~1 min/item. `pace/t0_all.sbatch` time-shares: vLLM for agent checks, then stop vLLM, then HF scoring. Pilot A should stop vLLM before `pilotA_score` the same way.
+
+## 7. Submit runs
 
 ```bash
 cd "$PROJECT_ROOT"
