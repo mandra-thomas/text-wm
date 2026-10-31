@@ -6,4 +6,4 @@
 2000
 
 ### unparseable_rate
-0.0
+0.001

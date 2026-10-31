@@ -2,6 +2,10 @@
 
 Log ideas here. Do **not** implement until `runs/PILOT_REPORT.md` is written.
 
+## Implementation notes (already decided)
+
+- **Solvable-only AgentGym indices** — not an extension. Protocol §1/§5.1; client filter in `wf/env/server.py`. Do not re-open unless upstream AgentGym ships a solvable-only list.
+
 - Full RQ3: 274 games × 3 error schedules × discarded/retained
 - ScienceWorld replication if `PILOT_RULE_HEADROOM` fires
 - Rationale ladder / unified self-simulation regimes

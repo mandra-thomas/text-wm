@@ -25,7 +25,7 @@ alwaysApply: true
 | Item | Value |
 | --- | --- |
 | Environment | ALFWorld via the AgentGym stack released with Word2World (`put` is renamed `move`; a `help` action exists; use their data download, not the original ALFWorld download) |
-| Splits | `train` (pilot), `valid_seen` (140 games), `valid_unseen` (134 games) |
+| Splits | `train` (pilot), `valid_seen` (140 games), `valid_unseen` (134 games). These counts are the **solvable** universe (see §5.1). |
 | Agent | `Qwen/Qwen3-8B`, ReAct prompt, temperature 0, thinking disabled, step cap `STEP_CAP` (default 30; confirm the stack's default in Tier 0 and record it) |
 | Primary world model | `Qwen/Qwen3-8B`, few-shot next-observation prompt, thinking disabled, scored by teacher forcing |
 | Fine-tuned world models | `X1AOX1A/WorldModel-Alfworld-Qwen2.5-7B`, `X1AOX1A/WorldModel-Alfworld-Llama3.1-8B` (use the prompt protocol in Word2World's `scripts/interact_with_world_model/run.py`) |
@@ -216,11 +216,26 @@ Sign convention (preregistered): predicted `H_discarded > 0`, `H_retained < 0`, 
 
 1. Clone Word2World; run `scripts/env_setup/uv_agentgym_rl.sh` and `uv_alfworld.sh`.
 2. `python scripts/download_data/download_data.py` (their renamed-action ALFWorld data). Remove any pre-existing ALFWorld data first.
-3. Start the server with `scripts/env_server/start_alfworld.sh`; confirm `train`, `valid_seen`, `valid_unseen` are selectable and record game counts.
+3. Start the server with `scripts/env_server/start_alfworld.sh`; confirm `train`, `valid_seen`, `valid_unseen` are selectable and record **solvable** game counts (§5.1).
 4. Pull `X1AOX1A/LLMasWorldModels` (ALFWorld) and the two fine-tuned checkpoints.
 5. Serve `Qwen/Qwen3-8B` with vLLM (`--max-model-len 8192`, `--enable-prefix-caching`); confirm `enable_thinking=false` takes effect by checking that no `<think>` block appears in 20 sampled responses.
 
 Record versions (commit SHA of Word2World, vLLM, transformers, model revisions) in `runs/env.json`.
+
+### 5.1 Solvable games only (AgentGym vs protocol counts)
+
+Word2World AgentGym builds one flat game list from its mapping JSONs. Those mappings include trials whose `game.tw-pddl` has `"solvable": false`. Loading them via `/reset` fails inside TextWorld/PDDL (commonly `KeyError: 'val1'`). Upstream `AlfredTWEnv.collect_game_files` already skips unsolvable files; AgentGym does not.
+
+**Study population = solvable games only.** That is what §1’s split sizes mean:
+
+| Split | AgentGym mapping rows | Solvable (`solvable: true`) | Protocol / this repo |
+| --- | ---: | ---: | ---: |
+| `train` | 2420 | 2179 | pilot sampling pool |
+| `valid_train` | 200 | 197 | unused in pilot |
+| `valid_seen` | 187 | 140 | confirmatory (§1) |
+| `valid_unseen` | 195 | 134 | confirmatory + Tier 0 ckpt check |
+
+Implementation: `wf/env/server.py` `AlfworldClient.list_games` returns only solvable local indices (reads `ALFWORLD_DATA` / `~/.cache/alfworld` + Word2World mapping JSONs). Do **not** treat this as an ad-hoc subsample of the protocol universe — it *is* that universe. Do not invent substitute games for unsolvable IDs.
 
 ---
 

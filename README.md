@@ -5,6 +5,8 @@ Preliminary experiments for goal-conditioned bias in text world models (ALFWorld
 **Law:** [PILOT_PROTOCOL.md](PILOT_PROTOCOL.md)  
 **Remote execution:** PACE ICE — see [pace/SETUP_ICE.md](pace/SETUP_ICE.md)
 
+Split sizes in the protocol (`valid_seen` 140, `valid_unseen` 134, train solvable pool) are games with `solvable: true` in ALFWorld PDDL. AgentGym’s mapping JSONs also list unsolvable trials that crash on reset; `wf/env/server.py` filters them out — see protocol §5.1.
+
 ## Quick start (mock / unit)
 
 ```bash

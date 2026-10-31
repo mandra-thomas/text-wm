@@ -6,7 +6,7 @@
 nan
 
 ### uncertain_acc
-0.4
+0.05
 
 ### n
-25
+200

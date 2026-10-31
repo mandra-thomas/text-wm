@@ -1,15 +1,17 @@
-# Pilot report — 2026-10-28 — git unknown — FILED filed_date: 2026-10-28 | constants_commit: unknown | RETENTION_MARGIN: 1.0 | note: mock filing for pipeline dry-run; replace with real filing date before ICE Pilot A/B
+# Pilot report — 2026-10-30 — git d49710c — Tier 0 from ICE job 6685206 (A100, 57m, failed=0)
 
-## Tier 0
+FILED.txt is still a **mock** filing — Pilot A/B sections below are dry-run only; do not treat as real pilot outcomes.
+
+## Tier 0 (real ICE)
 | check | result | pass |
 | --- | --- | --- |
-| t0_smoke | # STATUS — t0_smoke — PASS  games=5 observations≈155 STEP_CAP=30 Acceptance: ≥50 observations — PASS  | yes |
-| t0_replay | # STATUS — t0_replay — PASS  replay checks=60 identical=60 Acceptance: 100% identical — PASS  | yes |
-| t0_agent_determinism | # STATUS — t0_agent_determinism — PASS  mean step agreement=1.000 over 5 games  | yes |
-| t0_parser | # STATUS — t0_parser — PASS  n=2000 unparseable=0 rate=0.0000 threshold=0.05 — PASS  | yes |
-| t0_ckpt_accuracy | # STATUS — t0_ckpt_accuracy — PASS  valid_unseen n=25 determined_acc=nan (n=0) uncertain_acc=0.4 (n=25) — reported  | yes |
-| t0_scoring_agreement | # STATUS — t0_scoring_agreement — PASS  agreement=100/100 (1.00) min=0.9 — PASS  | yes |
-| t0_expert_labels | # STATUS — t0_expert_labels — PASS  expert labels available: yes; n_labels=25  | yes |
+| t0_smoke | games=5 observations≈155 STEP_CAP=30 | yes |
+| t0_replay | replay checks=60 identical=60 | yes |
+| t0_agent_determinism | mean step agreement=1.000 over 10 games | yes |
+| t0_parser | n=2000 unparseable=2 rate=0.0010 | yes |
+| t0_ckpt_accuracy | valid_unseen n=200 determined_acc=nan (n=0) uncertain_acc=0.05 | reported |
+| t0_scoring_agreement | agreement=93/100 (0.93) | yes |
+| t0_expert_labels | expert available: no — on_expert_path=null | yes |
 
 ## Pilot A (RQ2)
 
@@ -146,7 +148,9 @@ PILOT_RULE_RETAINED_FORMAT fired — switch to state persistence for full runs
 
 
 ## Deviations / failures
-See per-run STATUS.md files under runs/.
+- Tier 0 complete on ICE (6685206). Expert path not exposed via AgentGym (`on_expert_path=null`).
+- FT WM uncertain_acc=0.05 on 200 valid_unseen items; no items classified context_determined in this harness.
+- Pilot A/B blocks below remain mock dry-run until real FILED.txt + ICE pilot jobs.
 
 ## Note
-If this report was produced with WF_MOCK_*=1, replace with ICE results before claiming pilot completion.
+Tier 0 above is real ICE. Pilot A/B sections are still mock — replace before claiming pilot completion.

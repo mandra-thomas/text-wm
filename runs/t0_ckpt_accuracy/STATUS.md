@@ -1,4 +1,3 @@
-# STATUS — t0_ckpt_accuracy — FAIL
+# STATUS — t0_ckpt_accuracy — PASS
 
-reset failed for valid_unseen/43: 'val1' (unsolvable AgentGym mapping entry)
-Job: ICE Slurm 6660971 (2026-10-28). Fixed on main by filtering solvable-only games.
+valid_unseen n=200 determined_acc=nan (n=0) uncertain_acc=0.05 (n=200) — reported
