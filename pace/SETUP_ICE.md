@@ -80,7 +80,7 @@ python scripts/smoke_vllm_thinking.py --base-url "http://127.0.0.1:${VLLM_PORT}/
 
 ## 6. GPU ownership (1×A100)
 
-Tier 0 / pilots must not co-reside vLLM (agent) and HF transformers (WM scoring) on one GPU — HF will CPU-offload and generation becomes ~1 min/item. `pace/t0_all.sbatch` time-shares: vLLM for agent checks, then stop vLLM, then HF scoring. Pilot A should stop vLLM before `pilotA_score` the same way.
+Tier 0 / pilots must not co-reside vLLM (agent) and HF transformers (WM scoring) on one GPU — HF will CPU-offload and generation becomes ~1 min/item. `pace/t0_all.sbatch` and `pace/pilotA.sbatch` time-share: vLLM for agent work, then stop vLLM, then HF scoring. Pilot B keeps vLLM for the whole job (agent-only).
 
 ## 7. Submit runs
 

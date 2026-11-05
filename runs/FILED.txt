@@ -1,4 +1,4 @@
-filed_date: 2026-10-28
-constants_commit: unknown
+filed_date: 2026-11-05
+constants_commit: e2c1f1fd02f2fcda6af0f48e69b3b974c882c1aa
 RETENTION_MARGIN: 1.0
-note: mock filing for pipeline dry-run; replace with real filing date before ICE Pilot A/B
+note: Prereg constants locked at RETENTION_MARGIN=1.0 (wf/constants.py). Replace constants_commit if RETENTION_MARGIN is edited after this filing marker.
