@@ -27,7 +27,7 @@ class EnvHandle:
 
 def replay(client: AlfworldClient, game_id: str, prefix_actions: list[str], split: str = "train") -> EnvHandle:
     """Reset game and re-execute prefix_actions; return handle at resulting state."""
-    if client._env_id is None and not client.mock:
+    if client._env_id is None:
         client.create()
     state = client.reset(game_id, split)
     for action in prefix_actions:
@@ -56,16 +56,9 @@ def step_counterfactual(handle: EnvHandle, action: str) -> tuple[str, dict[str, 
 
 
 def history_text_from_state(state: GameState) -> str:
-    """Build interaction history string from reset obs + (action, obs) pairs."""
-    parts: list[str] = []
-    # Reconstruct: first observation is reset obs before any actions.
-    # We only have post-action obs in history; include task from task_line.
-    if state.history:
-        # Approximate first obs as task-bearing context
-        parts.append(state.task_line)
-        for act, obs in state.history:
-            parts.append(f"> {act}")
-            parts.append(obs)
-    else:
-        parts.append(state.observation)
+    """Interaction history: the first observation, then one "> action" / obs pair per step."""
+    parts = [state.first_observation or state.observation]
+    for act, obs in state.history:
+        parts.append(f"> {act}")
+        parts.append(obs)
     return "\n".join(parts)

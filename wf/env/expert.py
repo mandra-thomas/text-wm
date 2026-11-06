@@ -25,8 +25,8 @@ def on_expert_path(
         plan = [str(x).strip().lower() for x in meta["expert_actions"]]
         return action.strip().lower() in plan
 
-    # HTTP expert endpoint if server exposes it
-    if not client.mock and client._env_id is not None:
+    # HTTP expert endpoint if server exposes it (probed once; AgentGym has none today)
+    if not client.mock and client._env_id is not None and not client._expert_missing:
         for path in ("/expert", "/env/expert", "/alfworld/expert"):
             try:
                 r = client._session.post(
@@ -47,6 +47,7 @@ def on_expert_path(
                         return str(data["expert_action"]).strip().lower() == action.strip().lower()
             except Exception:
                 continue
+        client._expert_missing = True
 
     # Mock: treat opening drawer / taking mug / moving to coffeemachine as expert-ish
     if client.mock:

@@ -8,7 +8,7 @@ from wf.env.server import AlfworldClient
 
 def test_replay_determinism():
     c = AlfworldClient()
-    gid = "train/pick_and_place_simple-Mock-Mug"
+    gid = "train/0"
     o1, _ = step_counterfactual(replay(c, gid, ["go to drawer 1", "open drawer 1"]), "take mug 1 from drawer 1")
     o2, _ = step_counterfactual(replay(c, gid, ["go to drawer 1", "open drawer 1"]), "take mug 1 from drawer 1")
     assert o1 == o2
