@@ -9,6 +9,7 @@ OutcomeClass = Literal[
     "state_change",
     "reveal_with_goal",
     "reveal_without_goal",
+    "info",
     "unparseable",
 ]
 
@@ -19,6 +20,12 @@ _STATE = re.compile(
 )
 _REVEAL = re.compile(
     r"(In it, you see|On the .+ you see|you see a |you see an )",
+    re.IGNORECASE,
+)
+# Valid but informational: inventory, look with nothing nearby, examine, help.
+_INFO = re.compile(
+    r"^(You are carrying|You are not carrying|You are facing|You are in the middle of a room"
+    r"|Available commands|This is a|There's nothing|The .+ is (?:closed|open)\.)",
     re.IGNORECASE,
 )
 
@@ -44,12 +51,14 @@ def parse_observation(obs: str, goal_object: str | None = None) -> OutcomeClass:
     # Arrival / look narration often still informative but not in core classes
     if re.match(r"^You arrive at\b", first, re.IGNORECASE):
         return "state_change"
+    if _INFO.match(first):
+        return "info"
     return "unparseable"
 
 
 def is_success_obs(obs: str, goal_object: str | None = None) -> bool:
     cls = parse_observation(obs, goal_object)
-    return cls in ("state_change", "reveal_with_goal", "reveal_without_goal") and cls != "noop"
+    return cls in ("state_change", "reveal_with_goal", "reveal_without_goal", "info")
 
 
 def action_appears_valid(obs: str) -> bool:

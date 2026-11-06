@@ -1,16 +1,17 @@
 """Matched candidate observations o_plus / o_minus (§4.4). Never hand-template."""
 from __future__ import annotations
 
-from typing import Any
+import re
 
-from wf.env.replay import EnvHandle, replay, step_counterfactual
+from wf.env.replay import replay, step_counterfactual
+from wf.env.scene import Scene, scan_scene
 from wf.env.server import AlfworldClient
 
 
 def attach_candidates(
     client: AlfworldClient,
     transition: dict,
-    success_cache: dict[tuple[str, str], str] | None = None,
+    success_cache: dict[tuple[str, str], str | None] | None = None,
 ) -> dict:
     """Attach environment-generated o_plus / o_minus, or candidates=null."""
     cache = success_cache if success_cache is not None else {}
@@ -18,12 +19,11 @@ def attach_candidates(
     action = transition["action"]
     game_id = transition["game_id"]
     split = transition.get("split", "train")
-    prefix = list(transition.get("prefix_actions") or [])
 
     is_fail = true_obs.strip() == "Nothing happens."
     if is_fail:
         o_minus = true_obs
-        o_plus = _find_success_obs(client, game_id, split, action, prefix, cache)
+        o_plus = _find_success_obs(client, game_id, split, action, cache)
         if o_plus is None:
             transition["candidates"] = None
             transition["exclusion_reason"] = "no_success_twin"
@@ -36,44 +36,62 @@ def attach_candidates(
     return transition
 
 
+def _setup_plan(action: str, scene: Scene) -> list[str] | None:
+    """Actions from reset that reach a state where `action` should work, or None."""
+
+    def arrive(receptacle: str) -> list[str]:
+        return [f"go to {receptacle}"] + ([f"open {receptacle}"] if receptacle in scene.closed else [])
+
+    def carry(obj: str, receptacle: str) -> list[str] | None:
+        home = scene.locations.get(obj)
+        if home is None:
+            return None
+        steps = arrive(home) + [f"take {obj} from {home}"]
+        return steps if home == receptacle else steps + arrive(receptacle)
+
+    m = re.fullmatch(r"take (.+) from (.+)", action)
+    if m:
+        obj, receptacle = m[1], m[2]
+        if receptacle not in scene.receptacles:
+            return None
+        if scene.locations.get(obj) == receptacle:
+            return arrive(receptacle)
+        steps = carry(obj, receptacle)
+        return None if steps is None else steps + [f"move {obj} to {receptacle}"]
+    m = re.fullmatch(r"move (.+) to (.+)", action) or re.fullmatch(r"(?:heat|cool|clean) (.+) with (.+)", action)
+    if m:
+        return carry(m[1], m[2]) if m[2] in scene.receptacles else None
+    m = re.fullmatch(r"go to (.+)", action)
+    if m:
+        return [] if m[1] in scene.receptacles else None
+    m = re.fullmatch(r"(open|close) (.+)", action)
+    if m and m[2] in scene.closed:
+        return [f"go to {m[2]}"] if m[1] == "open" else arrive(m[2])
+    m = re.fullmatch(r"(?:use|examine) (.+)", action)
+    if m and m[1] in scene.locations:
+        return arrive(scene.locations[m[1]])
+    return None
+
+
 def _find_success_obs(
     client: AlfworldClient,
     game_id: str,
     split: str,
     action: str,
-    prefix: list[str],
-    cache: dict[tuple[str, str], str],
+    cache: dict[tuple[str, str], str | None],
 ) -> str | None:
+    """Run the action in a state where it succeeds. No such state means no twin."""
     key = (game_id, action)
     if key in cache:
         return cache[key]
-
-    # Strategy: try progressively shorter prefixes, and a few known setup actions
-    # that often make take/move valid in the mock / typical ALFWorld games.
-    trial_prefixes: list[list[str]] = []
-    for i in range(len(prefix), -1, -1):
-        trial_prefixes.append(prefix[:i])
-    # Common setup for take-from-drawer style actions
-    extras = [
-        ["go to drawer 1", "open drawer 1"],
-        ["go to countertop 1"],
-        ["go to fridge 1", "open fridge 1"],
-        ["go to cabinet 1", "open cabinet 1"],
-    ]
-    trial_prefixes.extend(extras)
-
-    seen: set[tuple[str, ...]] = set()
-    for pref in trial_prefixes:
-        t = tuple(pref)
-        if t in seen:
-            continue
-        seen.add(t)
+    plan = _setup_plan(action, scan_scene(client, game_id, split))
+    obs = None
+    if plan is not None:
         try:
-            handle = replay(client, game_id, list(pref), split=split)
-            obs, _info = step_counterfactual(handle, action)
-            if obs.strip() != "Nothing happens." and obs.strip():
-                cache[key] = obs
-                return obs
-        except Exception:
-            continue
-    return None
+            trial, _ = step_counterfactual(replay(client, game_id, plan, split=split), action)
+        except RuntimeError:  # plan ended the game, so the env refuses further steps
+            trial = None
+        if trial and trial.strip() != "Nothing happens.":
+            obs = trial
+    cache[key] = obs
+    return obs
