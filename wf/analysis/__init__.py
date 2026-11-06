@@ -2,6 +2,7 @@ from .report import write_run_report
 from .stats import (
     asymmetry_A,
     cluster_bootstrap,
+    delta_L,
     delta_p,
     icc,
     interaction_I,
@@ -12,6 +13,7 @@ from .stats import (
 __all__ = [
     "asymmetry_A",
     "cluster_bootstrap",
+    "delta_L",
     "delta_p",
     "icc",
     "interaction_I",

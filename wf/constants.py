@@ -7,6 +7,8 @@ Do not redefine elsewhere. After filing, only change via human edit + disclosure
 DELTA_SUPPORT_PP = 5.0  # H2 support threshold (percentage points)
 DELTA_STRONG_PP = 10.0
 PERMUTATION_P_MAX = 0.01
+DELTA_L_SUPPORT_NATS = 0.5  # prereg PDF: H2 needs mean log-odds shift >= this
+DELTA_L_STRONG_NATS = 1.0  # prereg PDF: reported as a strong effect
 H_FLOOR_PP = 3.0  # cell-level sign claims need |H| >= this in success-rate points
 FUTILITY_EST_PP = 2.0  # pilot goal-channel rule: estimate below this AND ...
 FUTILITY_UPPER_PP = 5.0  # ... 95% CI upper bound below this, on every tested model
@@ -33,6 +35,8 @@ WM_FEWSHOT_MODEL = "Qwen/Qwen3-8B"
 WM_FT_QWEN = "X1AOX1A/WorldModel-Alfworld-Qwen2.5-7B"
 WM_FT_LLAMA = "X1AOX1A/WorldModel-Alfworld-Llama3.1-8B"
 TRANSITION_DATASET = "X1AOX1A/LLMasWorldModels"
+PARSER_DATASET_FILE = "llama_factory/alfworld_test_with_env_195.json"
+CONFIRMATORY_GAMES = 134  # solvable valid_unseen; the game count sample sizes are planned for
 
 # Serving defaults
 VLLM_BASE_URL_DEFAULT = "http://127.0.0.1:8000/v1"
