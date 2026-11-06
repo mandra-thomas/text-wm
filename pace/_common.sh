@@ -71,19 +71,39 @@ PY
 
 start_alfworld_server() {
   local log="${PROJECT_ROOT}/logs/alfworld_${SLURM_JOB_ID:-local}.log"
-  local script="${WORD2WORLD_ROOT}/scripts/env_server/start_alfworld.sh"
-  if [[ -f "${script}" ]]; then
-    chmod +x "${script}" 2>/dev/null || true
-    (
-      cd "${WORD2WORLD_ROOT}"
-      bash scripts/env_server/start_alfworld.sh
-    ) >"${log}" 2>&1 &
-    echo $! >"${ALFWORLD_PID_FILE}"
-    echo "ALFWorld server starting (log=${log})"
-    sleep 15
-  else
-    echo "WARN: Word2World ALFWorld server script missing at ${script}; runs needing env will fail."
+  local alfworld="${WORD2WORLD_ROOT}/uv_alfworld/bin/alfworld"
+  if [[ ! -x "${alfworld}" ]]; then
+    echo "ERROR: ALFWorld server missing at ${alfworld}" >&2
+    return 1
   fi
+  # Jobs can share a node, so a busy port must not silently connect us to another job's server.
+  if curl -sf "http://127.0.0.1:${ALFWORLD_PORT}/" >/dev/null 2>&1; then
+    ALFWORLD_PORT=$((36100 + (${SLURM_JOB_ID:-0} % 800)))
+    echo "WARN: default ALFWorld port busy; using ${ALFWORLD_PORT}"
+  fi
+  export ALFWORLD_PORT
+  export ALFWORLD_BASE_URL="http://127.0.0.1:${ALFWORLD_PORT}"
+  (
+    cd "${WORD2WORLD_ROOT}"
+    # shellcheck disable=SC1091
+    source uv_alfworld/bin/activate
+    exec alfworld --host 127.0.0.1 --port "${ALFWORLD_PORT}"
+  ) >"${log}" 2>&1 &
+  echo $! >"${ALFWORLD_PID_FILE}"
+  echo "ALFWorld server starting port=${ALFWORLD_PORT} (log=${log})"
+  for _ in $(seq 1 60); do
+    if curl -sf "${ALFWORLD_BASE_URL}/" >/dev/null 2>&1; then
+      echo "ALFWorld ready at ${ALFWORLD_BASE_URL}"
+      return 0
+    fi
+    if ! kill -0 "$(cat "${ALFWORLD_PID_FILE}")" 2>/dev/null; then
+      echo "ERROR: ALFWorld server exited early; see ${log}" >&2
+      return 1
+    fi
+    sleep 5
+  done
+  echo "ERROR: ALFWorld server failed to become ready" >&2
+  return 1
 }
 
 stop_alfworld_server() {

@@ -87,11 +87,10 @@ def _find_success_obs(
     plan = _setup_plan(action, scan_scene(client, game_id, split))
     obs = None
     if plan is not None:
-        try:
-            trial, _ = step_counterfactual(replay(client, game_id, plan, split=split), action)
-        except RuntimeError:  # plan ended the game, so the env refuses further steps
-            trial = None
-        if trial and trial.strip() != "Nothing happens.":
-            obs = trial
+        handle = replay(client, game_id, plan, split=split)
+        if not handle.state.done:  # a finished game refuses further steps
+            trial, _ = step_counterfactual(handle, action)
+            if trial.strip() and trial.strip() != "Nothing happens.":
+                obs = trial
     cache[key] = obs
     return obs

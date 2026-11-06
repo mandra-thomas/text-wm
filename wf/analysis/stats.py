@@ -205,9 +205,10 @@ def icc(items: list[float], cluster_ids: list[str]) -> float:
     dfw = n - k
     msw = ssw / dfw if dfw > 0 else float("nan")
     n0 = (n - sum(len(g) ** 2 for g in groups) / n) / (k - 1)
-    if msb != msb or msw != msw or n0 == 0:
+    denominator = msb + (n0 - 1) * msw
+    if msb != msb or msw != msw or denominator == 0:  # e.g. every item difference identical
         return float("nan")
-    return (msb - msw) / (msb + (n0 - 1) * msw)
+    return (msb - msw) / denominator
 
 
 def rank_outcome(episodes: list[dict], step_cap: int = STEP_CAP) -> dict[str, Any]:
