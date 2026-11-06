@@ -73,7 +73,7 @@ def _summary(values: list[float]) -> dict:
     return {"n": len(values), "p10": pick(0.1), "median": pick(0.5), "p90": pick(0.9)}
 
 
-def checkpoint_accuracy(scorer: LogoddsScorer, path: Path, n: int) -> dict:
+def checkpoint_accuracy(scorer: LogoddsScorer, path: Path, n: int, report=None) -> dict:
     """Upstream's own data and format; the proposal cites about 99% single-step accuracy."""
     rows = json.loads(path.read_text(encoding="utf-8"))
     cases = []
@@ -85,12 +85,14 @@ def checkpoint_accuracy(scorer: LogoddsScorer, path: Path, n: int) -> dict:
     cases = cases[:n]
     correct = 0
     misses = []
-    for conversation, truth in cases:
+    for done, (conversation, truth) in enumerate(cases, 1):
         guess = scorer.free_generate(conversation, max_new_tokens=256)
         hit = guess.strip() == truth.strip()
         correct += hit
         if not hit and len(misses) < 6:
             misses.append({"truth": truth[:120], "guess": guess[:120]})
+        if report and done % 25 == 0:
+            report({"n": done, "exact_match": correct / done, "misses": misses})
     return {"n": len(cases), "exact_match": correct / max(len(cases), 1), "misses": misses}
 
 
@@ -147,11 +149,16 @@ def scoring_checks(args: argparse.Namespace, out: dict, save) -> None:
     for model, tag, ft in ((C.WM_FEWSHOT_MODEL, "qwen3-8b-fewshot", False), (C.WM_FT_QWEN, "w2w-qwen2.5-7b", True)):
         scorer = LogoddsScorer(model, model_tag=tag)
         report: dict = {"tokenizer": tokenizer_checks(scorer, failures[0])}
+        out[tag] = report
+
+        def partial_accuracy(partial: dict) -> None:
+            report["checkpoint_accuracy"] = partial
+            save()
+
         if not ft:
             report["agent_prompt"] = agent_prompt_tokens(scorer, client, games[0])
         elif data.is_file():
-            report["checkpoint_accuracy"] = checkpoint_accuracy(scorer, data, args.accuracy_items)
-        out[tag] = report
+            report["checkpoint_accuracy"] = checkpoint_accuracy(scorer, data, args.accuracy_items, partial_accuracy)
         save()
 
         # Same prompt twice must give the same number.
@@ -185,6 +192,23 @@ def scoring_checks(args: argparse.Namespace, out: dict, save) -> None:
         del scorer
 
 
+def _agent_summary(episodes: list[dict]) -> dict:
+    steps = [s for e in episodes for s in e["trace"]]
+    return {
+        "games": len(episodes),
+        "success": sum(e["success"] for e in episodes) / len(episodes),
+        "mean_S": rank_outcome(episodes)["mean_S"],
+        "mean_steps": sum(e["steps"] for e in episodes) / len(episodes),
+        "invalid_proposal_rate": sum(not s["proposal_valid"] for s in steps) / max(len(steps), 1),
+        "noop_rate": sum(s["real_obs"].strip() == NOOP for s in steps) / max(len(steps), 1),
+        "not_admissible_executed": sum(s["real_obs"].strip() == NOOP and s["executed"] == s["proposal"] for s in steps) / max(len(steps), 1),
+        "decision_critical_rate": sum(bool(s["decision_critical"]) for s in steps) / max(len(steps), 1),
+        "follow_rate": sum(bool(s["followed"]) for s in steps) / max(len(steps), 1),
+        "mean_corrupted": sum(e["n_corrupted"] for e in episodes) / len(episodes),
+        "mean_corruption_unavailable": sum(e["n_corruption_unavailable"] for e in episodes) / len(episodes),
+    }
+
+
 def agent_checks(args: argparse.Namespace, out: dict, save) -> None:
     client = AlfworldClient()
     client.create()
@@ -201,22 +225,11 @@ def agent_checks(args: argparse.Namespace, out: dict, save) -> None:
                                                          corrupt_fn=schedule(g, 1, "favorable", 1.0)),
     }
     for name, make in conditions.items():
-        episodes = [run_episode(client, agent, g, "train", "verify", make(g)) for g in games]
-        steps = [s for e in episodes for s in e["trace"]]
-        out[name] = {
-            "games": len(episodes),
-            "success": sum(e["success"] for e in episodes) / len(episodes),
-            "mean_S": rank_outcome(episodes)["mean_S"],
-            "mean_steps": sum(e["steps"] for e in episodes) / len(episodes),
-            "invalid_proposal_rate": sum(not s["proposal_valid"] for s in steps) / max(len(steps), 1),
-            "noop_rate": sum(s["real_obs"].strip() == NOOP for s in steps) / max(len(steps), 1),
-            "not_admissible_executed": sum(s["real_obs"].strip() == NOOP and s["executed"] == s["proposal"] for s in steps) / max(len(steps), 1),
-            "decision_critical_rate": sum(bool(s["decision_critical"]) for s in steps) / max(len(steps), 1),
-            "follow_rate": sum(bool(s["followed"]) for s in steps) / max(len(steps), 1),
-            "mean_corrupted": sum(e["n_corrupted"] for e in episodes) / len(episodes),
-            "mean_corruption_unavailable": sum(e["n_corruption_unavailable"] for e in episodes) / len(episodes),
-        }
-        save()
+        episodes: list[dict] = []
+        for g in games:
+            episodes.append(run_episode(client, agent, g, "train", "verify", make(g)))
+            out[name] = _agent_summary(episodes)
+            save()
 
 
 def main() -> None:

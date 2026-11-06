@@ -35,7 +35,7 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 
 ## Bug fixes (no design change intended)
 
-Foresight on a private env id; task and history in every condition; invalid actions executed rather than rewritten; no-twin steps not counted as corruptions; goal parser; swapped task line changes only the object; `context_determined` from history facts; `history_goal_agnostic` reads actions only; `delta_p` filtering; A computable; room description kept in history; no truncation of the admissible list; trace `targets_goal_object`; 100 distinct agreement items; `t0_parser` reads the dataset and fails loudly; episodes saved as they finish, with `--resume`.
+Foresight on a private env id; task and history in every condition; invalid actions executed rather than rewritten; no-twin steps not counted as corruptions; goal parser; swapped task line changes only the object; `context_determined` from history facts; `history_goal_agnostic` reads actions only; `delta_p` filtering; A computable; room description kept in history; no truncation of the admissible list; trace `targets_goal_object`; 100 distinct agreement items; `t0_parser` reads the dataset and fails loudly; every episode, score, generation and built game saved as it finishes, with `--resume` on all long runs; a resume skips runs that passed at the same commit and refuses to mix commits.
 
 ## Tier 0 results invalidated
 

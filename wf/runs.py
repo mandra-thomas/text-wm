@@ -50,10 +50,12 @@ from wf.util import (
     git_sha,
     is_mock,
     read_jsonl,
+    repair_jsonl,
     require_filed,
     run_dir,
     runs_root,
     write_json,
+    write_jsonl,
     write_status,
 )
 
@@ -68,14 +70,25 @@ def load_config(run_id: str) -> dict:
     return cfg
 
 
+RUN_OUTPUTS = ("transitions.jsonl", "scoring.jsonl", "episodes.jsonl", "observations.jsonl",
+               "items.jsonl", "generations.jsonl", "games_done.jsonl")
+
+
 def _init_run(run_id: str, cfg: dict) -> Path:
     d = run_dir(run_id)
+    saved_sha = d / "git_sha"
+    if cfg.get("resume") and saved_sha.exists() and saved_sha.read_text(encoding="utf-8").strip() != git_sha():
+        raise SystemExit(f"{run_id}: saved work is from commit {saved_sha.read_text(encoding='utf-8').strip()}, "
+                         f"this is {git_sha()}. Results must not mix versions; rerun without --resume.")
+    # a crash must not leave the previous run's PASS standing
+    (d / "STATUS.md").unlink(missing_ok=True)
     # fresh outputs for reproducibility of this invocation, unless resuming after a timeout
-    if not cfg.get("resume"):
-        for name in ("transitions.jsonl", "scoring.jsonl", "episodes.jsonl", "observations.jsonl"):
-            p = d / name
-            if p.exists():
-                p.unlink()
+    for name in RUN_OUTPUTS:
+        p = d / name
+        if cfg.get("resume"):
+            repair_jsonl(p)
+        elif p.exists():
+            p.unlink()
     write_json(d / "config.json", {k: v for k, v in cfg.items() if k != "resume"})
     (d / "git_sha").write_text(git_sha() + "\n", encoding="utf-8")
     return d
@@ -117,14 +130,41 @@ def _episode_key(ep: dict) -> tuple:
     return (ep["game_id"], ep["condition"], ep.get("arm"), ep.get("retention"), ep.get("schedule_seed"))
 
 
-def _run_jobs(d: Path, cfg: dict, client: AlfworldClient, agent: AgentClient, jobs: list[tuple]) -> list[dict]:
+def _already_passed(run_id: str) -> bool:
+    """--resume skips a run that finished cleanly at this commit."""
+    d = run_dir(run_id)
+    if not (d / "STATUS.md").exists() or not (d / "git_sha").exists():
+        return False
+    first = (d / "STATUS.md").read_text(encoding="utf-8").splitlines()[0]
+    return "— PASS" in first and (d / "git_sha").read_text(encoding="utf-8").strip() == git_sha()
+
+
+def _saved_games(d: Path, name: str, cfg: dict) -> tuple[list[dict], set[str]]:
+    """Records of fully saved games. A game counts only once games_done.jsonl lists it."""
+    if not cfg.get("resume"):
+        return [], set()
+    finished = {r["game_id"] for r in read_jsonl(d / "games_done.jsonl")}
+    records = read_jsonl(d / name)
+    kept = [r for r in records if r["game_id"] in finished]
+    if len(kept) != len(records):
+        write_jsonl(d / name, kept)
+    return kept, finished
+
+
+def _save_game(d: Path, name: str, game_id: str, records: list[dict]) -> None:
+    append_jsonl(d / name, records)
+    append_jsonl(d / "games_done.jsonl", [{"game_id": game_id}])
+
+
+def _run_jobs(d: Path, cfg: dict, client: AlfworldClient, agent: AgentClient, jobs: list[tuple],
+              step_cap: int = C.STEP_CAP) -> list[dict]:
     """Run (game, ForesightConfig, schedule_seed) jobs, saving each episode as it finishes."""
     episodes = read_jsonl(d / "episodes.jsonl") if cfg.get("resume") else []
     done = {_episode_key(ep) for ep in episodes}
     for gid, fc, seed in jobs:
         if (gid, fc.condition, fc.arm, fc.retention, seed) in done:
             continue
-        ep = run_episode(client, agent, gid, "train", cfg["run_id"], fc, schedule_seed=seed)
+        ep = run_episode(client, agent, gid, "train", cfg["run_id"], fc, step_cap=step_cap, schedule_seed=seed)
         append_jsonl(d / "episodes.jsonl", [ep])
         episodes.append(ep)
     return episodes
@@ -141,18 +181,12 @@ def run_t0_smoke(cfg: dict) -> int:
     n = int(cfg.get("n_games", 5))
     games = _games(client, "train", n, cfg)
     client.create()
+    jobs = [(gid, ForesightConfig(condition="none"), None) for gid in games]
+    episodes = _run_jobs(d, cfg, client, agent, jobs, step_cap=int(cfg.get("step_cap", C.STEP_CAP)))
+    (d / "observations.jsonl").unlink(missing_ok=True)  # rebuilt from the saved episodes
     obs_count = wins = noops = steps = 0
-    for gid in games:
-        ep = run_episode(
-            client,
-            agent,
-            gid,
-            "train",
-            run_id,
-            ForesightConfig(condition="none"),
-            step_cap=int(cfg.get("step_cap", C.STEP_CAP)),
-        )
-        append_jsonl(d / "episodes.jsonl", [ep])
+    for ep in episodes:
+        gid = ep["game_id"]
         first = client.reset(gid, "train").observation
         obs = [first] + [tr["real_obs"] for tr in ep["trace"]]
         append_jsonl(d / "observations.jsonl", [{"game_id": gid, "obs": o} for o in obs])
@@ -199,7 +233,7 @@ def _logged_states(client: AlfworldClient, cfg: dict, want: int) -> list[dict]:
 def run_t0_replay(cfg: dict) -> int:
     """20 logged states × 3 counterfactual actions, executed twice (§6)."""
     run_id = cfg["run_id"]
-    d = _init_run(run_id, cfg)
+    d = _init_run(run_id, {**cfg, "resume": False})  # minutes long: restarts rather than resumes
     client = _client(cfg)
     client.create()
     rng = random.Random(C.RNG_SEED)
@@ -248,16 +282,21 @@ def run_t0_agent_determinism(cfg: dict) -> int:
     agent = AgentClient(base_url=cfg.get("vllm_base_url"))
     client.create()
     games = _games(client, "train", int(cfg.get("n_games", 10)), cfg)
+    saved: dict[str, list[dict]] = {}
+    for ep in read_jsonl(d / "episodes.jsonl") if cfg.get("resume") else []:
+        saved.setdefault(ep["game_id"], []).append(ep)
     agreements = []
     for gid in games:
-        ep1 = run_episode(client, agent, gid, "train", run_id, ForesightConfig("none"))
-        ep2 = run_episode(client, agent, gid, "train", run_id, ForesightConfig("none"))
+        pair = saved.get(gid, [])[-2:]
+        if len(pair) < 2:
+            pair = [run_episode(client, agent, gid, "train", run_id, ForesightConfig("none")) for _ in range(2)]
+            append_jsonl(d / "episodes.jsonl", pair)
+        ep1, ep2 = pair
         a1 = [t["executed"] for t in ep1["trace"]]
         a2 = [t["executed"] for t in ep2["trace"]]
         n = max(len(a1), len(a2), 1)
         agree = sum(1 for i in range(min(len(a1), len(a2))) if a1[i] == a2[i]) / n
         agreements.append(agree)
-        append_jsonl(d / "episodes.jsonl", [ep1, ep2])
     mean_agree = sum(agreements) / len(agreements) if agreements else 0.0
     ok = mean_agree >= 0.95
     note = ""
@@ -302,7 +341,7 @@ def _dataset_observations(n: int) -> list[str]:
 
 def run_t0_parser(cfg: dict) -> int:
     run_id = cfg["run_id"]
-    d = _init_run(run_id, cfg)
+    d = _init_run(run_id, {**cfg, "resume": False})  # minutes long: restarts rather than resumes
     try:
         texts = _dataset_observations(2000)[:2000]
     except Exception as exc:
@@ -344,22 +383,31 @@ def run_t0_ckpt_accuracy(cfg: dict) -> int:
     client.create()
     games = _games(client, "valid_unseen", 40, {**cfg, "games": cfg.get("valid_unseen_games")})
     per_game = max(1, n // max(len(games), 1) + 1)
-    rng = random.Random(C.RNG_SEED)
-    items: list[dict] = []
+    items, finished = _saved_games(d, "items.jsonl", cfg)
     for gid in games:
+        if len(items) >= n:
+            break
+        if gid in finished:
+            continue
         built = _walk_transitions(client, gid, "valid_unseen")
-        rng.shuffle(built)
-        items.extend(built[:per_game])
+        random.Random(f"{C.RNG_SEED}|{gid}").shuffle(built)
+        kept = [{**t, "id": f"ckpt_{len(items) + i}"} for i, t in enumerate(built[:per_game])]
+        _save_game(d, "items.jsonl", gid, kept)
+        items.extend(kept)
     items = items[:n]
     if not items:
         write_status(run_id, "no valid_unseen items collected — FAIL", ok=False)
         return 1
     task_line_present = sum("Your task is to:" in build_messages(it, "aligned", ft_prompt=True)[0]["content"] for it in items)
     counts = {True: [0, 0], False: [0, 0]}
+    done = {g["id"]: g for g in read_jsonl(d / "generations.jsonl")} if cfg.get("resume") else {}
     for it in items:
-        gen = scorer.free_generate(build_messages(it, "aligned", ft_prompt=True))
-        exact = gen.split(" [SUCCESS]")[0].strip() == it["true_obs"].strip()
-        counts[bool(it["context_determined"])][0] += int(exact)
+        rec = done.get(it["id"])
+        if rec is None:
+            gen = scorer.free_generate(build_messages(it, "aligned", ft_prompt=True))
+            rec = {"id": it["id"], "generated": gen, "exact": gen.split(" [SUCCESS]")[0].strip() == it["true_obs"].strip()}
+            append_jsonl(d / "generations.jsonl", [rec])
+        counts[bool(it["context_determined"])][0] += int(rec["exact"])
         counts[bool(it["context_determined"])][1] += 1
     det_acc = counts[True][0] / counts[True][1] if counts[True][1] else float("nan")
     und_acc = counts[False][0] / counts[False][1] if counts[False][1] else float("nan")
@@ -386,29 +434,35 @@ def run_t0_scoring_agreement(cfg: dict) -> int:
     client = _client(cfg)
     client.create()
     scorer = LogoddsScorer(C.WM_FEWSHOT_MODEL, model_tag="qwen3-8b-fewshot")
-    rng = random.Random(C.RNG_SEED)
-    items: list[dict] = []
+    items, finished = _saved_games(d, "items.jsonl", cfg)
     for gid in _games(client, "train", 30, cfg):
-        built = [t for t in _walk_transitions(client, gid, "train") if t.get("candidates")]
-        rng.shuffle(built)
-        failures = [t for t in built if t["true_obs"].strip() == "Nothing happens."][:5]
-        successes = [t for t in built if t["true_obs"].strip() != "Nothing happens."][:5]
-        for t in failures + successes:
-            items.append({**t, "id": f"agree_{len(items)}"})
         if len(items) >= 100:
             break
+        if gid in finished:
+            continue
+        built = [t for t in _walk_transitions(client, gid, "train") if t.get("candidates")]
+        random.Random(f"{C.RNG_SEED}|{gid}").shuffle(built)
+        failures = [t for t in built if t["true_obs"].strip() == "Nothing happens."][:5]
+        successes = [t for t in built if t["true_obs"].strip() != "Nothing happens."][:5]
+        kept = [{**t, "id": f"agree_{len(items) + i}"} for i, t in enumerate(failures + successes)]
+        _save_game(d, "items.jsonl", gid, kept)
+        items.extend(kept)
     items = items[:100]
     if len(items) < 100:
         write_status(run_id, f"only {len(items)} distinct items with candidates; need 100 — FAIL", ok=False)
         return 1
     agree = 0
+    done = {s["transition_id"]: s for s in read_jsonl(d / "scoring.jsonl")} if cfg.get("resume") else {}
     for it in items:
-        gen_cls = parse_observation(scorer.free_generate(build_messages(it, "aligned")))
-        sc = score_transition(scorer, it, "aligned")
-        assert sc is not None
-        gen_success = gen_cls != "noop" and gen_cls != "unparseable"
-        agree += (sc.L > 0) == gen_success
-        append_jsonl(d / "scoring.jsonl", [sc.to_dict()])
+        rec = done.get(it["id"])
+        if rec is None:
+            gen_cls = parse_observation(scorer.free_generate(build_messages(it, "aligned")))
+            sc = score_transition(scorer, it, "aligned")
+            assert sc is not None
+            gen_success = gen_cls != "noop" and gen_cls != "unparseable"
+            rec = {**sc.to_dict(), "generated_class": gen_cls, "agree": (sc.L > 0) == gen_success}
+            append_jsonl(d / "scoring.jsonl", [rec])
+        agree += rec["agree"]
     rate = agree / len(items)
     ok = rate >= C.SCORING_AGREEMENT_MIN
     write_status(
@@ -422,7 +476,7 @@ def run_t0_scoring_agreement(cfg: dict) -> int:
 
 def run_t0_expert_labels(cfg: dict) -> int:
     run_id = cfg["run_id"]
-    d = _init_run(run_id, cfg)
+    d = _init_run(run_id, {**cfg, "resume": False})  # minutes long: restarts rather than resumes
     client = _client(cfg)
     client.create()
     games = _games(client, "train", 5, cfg)
@@ -454,8 +508,7 @@ def run_pilotA_transitions(cfg: dict) -> int:
     client.create()
     n_games = int(cfg.get("n_games", 40))
     games = _games(client, "train", n_games, cfg)
-    all_t = read_jsonl(d / "transitions.jsonl") if cfg.get("resume") else []
-    finished = {t["game_id"] for t in all_t}
+    all_t, finished = _saved_games(d, "transitions.jsonl", cfg)
     tid = len(all_t)
     for gid in games:
         if gid in finished:
@@ -471,7 +524,7 @@ def run_pilotA_transitions(cfg: dict) -> int:
         )
         tid += len(recs)
         all_t.extend(recs)
-        append_jsonl(d / "transitions.jsonl", recs)
+        _save_game(d, "transitions.jsonl", gid, recs)
     eligible = filter_pilot_a_items(all_t)
     states = {t["game_id"] + f"#{t['state_idx']}" for t in eligible}
     ok = len(eligible) >= 500 and len(states) >= 80
@@ -560,19 +613,19 @@ def run_pilotA_score(cfg: dict) -> int:
         return 1
 
     reports = {}
+    saved = read_jsonl(d / "scoring.jsonl") if cfg.get("resume") else []
+    done = {(s["model"], s["transition_id"], s["condition"]) for s in saved}
     for model_name, tag, ft in models:
         scorer = LogoddsScorer(model_name, model_tag=tag)
-        scores = []
-        for t in eligible:
-            for cond in conditions:
-                sc = score_transition(scorer, t, cond, ft_prompt=ft)
-                if sc:
-                    scores.append({**sc.to_dict(), "game_id": t["game_id"]})
-        for t in successes:
-            sc = score_transition(scorer, t, "aligned", ft_prompt=ft)
+        scores = [s for s in saved if s["model"] == tag]
+        for t, cond in [(t, c) for t in eligible for c in conditions] + [(t, "aligned") for t in successes]:
+            if (tag, t["id"], cond) in done:
+                continue
+            sc = score_transition(scorer, t, cond, ft_prompt=ft)
             if sc:
-                scores.append({**sc.to_dict(), "game_id": t["game_id"]})
-        append_jsonl(d / "scoring.jsonl", scores)
+                rec = {**sc.to_dict(), "game_id": t["game_id"]}
+                append_jsonl(d / "scoring.jsonl", [rec])
+                scores.append(rec)
         everything = eligible + successes
         reports[tag] = {
             "goal_agnostic": _effect(scores, agnostic),
@@ -881,6 +934,9 @@ def main(argv: list[str] | None = None) -> None:
         os.environ["WF_MOCK_SCORE"] = "1"
     cfg = load_config(args.run_id)
     cfg["resume"] = args.resume
+    if args.resume and _already_passed(args.run_id):
+        print(f"{args.run_id}: already passed at this commit, skipping", flush=True)
+        sys.exit(0)
     code = RUNNERS[args.run_id](cfg)
     sys.exit(code)
 

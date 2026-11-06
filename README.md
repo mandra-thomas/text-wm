@@ -26,7 +26,7 @@ Mock runs use `wf/env/sim.py`, which reproduces the AgentGym server's semantics 
 5. After filing prereg: set `RETENTION_MARGIN` (already `1.0` in `wf/constants.py`), write `runs/FILED.txt`, then:
    - `bash pace/submit.sh pilotA.sbatch`
    - `bash pace/submit.sh pilotB.sbatch`
-6. After a wall-clock timeout, resubmit with `WF_RESUME=1` in the job environment to keep finished episodes and transitions.
+6. After a wall-clock timeout or crash, resubmit the same job with `sbatch --export=ALL,WF_RESUME=1 pace/<job>.sbatch`. Work is saved as it finishes: one episode, one score or one built game at a time. A resume skips runs that already passed at this commit and refuses to continue work saved by a different commit. Partial results can be read while a job runs.
 
 Changes made after filing are listed in [notes/deviations.md](notes/deviations.md).
 

@@ -160,7 +160,7 @@ def check_contract(client: AlfworldClient, games: list[str]) -> dict:
     }
 
 
-def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | None) -> dict:
+def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | None, checkpoint=None) -> dict:
     objects_true = objects_found = location_right = 0
     missed: Counter = Counter()
     twins = Counter()
@@ -173,8 +173,32 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
     replay_mismatch = 0
     transitions: list[dict] = []
     per_game: list[int] = []
-    timings = {"scan_s": [], "reset_s": []}
-    for gid in games:
+    timings = {"scan_s": [], "reset_s": [], "step_s": [], "soundness_s": [], "build_s": []}
+
+    def summary(done: int) -> dict:
+        eligible = filter_pilot_a_items(transitions)
+        return {
+            "games": done,
+            "scene_scan": {"objects_in_hidden_state": objects_true, "found": objects_found, "right_location": location_right,
+                           "missed_types": missed.most_common(10)},
+            "replay_mismatches": replay_mismatch,
+            "context_determined_soundness": {"claims": determined_claims, "wrong": determined_wrong, "examples": wrong_examples},
+            "twins_by_action": {f"{k[0]}/{k[1]}": v for k, v in sorted(twins.items())},
+            "twin_examples": twin_examples,
+            "determination_reasons": dict(reasons),
+            "observed_classes": dict(observed),
+            "unparseable": unparseable.most_common(10),
+            "pilot_a": {
+                "total": len(transitions), "eligible": len(eligible),
+                "eligible_per_game": sum(per_game) / max(len(per_game), 1),
+                "agnostic_targeted": sum(bool(t["history_goal_agnostic"] and t["targets_goal_object"]) for t in eligible),
+                "exclusions": exclusion_counts(transitions),
+                "error_types": dict(Counter(t["error_type"] for t in eligible)),
+            },
+            "timing_s": {k: sum(v) / max(len(v), 1) for k, v in timings.items()},
+        }
+
+    for done, gid in enumerate(games, 1):
         started = time.perf_counter()
         client.reset(gid, "train")
         timings["reset_s"].append(time.perf_counter() - started)
@@ -190,6 +214,7 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
         rng = random.Random(gid)
         state = client.reset(gid, "train")
         actions: list[str] = []
+        soundness = 0.0
         for _ in range(12):
             choices = sorted(a for a in state.admissible if a not in FLUFF)
             action = rng.choice(choices)
@@ -197,6 +222,7 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
             # soundness: any action the rule calls a determined failure must actually fail
             probes = rng.sample(choices, min(4, len(choices))) + [f"take {o} from {state_rec}"
                                                                  for o, state_rec in list(scene.locations.items())[:3]]
+            started = time.perf_counter()
             for probe in probes:
                 if _failure_determined(history_facts(hist), probe):
                     determined_claims += 1
@@ -205,7 +231,10 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
                         determined_wrong += 1
                         if len(wrong_examples) < 8:
                             wrong_examples.append(f"{gid}: {probe!r} -> {obs[:70]!r} after {actions[-3:]}")
+            soundness += time.perf_counter() - started
+            started = time.perf_counter()
             following = client.step(state, action)
+            timings["step_s"].append(time.perf_counter() - started)
             observed[parse_observation(following.observation)] += 1
             if parse_observation(following.observation) == "unparseable":
                 unparseable[re.sub(r"\d+", "N", following.observation)[:70]] += 1
@@ -215,7 +244,10 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
             state = following
         replayed = replay(client, gid, actions, "train").state
         replay_mismatch += replayed.observation != state.observation or replayed.admissible != state.admissible
+        timings["soundness_s"].append(soundness)
+        started = time.perf_counter()
         built = build_transitions_from_rollout(client, gid, "train", actions, id_start=len(transitions), k=2, rng_seed=1)
+        timings["build_s"].append(time.perf_counter() - started)
         transitions += built
         per_game.append(len(filter_pilot_a_items(built)))
         for t in built:
@@ -225,27 +257,9 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
                 if t["candidates"] and len(twin_examples) < 6:
                     twin_examples.append(f"{t['action']} -> {t['candidates']['o_plus'][:60]}")
                 reasons[_determination_reason(t)] += 1
-    eligible = filter_pilot_a_items(transitions)
-    return {
-        "games": len(games),
-        "scene_scan": {"objects_in_hidden_state": objects_true, "found": objects_found, "right_location": location_right,
-                       "missed_types": missed.most_common(10)},
-        "replay_mismatches": replay_mismatch,
-        "context_determined_soundness": {"claims": determined_claims, "wrong": determined_wrong, "examples": wrong_examples},
-        "twins_by_action": {f"{k[0]}/{k[1]}": v for k, v in sorted(twins.items())},
-        "twin_examples": twin_examples,
-        "determination_reasons": dict(reasons),
-        "observed_classes": dict(observed),
-        "unparseable": unparseable.most_common(10),
-        "pilot_a": {
-            "total": len(transitions), "eligible": len(eligible),
-            "eligible_per_game": sum(per_game) / max(len(per_game), 1),
-            "agnostic_targeted": sum(bool(t["history_goal_agnostic"] and t["targets_goal_object"]) for t in eligible),
-            "exclusions": exclusion_counts(transitions),
-            "error_types": dict(Counter(t["error_type"] for t in eligible)),
-        },
-        "timing_s": {k: sum(v) / max(len(v), 1) for k, v in timings.items()},
-    }
+        if checkpoint:  # a time limit must not cost the games already done
+            checkpoint(summary(done))
+    return summary(len(games))
 
 
 def _determination_reason(t: dict) -> str:
@@ -266,7 +280,7 @@ def _determination_reason(t: dict) -> str:
     return "contents_or_open_state"
 
 
-def check_winning(client: AlfworldClient, games: list[str], cap: int) -> dict:
+def check_winning(client: AlfworldClient, games: list[str], cap: int, checkpoint=None) -> dict:
     """The C1 crash and every foresight mode, on real wins with no model involved."""
     configs = {
         "none": lambda g: ForesightConfig("none"),
@@ -280,11 +294,18 @@ def check_winning(client: AlfworldClient, games: list[str], cap: int) -> dict:
     errors: list[str] = []
     timing: dict[str, list[float]] = {}
     tried = 0
+
+    def summary() -> dict:
+        return {"games_with_plan": tried, "wins": dict(wins), "errors": errors,
+                "seconds_per_step": {k: sum(v) / len(v) for k, v in timing.items()}}
+
     for gid in games:
+        if tried >= cap:  # scanning the leftover games buys nothing
+            break
         scene = scan_scene(client, gid, "train")
         task = client.reset(gid, "train").task_line
         plan = _plan_to_win(scene, task)
-        if not plan or tried >= cap:
+        if not plan:
             continue
         tried += 1
         for name, make in configs.items():
@@ -295,8 +316,9 @@ def check_winning(client: AlfworldClient, games: list[str], cap: int) -> dict:
                 timing.setdefault(name, []).append((time.perf_counter() - started) / max(ep["steps"], 1))
             except Exception as exc:
                 errors.append(f"{gid} {name}: {type(exc).__name__}: {str(exc)[:120]}")
-    return {"games_with_plan": tried, "wins": dict(wins), "errors": errors,
-            "seconds_per_step": {k: sum(v) / len(v) for k, v in timing.items()}}
+        if checkpoint:
+            checkpoint(summary())
+    return summary()
 
 
 def main() -> None:
@@ -304,7 +326,7 @@ def main() -> None:
     parser.add_argument("--games", type=int, default=60)
     parser.add_argument("--win-games", type=int, default=20)
     parser.add_argument("--memory-resets", type=int, default=400)
-    parser.add_argument("--only", choices=["memory_recreate"], default=None)
+    parser.add_argument("--only", choices=["memory_recreate", "games"], default=None)
     args = parser.parse_args()
     client = AlfworldClient()
     client.create()
@@ -319,14 +341,18 @@ def main() -> None:
     context_file = Path(os.environ.get("WF_INIT_CONTEXTS", Path(os.environ["WORD2WORLD_ROOT"]) / "data/init_contexts/alfworld")) / "wm_instruct_train.json"
     contexts = [r["messages"][0]["content"] for r in json.loads(context_file.read_text())]
     out = {"solvable_train_games": len(client.list_games("train"))}
-    path = runs_root() / "verify_real_env.json"
+    path = runs_root() / ("verify_games.json" if args.only == "games" else "verify_real_env.json")
     checks = {
         "memory_before": lambda: check_memory(client, games[0], args.memory_resets),
         "contract": lambda: check_contract(client, games),
-        "winning": lambda: check_winning(client, games, args.win_games),
-        "games": lambda: check_games(client, games[: args.games], contexts),
+        "winning": lambda: check_winning(client, games, args.win_games,
+                                         checkpoint=lambda partial: write_json(path, {**out, "winning": partial})),
+        "games": lambda: check_games(client, games[: args.games], contexts,
+                                     checkpoint=lambda partial: write_json(path, {**out, "games": partial})),
         "memory_after": lambda: check_memory(client, games[0], args.memory_resets),
     }
+    if args.only == "games":
+        checks = {k: checks[k] for k in ("games", "memory_after")}
     for name, check in checks.items():  # saved after each check, so a failure keeps the rest
         started = time.perf_counter()
         try:
