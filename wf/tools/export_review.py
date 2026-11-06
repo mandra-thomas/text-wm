@@ -43,6 +43,7 @@ def _item_block(number: int, t: dict) -> str:
         f"- **Success text (o+):** {candidates.get('o_plus')}\n"
         f"- **Labels:** error_type={t['error_type']}, determined={yes_no(t['context_determined'])}, "
         f"goal-agnostic={yes_no(t['history_goal_agnostic'])}, targets goal={yes_no(t['targets_goal_object'])}"
+        f"{', shares a spot with the agent' if t.get('shared_location') else ''}"
         f"{', excluded: ' + t['exclusion_reason'] if t.get('exclusion_reason') else ''}\n\n"
         f"History the world model sees:\n\n{history}\n"
     )

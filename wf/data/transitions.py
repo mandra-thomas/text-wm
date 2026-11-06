@@ -109,6 +109,21 @@ def _failure_determined(facts: HistoryFacts, action: str) -> bool:
     return False
 
 
+def _receptacle(action: str) -> str | None:
+    m = re.search(r"\b(?:from|to|with) (.+)$", action) or re.fullmatch(r"(?:open|close) (.+)", action)
+    return m[1] if m else None
+
+
+def at_shared_spot(facts: HistoryFacts, action: str, scene: Scene) -> bool:
+    """Does the action's receptacle share a spot with the one the agent is at?
+
+    Then "you are elsewhere" proves nothing: the action can work from here, and the history
+    cannot show that. Such failures stay scored but leave the main test (notes/deviations.md).
+    """
+    target = _receptacle(action)
+    return bool(target and facts.location and scene.shares_spot(facts.location, target))
+
+
 def context_determined_label(history_text: str, action: str, true_obs: str) -> bool:
     """Is the outcome decidable from history_text alone (§4.2)?
 
@@ -201,11 +216,10 @@ def build_transitions_at_state(
         obs, info = step_counterfactual(h2, action)
         failed = obs.strip() == "Nothing happens."
         named = {o for o in scene.objects if names_object(action, o)}
-        rec_m = re.search(r"(?:from|to|with) (.+)$", action)
         swap_obj = swapped_goal(
             scene.objects,
             goal_object,
-            receptacle_in_question=rec_m[1] if rec_m else None,
+            receptacle_in_question=_receptacle(action),
             rng=rng,
             locations=scene.locations,
             exclude=named | seen,
@@ -229,6 +243,7 @@ def build_transitions_at_state(
             "outcome_class": parse_observation(obs, goal_object),
             "error_type": ("validity" if error_type in ("proposal", "success") else error_type) if failed else "completion",
             "context_determined": context_determined_label(hist, action, obs),
+            "shared_location": at_shared_spot(history_facts(hist), action, scene),
             "history_goal_agnostic": history_goal_agnostic(hist, goal_object, swap_obj) if swap_obj else None,
             "history_len": len(prefix_actions),
             "targets_goal_object": targets,
@@ -239,6 +254,8 @@ def build_transitions_at_state(
         attach_candidates(client, rec, success_cache=success_cache)
         if swap_obj is None:
             rec.setdefault("exclusion_reason", "no_swap_object")
+        if rec["shared_location"]:
+            rec.setdefault("exclusion_reason", "shared_location")
         records.append(rec)
         tid += 1
     return records
@@ -292,6 +309,11 @@ def filter_pilot_a_items(transitions: Iterable[dict]) -> list[dict]:
             continue
         out.append(t)
     return out
+
+
+def main_test_items(items: Iterable[dict]) -> list[dict]:
+    """Items for the main test. `shared_location` items feed only the sensitivity check."""
+    return [t for t in items if not t.get("shared_location")]
 
 
 def exclusion_counts(transitions: Iterable[dict]) -> dict[str, int]:

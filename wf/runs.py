@@ -37,6 +37,7 @@ from wf.data.transitions import (
     build_transitions_from_rollout,
     exclusion_counts,
     filter_pilot_a_items,
+    main_test_items,
 )
 from wf.env.expert import expert_available, label_action
 from wf.env.replay import replay, step_counterfactual
@@ -136,7 +137,8 @@ def _already_passed(run_id: str) -> bool:
     if not (d / "STATUS.md").exists() or not (d / "git_sha").exists():
         return False
     first = (d / "STATUS.md").read_text(encoding="utf-8").splitlines()[0]
-    return "— PASS" in first and (d / "git_sha").read_text(encoding="utf-8").strip() == git_sha()
+    finished = "— PASS" in first or "— REPORTED" in first
+    return finished and (d / "git_sha").read_text(encoding="utf-8").strip() == git_sha()
 
 
 def _saved_games(d: Path, name: str, cfg: dict) -> tuple[list[dict], set[str]]:
@@ -305,7 +307,7 @@ def run_t0_agent_determinism(cfg: dict) -> int:
     write_status(
         run_id,
         f"mean step agreement={mean_agree:.3f} over {len(games)} games{note}",
-        ok=True,  # reported even if low; protocol says report
+        reported=f"agreement {mean_agree:.3f}" if ok else f"BELOW TARGET: agreement {mean_agree:.3f} < 0.95",
     )
     write_run_report(run_id, "t0_agent_determinism", {"mean_agreement": mean_agree})
     return 0
@@ -415,7 +417,7 @@ def run_t0_ckpt_accuracy(cfg: dict) -> int:
         run_id,
         f"valid_unseen n={len(items)} exact-match determined_acc={det_acc} (n={counts[True][1]}) "
         f"uncertain_acc={und_acc} (n={counts[False][1]}) task_line_present={task_line_present}/{len(items)} — reported",
-        ok=True,
+        reported="no target",
     )
     write_run_report(
         run_id,
@@ -491,7 +493,7 @@ def run_t0_expert_labels(cfg: dict) -> int:
         msg = f"expert labels available: yes; n_labels={len(labels)}"
     else:
         msg = "expert labels available: no — on_expert_path=null; do not approximate with a heuristic."
-    write_status(run_id, msg, ok=True)
+    write_status(run_id, msg, reported="no target")
     write_run_report(run_id, "t0_expert_labels", {"available": available, "n": len(labels)})
     return 0
 
@@ -526,8 +528,9 @@ def run_pilotA_transitions(cfg: dict) -> int:
         all_t.extend(recs)
         _save_game(d, "transitions.jsonl", gid, recs)
     eligible = filter_pilot_a_items(all_t)
-    states = {t["game_id"] + f"#{t['state_idx']}" for t in eligible}
-    ok = len(eligible) >= 500 and len(states) >= 80
+    main_items = main_test_items(eligible)
+    states = {t["game_id"] + f"#{t['state_idx']}" for t in main_items}
+    ok = len(main_items) >= 500 and len(states) >= 80
     counts: dict[str, int] = {}
     for t in eligible:
         kind = "goal-agnostic" if t.get("history_goal_agnostic") else "goal-revealing"
@@ -539,7 +542,8 @@ def run_pilotA_transitions(cfg: dict) -> int:
     exclusions = exclusion_counts(all_t)
     write_status(
         run_id,
-        f"total={len(all_t)} eligible_failure_determined={len(eligible)} targeted={targeted} states={len(states)}\n"
+        f"total={len(all_t)} eligible_failure_determined={len(eligible)} main_test={len(main_items)} "
+        f"shared_location={len(eligible) - len(main_items)} targeted={targeted} states={len(states)}\n"
         f"counts={counts}\nbalance={balance}\nexclusions={exclusions}\n"
         f"Acceptance ≥500 items / ≥80 states — {'PASS' if ok else 'FAIL'}",
         ok=ok,
@@ -547,7 +551,8 @@ def run_pilotA_transitions(cfg: dict) -> int:
     write_run_report(
         run_id,
         "pilotA_transitions",
-        {"n_total": len(all_t), "n_eligible": len(eligible), "n_targeted": targeted, "n_states": len(states),
+        {"n_total": len(all_t), "n_eligible": len(eligible), "n_main_test": len(main_items),
+         "n_shared_location": len(eligible) - len(main_items), "n_targeted": targeted, "n_states": len(states),
          "counts": counts, "balance": balance, "exclusions": exclusions},
     )
     return 0 if ok else 1
@@ -600,8 +605,9 @@ def run_pilotA_score(cfg: dict) -> int:
     ]
     # The aligned goal must be one the action's success would advance (prereg).
     targeted = [t for t in eligible if t.get("targets_goal_object")]
-    agnostic = [t for t in targeted if t.get("history_goal_agnostic")]
-    revealing = [t for t in targeted if not t.get("history_goal_agnostic")]
+    agnostic_all = [t for t in targeted if t.get("history_goal_agnostic")]
+    agnostic = main_test_items(agnostic_all)
+    revealing = main_test_items(t for t in targeted if not t.get("history_goal_agnostic"))
     bins = {
         "0": lambda n: n == 0,
         "1-3": lambda n: 1 <= n <= 3,
@@ -626,7 +632,7 @@ def run_pilotA_score(cfg: dict) -> int:
                 rec = {**sc.to_dict(), "game_id": t["game_id"]}
                 append_jsonl(d / "scoring.jsonl", [rec])
                 scores.append(rec)
-        everything = eligible + successes
+        everything = main_test_items(eligible) + successes
         reports[tag] = {
             "goal_agnostic": _effect(scores, agnostic),
             "goal_revealing": _effect(scores, revealing, require_agnostic=False),
@@ -637,6 +643,12 @@ def run_pilotA_score(cfg: dict) -> int:
             "committed_vs_candidate": _effect(scores, agnostic, primary="committed", control="candidate"),
             "A": asymmetry_A(scores, everything),
             "A_ci": asymmetry_ci(scores, everything, seed=C.RNG_SEED),
+            # Sensitivity check, not a primary result: see notes/deviations.md
+            "with_shared_location": {
+                "n_flagged": len(agnostic_all) - len(agnostic),
+                "goal_agnostic": _effect(scores, agnostic_all),
+                "A": asymmetry_A(scores, eligible + successes),
+            },
         }
         core = reports[tag]["goal_agnostic"]
         reports[tag]["implied_se_pp"] = {
@@ -677,11 +689,17 @@ def run_pilotA_score(cfg: dict) -> int:
         tag: {k: rep["goal_agnostic"][k] for k in ("n_items", "n_games", "delta_p_pp", "delta_p_ci", "delta_L_nats", "delta_L_ci")}
         for tag, rep in reports.items()
     }
+    sensitivity = {
+        tag: {"n_flagged": rep["with_shared_location"]["n_flagged"],
+              "delta_L_nats": rep["with_shared_location"]["goal_agnostic"]["delta_L_nats"],
+              "A": rep["with_shared_location"]["A"]}
+        for tag, rep in reports.items()
+    }
     write_status(
         run_id,
         f"PILOT_RULE_GOAL_CHANNEL={'fired' if fired else 'not fired'}; ELIGIBLE_SET_TARGET={target_n}\n"
-        f"rule conflicts with ΔL on: {conflict or 'none'}\n{summary}",
-        ok=True,
+        f"rule conflicts with ΔL on: {conflict or 'none'}\n{summary}\nsensitivity with shared_location items: {sensitivity}",
+        reported="rule output",
     )
     write_run_report(run_id, "pilotA_score", cal)
     return 0
@@ -823,7 +841,8 @@ def run_pilotB_eligibility(cfg: dict) -> int:
         yaml.dump(cal, f, sort_keys=True)
     write_json(d / "metrics.json", cal)
     note = f"\nWARNING: too few eligible steps to reach {target} corruptions per episode: {short}" if short else ""
-    write_status(run_id, f"wrote {cal_path.name}: p_favorable={p_fav:.4f} p_unfavorable={p_unfav:.4f}{note}", ok=True)
+    write_status(run_id, f"wrote {cal_path.name}: p_favorable={p_fav:.4f} p_unfavorable={p_unfav:.4f}{note}",
+                 reported=f"BELOW TARGET: {short}" if short else "calibration")
     write_run_report(run_id, "pilotB_eligibility", cal)
     return 0
 
@@ -893,7 +912,7 @@ def run_pilotB_retention_minirun(cfg: dict) -> int:
     write_status(
         run_id,
         f"H_discarded={Hd} H_retained={Hr} I={I} retention_shift={shift}\n{fmt_rule}\ncells={cells}",
-        ok=True,
+        reported="rule output",
     )
     write_run_report(
         run_id,

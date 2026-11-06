@@ -1,5 +1,5 @@
 run_id: pilotA_transitions
 split: train
 # Need ≥80 eligible states / ≥500 items (protocol §6).
-n_games: 60
+n_games: 30
 step_cap: 12

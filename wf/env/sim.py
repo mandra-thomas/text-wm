@@ -3,7 +3,9 @@
 Mirrors AgentGym's env_wrapper.py at Word2World e8dc240: one server-side env per id, /reset
 rebuilds it, /step mutates it, episodes end at ENV_STEP_LIMIT steps or a win, and after
 done=True every /step returns an error. Commands
-outside the admissible list return "Nothing happens.". Observation strings use the templates
+outside the admissible list return "Nothing happens.". Some receptacles share a spot, as on the
+real server: `go to` between them is not offered, and actions on one work from the other.
+Observation strings use the templates
 of real trajectories. It plugs in as AlfworldClient._session, so mock runs exercise the same
 client code as ICE runs.
 """
@@ -38,8 +40,9 @@ class World:
         task: str = "Your task is to: put a mug in coffeemachine.",
         goal: str = "mug",
         target: str = "coffeemachine 1",
+        shared: tuple[str, ...] = (),
     ):
-        self.task, self.goal, self.target = task, goal, target
+        self.task, self.goal, self.target, self.shared = task, goal, target, shared
         other = "pear 1" if goal == "apple" else "apple 1"
         self.rec: dict[str, dict[str, Any]] = {
             "drawer 1": {"closed": True, "items": [f"{goal} 1", "pen 1"]},
@@ -57,19 +60,26 @@ class World:
         names = ", ".join("a " + k for k in self.rec)
         return f"You are in the middle of a room. Looking quickly around you, you see {names}.\n{self.task}"
 
+    def _here(self) -> list[str]:
+        """The receptacles at the agent's spot."""
+        if self.loc is None:
+            return []
+        return [k for k in self.rec if k == self.loc or (k in self.shared and self.loc in self.shared)]
+
     def admissible(self) -> list[str]:
-        acts = [f"go to {k}" for k in self.rec if k != self.loc] + ["help", "inventory", "look"]
-        if self.loc:
-            rec = self.rec[self.loc]
+        here = self._here()
+        acts = [f"go to {k}" for k in self.rec if k not in here] + ["help", "inventory", "look"]
+        for name in here:
+            rec = self.rec[name]
             if rec["closed"]:
-                acts.append(f"open {self.loc}")
+                acts.append(f"open {name}")
             else:
-                if self.loc in ("drawer 1", "cabinet 1"):
-                    acts.append(f"close {self.loc}")
+                if name in ("drawer 1", "cabinet 1"):
+                    acts.append(f"close {name}")
                 if self.hold:
-                    acts.append(f"move {self.hold} to {self.loc}")
+                    acts.append(f"move {self.hold} to {name}")
                 else:
-                    acts += [f"take {i} from {self.loc}" for i in rec["items"]]
+                    acts += [f"take {i} from {name}" for i in rec["items"]]
         return acts
 
     def _describe(self, name: str) -> str:
@@ -87,24 +97,26 @@ class World:
             self.loc = action[6:]
             return f"You arrive at {self.loc}. {self._describe(self.loc)}"
         if action.startswith("open "):
-            rec = self.rec[self.loc]
+            name = action[5:]
+            rec = self.rec[name]
             rec["closed"] = False
             seen = ", ".join("a " + i for i in rec["items"]) or "nothing"
-            return f"You open the {self.loc}. The {self.loc} is open. In it, you see {seen}."
+            return f"You open the {name}. The {name} is open. In it, you see {seen}."
         if action.startswith("close "):
-            self.rec[self.loc]["closed"] = True
-            return f"You close the {self.loc}."
+            name = action[6:]
+            self.rec[name]["closed"] = True
+            return f"You close the {name}."
         m = re.fullmatch(r"take (.+) from (.+)", action)
         if m:
             self.hold = m[1]
-            self.rec[self.loc]["items"].remove(self.hold)
-            return f"You pick up the {self.hold} from the {self.loc}."
+            self.rec[m[2]]["items"].remove(self.hold)
+            return f"You pick up the {self.hold} from the {m[2]}."
         m = re.fullmatch(r"move (.+) to (.+)", action)
         if m:
             obj, self.hold = self.hold, None
-            self.rec[self.loc]["items"].append(obj)
-            self.won = self.loc == self.target and obj.startswith(self.goal)
-            return f"You move the {obj} to the {self.loc}."
+            self.rec[m[2]]["items"].append(obj)
+            self.won = m[2] == self.target and obj.startswith(self.goal)
+            return f"You move the {obj} to the {m[2]}."
         if action == "inventory":
             return f"You are carrying: a {self.hold}." if self.hold else "You are not carrying anything."
         if action == "look":
@@ -117,7 +129,8 @@ def world_for_game(game: int) -> World:
     goal = GOALS[game % len(GOALS)]
     template = TASK_TEMPLATES[game % len(TASK_TEMPLATES)]
     target = "desklamp" if "desklamp" in template else TARGETS[game % len(TARGETS)]
-    return World(f"Your task is to: {template.format(o=goal, r=target)}", goal, f"{target} 1")
+    shared = ("drawer 1", "countertop 1") if game % 2 else ()  # holds the goal; visited back to back by a scan
+    return World(f"Your task is to: {template.format(o=goal, r=target)}", goal, f"{target} 1", shared)
 
 
 class _Response:

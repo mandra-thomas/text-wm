@@ -32,6 +32,8 @@ def main() -> None:
     ):
         st = _slurp(root / rid / "STATUS.md").replace("\n", " ")[:200]
         ok = "yes" if "PASS" in st or "reported" in st.lower() or "available" in st.lower() else "see STATUS"
+        if "BELOW TARGET" in st:
+            ok = "below target"
         if "FAIL" in st:
             ok = "no"
         lines.append(f"| {rid} | {st} | {ok} |")

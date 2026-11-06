@@ -234,7 +234,7 @@ def test_aligned_and_swapped_differ_only_in_the_task_line(client, ft):
 def test_finetuned_context_comes_from_the_real_file_by_game_index(monkeypatch, tmp_path):
     monkeypatch.delenv("WF_MOCK_SCORE", raising=False)
     monkeypatch.setenv("WF_INIT_CONTEXTS", str(tmp_path))
-    rows = [{"messages": [{"role": "system", "content": f"# Hidden {i}\nYour task is to: put a mug in shelf.\n"}]}
+    rows = [{"id": i, "messages": [{"role": "system", "content": f"# Hidden {i}\nYour task is to: put a mug in shelf.\n"}]}
             for i in range(3)]
     (tmp_path / "wm_instruct_train.json").write_text(json.dumps(rows))
     logodds_mod._wm_contexts.cache_clear()
@@ -561,3 +561,37 @@ def test_verification_tools_run_end_to_end(monkeypatch, tmp_path):
 
 def test_math_guard_sigmoid_is_finite_at_extremes():
     assert sigmoid(-5000) == 0.0 and sigmoid(5000) == 1.0 and math.isfinite(sigmoid(0.0))
+
+
+# --- world-model prompts --------------------------------------------------------------------------
+
+
+def _contexts(monkeypatch, tmp_path, split, ids):
+    monkeypatch.delenv("WF_MOCK_SCORE", raising=False)
+    monkeypatch.setenv("WF_INIT_CONTEXTS", str(tmp_path))
+    rows = [{"id": i, "messages": [{"role": "system", "content": f"# Hidden {i}\nYour task is to: task {i}.\n"}]} for i in ids]
+    (tmp_path / f"wm_instruct_{split}.json").write_text(json.dumps(rows))
+    logodds_mod._wm_contexts.cache_clear()
+
+
+def test_prompts_are_found_by_game_id_where_the_file_has_gaps(monkeypatch, tmp_path):
+    _contexts(monkeypatch, tmp_path, "valid_unseen", [2807, 2808, 2816, 2817])  # as in the real file
+    item = {"game_id": "valid_unseen/9", "split": "valid_unseen", "task_line": "Your task is to: task 2816."}
+    assert "# Hidden 2816" in logodds_mod.world_model_context(item)
+    logodds_mod._wm_contexts.cache_clear()
+
+
+def test_another_games_prompt_stops_the_run(monkeypatch, tmp_path):
+    _contexts(monkeypatch, tmp_path, "valid_unseen", [2807])
+    item = {"game_id": "valid_unseen/0", "split": "valid_unseen", "task_line": "Your task is to: something else."}
+    with pytest.raises(ValueError, match="different task"):
+        logodds_mod.world_model_context(item)
+    logodds_mod._wm_contexts.cache_clear()
+
+
+def test_a_missing_prompt_stops_the_run(monkeypatch, tmp_path):
+    _contexts(monkeypatch, tmp_path, "valid_unseen", [2807])
+    item = {"game_id": "valid_unseen/1", "split": "valid_unseen", "task_line": "Your task is to: task 2808."}
+    with pytest.raises(KeyError, match="no world-model context"):
+        logodds_mod.world_model_context(item)
+    logodds_mod._wm_contexts.cache_clear()

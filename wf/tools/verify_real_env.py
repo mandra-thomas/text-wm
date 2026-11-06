@@ -21,10 +21,12 @@ from wf.corruption.schedule import schedule
 from wf.data.goals import parse_task_line
 from wf.data.transitions import (
     _failure_determined,
+    at_shared_spot,
     build_transitions_from_rollout,
     exclusion_counts,
     filter_pilot_a_items,
     history_facts,
+    main_test_items,
 )
 from wf.env.replay import history_text_from_state, replay, step_counterfactual
 from wf.env.scene import scan_scene
@@ -165,7 +167,7 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
     missed: Counter = Counter()
     twins = Counter()
     twin_examples: list[str] = []
-    determined_claims = determined_wrong = 0
+    determined_claims = determined_wrong = wrong_shared = 0
     wrong_examples: list[str] = []
     reasons = Counter()
     unparseable: Counter = Counter()
@@ -182,14 +184,15 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
             "scene_scan": {"objects_in_hidden_state": objects_true, "found": objects_found, "right_location": location_right,
                            "missed_types": missed.most_common(10)},
             "replay_mismatches": replay_mismatch,
-            "context_determined_soundness": {"claims": determined_claims, "wrong": determined_wrong, "examples": wrong_examples},
+            "context_determined_soundness": {"claims": determined_claims, "wrong": determined_wrong,
+                                             "wrong_at_shared_spot": wrong_shared, "examples": wrong_examples},
             "twins_by_action": {f"{k[0]}/{k[1]}": v for k, v in sorted(twins.items())},
             "twin_examples": twin_examples,
             "determination_reasons": dict(reasons),
             "observed_classes": dict(observed),
             "unparseable": unparseable.most_common(10),
             "pilot_a": {
-                "total": len(transitions), "eligible": len(eligible),
+                "total": len(transitions), "eligible": len(eligible), "main_test": len(main_test_items(eligible)),
                 "eligible_per_game": sum(per_game) / max(len(per_game), 1),
                 "agnostic_targeted": sum(bool(t["history_goal_agnostic"] and t["targets_goal_object"]) for t in eligible),
                 "exclusions": exclusion_counts(transitions),
@@ -229,6 +232,7 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
                     obs, _ = step_counterfactual(replay(client, gid, actions, "train"), probe)
                     if obs.strip() != NOOP:
                         determined_wrong += 1
+                        wrong_shared += at_shared_spot(history_facts(hist), probe, scene)
                         if len(wrong_examples) < 8:
                             wrong_examples.append(f"{gid}: {probe!r} -> {obs[:70]!r} after {actions[-3:]}")
             soundness += time.perf_counter() - started

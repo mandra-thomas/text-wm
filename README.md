@@ -12,7 +12,7 @@ Design documents:
 
 - [cs8803_dlt_proposal.pdf](cs8803_dlt_proposal.pdf) and [cs8803_dlt_preregistration.pdf](cs8803_dlt_preregistration.pdf): the study.
 - [PILOT_PROTOCOL.md](PILOT_PROTOCOL.md): the implementation spec. Its time estimates predate the fixes below.
-- [notes/deviations.md](notes/deviations.md): every change since filing, and six open team decisions. Where this and the protocol disagree, this is current.
+- [notes/deviations.md](notes/deviations.md): every change since filing, six open team decisions, and what the write-up must mention. Where this and the protocol disagree, this is current.
 - [notes/extensions.md](notes/extensions.md): ideas parked until the pilot report exists.
 
 ## Status (2026-11-05)
@@ -136,8 +136,9 @@ Logs are in `logs/`, named by job id.
 
 ## Things worth knowing
 
+- **Some receptacles share a spot.** From `cabinet 1` the agent can act on `cabinet 2`, and `go to cabinet 2` does nothing. Items affected by this carry `shared_location`, stay scored, and are left out of Pilot A's main test. Read that section of [notes/deviations.md](notes/deviations.md) before analysing or writing up results.
 - **Solvable games only.** The split sizes are 2,179 train, 140 `valid_seen` and 134 `valid_unseen`. AgentGym's mappings also list unsolvable games that crash on reset, and `wf/env/server.py` filters them out. See protocol §5.1.
 - **The server keeps one live game per id.** Finished games refuse further steps, and ALFWorld ends every episode at 50 steps. Counterfactual replays run on a separate sandbox id, so they never touch the live episode.
 - **Steps are slow by design.** Every step replays the game from a reset, in every condition, which costs about 1.7 s before any model time.
-- **The real server leaks about 2.6 MB per reset.** That is fine for the pilots, but the full RQ3 run, at roughly 100,000 resets, needs a fix or periodic restarts.
+- **The real server leaks memory on every reset.** It reached about 20 GB after 4,281 resets over 30 games, or about 4.5 MB per reset, without getting slower. Jobs have 64 GB, which Pilot A's 30 games fit comfortably, but the full RQ3 run, at roughly 100,000 resets, needs a fix or periodic restarts.
 - **Expert labels are unavailable on the real server.** `on_expert_path` stays null rather than being approximated.

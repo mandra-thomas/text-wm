@@ -19,6 +19,10 @@ class Scene:
     receptacles: list[str]
     locations: dict[str, str] = field(default_factory=dict)  # "mug 1" -> "drawer 1"
     closed: set[str] = field(default_factory=set)
+    shared: dict[str, set[str]] = field(default_factory=dict)  # "cabinet 1" -> {"cabinet 2"}: same spot
+
+    def shares_spot(self, here: str, other: str) -> bool:
+        return other in self.shared.get(here, set())
 
     @property
     def objects(self) -> list[str]:
@@ -38,7 +42,13 @@ def scan_scene(client: AlfworldClient, game_id: str, split: str = "train") -> Sc
     for receptacle in scene.receptacles:
         if state.step + 2 >= ENV_STEP_LIMIT:  # large rooms need more steps than one episode allows
             state = scanner.reset(game_id, split)
+        elif f"go to {receptacle}" not in state.admissible:  # same spot as here, so the move would do nothing
+            state = scanner.reset(game_id, split)
         state = scanner.step(state, f"go to {receptacle}")
+        # ALFWorld stops offering `go to` for a receptacle at the agent's own spot; on real games
+        # this matched a direct test on all 2,164 receptacle pairs (see notes/deviations.md).
+        scene.shared[receptacle] = {r for r in scene.receptacles
+                                    if r != receptacle and f"go to {r}" not in state.admissible}
         if f"The {receptacle} is closed" in state.observation:
             scene.closed.add(receptacle)
             state = scanner.step(state, f"open {receptacle}")

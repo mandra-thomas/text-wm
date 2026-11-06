@@ -105,9 +105,10 @@ def iter_jsonl(path: Path) -> Iterator[dict]:
                 yield json.loads(line)
 
 
-def write_status(run_id: str, body: str, ok: bool = True) -> Path:
+def write_status(run_id: str, body: str, ok: bool = True, reported: str | None = None) -> Path:
+    """PASS means a target was met. `reported` is for runs with no target, or a result below one."""
     p = run_dir(run_id) / "STATUS.md"
-    status = ("PASS" if ok else "FAIL") + (" (MOCK)" if is_mock() else "")
+    status = (f"REPORTED ({reported})" if reported else "PASS" if ok else "FAIL") + (" (MOCK)" if is_mock() else "")
     p.write_text(f"# STATUS — {run_id} — {status}\n\n{body.rstrip()}\n", encoding="utf-8")
     return p
 

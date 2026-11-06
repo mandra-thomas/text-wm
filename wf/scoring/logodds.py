@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from wf.data.goals import make_swapped_task_line
+from wf.env.server import parse_game_id
 from wf.scoring.prompts import (
     _replace_task_line,
     condition_task_line,
@@ -196,19 +197,26 @@ def _init_contexts_dir() -> Path:
 
 
 @lru_cache(maxsize=None)
-def _wm_contexts(split: str) -> tuple[str, ...]:
+def _wm_contexts(split: str) -> dict[int, str]:
+    """Keyed by each row's `id`, the game's global index. Rows have gaps, so position means nothing."""
     name = {"valid_train": "test"}.get(split, split)
     path = _init_contexts_dir() / f"wm_instruct_{name}.json"
     rows = json.loads(path.read_text(encoding="utf-8"))
-    return tuple(row["messages"][0]["content"] for row in rows)
+    return {int(row["id"]): row["messages"][0]["content"] for row in rows}
 
 
 def world_model_context(transition: dict) -> str:
     """Hidden state + first observation for this game, the checkpoints' trained input."""
     if os.environ.get("WF_MOCK_SCORE", "0") == "1":
         return f"# Environment Information (Only visible to Assistant)\n\n{transition['task_line']}\n"
-    local_index = int(transition["game_id"].split("/", 1)[1])
-    return _wm_contexts(transition["split"])[local_index]
+    split, global_index = parse_game_id(transition["game_id"])
+    context = _wm_contexts(split).get(global_index)
+    if context is None:
+        raise KeyError(f"no world-model context for {transition['game_id']} (global index {global_index})")
+    # _replace_task_line would hide another game's hidden state, so prove it is this game's.
+    if transition["task_line"].strip() not in context:
+        raise ValueError(f"world-model context for {transition['game_id']} is for a different task")
+    return context
 
 
 def build_messages(transition: dict, condition: str, ft_prompt: bool = False) -> list[dict[str, str]]:

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import wf.runs as runs_mod
+import wf.tools.assemble_pilot_report as assemble_pilot_report
 import wf.tools.verify_models as verify_models
 import wf.tools.verify_real_env as verify_env
 from wf.env.server import AlfworldClient
@@ -311,6 +312,36 @@ def test_resume_refuses_to_mix_commits(mock_runs, monkeypatch):
     with pytest.raises(SystemExit, match="must not mix"):
         runs_mod.run_t0_smoke({"run_id": "t0_smoke", "n_games": 12, "step_cap": 12, "resume": True})
     runs_mod.run_t0_smoke({"run_id": "t0_smoke", "n_games": 12, "step_cap": 12})  # a fresh run is fine
+
+
+def test_reported_runs_never_say_pass_and_resume_still_skips_them(mock_runs, monkeypatch):
+    root = mock_runs("run")
+    runs_mod.run_t0_ckpt_accuracy({"run_id": "t0_ckpt_accuracy", "n_items": 10})
+    first = (root / "t0_ckpt_accuracy" / "STATUS.md").read_text().splitlines()[0]
+    assert "REPORTED (no target)" in first and "PASS" not in first
+    assert runs_mod._already_passed("t0_ckpt_accuracy") is True
+
+
+def test_low_determinism_says_below_target_on_the_first_line(mock_runs, monkeypatch):
+    root = mock_runs("run")
+    real = runs_mod.run_episode
+    calls = [0]
+
+    def drifts(*args, **kwargs):
+        calls[0] += 1
+        ep = real(*args, **kwargs)
+        if calls[0] % 2 == 0:  # the second run of each game disagrees everywhere
+            for step in ep["trace"]:
+                step["executed"] = "look"
+        return ep
+
+    monkeypatch.setattr(runs_mod, "run_episode", drifts)
+    runs_mod.run_t0_agent_determinism({"run_id": "t0_agent_determinism", "n_games": 2})
+    first = (root / "t0_agent_determinism" / "STATUS.md").read_text().splitlines()[0]
+    assert "REPORTED (BELOW TARGET" in first and "PASS" not in first
+    assemble_pilot_report.main()
+    report = (root / "PILOT_REPORT.md").read_text()
+    assert "| below target |" in report
 
 
 # --- verification tools --------------------------------------------------------------------------
