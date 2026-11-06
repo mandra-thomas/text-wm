@@ -20,13 +20,14 @@ from wf.agent.foresight import ForesightConfig
 from wf.agent.react import AgentClient, run_episode
 from wf.analysis.stats import cluster_bootstrap, pair_permutation, rank_outcome
 from wf.corruption.schedule import schedule
-from wf.data.goals import make_swapped_task_line, swapped_goal
+from wf.data.goals import make_swapped_task_line
+from wf.data.transitions import pick_swap
 from wf.env.scene import scan_scene
 from wf.env.server import AlfworldClient
 from wf.runs import _games, _walk_transitions
 from wf.scoring.logodds import LogoddsScorer, build_messages
 from wf.scoring.prompts import agent_react_messages
-from wf.util import runs_root, sigmoid, write_json
+from wf.util import git_sha, runs_root, sigmoid, write_json
 
 NOOP = "Nothing happens."
 
@@ -43,8 +44,8 @@ def _items(client: AlfworldClient, games: list[str]) -> list[dict]:
 def _with_second_swap(item: dict, client: AlfworldClient, rng: random.Random) -> dict | None:
     """Same item with a different irrelevant goal, for the placebo comparison."""
     scene = scan_scene(client, item["game_id"], "train")
-    other = swapped_goal(scene.objects, item["goal_object"], rng=rng, locations=scene.locations,
-                         exclude={item["swapped_goal_object"]})
+    other = pick_swap(scene, item["task_line"], item["goal_object"], item["action"], item["history_text"], rng,
+                      also_exclude={item["swapped_goal_object"]})
     if other is None:
         return None
     line = make_swapped_task_line(item["task_line"], item["goal_object"], other)
@@ -96,11 +97,11 @@ def checkpoint_accuracy(scorer: LogoddsScorer, path: Path, n: int, report=None) 
     return {"n": len(cases), "exact_match": correct / max(len(cases), 1), "misses": misses}
 
 
-def tokenizer_checks(scorer: LogoddsScorer, item: dict) -> dict:
+def tokenizer_checks(scorer: LogoddsScorer, item: dict, ft: bool = False) -> dict:
     if scorer.mock:
         return {"skipped": "mock"}
     tok = scorer._tok
-    messages = build_messages(item, "aligned")
+    messages = build_messages(item, "aligned", ft_prompt=ft)
     prompt_text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
     prompt_ids = scorer._encode(messages)[0].tolist()
     out = {
@@ -148,7 +149,7 @@ def scoring_checks(args: argparse.Namespace, out: dict, save) -> None:
     data = Path(os.environ.get("WORD2WORLD_ROOT", "")) / "data" / C.PARSER_DATASET_FILE
     for model, tag, ft in ((C.WM_FEWSHOT_MODEL, "qwen3-8b-fewshot", False), (C.WM_FT_QWEN, "w2w-qwen2.5-7b", True)):
         scorer = LogoddsScorer(model, model_tag=tag)
-        report: dict = {"tokenizer": tokenizer_checks(scorer, failures[0])}
+        report: dict = {"tokenizer": tokenizer_checks(scorer, failures[0], ft)}
         out[tag] = report
 
         def partial_accuracy(partial: dict) -> None:
@@ -239,7 +240,7 @@ def main() -> None:
     parser.add_argument("--items", type=int, default=150)
     parser.add_argument("--accuracy-items", type=int, default=300)
     args = parser.parse_args()
-    out: dict = {}
+    out: dict = {"git_sha": git_sha()}
     path = runs_root() / f"verify_{args.part}.json"
 
     def save() -> None:

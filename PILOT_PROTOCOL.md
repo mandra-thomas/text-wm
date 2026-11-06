@@ -77,7 +77,7 @@ wf/
   tools/                # real-server and model verifiers, review export, report assembly
 pace/                   # PACE ICE job scripts and setup
 scripts/                # mutation check, vLLM smoke test
-runs/                   # real outputs (gitignored except REPORT.md, STATUS.md, FILED.txt, PILOT_REPORT.md, env.json)
+runs/                   # real outputs (gitignored except FILED.txt and env.json)
 runs_mock/              # mock outputs, kept apart from real results (gitignored)
 notes/extensions.md     # ideas that are NOT in scope
 notes/deviations.md     # every change since filing, open decisions, what the write-up must mention
@@ -97,7 +97,7 @@ tests/                  # unit, regression, adversarial and crash-and-resume tes
  "task_line": "Your task is to: put a mug in coffeemachine.",
  "swapped_task_line": "Your task is to: put a spraybottle in coffeemachine.",
  "goal_object": "mug", "scene_objects": ["mug", "apple", "spraybottle", "..."],
- "swapped_goal_object": "spraybottle",
+ "swapped_goal_object": "spraybottle", "swap_feasible": true,
  "action": "take mug 1 from drawer 1", "action_type": "take",
  "true_obs": "Nothing happens.", "outcome_class": "noop",
  "error_type": "validity", "context_determined": true, "shared_location": false,
@@ -106,7 +106,7 @@ tests/                  # unit, regression, adversarial and crash-and-resume tes
  "candidates": {"o_plus": "You pick up the mug 1 from the drawer 1.", "o_minus": "Nothing happens."}}
 ```
 
-`outcome_class ∈ {noop, state_change, reveal_with_goal, reveal_without_goal, info, unparseable}`; `error_type ∈ {validity, precondition, presence, completion}` (§4.2). `context_determined` is true when validity/precondition/contents are decidable from `history_text` alone. `shared_location` is true when the action's receptacle shares a spot with the one the agent is at (§4.2). `exclusion_reason` records why an item left Pilot A, when it did.
+`outcome_class ∈ {noop, state_change, reveal_with_goal, reveal_without_goal, info, unparseable}`; `error_type ∈ {validity, precondition, presence, completion}` (§4.2). `context_determined` is true when validity/precondition/contents are decidable from `history_text` alone. `shared_location` is true when the action's receptacle shares a spot with the one the agent is at (§4.2). `swap_feasible` is false when no object could replace the goal in this task (§4.3). `exclusion_reason` records why an item left Pilot A, when it did.
 
 **`scoring`** (from `scoring/logodds.py`)
 
@@ -158,12 +158,12 @@ At each sampled state (every k-th step of a logged ReAct rollout, k=2, plus ever
 - wrong-object and wrong-receptacle variants of the proposal;
 - **targeted goal-object failures**: `take <goal_object> from <receptacle where it is not>`, `move <goal_object> to <target>` while not holding it — `error_type=validity` or `precondition` as applicable, `targets_goal_object=true`.
 
-Label `context_determined` by rule: validity and precondition failures are determined when the relevant fact (object location, holding state, receptacle open/closed) appears in `history_text`; reveal outcomes of unopened receptacles are `context_determined=false`. The agent's location counts as such a fact, but some receptacles share a spot, so "the agent is elsewhere" does not prove failure for them: those items carry `shared_location=true` (§6, Pilot A). Balance success/failure within state where possible; record the imbalance.
+Label `context_determined` by rule: validity and precondition failures are determined when the relevant fact (object location, holding state, receptacle open/closed) appears in `history_text`; reveal outcomes of unopened receptacles are `context_determined=false`, and a `go to` success is determined only if the history already shows the receptacle closed. The agent's location counts as such a fact, but some receptacles share a spot, so "the agent is elsewhere" does not prove failure for them: those items carry `shared_location=true` (§6, Pilot A). Balance success/failure within state where possible; record the imbalance.
 
 ### 4.3 `data/goals.py`
 
 - `history_goal_agnostic(history_text, goal_object, swapped_goal_object) -> bool`: true iff the prefix contains no `take/move/heat/cool/clean/examine` action naming either object. Navigation and `open/close` are allowed.
-- `swapped_goal(scene_objects, goal_object, receptacle_in_question, rng, locations, exclude) -> str | None`: choose an object present in the scene (read from the environment by `env/scene.py`, on a private env id, never shown to a model) but not in the receptacle the action concerns, of the same task type where possible. Return `None` if no object qualifies. Record the choice; use a fixed RNG seed.
+- `swapped_goal(scene_objects, goal_object, receptacle_in_question, rng, locations, exclude) -> str | None`: choose an object present in the scene (read from the environment by `env/scene.py`, on a private env id, never shown to a model) but not in any receptacle the action concerns. It must be feasible for the task by the game's own flags in `initial_state.pddl`: pickupable, heatable/coolable/cleanable as the task needs, accepted by the target (`canContain`), two instances for pick-two tasks, and not the target itself. Return `None` if no object qualifies; the item then leaves Pilot A. Record the choice; use a fixed RNG seed.
 - `make_swapped_task_line(task_line, goal_object, swapped_object) -> str`: the first-observation task line with only the object changed, in the exact template the stack uses.
 
 Conditions are built by replacing **only** the task line in the first observation. Nothing else in `history_text` changes.
@@ -172,7 +172,7 @@ Conditions are built by replacing **only** the task line in the first observatio
 
 For each transition produce `o_plus` (favorable) and `o_minus` (unfavorable), both environment-generated:
 
-- If the true action fails (`true_obs == "Nothing happens."`): `o_minus = true_obs`; `o_plus` = the observation the environment produces for the same action type and objects in a state where it succeeds. Obtain it by planning from reset with the scene from `env/scene.py`, replaying that plan to a state where the action is valid, and executing it; cache by `(game_id, action)`.
+- If the true action fails (`true_obs == "Nothing happens."`): `o_minus = true_obs`; `o_plus` = the observation the environment produces for the same action type and objects in a state where it succeeds. Obtain it by planning from reset with the scene from `env/scene.py`, replaying that plan to a state where the action is valid, and executing it; cache by `(game_id, action)`. `open` and `go to` twins print a receptacle's state as of reset, so they are unavailable once the agent has changed that receptacle.
 - If the true action succeeds: `o_plus = true_obs`; `o_minus = "Nothing happens."`.
 
 Never template `o_plus` by hand. If no succeeding state exists for that action in that game, mark the transition `candidates=null` and exclude it from scoring (count exclusions).
@@ -203,7 +203,7 @@ Loop per step:
 4. Agent decides `executed` given `prediction_shown`; environment returns `real_obs`.
 5. Retention: `discarded` removes the prediction from the history after execution; `retained` keeps it in the trace as the agent's "Expected outcome:" line immediately before the action, followed by the real observation. **The prediction is presented identically at decision time in both modes.**
 
-The ReAct prompt, the "Expected outcome:" wording, and the few-shot examples are frozen in `scoring/prompts.py` before Pilot B.
+The ReAct prompt, the "Expected outcome:" wording, and the few-shot examples are frozen in `scoring/prompts.py` before Pilot B. The few-shot examples are logged server text from train games; they were replaced once, on 2026-11-06 (`notes/deviations.md`).
 
 ### 4.8 `corruption/schedule.py`
 
@@ -266,7 +266,7 @@ Run ids are fixed. Each run has a YAML in `wf/config/`, an acceptance criterion,
 | --- | --- | --- | --- |
 | `t0_smoke` | 5 train games, Qwen3-8B ReAct, no foresight; dump every observation | Loop completes; step cap recorded; ≥ 50 observations captured for the parser table | parser templates, `STEP_CAP` |
 | `t0_replay` | 20 logged states × 3 counterfactual actions, executed twice | 100% identical observations across the two replays | go/no-go on `replay.py`; if it fails, build a wrapper before anything else |
-| `t0_agent_determinism` | 10 games at temperature 0, run twice | Trajectory agreement reported; if < 95% step-level agreement, add agent seeding and note that schedules are not pure replicates | Section 5 inference wording |
+| `t0_agent_determinism` | 10 games at temperature 0, run twice | Trajectory agreement reported; if < 95% step-level agreement, note that schedules are not pure replicates and investigate. The agent picks greedily at temperature 0, so a seed cannot help | Section 5 inference wording |
 | `t0_parser` | Parser over ~2,000 logged observations from `LLMasWorldModels` | Unparseable ≤ `MAX_UNPARSEABLE` (0.05) | parser readiness |
 | `t0_ckpt_accuracy` | Word2World Qwen2.5-7B checkpoint, 200 `valid_unseen` items, single-step exact match, split by `context_determined` | Accuracy reported per class; confirm task line is present in first observation | whether the uncertain subset is where the checkpoint must guess |
 | `t0_scoring_agreement` | 100 train items: `sign(L)` vs parsed free generation, Qwen3-8B few-shot | Agreement ≥ `SCORING_AGREEMENT_MIN` (0.90); else revise the few-shot prompt and rerun (log both) | scoring method defensibility |
@@ -276,11 +276,11 @@ Run ids are fixed. Each run has a YAML in `wf/config/`, an acceptance criterion,
 
 Timing measured on the real server, with no model: item building averaged 207 s per game over 30 games, so the configured 30 games take about 1.7 hours. Agent rollouts add to that, and scoring has not been timed yet.
 
-The main test uses items that name the goal object (`targets_goal_object`) and are not `shared_location`. Other items stay scored. `shared_location` items are left out of the sample-size gate too, and are reported as a sensitivity check. See "shared locations" in `notes/deviations.md`.
+The main test uses goal-agnostic items that name the goal object (`targets_goal_object`) and are not `shared_location`. Other items stay scored. The sample-size gate counts this population and also reports the broader count. `shared_location` items are reported as a sensitivity check, on both sides of A. See "shared locations" in `notes/deviations.md`.
 
-`pilotA_transitions`: build ≥ 500 counterfactual items from ≥ 80 train states, `context_determined & true failure`, with `history_goal_agnostic` labels and `targets_goal_object` set; report the count per (goal-agnostic, goal-revealing) and per `error_type`.
+`pilotA_transitions`: build ≥ 500 main-test items from ≥ 80 train states, `context_determined & true failure`, with `history_goal_agnostic` labels and `targets_goal_object` set; report the count per (goal-agnostic, goal-revealing) and per `error_type`.
 
-`pilotA_score`: score all items under `aligned`, `swapped`, `absent`, `committed`, `candidate` on (a) Qwen3-8B few-shot and (b) `WorldModel-Alfworld-Qwen2.5-7B`. True successes are scored under `aligned` only, because A needs them.
+`pilotA_score`: score all items under `aligned`, `swapped`, `absent`, `committed`, `candidate` on (a) Qwen3-8B few-shot and (b) `WorldModel-Alfworld-Qwen2.5-7B`. True successes are scored under `aligned` only, because A needs them. Excluded successes (`shared_location`, unparseable) leave A, and exclusions are counted on both sides.
 
 Report (in `REPORT.md`):
 
@@ -302,11 +302,11 @@ Report: success rate and rank outcome per condition; oracle gain over none with 
 
 `pilotB_consumption`: from the oracle episodes, the **decision-critical rate** = fraction of steps where `action_under_true_prediction` differs from the no-foresight proposal, and the follow-rate on oracle predictions. If the decision-critical rate is below `CONSUMPTION_MIN` (0.10), stop: the agent is not consuming foresight and the presentation format must be strengthened before any corruption run is meaningful. Report this before proceeding.
 
-`pilotB_eligibility`: per step, the fraction of proposals that are invalid vs valid; expert-path membership among valid proposals; compute `p_favorable`, `p_unfavorable` such that expected realized corruptions per episode ≈ `CORRUPTIONS_PER_EPISODE_TARGET` (3) in each arm. Write both to `wf/config/calibrated.yaml` with the derivation.
+`pilotB_eligibility`: on oracle episodes only, per step, the fraction of proposals that are invalid, corruptible (a success twin exists, so `done` never counts) and valid; expert-path membership among valid proposals; compute `p_favorable`, `p_unfavorable` such that expected realized corruptions per episode match in both arms, at `CORRUPTIONS_PER_EPISODE_TARGET` (3) or the lower of what each arm can reach. Report the corruption mix by action type. Write both to `wf/config/calibrated.yaml` with the derivation.
 
 `pilotB_retention_minirun`: 30 train games × {favorable, unfavorable} × {discarded, retained} × 1 schedule (120 episodes). Report all four cells' rank outcome and success rate, `H_discarded`, `H_retained`, preliminary `I`, realized corruptions per episode per arm, follow-rate on corrupted vs correct predictions, steps lost after each error type, retry rate after unfavorable errors on valid actions.
 
-Decisions: apply `PILOT_RULE_HEADROOM` and `PILOT_RULE_RETAINED_FORMAT` (§7). A borderline headroom result runs `pilotB_headroom_recheck` (100 games) first.
+Decisions: apply `PILOT_RULE_HEADROOM` and `PILOT_RULE_RETAINED_FORMAT` (§7). A borderline or fired headroom rule stops the job with exit code 3. A borderline result runs `pilotB_headroom_recheck` (100 games, `pace/pilotB_recheck.sbatch`), and the later stages wait for it to clear the rule.
 
 ### Tier 3 — only if Pilots A and B finish cleanly
 
@@ -344,7 +344,7 @@ PERMUTATIONS = 1000
 RNG_SEED = 20260924
 ```
 
-Pilot rules. **The one-page preregistration PDF does not contain these**, so the team still has to confirm where they come from (decision 4 in `notes/deviations.md`). `PILOT_RULE_GOAL_CHANNEL` runs in Δ_p as written here, while the preregistered headline is ΔL (decision 1); `pilotA_score` reports both and flags any conflict.
+Pilot rules. **The one-page preregistration PDF does not contain these**, so the team still has to confirm where they come from (decision 10 in `notes/deviations.md`). `PILOT_RULE_GOAL_CHANNEL` runs in Δ_p as written here, while the preregistered headline is ΔL (decision 4); `pilotA_score` reports both and flags any conflict.
 
 - **PILOT_RULE_GOAL_CHANNEL**: if on every tested model the Pilot A Δ_p point estimate < `FUTILITY_EST_PP` and its 95% CI upper bound < `FUTILITY_UPPER_PP`, the goal channel is dropped from the headline; H3 and the validity-oracle decomposition become the headline; RQ2 is reported as a null. A wide interval alone does not fire the rule.
 - **PILOT_RULE_HEADROOM**: if oracle foresight improves ALFWorld success by less than `HEADROOM_MIN_PP` over none in `pilotB_headroom`, RQ3 moves to ScienceWorld before full runs; a borderline result (CI includes the threshold) triggers `pilotB_headroom_recheck` on `HEADROOM_RECHECK_GAMES` games first.

@@ -72,24 +72,37 @@ class AgentClient:
 
         lines = body.strip().splitlines()
         shown = lines[-1].split(":", 1)[1].strip() if lines[-1].startswith("Expected outcome:") else None
+        task_text = task.group(0) if task else ""
         if shown is None:
             if int(hashlib.sha256(body.encode()).hexdigest()[:2], 16) % 3 != 0:
                 return f"Thought: try\nAction: take {goal} from countertop 1"
-            return f"Thought: progress\nAction: {self._mock_best(adm, goal, target)}"
+            return f"Thought: progress\nAction: {self._mock_best(adm, goal, target, task_text, body)}"
 
         proposal = lines[-2].split(":", 1)[1].strip()
         if shown in ("Nothing happens.", "This action is not valid."):
-            best = self._mock_best(adm, goal, target)
+            best = self._mock_best(adm, goal, target, task_text, body)
             return f"Thought: avoid it\nAction: {'look' if best == proposal else best}"
         return f"Thought: go ahead\nAction: {proposal}"
 
     @staticmethod
-    def _mock_best(adm: list[str], goal: str, target: str) -> str:
-        for act in (f"move {goal} to {target}", f"take {goal} from drawer 1", "open drawer 1"):
+    def _mock_best(adm: list[str], goal: str, target: str, task: str = "", body: str = "") -> str:
+        holding = f"examine {goal}" in adm
+        steps = [f"take {goal} from drawer 1", "open drawer 1"]
+        go = f"go to {target}"
+        if holding and "desklamp" in target:
+            steps, go = ["use desklamp 1"], "go to sidetable 1"
+        elif holding:
+            tools = (("heat", ("heat", "hot"), "microwave 1"), ("cool", ("cool",), "fridge 1"), ("clean", ("clean",), "sinkbasin 1"))
+            for verb, words, tool in tools:
+                if any(f" {w} " in f" {task} " for w in words) and f"You {verb} the {goal}" not in body:
+                    steps, go = [f"{verb} {goal} with {tool}"], f"go to {tool}"
+                    break
+            else:
+                steps = [f"move {goal} to {target}"]
+        for act in steps:
             if act in adm:
                 return act
-        holding = any(a.startswith(f"move {goal} to") for a in adm)
-        act = f"go to {target}" if holding else "go to drawer 1"
+        act = go if holding else "go to drawer 1"
         return act if act in adm else "look"
 
 
@@ -181,6 +194,7 @@ def run_episode(
             "decision_critical": action_under_true != proposal,
             "followed": _followed(fs, executed, proposal),
             "on_expert_path": on_expert_path(env, state, executed),
+            "proposal_on_expert_path": on_expert_path(env, state, proposal),
             "targets_goal_object": names_object(executed, goal_object),
         }
         trace.append(step_rec)
@@ -202,6 +216,7 @@ def run_episode(
         "arm": foresight.arm,
         "retention": foresight.retention,
         "schedule_seed": schedule_seed,
+        "p_arm": foresight.p_arm,
         "steps": len(trace),
         "success": bool(state.won),
         "n_corrupted": n_corrupted,

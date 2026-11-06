@@ -4,6 +4,7 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass
+from typing import Any, Callable
 
 _INTERACT = re.compile(r"^> (?:take|move|heat|cool|clean|examine)\s+([a-zA-Z_]+)", re.IGNORECASE)
 
@@ -34,21 +35,43 @@ def swapped_goal(
     goal_object: str,
     receptacle_in_question: str | None = None,
     rng: random.Random | None = None,
-    locations: dict[str, str] | None = None,
+    locations: dict[str, set[str]] | None = None,
     exclude: set[str] | None = None,
+    feasible: Callable[[str], bool] | None = None,
 ) -> str | None:
-    """A scene object other than the goal and not in the receptacle the action concerns.
+    """A scene object other than the goal, not in the receptacle the action concerns, that fits.
 
-    Returns None when no such object exists; the item is then excluded, never substituted.
+    `feasible` says whether an object could do this job in this task. Returns None when no
+    object qualifies; the item is then excluded, never substituted.
     """
     rng = rng or random.Random(0)
     goal = goal_object.lower()
     barred = {goal} | {o.lower() for o in (exclude or ())}
-    for instance, receptacle in (locations or {}).items():
-        if receptacle == receptacle_in_question:
+    for instance, receptacles in (locations or {}).items():
+        if receptacle_in_question in receptacles:
             barred.add(instance.rsplit(" ", 1)[0].lower())
-    candidates = sorted(o for o in scene_objects if o.lower() not in barred)
+    candidates = sorted(o for o in scene_objects if o.lower() not in barred and (feasible is None or feasible(o)))
     return rng.choice(candidates) if candidates else None
+
+
+def swap_feasible(task_line: str, candidate: str, traits: dict[str, Any], n_instances: int) -> bool:
+    """Could this object replace the goal in this task, by the game's own rules?
+
+    "put a hot houseplant in cabinet" cannot be done, so it is not a comparable goal (§4.3).
+    Uses the game's own flags, so nothing here lists objects by hand.
+    """
+    spec = parse_task_line(task_line)
+    text = task_line.split("Your task is to:", 1)[-1].lower()
+    obj = candidate.lower()
+    if obj == spec.receptacle or obj not in traits["pickupable"]:
+        return False
+    needed = (("heatable", r"\b(?:heat|hot)\b"), ("coolable", r"\bcool\b"), ("cleanable", r"\bclean\b"))
+    if any(re.search(words, text) and obj not in traits[trait] for trait, words in needed):
+        return False
+    if re.search(r"\btwo\b", text) and n_instances < 2:
+        return False
+    is_look_task = re.search(r"\b(?:look at|examine the)\b", text) is not None
+    return is_look_task or obj in traits["can_contain"].get(spec.receptacle, set())
 
 
 @dataclass(frozen=True)

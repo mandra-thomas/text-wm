@@ -39,7 +39,7 @@ ls scripts/env_server/start_alfworld.sh
 module load anaconda3 cuda/12.1   # adjust to ICE module list
 conda create -y -p "$SERVE_ENV" python=3.11
 conda activate "$SERVE_ENV"
-pip install "vllm>=0.6" "transformers>=4.51" torch accelerate datasets pyyaml scipy
+pip install "vllm>=0.8.5" "transformers>=4.51" torch accelerate datasets pyyaml scipy
 # AgentGym packages may live in WORD2WORLD uv envs — keep AGENTGYM_ENV separate if needed.
 ```
 
@@ -55,10 +55,10 @@ for repo in [
     "Qwen/Qwen3-8B",
     "X1AOX1A/WorldModel-Alfworld-Qwen2.5-7B",
     "X1AOX1A/WorldModel-Alfworld-Llama3.1-8B",
-    "X1AOX1A/LLMasWorldModels",
 ]:
     print("fetch", repo)
     snapshot_download(repo)
+snapshot_download("X1AOX1A/LLMasWorldModels", repo_type="dataset")
 # Optional / gated (confirmatory co-primary, not Pilot A):
 # snapshot_download("meta-llama/Llama-3.1-8B-Instruct")
 PY

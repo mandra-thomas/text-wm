@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from wf.constants import ENV_STEP_LIMIT
 from wf.env.server import AlfworldClient
@@ -17,12 +18,19 @@ _OBJECT = re.compile(r"\ban? ([a-z]+ \d+)")
 @dataclass
 class Scene:
     receptacles: list[str]
-    locations: dict[str, str] = field(default_factory=dict)  # "mug 1" -> "drawer 1"
+    # "mug 1" -> {"drawer 1"}. ALFWorld can list one object in two receptacles at once.
+    locations: dict[str, set[str]] = field(default_factory=dict)
     closed: set[str] = field(default_factory=set)
     shared: dict[str, set[str]] = field(default_factory=dict)  # "cabinet 1" -> {"cabinet 2"}: same spot
+    traits: dict[str, Any] = field(default_factory=dict)  # the game's own rules, see object_traits
 
     def shares_spot(self, here: str, other: str) -> bool:
         return other in self.shared.get(here, set())
+
+    def home(self, instance: str) -> str | None:
+        """One receptacle holding this instance; the same one every time."""
+        places = self.locations.get(instance)
+        return min(places) if places else None
 
     @property
     def objects(self) -> list[str]:
@@ -38,7 +46,8 @@ def scan_scene(client: AlfworldClient, game_id: str, split: str = "train") -> Sc
     if game_id in scanner._scenes:
         return scanner._scenes[game_id]
     state = scanner.reset(game_id, split)
-    scene = Scene(receptacles=[a[len("go to "):] for a in state.admissible if a.startswith("go to ")])
+    scene = Scene(receptacles=[a[len("go to "):] for a in state.admissible if a.startswith("go to ")],
+                  traits=scanner.object_traits(game_id, split))
     for receptacle in scene.receptacles:
         if state.step + 2 >= ENV_STEP_LIMIT:  # large rooms need more steps than one episode allows
             state = scanner.reset(game_id, split)
@@ -53,6 +62,6 @@ def scan_scene(client: AlfworldClient, game_id: str, split: str = "train") -> Sc
             scene.closed.add(receptacle)
             state = scanner.step(state, f"open {receptacle}")
         for instance in _OBJECT.findall(state.observation):
-            scene.locations[instance] = receptacle
+            scene.locations.setdefault(instance, set()).add(receptacle)
     scanner._scenes[game_id] = scene
     return scene

@@ -1,10 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=wf-pilotB
+#SBATCH --no-requeue
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=06:00:00
+#SBATCH --mem=128G
+#SBATCH --time=14:00:00
 #SBATCH --gres=gpu:A100:1
 #SBATCH --output=logs/pilotB_%j.out
 #SBATCH --error=logs/pilotB_%j.err

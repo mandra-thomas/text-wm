@@ -13,6 +13,7 @@ from wf.data.goals import (
     make_swapped_task_line,
     names_object,
     parse_task_line,
+    swap_feasible,
     swapped_goal,
 )
 from wf.env.expert import on_expert_path
@@ -22,7 +23,7 @@ from wf.env.server import AlfworldClient, GameState
 from wf.scoring.parser import parse_observation
 
 _INSTANCE = re.compile(r"\ban? ([a-z]+ \d+)")
-_ACTION_TYPE = re.compile(r"^(go to|take|move|open|close|heat|cool|clean|examine|inventory|look|help)\b", re.I)
+_ACTION_TYPE = re.compile(r"^(go to|take|move|open|close|heat|cool|clean|examine|use|slice|inventory|look|help)\b", re.I)
 
 
 def action_type(action: str) -> str:
@@ -66,12 +67,15 @@ def history_facts(history_text: str) -> HistoryFacts:
         m = re.search(r"The (.+?) is closed\.", line)
         if m:
             facts.closed.add(m[1])
-        m = re.search(r"The (.+?) is open\.", line)
-        if m:
-            facts.opened.add(m[1])
+        is_open = re.search(r"The (.+?) is open\.", line)
+        if is_open:
+            facts.opened.add(is_open[1])
         m = re.search(r"(?:In it|On the (.+?)), you see (.+)", line)
-        if m and facts.location:
-            facts.contents[m[1] or facts.location] = set(_INSTANCE.findall(m[2]))
+        if m:
+            # With a shared spot, the line can describe a receptacle other than the one the agent is at.
+            place = m[1] or (is_open[1] if is_open else facts.location)
+            if place:
+                facts.contents[place] = set(_INSTANCE.findall(m[2]))
         m = re.match(r"You pick up the (.+?) from the (.+?)\.", line)
         if m:
             facts.holding = m[1]
@@ -79,7 +83,8 @@ def history_facts(history_text: str) -> HistoryFacts:
         m = re.match(r"You move the (.+?) to the (.+?)\.", line)
         if m:
             facts.holding = None
-            facts.contents.setdefault(m[2], set()).add(m[1])
+            if m[2] in facts.contents:  # a receptacle never seen stays unknown
+                facts.contents[m[2]].add(m[1])
     return facts
 
 
@@ -132,7 +137,32 @@ def context_determined_label(history_text: str, action: str, true_obs: str) -> b
     """
     if true_obs.strip() == "Nothing happens.":
         return _failure_determined(history_facts(history_text), action)
+    arrival = re.fullmatch(r"go to (.+)", action)
+    if arrival and arrival[1] not in history_facts(history_text).closed:
+        return False  # "The drawer 2 is closed." is news unless the history already said so
     return "you see" not in true_obs.lower()
+
+
+def pick_swap(
+    scene: Scene,
+    task_line: str,
+    goal_object: str,
+    action: str,
+    history_text: str,
+    rng: random.Random,
+    also_exclude: set[str] | None = None,
+) -> str | None:
+    """A swapped goal for this item: feasible for the task, and unrelated to the action and history."""
+    named = {o for o in scene.objects if names_object(action, o)}
+    return swapped_goal(
+        scene.objects,
+        goal_object,
+        receptacle_in_question=_receptacle(action),
+        rng=rng,
+        locations=scene.locations,
+        exclude=named | interacted_objects(history_text) | (also_exclude or set()),
+        feasible=lambda o: swap_feasible(task_line, o, scene.traits, len(scene.instances(o))),
+    )
 
 
 def _object_swaps(action: str, instances: list[str]) -> str | None:
@@ -151,8 +181,8 @@ def generate_alternatives(
 ) -> list[tuple[str, str, bool]]:
     """Return list of (action, error_type, targets_goal_object), built from the real scene."""
     goal = (scene.instances(goal_object) or [f"{goal_object} 1"])[0]
-    home = scene.locations.get(goal)
-    away = [r for r in scene.receptacles if r != home]
+    home = scene.home(goal)
+    away = [r for r in scene.receptacles if r not in scene.locations.get(goal, ())]
     rng.shuffle(away)
     targets = [r for r in scene.receptacles if r.rsplit(" ", 1)[0] == target] or away[:1]
     others = sorted(i for i in scene.locations if i.rsplit(" ", 1)[0] != goal_object)
@@ -206,7 +236,6 @@ def build_transitions_at_state(
     spec = parse_task_line(state.task_line)
     goal_object = spec.goal_object
     hist = history_text_from_state(state)
-    seen = interacted_objects(hist)
 
     records: list[dict] = []
     tid = id_start
@@ -215,15 +244,7 @@ def build_transitions_at_state(
         h2 = replay(client, game_id, prefix_actions, split=split)
         obs, info = step_counterfactual(h2, action)
         failed = obs.strip() == "Nothing happens."
-        named = {o for o in scene.objects if names_object(action, o)}
-        swap_obj = swapped_goal(
-            scene.objects,
-            goal_object,
-            receptacle_in_question=_receptacle(action),
-            rng=rng,
-            locations=scene.locations,
-            exclude=named | seen,
-        )
+        swap_obj = pick_swap(scene, state.task_line, goal_object, action, hist, rng)
         rec = {
             "id": f"t_{tid:06d}",
             "game_id": game_id,
@@ -236,6 +257,7 @@ def build_transitions_at_state(
             "goal_object": goal_object,
             "scene_objects": scene.objects,
             "swapped_goal_object": swap_obj,
+            "swap_feasible": swap_obj is not None,
             "swapped_task_line": make_swapped_task_line(state.task_line, goal_object, swap_obj) if swap_obj else None,
             "action": action,
             "action_type": action_type(action),
@@ -316,6 +338,11 @@ def main_test_items(items: Iterable[dict]) -> list[dict]:
     return [t for t in items if not t.get("shared_location")]
 
 
+def primary_items(items: Iterable[dict]) -> list[dict]:
+    """RQ2's primary population: names the goal, goal-agnostic history, not at a shared spot."""
+    return main_test_items(t for t in items if t.get("targets_goal_object") and t.get("history_goal_agnostic"))
+
+
 def exclusion_counts(transitions: Iterable[dict]) -> dict[str, int]:
     """Failures dropped from Pilot A, by reason (§6 report item)."""
     counts: dict[str, int] = {}
@@ -330,4 +357,22 @@ def exclusion_counts(transitions: Iterable[dict]) -> dict[str, int]:
             reason = t.get("exclusion_reason")
         if reason:
             counts[reason] = counts.get(reason, 0) + 1
+    return counts
+
+
+def success_exclusion_counts(transitions: Iterable[dict]) -> dict[str, int]:
+    """True successes left out of A, by reason."""
+    counts: dict[str, int] = {}
+    for t in transitions:
+        if (t.get("true_obs") or "").strip() == "Nothing happens.":
+            continue
+        if t.get("outcome_class") == "unparseable":
+            reason = "unparseable"
+        elif not t.get("context_determined"):
+            reason = "not_context_determined"
+        elif t.get("shared_location"):
+            reason = "shared_location"
+        else:
+            continue
+        counts[reason] = counts.get(reason, 0) + 1
     return counts

@@ -61,7 +61,9 @@ def forbid(monkeypatch, name: str) -> None:
 # --- files -------------------------------------------------------------------------------------
 
 
-def test_repair_cuts_only_a_half_written_last_line(tmp_path):
+def test_repair_cuts_only_a_half_written_last_line(tmp_path, monkeypatch):
+    for key in MOCK_KEYS:
+        monkeypatch.delenv(key, raising=False)
     path = tmp_path / "x.jsonl"
     append_jsonl(path, [{"a": 1}, {"a": 2}])
     assert repair_jsonl(path) is False
@@ -339,9 +341,9 @@ def test_low_determinism_says_below_target_on_the_first_line(mock_runs, monkeypa
     runs_mod.run_t0_agent_determinism({"run_id": "t0_agent_determinism", "n_games": 2})
     first = (root / "t0_agent_determinism" / "STATUS.md").read_text().splitlines()[0]
     assert "REPORTED (BELOW TARGET" in first and "PASS" not in first
-    assemble_pilot_report.main()
-    report = (root / "PILOT_REPORT.md").read_text()
-    assert "| below target |" in report
+    # The report's status column comes from this line, whatever the rest of the file says.
+    first, _ = assemble_pilot_report._status(root, "t0_agent_determinism")
+    assert "BELOW TARGET" in first
 
 
 # --- verification tools --------------------------------------------------------------------------

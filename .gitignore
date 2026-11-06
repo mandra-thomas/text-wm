@@ -16,19 +16,20 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# Runs: keep status/report markers, ignore bulky JSONL / caches
+# Runs: results stay out of git, so a clone never carries an old PASS
 runs/**
 !runs/
 !runs/.gitkeep
 !runs/*/
-!runs/**/REPORT.md
-!runs/**/STATUS.md
 !runs/FILED.txt
-!runs/PILOT_REPORT.md
 !runs/env.json
 
 # Mock runs and their calibration values
 runs_mock/
+
+# Values each pilot run writes for the next stage
+wf/config/calibrated.yaml
+wf/config/eligible_target.yaml
 
 # Caches / third party on cluster
 hfcache/

@@ -10,11 +10,9 @@ from wf import constants as C
 from wf.data.transitions import filter_pilot_a_items
 from wf.env.server import AlfworldClient
 from wf.runs import _games, _walk_transitions
-from wf.util import read_jsonl, runs_root
+from wf.util import append_jsonl, git_sha, is_mock, read_jsonl, runs_root
 
 CHECKLIST = """# Human review: real Pilot A items and agent traces
-
-Generated from the real ALFWorld server. Nothing here is mock data.
 
 For each item, ask:
 
@@ -64,10 +62,14 @@ def main() -> None:
     args = parser.parse_args()
     client = AlfworldClient()
     client.create()
+    # Items are saved per game, so a killed job keeps them for reading or a rerun of this step.
+    progress = runs_root() / "review_items.jsonl"
+    progress.unlink(missing_ok=True)
     by_type: dict[str, list[dict]] = defaultdict(list)
     for gid in _games(client, "train", args.games, {}):
         built = _walk_transitions(client, gid, "train")
         by_type[built[0]["task_line"].split(":")[1].split()[0] if built else ""].extend(built)
+        append_jsonl(progress, built)
 
     rng = random.Random(C.RNG_SEED)
     picked: list[dict] = []
@@ -83,7 +85,8 @@ def main() -> None:
     successes = [t for items in by_type.values() for t in items if t["true_obs"].strip() != "Nothing happens."]
     rng.shuffle(successes)
 
-    parts = [CHECKLIST, "\n# A. Items that would be scored\n"]
+    source = "MOCK DATA, not the real game." if is_mock() else "Generated from the real ALFWorld server."
+    parts = [CHECKLIST, f"{source} Commit {git_sha()}.\n", "\n# A. Items that would be scored\n"]
     parts += [_item_block(i + 1, t) for i, t in enumerate(picked)]
     parts.append("\n# B. Failures excluded (no success text found). Should these really be excluded?\n")
     parts += [_item_block(len(picked) + i + 1, t) for i, t in enumerate(excluded[:5])]

@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=wf-verify
+#SBATCH --no-requeue
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4

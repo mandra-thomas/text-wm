@@ -2,9 +2,17 @@
 # Shared preamble for Wishful Foresight sbatch scripts.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-export PROJECT_ROOT="${PROJECT_ROOT:-$PROJECT_ROOT_DEFAULT}"
+for mock_var in WF_MOCK_ENV WF_MOCK_AGENT WF_MOCK_SCORE; do
+  if [[ -n "${!mock_var:-}" ]]; then
+    echo "ERROR: ${mock_var} is set; cluster jobs must not run in mock mode" >&2
+    exit 1
+  fi
+done
+
+# The checkout this script sits in is the project, whatever the shell has left in PROJECT_ROOT.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+PROJECT_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd -P)"
+export PROJECT_ROOT="${PROJECT_ROOT_DEFAULT}"
 
 if [[ -f "${PROJECT_ROOT}/pace/pace.env" ]]; then
   set -a
@@ -13,7 +21,11 @@ if [[ -f "${PROJECT_ROOT}/pace/pace.env" ]]; then
   set +a
 fi
 
-export PROJECT_ROOT="${PROJECT_ROOT:-$PROJECT_ROOT_DEFAULT}"
+if [[ "$(cd "${PROJECT_ROOT}" 2>/dev/null && pwd -P)" != "${PROJECT_ROOT_DEFAULT}" ]]; then
+  echo "ERROR: pace.env says PROJECT_ROOT=${PROJECT_ROOT}, but this script is in ${PROJECT_ROOT_DEFAULT}" >&2
+  exit 1
+fi
+
 export RUNS_DIR="${RUNS_DIR:-${PROJECT_ROOT}/runs}"
 export WORD2WORLD_ROOT="${WORD2WORLD_ROOT:-${PROJECT_ROOT}/third_party/Word2World}"
 export HF_HOME="${HF_HOME:-${PROJECT_ROOT}/hfcache}"
@@ -92,13 +104,14 @@ start_alfworld_server() {
   echo $! >"${ALFWORLD_PID_FILE}"
   echo "ALFWorld server starting port=${ALFWORLD_PORT} (log=${log})"
   for _ in $(seq 1 60); do
-    if curl -sf "${ALFWORLD_BASE_URL}/" >/dev/null 2>&1; then
-      echo "ALFWorld ready at ${ALFWORLD_BASE_URL}"
-      return 0
-    fi
+    # Our own process first: an answer on this port could come from another job's server.
     if ! kill -0 "$(cat "${ALFWORLD_PID_FILE}")" 2>/dev/null; then
       echo "ERROR: ALFWorld server exited early; see ${log}" >&2
       return 1
+    fi
+    if curl -sf "${ALFWORLD_BASE_URL}/" >/dev/null 2>&1; then
+      echo "ALFWorld ready at ${ALFWORLD_BASE_URL}"
+      return 0
     fi
     sleep 5
   done
@@ -136,15 +149,15 @@ start_vllm() {
   echo "vLLM starting model=${model} port=${VLLM_PORT} (log=${log})"
   # Wait until healthy or timeout
   for _ in $(seq 1 120); do
+    # Fail fast if process died; an answer on this port could come from another job's server.
+    if [[ -f "${VLLM_PID_FILE}" ]] && ! kill -0 "$(cat "${VLLM_PID_FILE}")" 2>/dev/null; then
+      echo "ERROR: vLLM process exited early; see ${log}" >&2
+      return 1
+    fi
     if curl -sf "http://127.0.0.1:${VLLM_PORT}/health" >/dev/null 2>&1 \
       || curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
       echo "vLLM ready at ${VLLM_BASE_URL}"
       return 0
-    fi
-    # Fail fast if process died
-    if [[ -f "${VLLM_PID_FILE}" ]] && ! kill -0 "$(cat "${VLLM_PID_FILE}")" 2>/dev/null; then
-      echo "ERROR: vLLM process exited early; see ${log}" >&2
-      return 1
     fi
     sleep 5
   done
@@ -191,6 +204,10 @@ ensure_vllm() {
 run_wf() {
   local run_id="$1"
   activate_serve
-  # WF_RESUME=1 keeps saved work after a wall-clock timeout: sbatch --export=ALL,WF_RESUME=1 ...
-  python -m wf.runs "${run_id}" ${WF_RESUME:+--resume}
+  # WF_RESUME=1 keeps saved work after a timeout: WF_RESUME=1 bash pace/submit.sh <job>.sbatch
+  if [[ "${WF_RESUME:-}" == "1" ]]; then
+    python -m wf.runs "${run_id}" --resume
+  else
+    python -m wf.runs "${run_id}"
+  fi
 }

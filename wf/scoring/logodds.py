@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from dataclasses import dataclass
 from functools import lru_cache
@@ -59,7 +60,7 @@ class LogoddsScorer:
         self.model_name = model_name
         self.model_tag = model_tag or model_name.split("/")[-1].lower()
         self.mock = os.environ.get("WF_MOCK_SCORE", "0") == "1"
-        self._cache: dict[tuple[str, str, str], ScoreResult] = {}
+        self._cache: dict[tuple[str, str, str, str], ScoreResult] = {}
         self._model = None
         self._tok = None
         self.device = device
@@ -139,13 +140,16 @@ class LogoddsScorer:
         o_plus: str,
         o_minus: str,
     ) -> ScoreResult:
-        key = (self.model_tag, condition, transition_id)
+        content = hashlib.sha256(json.dumps([messages, o_plus, o_minus], sort_keys=True).encode()).hexdigest()
+        key = (self.model_tag, condition, transition_id, content)
         if key in self._cache:
             return self._cache[key]
 
         logp_plus, n_plus = self._teacher_force_logprob(messages, o_plus)
         logp_minus, n_minus = self._teacher_force_logprob(messages, o_minus)
         L = logp_plus - logp_minus
+        if not math.isfinite(L):
+            raise ValueError(f"non-finite L for {transition_id}/{condition} on {self.model_tag}: {L}")
         result = ScoreResult(
             transition_id=transition_id,
             model=self.model_tag,
@@ -159,6 +163,13 @@ class LogoddsScorer:
         )
         self._cache[key] = result
         return result
+
+    def _stop_tokens(self) -> list[int]:
+        """Every end-of-turn token. Fine-tuned checkpoints leave the tokenizer's out of their generation config."""
+        configured = self._model.generation_config.eos_token_id
+        tokens = [self._tok.eos_token_id, self._tok.pad_token_id]
+        tokens += configured if isinstance(configured, list) else [configured]
+        return sorted({t for t in tokens if t is not None})
 
     def free_generate(self, messages: list[dict[str, str]], max_new_tokens: int = 64) -> str:
         if self.mock:
@@ -178,6 +189,7 @@ class LogoddsScorer:
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
                 temperature=None,
+                eos_token_id=self._stop_tokens(),
             )
         gen = out[0, input_ids.shape[1] :]
         return self._tok.decode(gen, skip_special_tokens=True).strip()

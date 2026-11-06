@@ -15,6 +15,7 @@ class ForesightConfig:
     arm: str | None = None  # favorable | unfavorable
     retention: str = "discarded"  # discarded | retained
     corrupt_fn: Callable[[int, bool], bool] | None = None
+    p_arm: float | None = None  # the rate behind corrupt_fn, kept with the episode
 
 
 def foresight_prediction(
@@ -84,6 +85,7 @@ def foresight_prediction(
             "split": state.split,
             "action": proposal,
             "true_obs": oracle_obs,
+            "history_pairs": state.history,
         }
         attach_candidates(sandbox, tmp, success_cache=success_cache)
         cands = tmp.get("candidates")

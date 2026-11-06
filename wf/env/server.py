@@ -41,6 +41,8 @@ SPLIT_MAPPING_FILES = {
     "valid_seen": "mappings_valid_seen.json",
     "valid_unseen": "mappings_valid_unseen.json",
 }
+_TRAIT = re.compile(r"\((pickupable|heatable|coolable|cleanable) ([A-Za-z]+)_bar")
+_CAN_CONTAIN = re.compile(r"\(canContain ([A-Za-z]+)Type ([A-Za-z]+)Type\)")
 SPLIT_DATA_DIRS = {
     "train": "train",
     "valid_train": "valid_train",
@@ -100,6 +102,7 @@ class AlfworldClient:
         self._session = sim.Server() if self.mock else requests.Session()
         self._env_id: int | None = None
         self._solvable_local: dict[str, list[int]] = {}
+        self._mappings: dict[str, list[dict]] = {}
         self._sandbox: AlfworldClient | None = None
         self._is_sandbox = False
         self._scenes: dict[str, Any] = {}
@@ -170,47 +173,62 @@ class AlfworldClient:
                 return p
         return None
 
+    def _game_mappings(self, split: str) -> tuple[Path, list[dict]]:
+        """The ALFWorld data folder and AgentGym's list of games. Missing paths are an error."""
+        cfg_dir = self._mapping_config_dir()
+        data = self._alfworld_data()
+        mapping_path = cfg_dir / SPLIT_MAPPING_FILES[split] if cfg_dir and split in SPLIT_MAPPING_FILES else None
+        if data is None or mapping_path is None or not mapping_path.is_file():
+            raise RuntimeError(f"cannot find the {split} game list: set WORD2WORLD_ROOT and ALFWORLD_DATA")
+        if split not in self._mappings:
+            self._mappings[split] = json.loads(mapping_path.read_text())
+        return data, self._mappings[split]
+
+    def _game_dir(self, data: Path, split: str, mapping: dict) -> Path:
+        return data / "json_2.1.1" / SPLIT_DATA_DIRS[split] / mapping["task_type"] / mapping["task_id"]
+
     def solvable_local_indices(self, split: str) -> list[int]:
         """Local indices within AgentGym's mapping whose game.tw-pddl has solvable=true.
 
         AgentGym's flat `games` list includes unsolvable files; resetting those raises
-        KeyError('val1') (broken PDDL). Protocol split sizes are the solvable subset.
+        KeyError('val1') (broken PDDL). Protocol split sizes are the solvable subset, and any
+        other count means a changed population, which must not pass in silence.
         """
         if split in self._solvable_local:
             return self._solvable_local[split]
-        cfg_dir = self._mapping_config_dir()
-        data = self._alfworld_data()
-        mapping_name = SPLIT_MAPPING_FILES.get(split)
-        data_subdir = SPLIT_DATA_DIRS.get(split)
-        if not cfg_dir or not data or not mapping_name or not data_subdir:
-            # Fall back to all raw indices if paths unavailable (mock/dev).
-            idxs = list(range(SPLIT_SIZES.get(split, 0)))
-            self._solvable_local[split] = idxs
-            return idxs
-        mapping_path = cfg_dir / mapping_name
-        if not mapping_path.is_file():
-            idxs = list(range(SPLIT_SIZES.get(split, 0)))
-            self._solvable_local[split] = idxs
-            return idxs
-        mappings = json.loads(mapping_path.read_text())
+        data, mappings = self._game_mappings(split)
         good: list[int] = []
         for i, m in enumerate(mappings):
-            game_path = (
-                data
-                / "json_2.1.1"
-                / data_subdir
-                / m["task_type"]
-                / m["task_id"]
-                / "game.tw-pddl"
-            )
             try:
-                meta = json.loads(game_path.read_text())
+                meta = json.loads((self._game_dir(data, split, m) / "game.tw-pddl").read_text())
             except (OSError, json.JSONDecodeError):
                 continue
             if meta.get("solvable") is True:
                 good.append(i)
+        if len(good) != SPLIT_SOLVABLE_SIZES.get(split):
+            raise RuntimeError(f"{split} has {len(good)} solvable games, expected {SPLIT_SOLVABLE_SIZES.get(split)}")
         self._solvable_local[split] = good
         return good
+
+    def object_traits(self, game_id: str, split: str) -> dict[str, Any]:
+        """What each object type can do in this game, from its own initial_state.pddl.
+
+        The game's rules: `heatable`, `coolable`, `cleanable`, `pickupable`, and which object
+        types each receptacle type accepts. Never shown to a model.
+        """
+        local = int(game_id.split("/", 1)[1])
+        if isinstance(self._session, sim.Server):
+            return self._session.factory(SPLIT_OFFSETS.get(split, 0) + local).traits()
+        data, mappings = self._game_mappings(split)
+        text = (self._game_dir(data, split, mappings[local]) / "initial_state.pddl").read_text()
+        traits: dict[str, Any] = {name: set() for name in ("pickupable", "heatable", "coolable", "cleanable")}
+        for name, obj in _TRAIT.findall(text):
+            traits[name].add(obj.lower())
+        contain: dict[str, set[str]] = {}
+        for receptacle, obj in _CAN_CONTAIN.findall(text):
+            contain.setdefault(receptacle.lower(), set()).add(obj.lower())
+        traits["can_contain"] = contain
+        return traits
 
     def list_games(self, split: str) -> list[str]:
         if self.mock:

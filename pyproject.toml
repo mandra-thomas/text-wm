@@ -22,7 +22,7 @@ serve = [
   "transformers>=4.51",
   "accelerate>=0.27",
   "datasets>=2.18",
-  "vllm>=0.6",
+  "vllm>=0.8.5",
   "openai>=1.30",
 ]
 dev = [

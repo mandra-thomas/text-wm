@@ -32,7 +32,7 @@ from wf.env.replay import history_text_from_state, replay, step_counterfactual
 from wf.env.scene import scan_scene
 from wf.env.server import AlfworldClient
 from wf.scoring.parser import parse_observation
-from wf.util import runs_root, write_json
+from wf.util import git_sha, runs_root, write_json
 
 NOOP = "Nothing happens."
 FLUFF = ("help", "look", "inventory")
@@ -61,7 +61,7 @@ def _plan_to_win(scene, task_line: str) -> list[str] | None:
     if not instances or not targets:
         return None
     obj, target = instances[0], targets[0]
-    home = scene.locations[obj]
+    home = scene.home(obj)
     plan = [f"go to {home}"] + ([f"open {home}"] if home in scene.closed else []) + [f"take {obj} from {home}"]
     if target != home:
         plan += [f"go to {target}"] + ([f"open {target}"] if target in scene.closed else [])
@@ -212,7 +212,7 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
             truth = _hidden_objects(contexts[int(gid.split("/")[1])])
             objects_true += len(truth)
             objects_found += sum(o in scene.locations for o in truth)
-            location_right += sum(scene.locations.get(o) == r for o, r in truth.items())
+            location_right += sum(r in scene.locations.get(o, ()) for o, r in truth.items())
             missed.update(o.rsplit(" ", 1)[0] for o in truth if o not in scene.locations)
         rng = random.Random(gid)
         state = client.reset(gid, "train")
@@ -223,8 +223,8 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
             action = rng.choice(choices)
             hist = history_text_from_state(state)
             # soundness: any action the rule calls a determined failure must actually fail
-            probes = rng.sample(choices, min(4, len(choices))) + [f"take {o} from {state_rec}"
-                                                                 for o, state_rec in list(scene.locations.items())[:3]]
+            probes = rng.sample(choices, min(4, len(choices))) + [f"take {o} from {min(places)}"
+                                                                 for o, places in list(scene.locations.items())[:3]]
             started = time.perf_counter()
             for probe in probes:
                 if _failure_determined(history_facts(hist), probe):
@@ -344,7 +344,7 @@ def main() -> None:
     games = games[: max(args.games, args.win_games * 6)]
     context_file = Path(os.environ.get("WF_INIT_CONTEXTS", Path(os.environ["WORD2WORLD_ROOT"]) / "data/init_contexts/alfworld")) / "wm_instruct_train.json"
     contexts = [r["messages"][0]["content"] for r in json.loads(context_file.read_text())]
-    out = {"solvable_train_games": len(client.list_games("train"))}
+    out = {"solvable_train_games": len(client.list_games("train")), "git_sha": git_sha()}
     path = runs_root() / ("verify_games.json" if args.only == "games" else "verify_real_env.json")
     checks = {
         "memory_before": lambda: check_memory(client, games[0], args.memory_resets),
@@ -365,6 +365,9 @@ def main() -> None:
             out[name] = {"FAILED": f"{type(exc).__name__}: {exc}"}
         print(name, f"{time.perf_counter() - started:.0f}s", json.dumps(out[name], default=str)[:1500], flush=True)
         write_json(path, out)
+    failed = [name for name in checks if isinstance(out[name], dict) and "FAILED" in out[name]]
+    if failed:
+        raise SystemExit(f"checks failed: {failed}")
 
 
 if __name__ == "__main__":

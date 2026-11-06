@@ -172,7 +172,7 @@ def pair_permutation(
     With cluster_ids, all items of a game flip together, as the prereg requires so that the
     null respects clustering. Without them, each item flips alone.
     """
-    if not diffs:
+    if not diffs or any(d != d for d in diffs):  # a NaN compares false, which would look significant
         return float("nan")
     rng = random.Random(seed)
     totals: dict[Any, float] = defaultdict(float)

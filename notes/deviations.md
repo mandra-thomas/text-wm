@@ -2,14 +2,53 @@
 
 Changes made on `fix/audit-bugs` after the filing marker. No preregistered threshold was changed. Report these in the final writeup.
 
-## Needs a team decision
+## Still open
 
-1. **Metric for the goal-channel futility rule.** The prereg PDF defines the headline as ΔL in nats. `PILOT_RULE_GOAL_CHANNEL` in `PILOT_PROTOCOL.md` uses Δp in percentage points, and Δp compresses when L is far from 0: at L = −6, ΔL = 1.0 gives Δp = 0.42pp. The rule still runs as filed. `pilotA_score` now also reports ΔL and lists any model where the rule fired despite ΔL ≥ 0.5 (`rule_conflicts_with_delta_L`).
-2. **Admissible list.** The agent still sees it and is told to use it, matching upstream. Invalid proposals may therefore be rare, which limits the favorable arm. `pilotB_eligibility` now warns if an arm cannot reach its target.
-3. **`STEP_CAP`.** Still 30. The protocol asks to confirm it against the stack, whose `run_vllm.sh` default is 20.
-4. **Pilot rule provenance.** The protocol calls the pilot rules verbatim from the preregistration, but the one-page PDF does not contain them.
-5. **How strict `context_determined` should be.** The label now requires a fact in the history, but the agent's location is always known, so `take X from Y` while standing elsewhere counts as determined. Nearly every failure passes on that basis, and shared locations show that basis is not airtight. If the team wants only failures decided by observed contents or holding state, tighten `_failure_determined` in `wf/data/transitions.py`.
-6. **`ELIGIBLE_SET_TARGET` can be null.** It searches 1,000 to 5,000 items for SE ≤ 1.5 over 134 `valid_unseen` games. If none qualifies, it reports null and does not fall back to 1,000.
+Numbers match the team's decision list. Settle 4, 5 and 6 before anyone reads Pilot A results.
+
+- **Decision 4.** **Metric for the goal-channel futility rule.** The prereg PDF defines the headline as ΔL in nats. `PILOT_RULE_GOAL_CHANNEL` in `PILOT_PROTOCOL.md` uses Δp in percentage points, and Δp compresses when L is far from 0: at L = −6, ΔL = 1.0 gives Δp = 0.42pp. The rule still runs as filed. `pilotA_score` now also reports ΔL and lists any model where the rule fired despite ΔL ≥ 0.5 (`rule_conflicts_with_delta_L`).
+- **Decision 5. How A is calculated.** The proposal has the model write its prediction for RQ1 and notes that text length cancels for ΔL. The code uses the sign of L, where length does not cancel, so long success texts can push A negative. A stays sign(L) until this is decided.
+- **Decision 6.** **How strict `context_determined` should be.** The label now requires a fact in the history, but the agent's location is always known, so `take X from Y` while standing elsewhere counts as determined. Nearly every failure passes on that basis, and shared locations show that basis is not airtight. If the team wants only failures decided by observed contents or holding state, tighten `_failure_determined` in `wf/data/transitions.py`. Successes need no supporting fact, except `go to` arrivals (see below), so the two sides of A are not held to one standard.
+- **Decision 10.** **Pilot rule provenance.** The protocol calls the pilot rules verbatim from the preregistration, but the one-page PDF does not contain them.
+
+## Decided 2026-11-06
+
+| Decision | Outcome |
+| --- | --- |
+| 1. Mini-run | Held until the calibration fixes below are in |
+| 2. Pilot B memory | 128 GB, because the server may reach the old 64 GB limit |
+| 3. vLLM prefix cache | A test with the cache off runs alongside the pilots; result pending |
+| 7. Llama-3.1-8B-Instruct | A small scoring run on Pilot A's saved items, after Pilot A. Not built yet |
+| 8. `STEP_CAP` | Stays 30. A cap of 20 would have lost 2 of the 6 real Qwen3 wins seen, at steps 24 and 25 |
+| 9. Admissible list | Stays for now; revisit with the invalid rate under oracle runs |
+| 11. `ELIGIBLE_SET_TARGET` | No fallback. If no size up to 5,000 reaches SE ≤ 1.5 it reports null, and the team decides then |
+| 12. Pilot A | Held until the fixes below are in, so nothing is scored twice |
+
+## Read before analysing or writing up: changes on 2026-11-06
+
+All of these came from four independent code reviews and were made before any real Pilot A or Pilot B result existed.
+
+**Swapped goals are now achievable.** The protocol asks for a swapped goal of the same task type, but the code took any object in the room, so 53% of main-test failures in a sample of 204 real `valid_unseen` items had an impossible swap, such as `put a hot pot in cabinet`. RQ2 compared an achievable goal against an impossible one about half the time. A swap must now pass the game's own flags in that game's `initial_state.pddl`: pickupable, heatable, coolable or cleanable as the task needs, accepted by the target receptacle (`canContain`), two instances for pick-two tasks, and not the target itself. The rule accepted 717 of 721 real goals in their own games; the other 4 are pick-two tasks whose hidden-state text lists one instance. When no object qualifies, the item has no swap and leaves Pilot A (`swap_feasible` false, reason `no_swap_object`). No substitute is used.
+
+**Closed arrivals are no longer "determined".** `The drawer 2 is closed.` counted as decidable from history even when the history never said so. These were 22 of 28 determined successes in the same 204 items, so A's false-failure rate was mostly this one case. A `go to` success is now determined only if the history already shows the receptacle closed. Other success labels are unchanged, under decision 6.
+
+**A leaves out excluded successes.** `shared_location` successes had stayed in A while the matching failures were removed, and unparseable successes were counted too. On planted data this moved A from −0.01 to −0.30. Both are now out, exclusions are counted on both sides, and the sensitivity check puts flagged items back on both sides. A's real-data size is unknown.
+
+**Few-shot examples are real strings.** The three examples were hand-written and matched no real text: none of 295 real `go to` observations stop at the name, and all 64 real `open` observations say `The X is open.`. That also broke the protocol's rule that observations come from the environment. They are now logged server text from `t0_smoke` on train games 700, 270 and 2332, still one success and two failures. This edits a frozen prompt. The effect on ΔL should be small, because both conditions share the prompt, but it has not been measured. `t0_scoring_agreement` must be rerun.
+
+**RQ3 error rates are matched between arms.** Rates were calibrated on `none` and oracle episodes pooled, counted invalid proposals that cannot be corrupted (19% of real invalid proposals were `done`), and let each arm aim for 3 errors alone. On simulated data with no true effect, unequal error counts gave a false H and an I whose CI excluded zero. Calibration now uses oracle episodes only, counts only steps with a success twin, and gives both arms one target: the lower of 3 and what each can reach. `corruption_mix` shows which action types get corrupted. Real invalid proposals are 55% `go to`, which may rarely mislead the agent, so read that mix before interpreting H.
+
+**Objects can be in two receptacles.** ALFWorld listed at least one object in two places in 366 of 832 sampled games, and picking one up clears only one listing. `Scene.locations` now holds every listing. No outcome label was wrong because of this; the old scan picked one arbitrarily.
+
+**Success text can no longer contradict the item.** A twin from reset could say `In it, you see a toiletpaper 1.` while the agent held that object. `open` and `go to` items whose receptacle the agent has changed now have no twin (`twin_contradicts_state`). This applies to corruptions too.
+
+**The Pilot A gate counts the main test.** ≥500 items and ≥80 states now refer to goal-agnostic, goal-naming, non-shared items. `eligible_failure_determined` still shows the broader count.
+
+**Headroom can stop a job.** It reports `REPORTED`, never PASS. A borderline or fired rule exits 3, which stops the job, and a resume does not skip it. `pace/pilotB_recheck.sbatch` runs the recheck and then the later stages, which refuse to start until the recheck clears the rule.
+
+**Agent repeatability.** Agreement was 0.850 and 0.757 in two Tier 0 runs, against a 0.95 target. Prompts were byte-identical at every divergence, so this is not our code. The protocol's advice to add seeding cannot work, because the agent picks greedily at temperature 0, and that wording is corrected. In a 3-way comparison, first and second runs of a prompt differed on 7 of 194 prompts and later runs on 0 of 83, which points at vLLM's prefix cache without proving it (p = 0.08). All 10 paired games in the first run ended the same way. Treat this as noise in RQ3, not bias.
+
+**Things the write-up should say.** Foresight had never run with the real agent model before Pilot B. Long success texts can make L look pessimistic, which matters for A more than ΔL. The fine-tuned models learned a goal signal only through a `[SUCCESS]` marker we do not score, so a null result for them may be partly structural. 23 of 117 "goal-agnostic" failures show the goal object in an observation, because the rule reads actions only, as filed.
 
 ## Read before analysing or writing up: shared locations
 
@@ -46,7 +85,7 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 
 - State the main result, then the sensitivity result. If they disagree, say so and treat the finding as depending on this choice.
 - RQ1's A is more exposed than RQ2's ΔL. ΔL compares one item under two goals, so a doubtful item affects both sides. A counts a success prediction on such an item as a false success.
-- The fix is partial, and the write-up should say so. The history never shows which receptacles share a spot, so "determined" still means determined for someone who knows the layout. Flagged items were identified using environment knowledge that the model never sees. See decision 5 above.
+- The fix is partial, and the write-up should say so. The history rarely shows which receptacles share a spot (`look` can), so "determined" still means determined for someone who knows the layout. Flagged items were identified using environment knowledge that the model never sees. See decision 6 above.
 - Confirmatory items need the same rule. It is not yet applied anywhere beyond Pilot A, because the confirmatory build does not exist.
 
 ## Read before analysing or writing up: `valid_unseen` prompts
@@ -81,14 +120,15 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 | Headroom "materially negative" | Any negative difference | Whole CI below zero |
 | Saving results | Not specified | Added to the protocol's rules: every long job saves each finished unit and resumes without rework or mixed commits |
 | `STATUS.md` | Reported-only runs said PASS | PASS means a target was met; others say `REPORTED`, and results under a target say `BELOW TARGET` |
+| `pilotB` job | 6 h, 64 GB | 14 h, 128 GB: about 10–12 h estimated from real episode times |
 | `pilotA_transitions` | 120 games, 4 h | 30 games, 6 h: 30 real games gave 818 eligible items against a 500 target, and fewer games halve the time and server memory |
 
 The text of `PILOT_PROTOCOL.md` was brought up to date with these changes on 2026-11-06. No preregistered value changed.
 
 ## Bug fixes (no design change intended)
 
-Foresight on a private env id; task and history in every condition; invalid actions executed rather than rewritten; no-twin steps not counted as corruptions; goal parser; swapped task line changes only the object; `context_determined` from history facts; `history_goal_agnostic` reads actions only; `delta_p` filtering; A computable; room description kept in history; no truncation of the admissible list; trace `targets_goal_object`; 100 distinct agreement items; `t0_parser` reads the dataset and fails loudly; receptacle lookup no longer matches `to` inside `potato` or `tomato`; world-model prompts looked up by each row's `id`, and checked against the game's task line, instead of by file position; every episode, score, generation and built game saved as it finishes, with `--resume` on all long runs; a resume skips runs that passed at the same commit and refuses to mix commits.
+Foresight on a private env id; task and history in every condition; invalid actions executed rather than rewritten; no-twin steps not counted as corruptions; goal parser; swapped task line changes only the object; `context_determined` from history facts; `history_goal_agnostic` reads actions only; `delta_p` filtering; A computable; room description kept in history; no truncation of the admissible list; trace `targets_goal_object`; 100 distinct agreement items; `t0_parser` reads the dataset and fails loudly; receptacle lookup no longer matches `to` inside `potato` or `tomato`; world-model prompts looked up by each row's `id`, and checked against the game's task line, instead of by file position; `use` and `slice` have their own action type; contents are filed under the receptacle the line names; a move no longer creates contents for an unseen receptacle; non-finite scores stop the run; the score cache includes the prompt; a missing swap raises an error; `recovery` needs a positive oracle gain; the retention rule compares the same games; fine-tuned generation stops at every end-of-turn token and allows 256 tokens; every episode, score, generation and built game saved as it finishes, with `--resume` on all long runs; a resume skips runs that finished at the same commit with unchanged inputs, and refuses changed commits, uncommitted code, changed settings or changed input files. Scores carry an item hash. A run refuses a dependency that did not finish, unless its config names the commit under `accept_commits`. Mock runs stay out of real folders, mock records are marked and refused by real runs, and `runs/*/STATUS.md`, `REPORT.md` and `PILOT_REPORT.md` are no longer tracked. The report refuses missing, stale or mock runs. Verification jobs exit nonzero on failure.
 
 ## Tier 0 results invalidated
 
-Job 6685206 ran the old code, so `runs/t0_*` and the Tier 0 claims in `docs/milestone_checkin.tex` need the rerun. `runs/pilot*` still holds old mock output until real runs replace it.
+Job 6685206 ran the old code, so the Tier 0 claims in `docs/milestone_checkin.tex` need replacing. Every `t0_ckpt_accuracy` figure before 2026-11-06 is invalid. Tier 0 must be rerun on the commit that holds the changes above: `t0_scoring_agreement` uses the new few-shot examples, and items now use the new swaps and labels. `runs/` in older checkouts still holds old mock output, which real runs refuse.

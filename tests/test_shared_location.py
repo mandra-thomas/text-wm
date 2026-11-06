@@ -13,6 +13,7 @@ from wf.data.transitions import (
     filter_pilot_a_items,
     history_facts,
     main_test_items,
+    primary_items,
 )
 from wf.env.scene import scan_scene
 from wf.env.server import AlfworldClient
@@ -50,7 +51,7 @@ def test_scan_sees_inside_both_receptacles_of_a_shared_spot(client):
     assert scene.shares_spot("drawer 1", "countertop 1") and scene.shares_spot("countertop 1", "drawer 1")
     # The scan reaches countertop 1 straight from drawer 1, where `go to` does nothing.
     assert scene.receptacles.index("countertop 1") == scene.receptacles.index("drawer 1") + 1
-    on_counter = [o for o, r in scene.locations.items() if r == "countertop 1"]
+    on_counter = [o for o, places in scene.locations.items() if "countertop 1" in places]
     assert on_counter  # the real scan missed exactly these objects
 
 
@@ -119,7 +120,8 @@ def test_sample_size_gate_counts_only_main_test_items(monkeypatch, tmp_path):
     transitions, _ = _run_pilot_a(monkeypatch, tmp_path)
     status = (tmp_path / "pilotA_transitions" / "STATUS.md").read_text()
     eligible = filter_pilot_a_items(transitions)
-    assert f"main_test={len(main_test_items(eligible))}" in status
+    assert f"main_test={len(primary_items(eligible))}" in status
+    assert f"eligible_failure_determined={len(eligible)}" in status  # the broader count stays visible
     assert f"shared_location={len(eligible) - len(main_test_items(eligible))}" in status
 
 
@@ -129,12 +131,12 @@ def test_flagged_items_cannot_carry_the_sample_size_gate(monkeypatch, tmp_path):
     monkeypatch.setenv("RUNS_DIR", str(tmp_path))
     (tmp_path / "FILED.txt").write_text("filed_date: x\n")
     config = {"run_id": "pilotA_transitions", "n_games": 60, "step_cap": 12}
+    monkeypatch.setattr(runs_mod, "primary_items", lambda items: list(items))
     assert runs_mod.run_pilotA_transitions(dict(config)) == 0
     # One item short of the gate, with plenty of states, so only the item count can fail it.
-    monkeypatch.setattr(runs_mod, "main_test_items", lambda items: list(items)[:499])
+    monkeypatch.setattr(runs_mod, "primary_items", lambda items: list(items)[::3][:499])
     assert runs_mod.run_pilotA_transitions(dict(config)) == 1
     assert "PASS" not in (tmp_path / "pilotA_transitions" / "STATUS.md").read_text().splitlines()[-1]
-    assert "states=" in (tmp_path / "pilotA_transitions" / "STATUS.md").read_text()
     status = (tmp_path / "pilotA_transitions" / "STATUS.md").read_text()
     assert int(status.split(" states=")[1].split()[0]) >= 80
 
@@ -150,7 +152,9 @@ def test_A_is_computed_without_and_then_with_flagged_items(monkeypatch, tmp_path
     monkeypatch.setattr(runs_mod, "asymmetry_A", spy)
     transitions, metrics = _run_pilot_a(monkeypatch, tmp_path)
     eligible = filter_pilot_a_items(transitions)
-    flagged = len(eligible) - len(main_test_items(eligible))
-    assert flagged > 0
+    flagged_failures = len(eligible) - len(main_test_items(eligible))
+    flagged_successes = len([t for t in transitions if t["context_determined"] and t["candidates"] and t["shared_location"]
+                             and t["true_obs"].strip() != "Nothing happens."])
+    assert flagged_failures > 0 and flagged_successes > 0
     main, with_flagged = sizes[0], sizes[1]
-    assert with_flagged - main == flagged
+    assert with_flagged - main == flagged_failures + flagged_successes  # back on both sides

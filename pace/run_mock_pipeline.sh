@@ -24,15 +24,26 @@ if [[ ! -f "$RUNS_DIR/FILED.txt" ]]; then
   echo "note: mock filing for pipeline dry-run" >"$RUNS_DIR/FILED.txt"
 fi
 
+# A dry run walks past gates and pilot rules so every stage still runs; a crash still stops it.
+export WF_MOCK_CONTINUE=1
+gated() {
+  rm -f "$RUNS_DIR/$1/STATUS.md"
+  "$PY" -m wf.runs "$1" --mock || {
+    [[ -f "$RUNS_DIR/$1/STATUS.md" ]] || exit 1
+    echo "note: $1 stopped at its gate or rule; mock dry run continues"
+  }
+}
+
 echo "=== Pilot A (mock) ==="
-"$PY" -m wf.runs pilotA_transitions --mock
-"$PY" -m wf.runs pilotA_score --mock
+gated pilotA_transitions
+gated pilotA_score
 
 echo "=== Pilot B (mock) ==="
-"$PY" -m wf.runs pilotB_headroom --mock
-"$PY" -m wf.runs pilotB_consumption --mock
-"$PY" -m wf.runs pilotB_eligibility --mock
-"$PY" -m wf.runs pilotB_retention_minirun --mock
+gated pilotB_headroom
+gated pilotB_headroom_recheck
+gated pilotB_consumption
+gated pilotB_eligibility
+gated pilotB_retention_minirun
 
 "$PY" -m wf.tools.assemble_pilot_report
 echo "=== mock pipeline done ==="

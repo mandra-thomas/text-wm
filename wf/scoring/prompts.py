@@ -4,37 +4,43 @@ from __future__ import annotations
 import re
 
 # --- Few-shot world-model exemplars (set 0; additional sets for SD later) ---
+# Every string is logged server output from t0_smoke on train games (job 6832744), so no
+# observation shown to a model is hand-written. Games, in order: train/700, train/270, train/2332.
+# Histories are the steps just before the action. One success and two failures, as before.
 
 WM_FEWSHOT_SET0: list[dict[str, str]] = [
     {
         "history": (
-            "Your task is to: put a mug in coffeemachine.\n"
-            "> go to drawer 1\n"
-            "You arrive at drawer 1.\n"
-            "> open drawer 1\n"
-            "You open the drawer 1. In it, you see a mug 1."
+            "Your task is to: put a soapbottle in toilet.\n"
+            "> go to cabinet 1\n"
+            "You arrive at cabinet 1. The cabinet 1 is closed.\n"
+            "> open cabinet 1\n"
+            "You open the cabinet 1. The cabinet 1 is open. In it, you see a spraybottle 1."
         ),
-        "action": "take mug 1 from drawer 1",
-        "observation": "You pick up the mug 1 from the drawer 1.",
+        "action": "take spraybottle 1 from cabinet 1",
+        "observation": "You pick up the spraybottle 1 from the cabinet 1.",
     },
     {
         "history": (
-            "Your task is to: put a mug in coffeemachine.\n"
-            "> go to countertop 1\n"
-            "You arrive at countertop 1."
+            "Your task is to: put some candle on cabinet.\n"
+            "> go to toilet 1\n"
+            "You arrive at toilet 1. On the toilet 1, you see a candle 2, and a candle 1.\n"
+            "> take candle 1 from toilet 1\n"
+            "You pick up the candle 1 from the toilet 1."
         ),
-        "action": "take mug 1 from drawer 1",
+        "action": "move candle 1 to cabinet 1",
         "observation": "Nothing happens.",
     },
     {
         "history": (
-            "Your task is to: put an apple in fridge.\n"
-            "> go to fridge 1\n"
-            "You arrive at fridge 1.\n"
-            "> open fridge 1\n"
-            "You open the fridge 1. In it, you see a egg 1."
+            "Your task is to: put two soapbottle in garbagecan.\n"
+            "> move soapbottle 2 to garbagecan 1\n"
+            "You move the soapbottle 2 to the garbagecan 1.\n"
+            "> go to countertop 1\n"
+            "You arrive at countertop 1. On the countertop 1, you see a handtowel 1, a soapbar 1, "
+            "a spraybottle 3, and a spraybottle 1."
         ),
-        "action": "take apple 1 from fridge 1",
+        "action": "take soapbottle 1 from countertop 1",
         "observation": "Nothing happens.",
     },
 ]
@@ -144,6 +150,8 @@ def condition_task_line(
     if condition == "aligned":
         return aligned_task
     if condition == "swapped":
+        if not swapped_task:
+            raise ValueError("swapped condition needs a swapped goal")  # would quietly score the aligned goal
         return swapped_task
     if condition == "absent":
         return "Your task is to: explore the room."

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -33,11 +34,15 @@ from wf.analysis.stats import (
     success_gain_ci,
 )
 from wf.corruption.schedule import calibrate_p_arm, schedule
+from wf.data.candidates import twin_available
 from wf.data.transitions import (
+    action_type,
     build_transitions_from_rollout,
     exclusion_counts,
     filter_pilot_a_items,
     main_test_items,
+    primary_items,
+    success_exclusion_counts,
 )
 from wf.env.expert import expert_available, label_action
 from wf.env.replay import replay, step_counterfactual
@@ -48,6 +53,8 @@ from wf.util import (
     REPO_ROOT,
     append_jsonl,
     calibration_dir,
+    file_sha,
+    git_dirty,
     git_sha,
     is_mock,
     read_jsonl,
@@ -73,16 +80,38 @@ def load_config(run_id: str) -> dict:
 
 RUN_OUTPUTS = ("transitions.jsonl", "scoring.jsonl", "episodes.jsonl", "observations.jsonl",
                "items.jsonl", "generations.jsonl", "games_done.jsonl")
+RULE_STOP_EXIT = 3  # a pilot rule says stop; distinct from a crash or a failed gate
 
 
-def _init_run(run_id: str, cfg: dict) -> Path:
-    d = run_dir(run_id)
+def _check_resume(d: Path, run_id: str, config: dict, inputs: dict[str, str]) -> None:
+    """Saved work may continue only under the same code, settings and input files."""
     saved_sha = d / "git_sha"
-    if cfg.get("resume") and saved_sha.exists() and saved_sha.read_text(encoding="utf-8").strip() != git_sha():
+    if not is_mock() and git_dirty():
+        raise SystemExit(f"{run_id}: the checkout has uncommitted changes, so a resume could mix code versions.")
+    if saved_sha.exists() and saved_sha.read_text(encoding="utf-8").strip() != git_sha():
         raise SystemExit(f"{run_id}: saved work is from commit {saved_sha.read_text(encoding='utf-8').strip()}, "
                          f"this is {git_sha()}. Results must not mix versions; rerun without --resume.")
-    # a crash must not leave the previous run's PASS standing
-    (d / "STATUS.md").unlink(missing_ok=True)
+    saved_config = d / "config.json"
+    if saved_config.exists():
+        saved = {k: v for k, v in json.loads(saved_config.read_text(encoding="utf-8")).items() if k != "calibrated"}
+        if saved != json.loads(json.dumps(config)):
+            raise SystemExit(f"{run_id}: settings changed since the saved work; rerun without --resume.")
+    saved_inputs = d / "inputs.json"
+    if saved_inputs.exists() and json.loads(saved_inputs.read_text(encoding="utf-8"))["inputs"] != inputs:
+        raise SystemExit(f"{run_id}: its input files changed since the saved work; rerun without --resume.")
+
+
+def _init_run(run_id: str, cfg: dict, inputs: tuple[Path, ...] = ()) -> Path:
+    d = run_dir(run_id)
+    if not is_mock() and git_sha() == "unknown":
+        raise SystemExit(f"{run_id}: no git commit to attribute results to.")
+    config = {k: v for k, v in cfg.items() if k != "resume"}
+    hashes = {str(path): file_sha(path) for path in inputs}
+    if cfg.get("resume"):
+        _check_resume(d, run_id, config, hashes)
+    # a crash must not leave the previous run's results standing
+    for name in ("STATUS.md", "REPORT.md", "metrics.json"):
+        (d / name).unlink(missing_ok=True)
     # fresh outputs for reproducibility of this invocation, unless resuming after a timeout
     for name in RUN_OUTPUTS:
         p = d / name
@@ -90,7 +119,8 @@ def _init_run(run_id: str, cfg: dict) -> Path:
             repair_jsonl(p)
         elif p.exists():
             p.unlink()
-    write_json(d / "config.json", {k: v for k, v in cfg.items() if k != "resume"})
+    write_json(d / "config.json", config)
+    write_json(d / "inputs.json", {"inputs": hashes, "git_dirty": git_dirty()})
     (d / "git_sha").write_text(git_sha() + "\n", encoding="utf-8")
     return d
 
@@ -128,17 +158,56 @@ def _random_walk(client: AlfworldClient, game_id: str, split: str, n: int = 12) 
 
 
 def _episode_key(ep: dict) -> tuple:
-    return (ep["game_id"], ep["condition"], ep.get("arm"), ep.get("retention"), ep.get("schedule_seed"))
+    return (ep["game_id"], ep["condition"], ep.get("arm"), ep.get("retention"), ep.get("schedule_seed"), ep.get("p_arm"))
+
+
+def _status_line(run_id: str) -> str:
+    path = run_dir(run_id) / "STATUS.md"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    return lines[0] if lines else ""
+
+
+def _finished(run_id: str, commits: tuple[str, ...] = ()) -> bool:
+    """Did this run end cleanly, on this code or a named commit, and are its inputs unchanged?"""
+    d = run_dir(run_id)
+    first = _status_line(run_id)
+    if not first or not (d / "git_sha").exists():
+        return False
+    finished = "— PASS" in first or "— REPORTED" in first
+    if ("(MOCK)" in first) != is_mock():
+        return False
+    sha = (d / "git_sha").read_text(encoding="utf-8").strip()
+    if not is_mock() and sha == "unknown":
+        return False
+    if any(sha.startswith(c) for c in commits):
+        return finished
+    saved = d / "inputs.json"
+    inputs = json.loads(saved.read_text(encoding="utf-8"))["inputs"] if saved.exists() else {}
+    if any(not Path(path).exists() or file_sha(Path(path)) != digest for path, digest in inputs.items()):
+        return False
+    return finished and (d / "git_sha").read_text(encoding="utf-8").strip() == git_sha()
 
 
 def _already_passed(run_id: str) -> bool:
-    """--resume skips a run that finished cleanly at this commit."""
-    d = run_dir(run_id)
-    if not (d / "STATUS.md").exists() or not (d / "git_sha").exists():
-        return False
-    first = (d / "STATUS.md").read_text(encoding="utf-8").splitlines()[0]
-    finished = "— PASS" in first or "— REPORTED" in first
-    return finished and (d / "git_sha").read_text(encoding="utf-8").strip() == git_sha()
+    """--resume skips a run that finished cleanly at this commit, unless a pilot rule said stop."""
+    return _finished(run_id) and "STOP:" not in _status_line(run_id)
+
+
+def require_passed(run_id: str, cfg: dict, dep: str) -> None:
+    """A run reads another's output only if that run finished. Otherwise it stops here.
+
+    `accept_commits: {dep: [sha]}` in the run's config names an earlier commit to trust, and
+    it stays on record in config.json.
+    """
+    if is_mock() and os.environ.get("WF_MOCK_CONTINUE") == "1":  # the mock dry run walks past gates
+        return
+    commits = tuple((cfg.get("accept_commits") or {}).get(dep, ()))
+    problem = None if _finished(dep, commits) else f"{dep} has not finished cleanly at this commit: {_status_line(dep) or 'no status'}"
+    if not problem and "STOP:" in _status_line(dep) and not _already_passed("pilotB_headroom_recheck"):
+        problem = f"{dep} says stop and its recheck has not cleared it: {_status_line(dep)}"
+    if problem:
+        write_status(run_id, problem, ok=False)
+        raise SystemExit(1)
 
 
 def _saved_games(d: Path, name: str, cfg: dict) -> tuple[list[dict], set[str]]:
@@ -164,7 +233,7 @@ def _run_jobs(d: Path, cfg: dict, client: AlfworldClient, agent: AgentClient, jo
     episodes = read_jsonl(d / "episodes.jsonl") if cfg.get("resume") else []
     done = {_episode_key(ep) for ep in episodes}
     for gid, fc, seed in jobs:
-        if (gid, fc.condition, fc.arm, fc.retention, seed) in done:
+        if (gid, fc.condition, fc.arm, fc.retention, seed, fc.p_arm) in done:
             continue
         ep = run_episode(client, agent, gid, "train", cfg["run_id"], fc, step_cap=step_cap, schedule_seed=seed)
         append_jsonl(d / "episodes.jsonl", [ep])
@@ -198,16 +267,16 @@ def run_t0_smoke(cfg: dict) -> int:
         noops += sum(tr["real_obs"].strip() == "Nothing happens." for tr in ep["trace"])
     ok = obs_count >= 50
     noop_rate = noops / steps if steps else float("nan")
+    write_run_report(
+        run_id,
+        "t0_smoke",
+        {"observations": obs_count, "games": len(games), "wins": wins, "noop_rate": noop_rate, "STEP_CAP": C.STEP_CAP},
+    )
     write_status(
         run_id,
         f"games={len(games)} wins={wins} observations={obs_count} noop_rate={noop_rate:.3f} STEP_CAP={C.STEP_CAP}\n"
         f"Acceptance: ≥50 observations — {'PASS' if ok else 'FAIL'}",
         ok=ok,
-    )
-    write_run_report(
-        run_id,
-        "t0_smoke",
-        {"observations": obs_count, "games": len(games), "wins": wins, "noop_rate": noop_rate, "STEP_CAP": C.STEP_CAP},
     )
     return 0 if ok else 1
 
@@ -235,11 +304,16 @@ def _logged_states(client: AlfworldClient, cfg: dict, want: int) -> list[dict]:
 def run_t0_replay(cfg: dict) -> int:
     """20 logged states × 3 counterfactual actions, executed twice (§6)."""
     run_id = cfg["run_id"]
-    d = _init_run(run_id, {**cfg, "resume": False})  # minutes long: restarts rather than resumes
+    smoke = runs_root() / "t0_smoke" / "episodes.jsonl"
+    if smoke.exists():
+        require_passed(run_id, cfg, "t0_smoke")
+    d = _init_run(run_id, {**cfg, "resume": False},  # minutes long: restarts rather than resumes
+                  inputs=(smoke,) if smoke.exists() else ())
     client = _client(cfg)
     client.create()
     rng = random.Random(C.RNG_SEED)
     states = _logged_states(client, cfg, 20)
+    source = "t0_smoke" if smoke.exists() else "seeded walks"
     total = mismatches = live_mismatches = informative = 0
     for st in states:
         handle = replay(client, st["game_id"], st["prefix"], "train")
@@ -261,18 +335,18 @@ def run_t0_replay(cfg: dict) -> int:
                 [{"game_id": st["game_id"], "action": act, "o1": o1, "o2": o2, "match": match, "live_ok": live_ok}],
             )
     ok = total > 0 and mismatches == 0 and live_mismatches == 0
-    write_status(
-        run_id,
-        f"states={len(states)} replay checks={total} identical={total - mismatches} "
-        f"informative={informative} replay_vs_live_mismatches={live_mismatches}\n"
-        f"Acceptance: 100% identical — {'PASS' if ok else 'FAIL'}",
-        ok=ok,
-    )
     write_run_report(
         run_id,
         "t0_replay",
-        {"states": len(states), "checks": total, "mismatches": mismatches,
+        {"states": len(states), "source": source, "checks": total, "mismatches": mismatches,
          "informative": informative, "replay_vs_live_mismatches": live_mismatches},
+    )
+    write_status(
+        run_id,
+        f"states={len(states)} from {source} replay checks={total} identical={total - mismatches} "
+        f"informative={informative} replay_vs_live_mismatches={live_mismatches}\n"
+        f"Acceptance: 100% identical — {'PASS' if ok else 'FAIL'}",
+        ok=ok,
     )
     return 0 if ok else 1
 
@@ -303,13 +377,14 @@ def run_t0_agent_determinism(cfg: dict) -> int:
     ok = mean_agree >= 0.95
     note = ""
     if not ok:
-        note = "\nTrajectory agreement < 95%: add agent seeding; schedules are not pure replicates."
+        note = ("\nTrajectory agreement < 95%, so schedules are not pure replicates. The agent picks greedily at "
+                "temperature 0, so a seed cannot help: report this and investigate.")
+    write_run_report(run_id, "t0_agent_determinism", {"mean_agreement": mean_agree})
     write_status(
         run_id,
         f"mean step agreement={mean_agree:.3f} over {len(games)} games{note}",
         reported=f"agreement {mean_agree:.3f}" if ok else f"BELOW TARGET: agreement {mean_agree:.3f} < 0.95",
     )
-    write_run_report(run_id, "t0_agent_determinism", {"mean_agreement": mean_agree})
     return 0
 
 
@@ -359,14 +434,14 @@ def run_t0_parser(cfg: dict) -> int:
             unparse += 1
     rate = unparse / len(texts)
     ok = rate <= C.MAX_UNPARSEABLE
+    write_run_report(run_id, "t0_parser", {"n": len(texts), "unparseable_rate": rate})
+    append_jsonl(d / "observations.jsonl", [{"n": len(texts), "unparseable_rate": rate}])
     write_status(
         run_id,
         f"n={len(texts)} unparseable={unparse} rate={rate:.4f} "
         f"threshold={C.MAX_UNPARSEABLE} — {'PASS' if ok else 'FAIL'}",
         ok=ok,
     )
-    write_run_report(run_id, "t0_parser", {"n": len(texts), "unparseable_rate": rate})
-    append_jsonl(d / "observations.jsonl", [{"n": len(texts), "unparseable_rate": rate}])
     return 0 if ok else 1
 
 
@@ -406,19 +481,13 @@ def run_t0_ckpt_accuracy(cfg: dict) -> int:
     for it in items:
         rec = done.get(it["id"])
         if rec is None:
-            gen = scorer.free_generate(build_messages(it, "aligned", ft_prompt=True))
+            gen = scorer.free_generate(build_messages(it, "aligned", ft_prompt=True), max_new_tokens=256)
             rec = {"id": it["id"], "generated": gen, "exact": gen.split(" [SUCCESS]")[0].strip() == it["true_obs"].strip()}
             append_jsonl(d / "generations.jsonl", [rec])
         counts[bool(it["context_determined"])][0] += int(rec["exact"])
         counts[bool(it["context_determined"])][1] += 1
     det_acc = counts[True][0] / counts[True][1] if counts[True][1] else float("nan")
     und_acc = counts[False][0] / counts[False][1] if counts[False][1] else float("nan")
-    write_status(
-        run_id,
-        f"valid_unseen n={len(items)} exact-match determined_acc={det_acc} (n={counts[True][1]}) "
-        f"uncertain_acc={und_acc} (n={counts[False][1]}) task_line_present={task_line_present}/{len(items)} — reported",
-        reported="no target",
-    )
     write_run_report(
         run_id,
         "t0_ckpt_accuracy",
@@ -426,6 +495,12 @@ def run_t0_ckpt_accuracy(cfg: dict) -> int:
          "n_determined": counts[True][1], "task_line_present": task_line_present},
     )
     write_json(d / "metrics.json", {"determined_acc": det_acc, "uncertain_acc": und_acc})
+    write_status(
+        run_id,
+        f"valid_unseen n={len(items)} exact-match determined_acc={det_acc} (n={counts[True][1]}) "
+        f"uncertain_acc={und_acc} (n={counts[False][1]}) task_line_present={task_line_present}/{len(items)} — reported",
+        reported="no target",
+    )
     return 0
 
 
@@ -467,12 +542,12 @@ def run_t0_scoring_agreement(cfg: dict) -> int:
         agree += rec["agree"]
     rate = agree / len(items)
     ok = rate >= C.SCORING_AGREEMENT_MIN
+    write_run_report(run_id, "t0_scoring_agreement", {"agreement": rate, "n_distinct": len(items)})
     write_status(
         run_id,
         f"agreement={agree}/{len(items)} ({rate:.2f}) min={C.SCORING_AGREEMENT_MIN} — {'PASS' if ok else 'FAIL'}",
         ok=ok,
     )
-    write_run_report(run_id, "t0_scoring_agreement", {"agreement": rate, "n_distinct": len(items)})
     return 0 if ok else 1
 
 
@@ -493,8 +568,8 @@ def run_t0_expert_labels(cfg: dict) -> int:
         msg = f"expert labels available: yes; n_labels={len(labels)}"
     else:
         msg = "expert labels available: no — on_expert_path=null; do not approximate with a heuristic."
-    write_status(run_id, msg, reported="no target")
     write_run_report(run_id, "t0_expert_labels", {"available": available, "n": len(labels)})
+    write_status(run_id, msg, reported="no target")
     return 0
 
 
@@ -528,7 +603,7 @@ def run_pilotA_transitions(cfg: dict) -> int:
         all_t.extend(recs)
         _save_game(d, "transitions.jsonl", gid, recs)
     eligible = filter_pilot_a_items(all_t)
-    main_items = main_test_items(eligible)
+    main_items = primary_items(eligible)
     states = {t["game_id"] + f"#{t['state_idx']}" for t in main_items}
     ok = len(main_items) >= 500 and len(states) >= 80
     counts: dict[str, int] = {}
@@ -539,21 +614,22 @@ def run_pilotA_transitions(cfg: dict) -> int:
     n_fail = sum((t.get("true_obs") or "").strip() == "Nothing happens." for t in all_t)
     balance = {"failures": n_fail, "successes": len(all_t) - n_fail}
     targeted = sum(bool(t.get("targets_goal_object")) for t in eligible)
-    exclusions = exclusion_counts(all_t)
-    write_status(
-        run_id,
-        f"total={len(all_t)} eligible_failure_determined={len(eligible)} main_test={len(main_items)} "
-        f"shared_location={len(eligible) - len(main_items)} targeted={targeted} states={len(states)}\n"
-        f"counts={counts}\nbalance={balance}\nexclusions={exclusions}\n"
-        f"Acceptance ≥500 items / ≥80 states — {'PASS' if ok else 'FAIL'}",
-        ok=ok,
-    )
+    exclusions = {"failures": exclusion_counts(all_t), "successes": success_exclusion_counts(all_t)}
+    n_flagged = len(eligible) - len(main_test_items(eligible))
     write_run_report(
         run_id,
         "pilotA_transitions",
         {"n_total": len(all_t), "n_eligible": len(eligible), "n_main_test": len(main_items),
-         "n_shared_location": len(eligible) - len(main_items), "n_targeted": targeted, "n_states": len(states),
+         "n_shared_location": n_flagged, "n_targeted": targeted, "n_states": len(states),
          "counts": counts, "balance": balance, "exclusions": exclusions},
+    )
+    write_status(
+        run_id,
+        f"total={len(all_t)} eligible_failure_determined={len(eligible)} main_test={len(main_items)} "
+        f"shared_location={n_flagged} targeted={targeted} states={len(states)}\n"
+        f"counts={counts}\nbalance={balance}\nexclusions={exclusions}\n"
+        f"Acceptance ≥500 main-test items / ≥80 states — {'PASS' if ok else 'FAIL'}",
+        ok=ok,
     )
     return 0 if ok else 1
 
@@ -582,22 +658,34 @@ def _effect(scores: list[dict], items: list[dict], require_agnostic: bool = True
     }
 
 
+def _item_hash(t: dict) -> str:
+    """What a score depends on, so it can never attach to a different item with the same id."""
+    fields = {k: t.get(k) for k in ("action", "history_text", "task_line", "swapped_task_line", "candidates")}
+    return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()[:16]
+
+
 def run_pilotA_score(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
-    d = _init_run(run_id, cfg)
+    require_passed(run_id, cfg, "pilotA_transitions")
     src = Path(cfg.get("transitions_path", runs_root() / "pilotA_transitions" / "transitions.jsonl"))
+    if not src.exists():
+        write_status(run_id, f"No transitions at {src}", ok=False)
+        return 1
+    d = _init_run(run_id, cfg, inputs=(src,))
     transitions = read_jsonl(src)
     if not transitions:
         write_status(run_id, f"No transitions at {src}", ok=False)
         return 1
     eligible = filter_pilot_a_items(transitions)
     # True successes get the aligned condition only, for A: false-failure needs them.
-    successes = [
+    all_successes = [
         t for t in transitions
         if t.get("context_determined") and t.get("candidates")
         and (t.get("true_obs") or "").strip() != "Nothing happens."
+        and t.get("outcome_class") != "unparseable"
     ]
+    successes = main_test_items(all_successes)
     conditions = ["aligned", "swapped", "absent", "committed", "candidate"]
     models = [
         (C.WM_FEWSHOT_MODEL, "qwen3-8b-fewshot", False),
@@ -606,7 +694,7 @@ def run_pilotA_score(cfg: dict) -> int:
     # The aligned goal must be one the action's success would advance (prereg).
     targeted = [t for t in eligible if t.get("targets_goal_object")]
     agnostic_all = [t for t in targeted if t.get("history_goal_agnostic")]
-    agnostic = main_test_items(agnostic_all)
+    agnostic = primary_items(eligible)
     revealing = main_test_items(t for t in targeted if not t.get("history_goal_agnostic"))
     bins = {
         "0": lambda n: n == 0,
@@ -620,16 +708,19 @@ def run_pilotA_score(cfg: dict) -> int:
 
     reports = {}
     saved = read_jsonl(d / "scoring.jsonl") if cfg.get("resume") else []
+    hashes = {t["id"]: _item_hash(t) for t in eligible + all_successes}
+    if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):
+        raise SystemExit(f"{run_id}: saved scores belong to different items; rerun without --resume.")
     done = {(s["model"], s["transition_id"], s["condition"]) for s in saved}
     for model_name, tag, ft in models:
         scorer = LogoddsScorer(model_name, model_tag=tag)
         scores = [s for s in saved if s["model"] == tag]
-        for t, cond in [(t, c) for t in eligible for c in conditions] + [(t, "aligned") for t in successes]:
+        for t, cond in [(t, c) for t in eligible for c in conditions] + [(t, "aligned") for t in all_successes]:
             if (tag, t["id"], cond) in done:
                 continue
             sc = score_transition(scorer, t, cond, ft_prompt=ft)
             if sc:
-                rec = {**sc.to_dict(), "game_id": t["game_id"]}
+                rec = {**sc.to_dict(), "game_id": t["game_id"], "item_hash": hashes[t["id"]]}
                 append_jsonl(d / "scoring.jsonl", [rec])
                 scores.append(rec)
         everything = main_test_items(eligible) + successes
@@ -647,7 +738,7 @@ def run_pilotA_score(cfg: dict) -> int:
             "with_shared_location": {
                 "n_flagged": len(agnostic_all) - len(agnostic),
                 "goal_agnostic": _effect(scores, agnostic_all),
-                "A": asymmetry_A(scores, eligible + successes),
+                "A": asymmetry_A(scores, eligible + all_successes),
             },
         }
         core = reports[tag]["goal_agnostic"]
@@ -679,7 +770,7 @@ def run_pilotA_score(cfg: dict) -> int:
         "ELIGIBLE_SET_TARGET": target_n,
         "PILOT_RULE_GOAL_CHANNEL": fired,
         "rule_conflicts_with_delta_L": conflict,
-        "exclusions": exclusion_counts(transitions),
+        "exclusions": {"failures": exclusion_counts(transitions), "successes": success_exclusion_counts(transitions)},
         "reports": reports,
     }
     with (calibration_dir() / "eligible_target.yaml").open("w", encoding="utf-8") as f:
@@ -695,13 +786,13 @@ def run_pilotA_score(cfg: dict) -> int:
               "A": rep["with_shared_location"]["A"]}
         for tag, rep in reports.items()
     }
+    write_run_report(run_id, "pilotA_score", cal)
     write_status(
         run_id,
         f"PILOT_RULE_GOAL_CHANNEL={'fired' if fired else 'not fired'}; ELIGIBLE_SET_TARGET={target_n}\n"
         f"rule conflicts with ΔL on: {conflict or 'none'}\n{summary}\nsensitivity with shared_location items: {sensitivity}",
         reported="rule output",
     )
-    write_run_report(run_id, "pilotA_score", cal)
     return 0
 
 
@@ -732,7 +823,15 @@ def run_pilotB_headroom(cfg: dict) -> int:
     gain = success_gain_ci(oracle_d, none, seed=C.RNG_SEED)
     retained_minus = success_gain_ci(oracle_r, oracle_d, seed=C.RNG_SEED)
     oracle_gain = succ_rate(oracle_d) - succ_rate(none)
-    recovery = (succ_rate(validity) - succ_rate(none)) / oracle_gain if oracle_gain else float("nan")
+    recovery = (succ_rate(validity) - succ_rate(none)) / oracle_gain if oracle_gain > 0 else float("nan")
+
+    per_condition = {
+        name: {"success": succ_rate(eps), "mean_S": rank_outcome(eps)["mean_S"]}
+        for name, eps in (("none", none), ("oracle_discarded", oracle_d), ("oracle_retained", oracle_r), ("validity_only", validity))
+    }
+    if any(v != v for v in (gain["estimate"], gain["ci_low"], gain["ci_high"])):
+        write_status(run_id, f"oracle gain cannot be computed: {gain}\n{per_condition}", ok=False)
+        return 1
 
     # PILOT_RULE_HEADROOM; a borderline result gets the 100-game recheck first
     borderline = gain["ci_low"] <= C.HEADROOM_MIN_PP <= gain["ci_high"]
@@ -742,35 +841,34 @@ def run_pilotB_headroom(cfg: dict) -> int:
         rule = "PILOT_RULE_HEADROOM fired — RQ3 moves to ScienceWorld"
     else:
         rule = "PILOT_RULE_HEADROOM not fired"
+    stop = rule != "PILOT_RULE_HEADROOM not fired"
 
-    per_condition = {
-        name: {"success": succ_rate(eps), "mean_S": rank_outcome(eps)["mean_S"]}
-        for name, eps in (("none", none), ("oracle_discarded", oracle_d), ("oracle_retained", oracle_r), ("validity_only", validity))
-    }
     # "Materially negative": the whole interval sits below zero, not one game's flip.
     broken = retained_minus["ci_high"] < 0
-    write_status(
-        run_id,
-        f"{per_condition}\noracle_gain={gain} recovery={recovery}\nretained_minus_discarded={retained_minus}\n{rule}"
-        + ("\nretained-oracle minus discarded-oracle is materially negative — retained format broken; "
-           "stop before mini-run." if broken else ""),
-        ok=not broken,
-    )
     write_run_report(
         run_id,
         "pilotB_headroom",
         {**per_condition, "oracle_gain_pp": gain, "validity_recovery": recovery,
          "retained_minus_discarded_pp": retained_minus, "rule": rule},
     )
-    return 1 if broken else 0
+    write_status(
+        run_id,
+        f"{per_condition}\noracle_gain={gain} recovery={recovery}\nretained_minus_discarded={retained_minus}\n{rule}"
+        + ("\nretained-oracle minus discarded-oracle is materially negative — retained format broken; "
+           "stop before mini-run." if broken else ""),
+        ok=False,
+        reported=None if broken else f"STOP: {rule}" if stop else "rule not fired",
+    )
+    return 1 if broken else RULE_STOP_EXIT if stop else 0
 
 
 def run_pilotB_consumption(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
-    d = _init_run(run_id, cfg)
+    require_passed(run_id, cfg, "pilotB_headroom")
     # Reuse headroom oracle episodes if present
     src = Path(cfg.get("episodes_path", runs_root() / "pilotB_headroom" / "episodes.jsonl"))
+    d = _init_run(run_id, cfg, inputs=(src,) if src.exists() else ())
     episodes = [e for e in read_jsonl(src) if e.get("condition") == "oracle"]
     if not episodes:
         write_status(run_id, f"No oracle episodes at {src}; run pilotB_headroom first", ok=False)
@@ -784,73 +882,94 @@ def run_pilotB_consumption(cfg: dict) -> int:
     rate = crit / total if total else 0.0
     follow_rate = follow / total if total else 0.0
     ok = rate >= C.CONSUMPTION_MIN
+    write_json(d / "metrics.json", {"decision_critical_rate": rate, "follow_rate": follow_rate})
+    write_run_report(run_id, "pilotB_consumption", {"decision_critical_rate": rate, "follow_rate": follow_rate})
     write_status(
         run_id,
         f"decision_critical_rate={rate:.3f} follow_rate={follow_rate:.3f} "
         f"min={C.CONSUMPTION_MIN} — {'PASS' if ok else 'FAIL: strengthen foresight presentation'}",
         ok=ok,
     )
-    write_json(d / "metrics.json", {"decision_critical_rate": rate, "follow_rate": follow_rate})
-    write_run_report(run_id, "pilotB_consumption", {"decision_critical_rate": rate, "follow_rate": follow_rate})
     return 0 if ok else 1
 
 
 def run_pilotB_eligibility(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
-    d = _init_run(run_id, cfg)
+    require_passed(run_id, cfg, "pilotB_headroom")
     src = Path(cfg.get("episodes_path", runs_root() / "pilotB_headroom" / "episodes.jsonl"))
-    episodes = [e for e in read_jsonl(src) if e.get("condition") in ("none", "oracle")]
+    d = _init_run(run_id, cfg, inputs=(src,) if src.exists() else ())
+    # Corrupted arms run with a prediction on screen, so only oracle episodes show their rates.
+    episodes = [e for e in read_jsonl(src) if e.get("condition") == "oracle"]
     if not episodes:
-        write_status(run_id, f"No episodes at {src}; run pilotB_headroom first", ok=False)
+        write_status(run_id, f"No oracle episodes at {src}; run pilotB_headroom first", ok=False)
         return 1
-    invalid = valid = expert_valid = labelled_valid = steps = 0
+    client = _client(cfg)
+    client.create()
+    sandbox = client.sandbox()
+    twins: dict = {}
+    invalid = corruptible = valid = expert_valid = labelled_valid = steps = 0
+    mix: dict[str, dict[str, int]] = {"favorable": {}, "unfavorable": {}}
     for ep in episodes:
+        history: list[tuple[str, str]] = []
         for tr in ep.get("trace", []):
             steps += 1
+            kind = action_type(tr["proposal"])
             if tr.get("proposal_valid"):
                 valid += 1
-                if tr.get("on_expert_path") is not None:
+                mix["unfavorable"][kind] = mix["unfavorable"].get(kind, 0) + 1
+                if tr.get("proposal_on_expert_path") is not None:
                     labelled_valid += 1
-                    expert_valid += int(tr["on_expert_path"])
+                    expert_valid += int(tr["proposal_on_expert_path"])
             else:
                 invalid += 1
-    inv_rate = invalid / steps if steps else 0.0
-    val_rate = valid / steps if steps else 0.0
+                if twin_available(sandbox, ep["game_id"], ep["split"], tr["proposal"], history, twins):
+                    corruptible += 1
+                    mix["favorable"][kind] = mix["favorable"].get(kind, 0) + 1
+            history.append((tr["executed"], tr["real_obs"]))
     exp_steps = steps / len(episodes)
+    corruptible_rate = corruptible / steps if steps else 0.0
+    val_rate = valid / steps if steps else 0.0
+    achievable = {"favorable": corruptible_rate * exp_steps, "unfavorable": val_rate * exp_steps}
     target = C.CORRUPTIONS_PER_EPISODE_TARGET
-    p_fav = calibrate_p_arm(inv_rate, target, exp_steps)
-    p_unfav = calibrate_p_arm(val_rate, target, exp_steps)
-    expected = {"favorable": inv_rate * exp_steps * p_fav, "unfavorable": val_rate * exp_steps * p_unfav}
-    short = {arm: round(e, 2) for arm, e in expected.items() if e < target - 1e-9}
+    # One target for both arms, or a gap in error counts would read as a gap in cost.
+    common_target = min(target, *achievable.values())
+    p_fav = calibrate_p_arm(corruptible_rate, common_target, exp_steps)
+    p_unfav = calibrate_p_arm(val_rate, common_target, exp_steps)
+    expected = {"favorable": corruptible_rate * exp_steps * p_fav, "unfavorable": val_rate * exp_steps * p_unfav}
+    short = {arm: round(e, 2) for arm, e in achievable.items() if e < target - 1e-9}
     cal = {
-        "invalid_proposal_rate": inv_rate,
+        "invalid_proposal_rate": invalid / steps if steps else 0.0,
+        "corruptible_proposal_rate": corruptible_rate,
         "valid_proposal_rate": val_rate,
         "expert_among_valid": (expert_valid / labelled_valid) if labelled_valid else None,
         "expected_steps": exp_steps,
         "p_favorable": p_fav,
         "p_unfavorable": p_unfav,
         "expected_corruptions": expected,
+        "common_target": common_target,
+        "corruption_mix": mix,
         "arms_below_target": short,
         "CORRUPTIONS_PER_EPISODE_TARGET": target,
-        "derivation": "p = target / (eligibility_rate * expected_steps), clipped to 1",
+        "derivation": "p = common target / (corruptible rate * expected_steps) on oracle episodes, clipped to 1",
     }
     # write calibrated.yaml
     cal_path = calibration_dir() / "calibrated.yaml"
     with cal_path.open("w", encoding="utf-8") as f:
         yaml.dump(cal, f, sort_keys=True)
     write_json(d / "metrics.json", cal)
-    note = f"\nWARNING: too few eligible steps to reach {target} corruptions per episode: {short}" if short else ""
-    write_status(run_id, f"wrote {cal_path.name}: p_favorable={p_fav:.4f} p_unfavorable={p_unfav:.4f}{note}",
-                 reported=f"BELOW TARGET: {short}" if short else "calibration")
     write_run_report(run_id, "pilotB_eligibility", cal)
+    note = f"\nWARNING: too few eligible steps to reach {target} corruptions per episode: {short}" if short else ""
+    write_status(run_id, f"wrote {cal_path.name}: p_favorable={p_fav:.4f} p_unfavorable={p_unfav:.4f} "
+                         f"common_target={common_target:.2f} mix={mix}{note}",
+                 reported=f"BELOW TARGET: {short}" if short else "calibration")
     return 0
 
 
 def run_pilotB_retention_minirun(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
-    d = _init_run(run_id, cfg)
+    require_passed(run_id, cfg, "pilotB_eligibility")
     cal_path = calibration_dir() / "calibrated.yaml"
     if not cal_path.exists():
         write_status(run_id, f"{cal_path} missing; run pilotB_eligibility first", ok=False)
@@ -858,8 +977,11 @@ def run_pilotB_retention_minirun(cfg: dict) -> int:
     if C.RETENTION_MARGIN is None:
         write_status(run_id, "RETENTION_MARGIN is None — set before filing", ok=False)
         return 1
+    d = _init_run(run_id, cfg, inputs=(cal_path,))
     with cal_path.open(encoding="utf-8") as f:
         cal = yaml.safe_load(f) or {}
+    calibrated = {"p_favorable": cal["p_favorable"], "p_unfavorable": cal["p_unfavorable"]}
+    write_json(d / "config.json", {**{k: v for k, v in cfg.items() if k != "resume"}, "calibrated": calibrated})
     client = _client(cfg)
     agent = AgentClient(base_url=cfg.get("vllm_base_url"))
     client.create()
@@ -875,6 +997,7 @@ def run_pilotB_retention_minirun(cfg: dict) -> int:
                     arm=arm,
                     retention=retention,
                     corrupt_fn=schedule(gid, seed, arm, float(p)),
+                    p_arm=float(p),
                 )
                 jobs.append((gid, fc, seed))
     episodes = _run_jobs(d, cfg, client, agent, jobs)
@@ -886,7 +1009,12 @@ def run_pilotB_retention_minirun(cfg: dict) -> int:
     # retention margin on favorable arm
     fav_disc = [e for e in episodes if e["arm"] == "favorable" and e["retention"] == "discarded"]
     fav_ret = [e for e in episodes if e["arm"] == "favorable" and e["retention"] == "retained"]
-    shift = abs(rank_outcome(fav_ret)["mean_S"] - rank_outcome(fav_disc)["mean_S"])
+    ret_S, disc_S = rank_outcome(fav_ret)["per_game_S"], rank_outcome(fav_disc)["per_game_S"]
+    paired = sorted(set(ret_S) & set(disc_S))  # a game missing from one cell must not move the shift
+    if not paired:
+        write_status(run_id, "no game has both favorable cells; retention shift cannot be computed", ok=False)
+        return 1
+    shift = abs(sum(ret_S[g] - disc_S[g] for g in paired) / len(paired))
     if shift < C.RETENTION_MARGIN:
         fmt_rule = (
             "PILOT_RULE_RETAINED_FORMAT fired — switch to state persistence for full runs"
@@ -909,16 +1037,17 @@ def run_pilotB_retention_minirun(cfg: dict) -> int:
         if e.get("condition") == "oracle" and e.get("retention") == "discarded"
     ]
     diagnostics = corruption_diagnostics(episodes, oracle)
-    write_status(
-        run_id,
-        f"H_discarded={Hd} H_retained={Hr} I={I} retention_shift={shift}\n{fmt_rule}\ncells={cells}",
-        reported="rule output",
-    )
     write_run_report(
         run_id,
         "pilotB_retention_minirun",
         {"H_discarded": Hd, "H_retained": Hr, "H_success_points": H_points, "sign_claim_allowed": sign_claims,
-         "I": I, "retention_shift": shift, "rule": fmt_rule, "cells": cells, "diagnostics": diagnostics},
+         "I": I, "retention_shift": shift, "rule": fmt_rule, "cells": cells, "diagnostics": diagnostics,
+         "calibrated": calibrated},
+    )
+    write_status(
+        run_id,
+        f"H_discarded={Hd} H_retained={Hr} I={I} retention_shift={shift}\n{fmt_rule}\ncells={cells}",
+        reported="rule output",
     )
     return 0
 
