@@ -1,5 +1,5 @@
 run_id: pilotA_transitions
 split: train
-# Need ≥80 eligible states / ≥500 items (protocol §6); 40 was too low on mock.
-n_games: 120
+# Need ≥80 eligible states / ≥500 items (protocol §6).
+n_games: 60
 step_cap: 12

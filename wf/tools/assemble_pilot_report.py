@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from wf.util import REPO_ROOT, git_sha, runs_root
+from wf.util import git_sha, is_mock, runs_root
 
 
 def _slurp(path: Path) -> str:
@@ -55,12 +55,11 @@ def main() -> None:
 
     lines += [
         "## Deviations / failures",
-        "See per-run STATUS.md files under runs/.",
-        "",
-        "## Note",
-        "If this report was produced with WF_MOCK_*=1, replace with ICE results before claiming pilot completion.",
+        "See per-run STATUS.md files under runs/ and notes/deviations.md.",
         "",
     ]
+    if is_mock():
+        lines += ["## Note", "MOCK DATA from WF_MOCK_*=1. Not pilot results.", ""]
     out = root / "PILOT_REPORT.md"
     out.write_text("\n".join(lines), encoding="utf-8")
     print(f"wrote {out}")

@@ -4,11 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from wf.util import write_report
+from wf.util import is_mock, write_report
 
 
 def write_run_report(run_id: str, title: str, sections: dict[str, Any]) -> Path:
-    lines = [f"# REPORT — {run_id}", "", f"## {title}", ""]
+    lines = [f"# REPORT — {run_id}" + (" (MOCK DATA)" if is_mock() else ""), "", f"## {title}", ""]
     for name, body in sections.items():
         lines.append(f"### {name}")
         if isinstance(body, dict):

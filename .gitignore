@@ -27,6 +27,9 @@ runs/**
 !runs/PILOT_REPORT.md
 !runs/env.json
 
+# Mock runs and their calibration values
+runs_mock/
+
 # Caches / third party on cluster
 hfcache/
 third_party/

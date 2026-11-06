@@ -82,6 +82,8 @@ python scripts/smoke_vllm_thinking.py --base-url "http://127.0.0.1:${VLLM_PORT}/
 
 Tier 0 / pilots must not co-reside vLLM (agent) and HF transformers (WM scoring) on one GPU — HF will CPU-offload and generation becomes ~1 min/item. `pace/t0_all.sbatch` and `pace/pilotA.sbatch` time-share: vLLM for agent work, then stop vLLM, then HF scoring. Pilot B keeps vLLM for the whole job (agent-only).
 
+`t0_ckpt_accuracy` and the fine-tuned model in `pilotA_score` read `$WORD2WORLD_ROOT/data/init_contexts/alfworld/wm_instruct_*.json` (from `download_data.py`), or the directory in `WF_INIT_CONTEXTS`.
+
 ## 7. Submit runs
 
 ```bash

@@ -1,0 +1,4 @@
+run_id: pilotB_headroom_recheck
+split: train
+n_games: 100
+step_cap: 30

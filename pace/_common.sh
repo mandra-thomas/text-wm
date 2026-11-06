@@ -23,6 +23,10 @@ export VLLM_PORT="${VLLM_PORT:-8000}"
 export ALFWORLD_PORT="${ALFWORLD_PORT:-36001}"
 export PYTHONPATH="${PROJECT_ROOT}${PYTHONPATH:+:$PYTHONPATH}"
 
+# Per-job pid files, so concurrent jobs sharing this checkout cannot stop each other's servers.
+export VLLM_PID_FILE="${PROJECT_ROOT}/logs/vllm_${SLURM_JOB_ID:-local}.pid"
+export ALFWORLD_PID_FILE="${PROJECT_ROOT}/logs/alfworld_${SLURM_JOB_ID:-local}.pid"
+
 mkdir -p "${RUNS_DIR}" "${PROJECT_ROOT}/logs"
 
 cd "${PROJECT_ROOT}"
@@ -74,7 +78,7 @@ start_alfworld_server() {
       cd "${WORD2WORLD_ROOT}"
       bash scripts/env_server/start_alfworld.sh
     ) >"${log}" 2>&1 &
-    echo $! >"${PROJECT_ROOT}/logs/alfworld.pid"
+    echo $! >"${ALFWORLD_PID_FILE}"
     echo "ALFWorld server starting (log=${log})"
     sleep 15
   else
@@ -83,9 +87,9 @@ start_alfworld_server() {
 }
 
 stop_alfworld_server() {
-  if [[ -f "${PROJECT_ROOT}/logs/alfworld.pid" ]]; then
-    kill "$(cat "${PROJECT_ROOT}/logs/alfworld.pid")" 2>/dev/null || true
-    rm -f "${PROJECT_ROOT}/logs/alfworld.pid"
+  if [[ -f "${ALFWORLD_PID_FILE}" ]]; then
+    kill "$(cat "${ALFWORLD_PID_FILE}")" 2>/dev/null || true
+    rm -f "${ALFWORLD_PID_FILE}"
   fi
 }
 
@@ -108,7 +112,7 @@ start_vllm() {
     --enable-prefix-caching \
     --port "${VLLM_PORT}" \
     >"${log}" 2>&1 &
-  echo $! >"${PROJECT_ROOT}/logs/vllm.pid"
+  echo $! >"${VLLM_PID_FILE}"
   echo "vLLM starting model=${model} port=${VLLM_PORT} (log=${log})"
   # Wait until healthy or timeout
   for _ in $(seq 1 120); do
@@ -118,7 +122,7 @@ start_vllm() {
       return 0
     fi
     # Fail fast if process died
-    if [[ -f "${PROJECT_ROOT}/logs/vllm.pid" ]] && ! kill -0 "$(cat "${PROJECT_ROOT}/logs/vllm.pid")" 2>/dev/null; then
+    if [[ -f "${VLLM_PID_FILE}" ]] && ! kill -0 "$(cat "${VLLM_PID_FILE}")" 2>/dev/null; then
       echo "ERROR: vLLM process exited early; see ${log}" >&2
       return 1
     fi
@@ -131,9 +135,9 @@ start_vllm() {
 stop_vllm() {
   # Tear down the OpenAI server so HF scoring can own the GPU (no CPU offload).
   local pid=""
-  if [[ -f "${PROJECT_ROOT}/logs/vllm.pid" ]]; then
-    pid="$(cat "${PROJECT_ROOT}/logs/vllm.pid")"
-    rm -f "${PROJECT_ROOT}/logs/vllm.pid"
+  if [[ -f "${VLLM_PID_FILE}" ]]; then
+    pid="$(cat "${VLLM_PID_FILE}")"
+    rm -f "${VLLM_PID_FILE}"
   fi
   if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
     echo "Stopping vLLM pid=${pid}"
@@ -156,7 +160,7 @@ stop_vllm() {
 }
 
 ensure_vllm() {
-  if [[ -f "${PROJECT_ROOT}/logs/vllm.pid" ]] && kill -0 "$(cat "${PROJECT_ROOT}/logs/vllm.pid")" 2>/dev/null; then
+  if [[ -f "${VLLM_PID_FILE}" ]] && kill -0 "$(cat "${VLLM_PID_FILE}")" 2>/dev/null; then
     if curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
       return 0
     fi
@@ -167,5 +171,6 @@ ensure_vllm() {
 run_wf() {
   local run_id="$1"
   activate_serve
-  python -m wf.runs "${run_id}"
+  # WF_RESUME=1 keeps saved work after a wall-clock timeout: sbatch --export=ALL,WF_RESUME=1 ...
+  python -m wf.runs "${run_id}" ${WF_RESUME:+--resume}
 }

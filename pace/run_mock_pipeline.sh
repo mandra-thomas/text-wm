@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 export WF_MOCK_ENV=1 WF_MOCK_AGENT=1 WF_MOCK_SCORE=1
-export RUNS_DIR="${RUNS_DIR:-$ROOT/runs}"
+export RUNS_DIR="${RUNS_DIR:-$ROOT/runs_mock}"
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
 PY="${ROOT}/.venv/bin/python"
 [[ -x "$PY" ]] || PY=python3
@@ -21,13 +21,7 @@ done
 
 # Filing gate for Pilot A/B
 if [[ ! -f "$RUNS_DIR/FILED.txt" ]]; then
-  SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-  cat >"$RUNS_DIR/FILED.txt" <<EOF
-filed_date: $(date -u +%Y-%m-%d)
-constants_commit: ${SHA}
-RETENTION_MARGIN: 1.0
-note: mock filing for pipeline dry-run; replace with real filing date before ICE Pilot A/B
-EOF
+  echo "note: mock filing for pipeline dry-run" >"$RUNS_DIR/FILED.txt"
 fi
 
 echo "=== Pilot A (mock) ==="
