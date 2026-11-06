@@ -14,11 +14,12 @@ def schedule(
 ) -> Callable[[int, bool], bool]:
     """Return (t, proposal_valid) -> corrupt_now, deterministic in (game_id, seed).
 
-    Eligibility: favorable corrupts only invalid proposals; unfavorable only valid.
+    Draws are shared across arms and retention modes (§4.8); only eligibility and p_arm
+    differ. Favorable corrupts only invalid proposals; unfavorable only valid.
     """
 
     def _rng_at(t: int) -> random.Random:
-        h = hashlib.sha256(f"{game_id}|{seed}|{arm}|{t}".encode()).hexdigest()
+        h = hashlib.sha256(f"{game_id}|{seed}|{t}".encode()).hexdigest()
         return random.Random(int(h[:16], 16))
 
     def corrupt_now(t: int, proposal_valid: bool) -> bool:

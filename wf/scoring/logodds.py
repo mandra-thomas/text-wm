@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 import hashlib
-import math
+import json
 import os
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
+from wf.data.goals import make_swapped_task_line
 from wf.scoring.prompts import (
+    _replace_task_line,
     condition_task_line,
-    world_model_ft_prompt,
+    world_model_ft_messages,
     world_model_prompt,
 )
 from wf.util import sigmoid
@@ -50,11 +54,9 @@ class LogoddsScorer:
         model_tag: str | None = None,
         device: str | None = None,
         dtype: str = "bfloat16",
-        use_chat_template: bool = True,
     ):
         self.model_name = model_name
         self.model_tag = model_tag or model_name.split("/")[-1].lower()
-        self.use_chat_template = use_chat_template
         self.mock = os.environ.get("WF_MOCK_SCORE", "0") == "1"
         self._cache: dict[tuple[str, str, str], ScoreResult] = {}
         self._model = None
@@ -83,10 +85,19 @@ class LogoddsScorer:
         h = hashlib.sha256(repr(prompt_messages_or_text).encode()).hexdigest()
         return int(h[:2], 16) % 2 == 0
 
-    def _teacher_force_logprob(self, prompt_messages_or_text: Any, candidate: str) -> tuple[float, int]:
+    def _encode(self, messages: list[dict[str, str]]) -> Any:
+        return self._tok.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            enable_thinking=False,
+        )
+
+    def _teacher_force_logprob(self, messages: list[dict[str, str]], candidate: str) -> tuple[float, int]:
         if self.mock:
             n_tok = max(1, len(candidate.split()))
-            prefer_success = self._mock_prefer_success(prompt_messages_or_text)
+            prefer_success = self._mock_prefer_success(messages)
             is_noop = candidate.strip() == "Nothing happens."
             # Prefer success ⇒ higher logp for non-noop candidates
             if prefer_success:
@@ -100,28 +111,8 @@ class LogoddsScorer:
         import torch
 
         assert self._model is not None and self._tok is not None
-        tok = self._tok
-        if self.use_chat_template and isinstance(prompt_messages_or_text, list):
-            try:
-                prompt_ids = tok.apply_chat_template(
-                    prompt_messages_or_text,
-                    tokenize=True,
-                    add_generation_prompt=True,
-                    return_tensors="pt",
-                    enable_thinking=False,
-                )
-            except TypeError:
-                prompt_ids = tok.apply_chat_template(
-                    prompt_messages_or_text,
-                    tokenize=True,
-                    add_generation_prompt=True,
-                    return_tensors="pt",
-                )
-        else:
-            text = prompt_messages_or_text if isinstance(prompt_messages_or_text, str) else str(prompt_messages_or_text)
-            prompt_ids = tok(text, return_tensors="pt").input_ids
-
-        cand_ids = tok(candidate, return_tensors="pt", add_special_tokens=False).input_ids
+        prompt_ids = self._encode(messages)
+        cand_ids = self._tok(candidate, return_tensors="pt", add_special_tokens=False).input_ids
         input_ids = torch.cat([prompt_ids, cand_ids], dim=1)
         device = next(self._model.parameters()).device
         input_ids = input_ids.to(device)
@@ -143,47 +134,16 @@ class LogoddsScorer:
         self,
         transition_id: str,
         condition: str,
-        history_text: str,
-        action: str,
+        messages: list[dict[str, str]],
         o_plus: str,
         o_minus: str,
-        aligned_task: str,
-        swapped_task: str | None = None,
-        ft_prompt: bool = False,
     ) -> ScoreResult:
         key = (self.model_tag, condition, transition_id)
         if key in self._cache:
             return self._cache[key]
 
-        task_override = condition_task_line(condition, aligned_task, swapped_task)
-        if ft_prompt:
-            prompt = world_model_ft_prompt(
-                _apply_task(history_text, task_override),
-                action,
-            )
-        else:
-            prompt = world_model_prompt(
-                history_text,
-                action,
-                task_line_override=task_override,
-            )
-
-        # committed / candidate framing: lightly annotate (exploratory in Pilot A)
-        if condition == "committed" and isinstance(prompt, list):
-            prompt = list(prompt)
-            prompt[-1] = {
-                **prompt[-1],
-                "content": prompt[-1]["content"] + "\n(The agent is committed to this goal.)",
-            }
-        if condition == "candidate" and isinstance(prompt, list):
-            prompt = list(prompt)
-            prompt[-1] = {
-                **prompt[-1],
-                "content": prompt[-1]["content"] + "\n(Treat the goal as one candidate among others.)",
-            }
-
-        logp_plus, n_plus = self._teacher_force_logprob(prompt, o_plus)
-        logp_minus, n_minus = self._teacher_force_logprob(prompt, o_minus)
+        logp_plus, n_plus = self._teacher_force_logprob(messages, o_plus)
+        logp_minus, n_minus = self._teacher_force_logprob(messages, o_minus)
         L = logp_plus - logp_minus
         result = ScoreResult(
             transition_id=transition_id,
@@ -199,32 +159,16 @@ class LogoddsScorer:
         self._cache[key] = result
         return result
 
-    def free_generate(self, history_text: str, action: str, max_new_tokens: int = 64) -> str:
+    def free_generate(self, messages: list[dict[str, str]], max_new_tokens: int = 64) -> str:
         if self.mock:
-            prompt = world_model_prompt(history_text, action)
-            if self._mock_prefer_success(prompt):
+            if self._mock_prefer_success(messages):
                 return "You pick up the mug 1 from the drawer 1."
             return "Nothing happens."
 
         import torch
 
         assert self._model is not None and self._tok is not None
-        messages = world_model_prompt(history_text, action)
-        try:
-            input_ids = self._tok.apply_chat_template(
-                messages,
-                tokenize=True,
-                add_generation_prompt=True,
-                return_tensors="pt",
-                enable_thinking=False,
-            )
-        except TypeError:
-            input_ids = self._tok.apply_chat_template(
-                messages,
-                tokenize=True,
-                add_generation_prompt=True,
-                return_tensors="pt",
-            )
+        input_ids = self._encode(messages)
         device = next(self._model.parameters()).device
         input_ids = input_ids.to(device)
         with torch.no_grad():
@@ -238,12 +182,50 @@ class LogoddsScorer:
         return self._tok.decode(gen, skip_special_tokens=True).strip()
 
 
-def _apply_task(history_text: str, task_override: str | None) -> str:
-    if not task_override:
-        return history_text
-    from wf.scoring.prompts import _replace_task_line
+_FRAMING = {
+    "committed": "(The agent is committed to this goal.)",
+    "candidate": "(Treat the goal as one candidate among others.)",
+}
 
-    return _replace_task_line(history_text, task_override)
+
+def _init_contexts_dir() -> Path:
+    root = os.environ.get("WF_INIT_CONTEXTS")
+    if root:
+        return Path(root)
+    return Path(os.environ.get("WORD2WORLD_ROOT", "third_party/Word2World")) / "data" / "init_contexts" / "alfworld"
+
+
+@lru_cache(maxsize=None)
+def _wm_contexts(split: str) -> tuple[str, ...]:
+    name = {"valid_train": "test"}.get(split, split)
+    path = _init_contexts_dir() / f"wm_instruct_{name}.json"
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    return tuple(row["messages"][0]["content"] for row in rows)
+
+
+def world_model_context(transition: dict) -> str:
+    """Hidden state + first observation for this game, the checkpoints' trained input."""
+    if os.environ.get("WF_MOCK_SCORE", "0") == "1":
+        return f"# Environment Information (Only visible to Assistant)\n\n{transition['task_line']}\n"
+    local_index = int(transition["game_id"].split("/", 1)[1])
+    return _wm_contexts(transition["split"])[local_index]
+
+
+def build_messages(transition: dict, condition: str, ft_prompt: bool = False) -> list[dict[str, str]]:
+    """The prompt for one item under one condition; only the task line and framing vary."""
+    aligned, swapped = transition["task_line"], _swapped_task(transition)
+    task = condition_task_line(condition, aligned, swapped)
+    note = _FRAMING.get(condition)
+    if ft_prompt:
+        system = _replace_task_line(world_model_context(transition), task)
+        if note:
+            system = f"{system}{note}\n"
+        return world_model_ft_messages(system, transition.get("history_pairs") or [], transition["action"])
+    messages = world_model_prompt(transition["history_text"], transition["action"], task_line_override=task)
+    if note:
+        last = messages[-1]
+        messages[-1] = {**last, "content": last["content"].replace("Next observation:", f"{note}\n\nNext observation:")}
+    return messages
 
 
 def score_transition(
@@ -258,18 +240,16 @@ def score_transition(
     return scorer.score_pair(
         transition_id=transition["id"],
         condition=condition,
-        history_text=transition["history_text"],
-        action=transition["action"],
+        messages=build_messages(transition, condition, ft_prompt=ft_prompt),
         o_plus=cands["o_plus"],
         o_minus=cands["o_minus"],
-        aligned_task=transition["task_line"],
-        swapped_task=_swapped_task(transition),
-        ft_prompt=ft_prompt,
     )
 
 
-def _swapped_task(transition: dict) -> str:
-    from wf.scoring.prompts import task_line_for
-
-    obj = transition.get("swapped_goal_object") or "apple"
-    return task_line_for(obj)
+def _swapped_task(transition: dict) -> str | None:
+    if transition.get("swapped_task_line"):
+        return transition["swapped_task_line"]
+    swapped = transition.get("swapped_goal_object")
+    if not swapped:
+        return None
+    return make_swapped_task_line(transition["task_line"], transition["goal_object"], swapped)

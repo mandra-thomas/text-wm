@@ -1,6 +1,7 @@
 """ReAct agent loop with foresight hooks (§4.7)."""
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from typing import Any
@@ -9,8 +10,9 @@ import requests
 
 from wf.agent.foresight import ForesightConfig, foresight_prediction
 from wf.constants import AGENT_MODEL, STEP_CAP, VLLM_BASE_URL_DEFAULT
+from wf.data.goals import names_object, parse_task_line
 from wf.env.expert import on_expert_path
-from wf.env.server import AlfworldClient, GameState
+from wf.env.server import AlfworldClient
 from wf.scoring.prompts import agent_react_messages, parse_react_action
 
 
@@ -23,7 +25,7 @@ class AgentClient:
         model: str = AGENT_MODEL,
         temperature: float = 0.0,
     ):
-        self.base_url = (base_url or os.environ.get("VLLM_BASE_URL") or VLLM_BASE_URL_DEFAULT).rstrip("/")
+        self.base_url = (os.environ.get("VLLM_BASE_URL") or base_url or VLLM_BASE_URL_DEFAULT).rstrip("/")
         self.model = model
         self.temperature = temperature
         self.mock = os.environ.get("WF_MOCK_AGENT", "0") == "1"
@@ -60,42 +62,35 @@ class AgentClient:
         return data["choices"][0]["message"]["content"] or ""
 
     def _mock_complete(self, messages: list[dict[str, str]]) -> str:
+        """Deterministic stand-in: mostly competent, sometimes proposes an invalid action."""
         text = messages[-1]["content"] if messages else ""
-        # Prefer admissible list order for a simple policy
-        adm = []
-        if "Admissible actions:" in text:
-            part = text.split("Admissible actions:", 1)[1]
-            for line in part.splitlines():
-                line = line.strip()
-                if line.startswith("- "):
-                    adm.append(line[2:].strip())
-        foresight = None
-        m = re.search(r"Expected outcome:\s*(.+)", text)
-        if m:
-            foresight = m.group(1).strip()
+        body, _, tail = text.partition("Admissible actions:")
+        adm = [ln.strip()[2:] for ln in tail.splitlines() if ln.strip().startswith("- ")]
+        task = re.search(r"Your task is to:.*", text)
+        spec = parse_task_line(task.group(0) if task else "")
+        goal, target = f"{spec.goal_object} 1", f"{spec.receptacle} 1"
 
-        # If foresight says not valid / Nothing happens, pick a different action
-        if foresight and (
-            foresight == "Nothing happens."
-            or foresight == "This action is not valid."
-        ):
-            for a in adm:
-                if a.startswith("go to") or a == "open drawer 1":
-                    return f"Thought: foresight says fail\nAction: {a}"
+        lines = body.strip().splitlines()
+        shown = lines[-1].split(":", 1)[1].strip() if lines[-1].startswith("Expected outcome:") else None
+        if shown is None:
+            if int(hashlib.sha256(body.encode()).hexdigest()[:2], 16) % 3 != 0:
+                return f"Thought: try\nAction: take {goal} from countertop 1"
+            return f"Thought: progress\nAction: {self._mock_best(adm, goal, target)}"
 
-        for preferred in (
-            "open drawer 1",
-            "take mug 1 from drawer 1",
-            "go to drawer 1",
-            "go to coffeemachine 1",
-            "move mug 1 to coffeemachine 1",
-            "look",
-        ):
-            if preferred in adm:
-                return f"Thought: progress\nAction: {preferred}"
-        if adm:
-            return f"Thought: try\nAction: {adm[0]}"
-        return "Thought: fallback\nAction: look"
+        proposal = lines[-2].split(":", 1)[1].strip()
+        if shown in ("Nothing happens.", "This action is not valid."):
+            best = self._mock_best(adm, goal, target)
+            return f"Thought: avoid it\nAction: {'look' if best == proposal else best}"
+        return f"Thought: go ahead\nAction: {proposal}"
+
+    @staticmethod
+    def _mock_best(adm: list[str], goal: str, target: str) -> str:
+        for act in (f"move {goal} to {target}", f"take {goal} from drawer 1", "open drawer 1"):
+            if act in adm:
+                return act
+        holding = any(a.startswith(f"move {goal} to") for a in adm)
+        act = f"go to {target}" if holding else "go to drawer 1"
+        return act if act in adm else "look"
 
 
 def run_episode(
@@ -109,28 +104,39 @@ def run_episode(
     schedule_seed: int | None = None,
     success_cache: dict | None = None,
 ) -> dict[str, Any]:
-    if env._env_id is None and not env.mock:
+    if env._env_id is None:
         env.create()
     state = env.reset(game_id, split)
+    goal_object = parse_task_line(state.task_line).goal_object
     prefix: list[str] = []
-    retained_history: list[dict[str, str]] = []
+    history: list[dict[str, str]] = []
     trace: list[dict] = []
     n_corrupted = 0
+    n_unavailable = 0
     cache = success_cache if success_cache is not None else {}
 
     for t in range(step_cap):
         if state.done:
             break
 
+        # Temperature 0: an identical prompt within a step gets the same answer, so ask once.
+        replies: dict[str, str] = {}
+
+        def ask(prediction: str | None = None, proposed: str | None = None) -> str:
+            msgs = agent_react_messages(
+                observation=state.observation,
+                history=history,
+                foresight_prediction=prediction,
+                proposal=proposed,
+                admissible=state.admissible,
+            )
+            key = repr(msgs)
+            if key not in replies:
+                replies[key] = agent.complete(msgs)
+            return parse_react_action(replies[key])
+
         # 1) proposal without foresight
-        msgs = agent_react_messages(
-            observation=state.observation,
-            history=retained_history if foresight.retention == "retained" else None,
-            foresight_prediction=None,
-            admissible=state.admissible,
-        )
-        raw = agent.complete(msgs)
-        proposal = parse_react_action(raw)
+        proposal = ask()
 
         # 2) foresight hook
         fs = foresight_prediction(
@@ -144,80 +150,46 @@ def run_episode(
         )
         if fs["corrupted"]:
             n_corrupted += 1
+        if fs.get("corruption_unavailable"):
+            n_unavailable += 1
 
-        # 3) decision-critical: extra call with oracle prediction at corrupted steps
+        # 3) decision-critical: what would the agent do given the true prediction?
         action_under_true = proposal
-        if fs["corrupted"] or foresight.condition in ("oracle", "validity_only", "corrupted"):
-            msgs_true = agent_react_messages(
-                observation=state.observation,
-                history=retained_history if foresight.retention == "retained" else None,
-                foresight_prediction=fs["oracle_obs"]
-                if foresight.condition != "validity_only"
-                else (
-                    "This action is valid."
-                    if fs["proposal_valid"]
-                    else "This action is not valid."
-                ),
-                admissible=state.admissible,
-            )
-            # Only required at corrupted steps per protocol; still useful for oracle
-            if fs["corrupted"] or foresight.condition != "none":
-                action_under_true = parse_react_action(agent.complete(msgs_true))
+        if foresight.condition == "validity_only":
+            verdict = "This action is valid." if fs["proposal_valid"] else "This action is not valid."
+            action_under_true = ask(verdict, proposal)
+        elif foresight.condition != "none":
+            action_under_true = ask(fs["oracle_obs"], proposal)
 
-        # 4) decide with shown prediction
-        msgs_dec = agent_react_messages(
-            observation=state.observation,
-            history=retained_history if foresight.retention == "retained" else None,
-            foresight_prediction=fs["prediction_shown"],
-            admissible=state.admissible,
-        )
-        executed = parse_react_action(agent.complete(msgs_dec))
-        # Prefer admissible if model drifts
-        if state.admissible and executed not in state.admissible:
-            # soft fallback to proposal if admissible
-            if proposal in state.admissible:
-                executed = proposal
-            else:
-                executed = state.admissible[0]
+        # 4) decide with shown prediction; invalid choices are executed and fail in the env
+        shown = fs["prediction_shown"]
+        executed = proposal if shown is None else ask(shown, proposal)
 
         new_state = env.step(state, executed)
         real_obs = new_state.observation
-
-        decision_critical = action_under_true != proposal
-        followed = _followed(fs, executed, proposal)
 
         step_rec = {
             "t": t,
             "proposal": proposal,
             "proposal_valid": fs["proposal_valid"],
-            "prediction_shown": fs["prediction_shown"],
+            "prediction_shown": shown,
             "prediction_type": fs["prediction_type"],
+            "corruption_unavailable": bool(fs.get("corruption_unavailable")),
             "action_under_true_prediction": action_under_true,
             "executed": executed,
             "real_obs": real_obs,
-            "decision_critical": decision_critical,
-            "followed": followed,
+            "decision_critical": action_under_true != proposal,
+            "followed": _followed(fs, executed, proposal),
             "on_expert_path": on_expert_path(env, state, executed),
-            "targets_goal_object": state.task_line.split()[-1].rstrip(".").lower() in executed.lower()
-            if state.task_line
-            else False,
+            "targets_goal_object": names_object(executed, goal_object),
         }
         trace.append(step_rec)
 
-        # retention: discarded removes prediction from history after execution
-        if foresight.retention == "retained" and fs["prediction_shown"] is not None:
-            retained_history.append(
-                {
-                    "observation": state.observation,
-                    "expected_outcome": fs["prediction_shown"],
-                    "action": executed,
-                }
-            )
-            retained_history.append({"observation": real_obs})
-        else:
-            # still keep observations for context if discarded? protocol: prediction removed;
-            # agent still sees real env obs via state.observation next loop
-            pass
+        # Retention differs only in whether the prediction stays in the history.
+        turn = {"observation": state.observation, "action": executed}
+        if foresight.retention == "retained" and shown is not None:
+            turn.update(proposal=proposal, expected_outcome=shown)
+        history.append(turn)
 
         prefix.append(executed)
         state = new_state
@@ -233,6 +205,7 @@ def run_episode(
         "steps": len(trace),
         "success": bool(state.won),
         "n_corrupted": n_corrupted,
+        "n_corruption_unavailable": n_unavailable,
         "trace": trace,
     }
 

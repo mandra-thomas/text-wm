@@ -27,8 +27,10 @@ def foresight_prediction(
     success_cache: dict | None = None,
 ) -> dict[str, Any]:
     """Return prediction_shown, prediction_type, proposal_valid, oracle_obs."""
-    # Always get oracle via replay (environment-generated only)
-    handle = replay(client, state.game_id, prefix_actions, split=state.split)
+    # Always get oracle via replay (environment-generated only), on a private env id so the
+    # live episode is untouched.
+    sandbox = client.sandbox()
+    handle = replay(sandbox, state.game_id, prefix_actions, split=state.split)
     oracle_obs, _info = step_counterfactual(handle, proposal)
     proposal_valid = oracle_obs.strip() != "Nothing happens."
 
@@ -80,13 +82,22 @@ def foresight_prediction(
         tmp = {
             "game_id": state.game_id,
             "split": state.split,
-            "prefix_actions": prefix_actions,
             "action": proposal,
             "true_obs": oracle_obs,
         }
-        attach_candidates(client, tmp, success_cache=success_cache)
+        attach_candidates(sandbox, tmp, success_cache=success_cache)
         cands = tmp.get("candidates")
-        shown = cands["o_plus"] if cands else oracle_obs
+        if cands is None:
+            # No success twin exists, so nothing false can be shown: not a corruption.
+            return {
+                "prediction_shown": oracle_obs,
+                "prediction_type": "oracle",
+                "proposal_valid": proposal_valid,
+                "oracle_obs": oracle_obs,
+                "corrupted": False,
+                "corruption_unavailable": True,
+            }
+        shown = cands["o_plus"]
         ptype = "corrupted_favorable"
     elif cfg.arm == "unfavorable" and proposal_valid:
         shown = "Nothing happens."

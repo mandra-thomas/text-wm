@@ -1,7 +1,7 @@
 """Frozen ReAct + world-model few-shot prompts (freeze before Pilot B)."""
 from __future__ import annotations
 
-from typing import Any
+import re
 
 # --- Few-shot world-model exemplars (set 0; additional sets for SD later) ---
 
@@ -69,18 +69,9 @@ def world_model_prompt(
 
 
 def _replace_task_line(history_text: str, task_line: str) -> str:
-    lines = history_text.splitlines()
-    out: list[str] = []
-    replaced = False
-    for line in lines:
-        if line.startswith("Your task is to:"):
-            out.append(task_line)
-            replaced = True
-        else:
-            out.append(line)
-    if not replaced:
-        out.insert(0, task_line)
-    return "\n".join(out)
+    """Swap the task line in place, leaving every other byte of the history unchanged."""
+    replaced, n = re.subn(r"^Your task is to:.*$", lambda _: task_line, history_text, flags=re.MULTILINE)
+    return replaced if n else f"{task_line}\n{history_text}"
 
 
 REACT_SYSTEM = (
@@ -88,7 +79,9 @@ REACT_SYSTEM = (
     "At each step, reason briefly then output a single admissible action. "
     "Format:\nThought: <brief>\nAction: <one action>\n"
     "Use only actions that appear in the admissible list when provided. "
-    "Do not invent observations."
+    "Do not invent observations. "
+    "An 'Expected outcome:' line predicts what would happen if the action on the "
+    "'Proposed action:' line above it were taken."
 )
 
 REACT_FEWSHOT = (
@@ -104,6 +97,7 @@ def agent_react_messages(
     history: list[dict[str, str]] | None = None,
     foresight_prediction: str | None = None,
     admissible: list[str] | None = None,
+    proposal: str | None = None,
 ) -> list[dict[str, str]]:
     """Build ReAct chat messages. Foresight shown as Expected outcome before decision."""
     messages: list[dict[str, str]] = [
@@ -111,50 +105,34 @@ def agent_react_messages(
         {"role": "user", "content": REACT_FEWSHOT},
     ]
     body_parts: list[str] = []
-    if history:
-        for turn in history:
-            if "observation" in turn:
-                body_parts.append(f"Observation: {turn['observation']}")
-            if turn.get("expected_outcome"):
-                body_parts.append(f"Expected outcome: {turn['expected_outcome']}")
-            if "action" in turn:
-                body_parts.append(f"Action: {turn['action']}")
+    for turn in history or []:
+        body_parts.append(f"Observation: {turn['observation']}")
+        if turn.get("expected_outcome"):
+            body_parts.append(f"Proposed action: {turn['proposal']}")
+            body_parts.append(f"Expected outcome: {turn['expected_outcome']}")
+        body_parts.append(f"Action: {turn['action']}")
     body_parts.append(f"Observation: {observation}")
     if foresight_prediction is not None:
+        body_parts.append(f"Proposed action: {proposal}")
         body_parts.append(f"Expected outcome: {foresight_prediction}")
     if admissible:
-        body_parts.append("Admissible actions:\n- " + "\n- ".join(admissible[:40]))
+        body_parts.append("Admissible actions:\n- " + "\n- ".join(admissible))
     body_parts.append("Respond with Thought and Action.")
     messages.append({"role": "user", "content": "\n".join(body_parts)})
     return messages
 
 
 def parse_react_action(text: str) -> str:
-    """Extract Action: line from model output."""
-    for line in (text or "").splitlines():
-        line = line.strip()
-        if line.lower().startswith("action:"):
-            return line.split(":", 1)[1].strip()
-    # fallback: last non-empty line
+    """Extract the action from model output; it may sit on the line after "Action:"."""
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
-    return lines[-1] if lines else "look"
-
-
-def task_line_for(goal_object: str, task_type: str = "pick_and_place_simple") -> str:
-    """Reconstruct first-observation task line in stack template."""
-    # Word2World renames put -> move in actions, but task text often still says put
-    receptacle = {
-        "pick_and_place_simple": "coffeemachine",
-        "pick_clean_then_place_in_recep": "shelvingunit",
-        "pick_heat_then_place_in_recep": "countertop",
-        "pick_cool_then_place_in_recep": "countertop",
-        "look_at_obj_in_light": "desklamp",
-        "pick_two_obj_and_place": "cabinet",
-    }.get(task_type, "coffeemachine")
-    article = "an" if goal_object[:1].lower() in "aeiou" else "a"
-    if task_type == "look_at_obj_in_light":
-        return f"Your task is to: look at {article} {goal_object} under the {receptacle}."
-    return f"Your task is to: put {article} {goal_object} in {receptacle}."
+    action = lines[-1] if lines else "look"
+    for i, line in enumerate(lines):
+        if line.lower().startswith("action:"):
+            action = line.split(":", 1)[1].strip()
+            if not action and i + 1 < len(lines):
+                action = lines[i + 1]
+            break
+    return action.strip("`'\" ").rstrip(".") or "look"
 
 
 def condition_task_line(
@@ -174,10 +152,19 @@ def condition_task_line(
     return aligned_task
 
 
-def world_model_ft_prompt(history_text: str, action: str) -> Any:
-    """Prompt protocol aligned with Word2World interact_with_world_model/run.py."""
-    # Keep a simple string prompt used by FT checkpoints
-    return (
-        f"<<SYS>>\nYou are a world model. Predict the next observation.\n<</SYS>>\n"
-        f"History:\n{history_text}\nAction: {action}\nObservation:"
-    )
+def world_model_ft_messages(
+    system_context: str,
+    history_pairs: list[list[str]],
+    action: str,
+) -> list[dict[str, str]]:
+    """Chat format the Word2World checkpoints were trained on (interact_with_world_model/run.py).
+
+    The system message carries the hidden state and first observation; each action is a user
+    turn and each observation an assistant turn.
+    """
+    messages = [{"role": "system", "content": system_context}]
+    for past_action, observation in history_pairs:
+        messages.append({"role": "user", "content": past_action})
+        messages.append({"role": "assistant", "content": observation})
+    messages.append({"role": "user", "content": action})
+    return messages
