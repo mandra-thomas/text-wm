@@ -535,5 +535,29 @@ def test_icc_of_identical_differences_is_undefined_not_a_crash():
     assert math.isnan(stats.icc([1.0, 1.0, 1.0, 1.0], ["a", "a", "b", "b"]))
 
 
+def test_verification_tools_run_end_to_end(monkeypatch, tmp_path):
+    """The GPU jobs are expensive to fail in, so run their whole code path on the simulator."""
+    from wf.tools import export_review, verify_models
+
+    monkeypatch.setenv("RUNS_DIR", str(tmp_path))
+    for key in MOCK_KEYS:
+        monkeypatch.setenv(key, "1")
+    monkeypatch.setattr("sys.argv", ["export_review", "--games", "12"])
+    export_review.main()
+    text = (tmp_path / "HUMAN_REVIEW.md").read_text()
+    assert "# A. Items that would be scored" in text and "## Item 1 " in text
+    monkeypatch.setattr("sys.argv", ["verify_models", "scoring", "--games", "8", "--items", "20"])
+    verify_models.main()
+    report = json.loads((tmp_path / "verify_scoring.json").read_text().replace("NaN", "null"))
+    assert report["qwen3-8b-fewshot"]["signal_auc"] is not None
+    assert report["qwen3-8b-fewshot"]["placebo_delta_L"]["n"] > 0
+    assert report["qwen3-8b-fewshot"]["repeat_max_abs_diff"] == 0.0
+    monkeypatch.setattr("sys.argv", ["verify_models", "agent", "--games", "3"])
+    verify_models.main()
+    agent = json.loads((tmp_path / "verify_agent.json").read_text())
+    assert agent["all_false_failures"]["mean_corrupted"] > 0
+    assert agent["all_false_successes"]["mean_corrupted"] > 0
+
+
 def test_math_guard_sigmoid_is_finite_at_extremes():
     assert sigmoid(-5000) == 0.0 and sigmoid(5000) == 1.0 and math.isfinite(sigmoid(0.0))

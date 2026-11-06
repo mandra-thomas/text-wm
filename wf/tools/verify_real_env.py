@@ -100,6 +100,18 @@ def check_memory(client: AlfworldClient, game: str, resets: int) -> list[list[fl
     return samples
 
 
+def check_memory_recreate(client: AlfworldClient, game: str, cycles: int) -> list[list[float]]:
+    """Does /close plus /create release what /reset leaks? Decides how long runs stay alive."""
+    samples = [[0, _server_rss_mb()]]
+    for i in range(1, cycles + 1):
+        client.reset(game, "train")
+        client.close()
+        client.create()
+        if i % max(cycles // 8, 1) == 0:
+            samples.append([i, _server_rss_mb()])
+    return samples
+
+
 def check_contract(client: AlfworldClient, games: list[str]) -> dict:
     """Are the server semantics the same ones sim.py assumes?"""
     gid = games[0]
@@ -292,11 +304,17 @@ def main() -> None:
     parser.add_argument("--games", type=int, default=60)
     parser.add_argument("--win-games", type=int, default=20)
     parser.add_argument("--memory-resets", type=int, default=400)
+    parser.add_argument("--only", choices=["memory_recreate"], default=None)
     args = parser.parse_args()
     client = AlfworldClient()
     client.create()
     games = list(client.list_games("train"))
     random.Random(20260924).shuffle(games)
+    if args.only == "memory_recreate":
+        samples = check_memory_recreate(client, games[0], args.memory_resets)
+        write_json(runs_root() / "verify_memory_recreate.json", samples)
+        print("memory_recreate", samples, flush=True)
+        return
     games = games[: max(args.games, args.win_games * 6)]
     context_file = Path(os.environ.get("WF_INIT_CONTEXTS", Path(os.environ["WORD2WORLD_ROOT"]) / "data/init_contexts/alfworld")) / "wm_instruct_train.json"
     contexts = [r["messages"][0]["content"] for r in json.loads(context_file.read_text())]
