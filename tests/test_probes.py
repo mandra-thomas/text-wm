@@ -15,6 +15,7 @@ import wf.scoring.logodds as logodds_mod
 from wf.agent.foresight import ForesightConfig
 from wf.agent.react import AgentClient, run_episode
 from wf.analysis import stats
+from wf.constants import ENV_STEP_LIMIT
 from wf.corruption.schedule import schedule
 from wf.data.goals import names_object
 from wf.data.transitions import (
@@ -134,6 +135,29 @@ def test_replay_reaches_the_same_state_as_a_live_run(client, game):
         state = following
     replayed = replay(client.sandbox(), gid, actions).state
     assert (replayed.observation, replayed.admissible) == (state.observation, state.admissible)
+
+
+def test_scene_scan_outlasts_the_environment_step_limit(client):
+    def big_kitchen(game):
+        world = sim.World()
+        for i in range(1, 41):
+            world.rec[f"cabinet {i + 1}"] = {"closed": True, "items": [f"cup {i}"]}
+        return world
+
+    client._session = sim.Server(factory=big_kitchen)
+    scene = scan_scene(client, "train/0")
+    assert len(scene.closed) == 42
+    assert all(f"cup {i}" in scene.locations for i in range(1, 41))
+
+
+def test_episodes_end_at_the_environment_step_limit_like_the_real_server(client):
+    state = client.reset("train/0", "train")
+    for _ in range(ENV_STEP_LIMIT):
+        assert not state.done
+        state = client.step(state, "look")
+    assert state.done and not state.won
+    with pytest.raises(RuntimeError, match="has finished"):
+        client.step(state, "look")
 
 
 def test_a_finished_sandbox_never_affects_the_live_episode(client):

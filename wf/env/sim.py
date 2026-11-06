@@ -1,7 +1,8 @@
 """In-process stand-in for the AgentGym ALFWorld server (WF_MOCK_ENV=1, unit tests).
 
 Mirrors AgentGym's env_wrapper.py at Word2World e8dc240: one server-side env per id, /reset
-rebuilds it, /step mutates it, and after done=True every /step returns an error. Commands
+rebuilds it, /step mutates it, episodes end at ENV_STEP_LIMIT steps or a win, and after
+done=True every /step returns an error. Commands
 outside the admissible list return "Nothing happens.". Observation strings use the templates
 of real trajectories. It plugs in as AlfworldClient._session, so mock runs exercise the same
 client code as ICE runs.
@@ -10,6 +11,8 @@ from __future__ import annotations
 
 import re
 from typing import Any, Callable
+
+from wf.constants import ENV_STEP_LIMIT
 
 GOALS = ("mug", "apple", "egg", "pan", "bowl")
 TARGETS = ("coffeemachine", "diningtable", "shelf", "sidetable")
@@ -48,6 +51,7 @@ class World:
         self.loc: str | None = None
         self.hold: str | None = None
         self.won = False
+        self.steps = 0
 
     def first(self) -> str:
         names = ", ".join("a " + k for k in self.rec)
@@ -160,9 +164,10 @@ class Server:
                 return _Response({"error": f"The task with environment {idx} has finished."})
             world = self.env[idx]
             obs = world.step(json["action"])
-            self.done[idx] = world.won
+            world.steps += 1
+            self.done[idx] = world.won or world.steps >= ENV_STEP_LIMIT
             return _Response({"observation": obs, "reward": float(world.won),
-                              "available_actions": world.admissible(), "done": world.won})
+                              "available_actions": world.admissible(), "done": self.done[idx]})
         if path == "/close":
             return _Response({"id": json["id"]})
         self.calls["other"] += 1

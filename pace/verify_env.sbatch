@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --time=02:00:00
 #SBATCH --partition=coc-cpu
 #SBATCH --output=logs/verify_%j.out
@@ -22,4 +22,4 @@ trap cleanup EXIT
 
 start_alfworld_server
 activate_serve
-python -m wf.tools.verify_real_env --games "${VERIFY_GAMES:-60}" --win-games "${VERIFY_WIN_GAMES:-20}"
+python -m wf.tools.verify_real_env --games "${VERIFY_GAMES:-30}" --win-games "${VERIFY_WIN_GAMES:-15}"

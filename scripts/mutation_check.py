@@ -51,6 +51,8 @@ MUTANTS = [
     ("mock filing accepted", "wf/util.py", 'return is_mock() or "mock" not in filed.read_text(encoding="utf-8").lower()', "return True"),
     ("minirun guesses rates", "wf/runs.py", '        write_status(run_id, f"{cal_path} missing; run pilotB_eligibility first", ok=False)\n        return 1\n', '        cal_path = None\n'),
     ("FT prompt loses hidden state", "wf/scoring/logodds.py", "system = _replace_task_line(world_model_context(transition), task)", 'system = f"{task}\\n"'),
+    ("scan ignores the step limit", "wf/env/scene.py", "if state.step + 2 >= ENV_STEP_LIMIT:", "if False:"),
+    ("sim has no step limit", "wf/env/sim.py", "self.done[idx] = world.won or world.steps >= ENV_STEP_LIMIT", "self.done[idx] = world.won"),
     ("duplicate LLM calls", "wf/agent/react.py", "            if key not in replies:\n                replies[key] = agent.complete(msgs)\n", "            replies[key] = agent.complete(msgs)\n"),
     ("prediction hides its action", "wf/scoring/prompts.py", '        body_parts.append(f"Proposed action: {proposal}")\n        body_parts.append(f"Expected outcome: {foresight_prediction}")', '        body_parts.append(f"Expected outcome: {foresight_prediction}")'),
 ]

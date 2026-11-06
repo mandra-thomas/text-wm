@@ -21,6 +21,8 @@ N_SCHEDULES = 3
 RETENTION_MARGIN = 1.0
 STEP_CAP = 30  # confirm against the stack default in t0_smoke; record in runs/env.json
 
+ENV_STEP_LIMIT = 50  # ALFWorld ends every episode here (max_nb_steps_per_episode); not ours to change
+
 # Engineering thresholds — may be tuned, changes logged in STATUS.md
 MAX_UNPARSEABLE = 0.05
 SCORING_AGREEMENT_MIN = 0.90

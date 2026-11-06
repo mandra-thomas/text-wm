@@ -28,6 +28,8 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 | `t0_ckpt_accuracy` match | Exact or same class | Exact only |
 | Parser classes | Four plus unparseable | Adds `info` for inventory, look, help, examine |
 | Agent prompt | Prediction with no action named | `Proposed action:` above `Expected outcome:`, explained in the system prompt |
+| Scene scan | Not applicable | Restarts the game before ALFWorld's 50-step limit (`ENV_STEP_LIMIT`), which also caps any future `STEP_CAP` at 50 |
+| ALFWorld server | Fixed port, no health check | Job-chosen port and a health check, since jobs can share a node |
 | Headroom "materially negative" | Any negative difference | Whole CI below zero |
 | `pilotA_transitions` | 120 games, 4 h | 60 games, 6 h: yield per game is higher, cost per game unmeasured on ICE |
 

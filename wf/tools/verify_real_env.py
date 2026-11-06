@@ -80,6 +80,26 @@ def _hidden_objects(context: str) -> dict[str, str]:
     return found
 
 
+def _server_rss_mb() -> float | None:
+    """Resident memory of the ALFWorld server itself, to tell a leak from file cache."""
+    pid_file = os.environ.get("ALFWORLD_PID_FILE")
+    try:
+        status = Path(f"/proc/{Path(pid_file).read_text().strip()}/status").read_text()
+    except (OSError, TypeError):
+        return None
+    return int(re.search(r"VmRSS:\s+(\d+)", status)[1]) / 1024
+
+
+def check_memory(client: AlfworldClient, game: str, resets: int) -> list[list[float]]:
+    """Server memory against reset count: flat is healthy, a steady climb is a leak."""
+    samples = [[0, _server_rss_mb()]]
+    for i in range(1, resets + 1):
+        client.reset(game, "train")
+        if i % max(resets // 8, 1) == 0:
+            samples.append([i, _server_rss_mb()])
+    return samples
+
+
 def check_contract(client: AlfworldClient, games: list[str]) -> dict:
     """Are the server semantics the same ones sim.py assumes?"""
     gid = games[0]
@@ -271,6 +291,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--games", type=int, default=60)
     parser.add_argument("--win-games", type=int, default=20)
+    parser.add_argument("--memory-resets", type=int, default=400)
     args = parser.parse_args()
     client = AlfworldClient()
     client.create()
@@ -280,14 +301,22 @@ def main() -> None:
     context_file = Path(os.environ.get("WF_INIT_CONTEXTS", Path(os.environ["WORD2WORLD_ROOT"]) / "data/init_contexts/alfworld")) / "wm_instruct_train.json"
     contexts = [r["messages"][0]["content"] for r in json.loads(context_file.read_text())]
     out = {"solvable_train_games": len(client.list_games("train"))}
-    out["contract"] = check_contract(client, games)
-    print("contract", json.dumps(out["contract"])[:400], flush=True)
-    out["games"] = check_games(client, games[: args.games], contexts)
-    print("games done", flush=True)
-    out["winning"] = check_winning(client, games, args.win_games)
     path = runs_root() / "verify_real_env.json"
-    write_json(path, out)
-    print(json.dumps(out, indent=1, default=str))
+    checks = {
+        "memory_before": lambda: check_memory(client, games[0], args.memory_resets),
+        "contract": lambda: check_contract(client, games),
+        "winning": lambda: check_winning(client, games, args.win_games),
+        "games": lambda: check_games(client, games[: args.games], contexts),
+        "memory_after": lambda: check_memory(client, games[0], args.memory_resets),
+    }
+    for name, check in checks.items():  # saved after each check, so a failure keeps the rest
+        started = time.perf_counter()
+        try:
+            out[name] = check()
+        except Exception as exc:
+            out[name] = {"FAILED": f"{type(exc).__name__}: {exc}"}
+        print(name, f"{time.perf_counter() - started:.0f}s", json.dumps(out[name], default=str)[:1500], flush=True)
+        write_json(path, out)
 
 
 if __name__ == "__main__":

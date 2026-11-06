@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from wf.constants import ENV_STEP_LIMIT
 from wf.env.server import AlfworldClient
 
 _OBJECT = re.compile(r"\ban? ([a-z]+ \d+)")
@@ -35,6 +36,8 @@ def scan_scene(client: AlfworldClient, game_id: str, split: str = "train") -> Sc
     state = scanner.reset(game_id, split)
     scene = Scene(receptacles=[a[len("go to "):] for a in state.admissible if a.startswith("go to ")])
     for receptacle in scene.receptacles:
+        if state.step + 2 >= ENV_STEP_LIMIT:  # large rooms need more steps than one episode allows
+            state = scanner.reset(game_id, split)
         state = scanner.step(state, f"go to {receptacle}")
         if f"The {receptacle} is closed" in state.observation:
             scene.closed.add(receptacle)
