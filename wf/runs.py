@@ -283,7 +283,8 @@ def _dataset_observations(n: int) -> list[str]:
             "You arrive at countertop 1. On the countertop 1, you see a apple 1.",
             "You are not carrying anything.",
         ] * (n // 6 + 1)
-    path = os.environ.get("WF_PARSER_DATASET_FILE")
+    local = Path(os.environ.get("WORD2WORLD_ROOT", "")) / "data" / C.PARSER_DATASET_FILE
+    path = os.environ.get("WF_PARSER_DATASET_FILE") or (str(local) if local.is_file() else None)
     if not path:
         from huggingface_hub import hf_hub_download
 
