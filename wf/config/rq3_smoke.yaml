@@ -7,3 +7,4 @@ schedule_seeds: [20260924, 20260925, 20260926]
 fs_probability: 0.75
 fs_cap: 3
 n_shards: 1
+copy_unyoked_ff: true

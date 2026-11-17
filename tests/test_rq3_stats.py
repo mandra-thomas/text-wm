@@ -120,3 +120,19 @@ def test_summary_keeps_baselines_out_of_the_units():
     assert out["primary"]["I"]["estimate"] == pytest.approx(1.5)
     assert out["primary_units"] == [["A", 1], ["A", 2], ["B", 1]]
     assert out["baselines"]["per_condition"]["oracle/retained"]["episodes"] == 2
+
+
+def test_determinism_check_flags_an_unerrored_episode_that_differs_from_its_baseline():
+    from wf.analysis.rq3_stats import determinism_check
+    tr = lambda *acts: [{"executed": a} for a in acts]
+    eps = [
+        {"game_id": "g", "condition": "oracle", "arm": None, "retention": "discarded", "success": True, "trace": tr("a", "b")},
+        {"game_id": "g", "condition": "corrupted", "arm": "favorable", "retention": "discarded", "schedule_seed": 1,
+         "delivered_errors": 0, "success": True, "trace": tr("a", "b")},
+        {"game_id": "g", "condition": "corrupted", "arm": "favorable", "retention": "discarded", "schedule_seed": 2,
+         "delivered_errors": 0, "success": True, "trace": tr("a", "c")},
+        {"game_id": "g", "condition": "corrupted", "arm": "favorable", "retention": "discarded", "schedule_seed": 3,
+         "delivered_errors": 2, "success": False, "trace": tr("x")},
+    ]
+    out = determinism_check(eps)
+    assert out["checked"] == 2 and out["identical"] == 1 and out["differing"] == [["g", "discarded", 2]]

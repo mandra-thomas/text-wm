@@ -168,6 +168,25 @@ def reading(I: dict[str, float]) -> str:
     return f"I = {est:.2f} steps (95% game-bootstrap CI {lo:.2f} to {hi:.2f}): the CI {where}"
 
 
+def determinism_check(episodes: list[dict]) -> dict[str, Any]:
+    """A false-success episode that received no error saw only perfect predictions, so it must repeat the
+    perfect-foresight baseline of its game and retention mode step for step. If it does not, arm
+    differences carry the agent's own run-to-run noise, and copied false-failure episodes are not exact."""
+    base = {(e["game_id"], e["retention"]): e for e in episodes if e.get("condition") == "oracle"}
+    checked, differing = 0, []
+    for e in episodes:
+        if e.get("condition") == "corrupted" and e.get("arm") == "favorable" and e.get("delivered_errors") == 0:
+            b = base.get((e["game_id"], e["retention"]))
+            if b is None:
+                continue
+            checked += 1
+            if [s["executed"] for s in e["trace"]] != [s["executed"] for s in b["trace"]] or e["success"] != b["success"]:
+                differing.append([e["game_id"], e["retention"], e.get("schedule_seed")])
+    copied = sum(bool(e.get("copied_from_baseline")) for e in episodes)
+    return {"checked": checked, "identical": checked - len(differing), "differing": differing,
+            "copied_false_failure_episodes": copied}
+
+
 def rq3_summary(episodes: list[dict], step_cap: int = STEP_CAP, seed: int = 0) -> dict[str, Any]:
     by_unit = units(episodes)
     everything = complete_units(by_unit)
@@ -187,4 +206,5 @@ def rq3_summary(episodes: list[dict], step_cap: int = STEP_CAP, seed: int = 0) -
         "delivered_covariate_primary": delivered_covariate(by_unit, primary, seed),
         "baselines": baseline_summary(baselines, step_cap, seed),
         "primary_units": [list(u) for u in primary],
+        "determinism_check": determinism_check(episodes),
     }

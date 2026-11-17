@@ -10,5 +10,8 @@ fs_probability: 0.75
 fs_cap: 3  # = CORRUPTIONS_PER_EPISODE_TARGET
 # Games are dealt round-robin to shards; WF_SHARD / WF_N_SHARDS override shard / n_shards.
 n_shards: 4
-# Fresh server after this many new episodes (memory leak; ~74 s each); resume jobs chain.
-max_episodes_per_job: 250
+# The job restarts the server after this many new episodes (memory leak, ~100 resets per episode),
+# keeping vLLM up; pace/rq3.sbatch loops until the shard is complete.
+max_episodes_per_job: 40
+# A false-failure episode whose partner got no errors is the perfect-foresight baseline; reuse it.
+copy_unyoked_ff: true

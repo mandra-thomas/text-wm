@@ -290,5 +290,21 @@ def test_the_cli_runs_the_smoke_config_and_its_analysis(mock_runs):
 def test_the_job_script_takes_its_shard_and_resumes():
     script = (REPO / "pace" / "rq3.sbatch").read_text()
     assert "#SBATCH --no-requeue" in script and "start_alfworld_server" in script and "start_vllm" in script
-    assert 'run_wf "${RQ3_RUN:-rq3}"' in script and "WF_SHARD" in script and "WF_N_SHARDS" in script
+    assert 'RUN="${RQ3_RUN:-rq3}"' in script and 'run_wf "${RUN}"' in script and "WF_SHARD" in script
+    # the game server restarts inside the job whenever the run stops with PARTIAL
+    loop = script.split("while true")[1]
+    assert "start_alfworld_server" in loop and "PARTIAL" in loop and "WF_RESUME=1" in loop
     assert "FILED.txt" in script
+
+
+def test_a_false_failure_with_nothing_to_yoke_reuses_the_baseline_and_says_so():
+    from wf import rq3
+    baseline = {"game_id": "g", "condition": "oracle", "arm": None, "retention": "retained", "schedule_seed": None,
+                "steps": 3, "success": True, "trace": [{"executed": "a"}]}
+    partner = {"game_id": "g", "condition": "corrupted", "arm": "favorable", "retention": "retained",
+               "schedule_seed": 7, "delivered_errors": 0, "cap": 3, "injections": []}
+    saved = {("g", "oracle", None, "retained", None): baseline, ("g", "corrupted", "favorable", "retained", 7): partner}
+    ep = rq3._run_job(("g", "corrupted", "unfavorable", "retained", 7), None, None, "train",
+                      {"run_id": "x", "copy_unyoked_ff": True}, saved, {})
+    assert ep["copied_from_baseline"] and ep["trace"] == baseline["trace"] and ep["delivered_errors"] == 0
+    assert rq3.episode_key(ep) == ("g", "corrupted", "unfavorable", "retained", 7)

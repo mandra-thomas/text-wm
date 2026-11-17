@@ -306,7 +306,16 @@ def _run_job(job: tuple, client: AlfworldClient, agent: AgentClient, split: str,
     if arm == "favorable":
         return run_false_success(client, agent, gid, split, ret, seed, float(cfg["fs_probability"]),
                                  int(cfg["fs_cap"]), step_cap, cache)
-    return run_false_failure(client, agent, gid, split, ret, saved[(gid, cond, "favorable", ret, seed)], step_cap, cache)
+    partner = saved[(gid, cond, "favorable", ret, seed)]
+    baseline = saved.get((gid, "oracle", None, ret, None))
+    if partner["delivered_errors"] == 0 and baseline is not None and cfg.get("copy_unyoked_ff", True):
+        # No error to yoke, so the episode is the perfect-foresight baseline of this retention mode;
+        # the analysis checks that assumption on the false-success episodes that also got none.
+        return {**baseline, "condition": "corrupted", "arm": "unfavorable", "schedule_seed": seed, "p_arm": None,
+                "cap": partner["cap"], "chances": None, "planned_errors": 0, "delivered_errors": 0, "n_corrupted": 0,
+                "shortfall": 0, "injections": [], "yoked_to": [], "fallbacks": 0, "restarts": [],
+                "copied_from_baseline": True}
+    return run_false_failure(client, agent, gid, split, ret, partner, step_cap, cache)
 
 
 def run_rq3(cfg: dict) -> int:
@@ -446,7 +455,8 @@ def run_rq3_analysis(cfg: dict) -> int:
         f"primary set: {prim['n_units']} units in {prim['n_games']} games\n"
         f"I_primary={prim['I']}\nH_discarded={prim['H_discarded']}\nH_retained={prim['H_retained']}\n"
         f"I_all_units={summary['all_units']['I']}\n{summary['reading']}\n"
-        f"shortfalls={summary['shortfalls']}\nfallbacks={summary['fallbacks']}",
+        f"shortfalls={summary['shortfalls']}\nfallbacks={summary['fallbacks']}\n"
+        f"determinism_check={summary['determinism_check']}",
         ok=False, reported="RQ3 interaction",
     )
     return 0
