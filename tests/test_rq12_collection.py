@@ -87,3 +87,48 @@ def test_confirmatory_config_matches_the_prereg():
     assert cfg["split"] == "valid_unseen" and cfg["n_games"] == 134
     assert cfg["min_items"] >= 1000 and cfg["min_states"] >= 200
     assert "rq12_transitions" in runs_mod.RUNNERS
+
+
+def test_holm_matches_the_textbook_two_model_case():
+    from wf.analysis.stats import holm
+    adj = holm({"qwen": 0.004, "llama": 0.03})
+    assert adj["qwen"] == pytest.approx(0.008) and adj["llama"] == pytest.approx(0.03)
+    adj = holm({"qwen": 0.02, "llama": 0.001})
+    assert adj["llama"] == pytest.approx(0.002) and adj["qwen"] == pytest.approx(0.02)
+    assert holm({"a": 0.6, "b": 0.4})["a"] == pytest.approx(0.8)  # monotone step-down
+
+
+@pytest.mark.parametrize("dl, ci, p, verdict", [
+    (1.36, [1.08, 1.68], 0.002, "supported (strong)"),
+    (0.7, [0.2, 1.2], 0.002, "supported"),
+    (0.4, [0.1, 0.7], 0.002, "weak (not support)"),
+    (0.8, [-0.1, 1.7], 0.002, "not supported"),
+    (-0.2, [-0.4, 0.05], 0.3, "not supported"),
+    (0.9, [0.3, 1.5], 0.02, "not supported (fails significance threshold)"),
+    # precedence (a): positive but below 0.5 with an interval including zero is not supported, not weak
+    (0.3, [-0.1, 0.7], 0.002, "not supported"),
+    # precedence (b): 0.01 <= Holm p < 0.05 fails the significance threshold
+    (0.6, [0.2, 1.0], 0.04, "not supported (fails significance threshold)"),
+    (0.6, [0.2, 1.0], 0.01, "not supported (fails significance threshold)"),
+])
+def test_prereg_rq2_verdict(dl, ci, p, verdict):
+    from wf.analysis.stats import prereg_rq2_verdict
+    assert prereg_rq2_verdict(dl, ci, p) == verdict
+
+
+def test_overall_verdict_needs_one_supported_model_and_holm_spans_both():
+    from wf.analysis.stats import prereg_rq2_verdicts
+    out = prereg_rq2_verdicts({
+        "qwen3": {"delta_L_nats": 7.1, "delta_L_ci": [5.9, 8.3], "delta_L_perm_p": 0.001},
+        "llama": {"delta_L_nats": 0.7, "delta_L_ci": [0.2, 1.2], "delta_L_perm_p": 0.006},
+    })
+    assert out["per_model"]["qwen3"]["holm_p"] == pytest.approx(0.002)  # smallest p doubled
+    assert out["per_model"]["llama"]["holm_p"] == pytest.approx(0.006)
+    assert out["per_model"]["qwen3"]["verdict"] == "supported (strong)"
+    assert out["per_model"]["llama"]["verdict"] == "supported"
+    assert out["overall"] == "supported"
+    none = prereg_rq2_verdicts({
+        "qwen3": {"delta_L_nats": 0.3, "delta_L_ci": [0.1, 0.5], "delta_L_perm_p": 0.001},
+        "llama": {"delta_L_nats": -0.1, "delta_L_ci": [-0.3, 0.1], "delta_L_perm_p": 0.4},
+    })
+    assert none["overall"] == "not supported" and none["supported_models"] == []

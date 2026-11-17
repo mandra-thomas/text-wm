@@ -83,14 +83,16 @@ PredictionClass = Literal[
 ]
 
 _FAIL_ANYWHERE = re.compile(
-    r"\b(?:can't|can not|cannot|couldn't|could not|unable to|not able to|fails? to|failed to|nothing happens)\b",
+    r"\b(?:can't|can not|cannot|couldn't|could not|unable to|not able to|fails? to|failed to|nothing happens"
+    r"|not possible|impossible"
+    r"|(?:do not|don't|did not|didn't) (?:see|have|find|notice|hold|carry)"
+    r"|there (?:is|are|'s) no"
+    r"|(?:is|are) not (?:in|on) your inventory|not in your inventory|you have no"
+    r"|(?:is|are) not there|need to .+ first)\b",
     re.IGNORECASE,
 )
 _FAIL_START = re.compile(
-    r"^(?:there (?:is|are|'s) no\b"
-    r"|there (?:is|are) not\b"
-    r"|you (?:don't|do not|didn't|did not) (?:see|have|find|notice|hold|carry)\b"
-    r"|you have no\b"
+    r"^(?:there (?:is|are) not\b"
     r"|you (?:are|'re) not (?:holding|carrying) (?!anything)"
     r"|you (?:are|'re) already (?:holding|carrying)\b"
     r"|you already (?:have|hold|carry)\b"
@@ -99,14 +101,32 @@ _FAIL_START = re.compile(
 )
 # Says the action did something, in words the environment would not use ("You place the candle 1 on ...").
 _SUCCESS_START = re.compile(
-    r"^you (?:place|wash|rinse|wet|fill|scrub|warm|chill|freeze|microwave|slice|take|grab|pick|set|switch"
-    r"|turn|walk|go|move|open|close|put|heat|cool|clean|use)\b",
+    r"^you (?:place|wash|rinse|wet|fill|scrub|submerge|soak|warm|chill|freeze|microwave|slice|take|grab|pick"
+    r"|set|switch|turn|move|open|close|put|heat|cool|clean|use)\b",
     re.IGNORECASE,
 )
+_RESULT = re.compile(r"\bis now (?:hot|heated|warm|cool|cooled|cold|chilled|clean|cleaned|washed|on|off|open|closed)\b",
+                     re.IGNORECASE)
+_MOVING = re.compile(r"^you (?:arrive at|go to|walk to|walk over to|head to|move to)\b", re.IGNORECASE)
+_ACTION = re.compile(r"^(go to|take|move|open|close|heat|cool|clean|examine|use|slice|toggle)\s+(.+?)"
+                     r"(?:\s+(?:from|to|with|in|on)\s+.+)?$", re.IGNORECASE)
 
 
-def parse_prediction(text: str, goal_object: str | None = None) -> PredictionClass:
-    """Classify a model's written prediction. Failure wording wins over everything but an exact template."""
+def _action_parts(action: str | None) -> tuple[str | None, str | None]:
+    """("heat", "potato") for "heat potato 1 with microwave 1"; (None, None) when unknown."""
+    m = _ACTION.match((action or "").strip())
+    if not m:
+        return None, None
+    return m[1].lower(), re.sub(r"\s+\d+$", "", m[2].strip()).lower()
+
+
+def parse_prediction(text: str, goal_object: str | None = None, action: str | None = None) -> PredictionClass:
+    """Classify a model's written prediction of what `action` does.
+
+    Failure wording wins over everything but the exact "Nothing happens.". With the action known,
+    a reply that describes a different action (walking somewhere, another object) is `unparseable`,
+    so it is never counted as a success of the action asked about.
+    """
     body = (text or "").strip()
     if not body:
         return "unparseable"
@@ -115,9 +135,23 @@ def parse_prediction(text: str, goal_object: str | None = None) -> PredictionCla
         return "noop"
     if _FAIL_ANYWHERE.search(first) or _FAIL_START.match(first):
         return "noop_paraphrase"
+    verb, obj = _action_parts(action)
+    if verb and verb != "go to":
+        if _MOVING.match(first):
+            # walks somewhere first; counts only if a later sentence does the action to the object
+            later = [x.strip() for x in re.split(r"(?<=\.)\s+", body)[1:]]
+            done = [x for x in later if (_SUCCESS_START.match(x) or _RESULT.search(x))
+                    and (not obj or re.search(rf"\b{re.escape(obj)}\b", x, re.IGNORECASE))]
+            return "success_paraphrase" if done else "unparseable"
+        if obj and not re.search(rf"\b{re.escape(obj)}\b", body, re.IGNORECASE):
+            return "unparseable"  # about some other object
+        if verb == "examine":
+            return "info"  # any description of the object, with no failure wording, says examining worked
     templated = parse_observation(body, goal_object)
+    if templated == "info" and verb in ("take", "move", "heat", "cool", "clean", "use", "slice"):
+        templated = "unparseable"  # a state description is not the action's result
     if templated != "unparseable":
         return templated
-    if _SUCCESS_START.match(first):
+    if _RESULT.search(body) or _SUCCESS_START.match(first):
         return "success_paraphrase"
     return "unparseable"

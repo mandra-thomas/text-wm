@@ -163,3 +163,41 @@ def test_audit_tops_up_from_the_other_model(tmp_path):
     rows = [json.loads(x) for x in key.read_text().splitlines()]
     assert sum(r["stratum"] == "success_paraphrase" for r in rows) == parser_audit.STRATA["success_paraphrase"]
     assert len(rows) == sum(parser_audit.STRATA.values())
+
+
+@pytest.mark.parametrize("action, text, cls", [
+    # examine: any description of the object is the action working
+    ("examine soapbar 1", "You examine the soapbar 1.", "info"),
+    ("examine pillow 1", "The pillow 1 is soft and fluffy.", "info"),
+    # failures worded in new ways
+    ("heat potato 1 with microwave 1", "The action is not possible. You do not have a potato 1.", "noop_paraphrase"),
+    ("take bread 1 from garbagecan 1", "You look around but do not see a bread 1.", "noop_paraphrase"),
+    ("cool mug 1 with fridge 1", "You try to cool the mug 1 with the fridge 1. The mug 1 is not in your inventory.",
+     "noop_paraphrase"),
+    ("heat potato 1 with microwave 1", "The microwave 1 is not hot. You need to heat it up first.", "noop_paraphrase"),
+    # successes stated as a result
+    ("cool egg 1 with fridge 1", "The egg 1 is now cool.", "success_paraphrase"),
+    # a different action is not a success of this one
+    ("heat cup 1 with microwave 1", "You arrive at the microwave 1. On the microwave 1, you see a cup 1.", "unparseable"),
+    ("clean potato 1 with sinkbasin 1", "You go to the sinkbasin 1. The sinkbasin 1 is empty.", "unparseable"),
+    ("clean potato 1 with sinkbasin 1", "You wash your hands with the sinkbasin 1.", "unparseable"),
+    ("heat apple 1 with microwave 1", "The apple 1 is in the microwave 1. The microwave 1 is closed.", "unparseable"),
+    # walking there and then doing it counts
+    ("clean potato 1 with sinkbasin 1",
+     "You go to the sinkbasin 1. The sinkbasin 1 is empty. You clean the potato 1 with the sinkbasin 1.", "success_paraphrase"),
+    # go to keeps its own templates
+    ("go to drawer 1", "You arrive at drawer 1. The drawer 1 is closed.", "state_change"),
+    # unchanged: the environment's own success text
+    ("take mug 1 from cabinet 1", "You pick up the mug 1 from the cabinet 1.", "state_change"),
+])
+def test_parse_prediction_knows_the_action(action, text, cls):
+    assert parse_prediction(text, "mug", action) == cls
+
+
+def test_audit_export_can_exclude_rows_already_seen(tmp_path):
+    g, t = _gens(tmp_path)
+    first = parser_audit.export(g, t, tmp_path / "a.csv")
+    second = parser_audit.export(g, t, tmp_path / "b.csv", exclude=first)
+    seen = {json.loads(x)["text"] for x in first.read_text().splitlines()}
+    again = {json.loads(x)["text"] for x in second.read_text().splitlines()}
+    assert not (seen & again)

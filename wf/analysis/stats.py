@@ -458,3 +458,53 @@ def scoring_agreement_on_failures(scores: list[dict], generations: list[dict], t
         agree += (L[g["transition_id"]] > 0) == said
     return {"agreement": agree / n if n else float("nan"), "agree": agree, "n": n}
 
+
+
+def holm(pvals: dict[str, float]) -> dict[str, float]:
+    """Holm-adjusted p-values (step-down, monotone, capped at 1). NaN stays NaN and is not counted."""
+    valid = sorted(((p, k) for k, p in pvals.items() if p == p), key=lambda x: x[0])
+    m = len(valid)
+    out = {k: float("nan") for k, p in pvals.items() if p != p}
+    running = 0.0
+    for i, (p, k) in enumerate(valid):
+        running = max(running, min(1.0, (m - i) * p))
+        out[k] = running
+    return out
+
+
+def prereg_rq2_verdict(delta_L: float, ci: list[float], holm_p: float) -> str:
+    """The preregistration's decision rule for one co-primary model.
+
+    Precedence, fixed before confirmatory data (notes/deviations.md, 2026-11-17):
+    1. ΔL ≤ 0, or a 95% game-bootstrap CI including zero: not supported (also when 0 < ΔL < 0.5).
+    2. 0 < ΔL < 0.5 with the CI excluding zero: weak, not support.
+    3. ΔL ≥ 0.5, CI excluding zero, Holm-adjusted game-level permutation p ≥ 0.01: not supported
+       (fails significance threshold), including 0.01 ≤ p < 0.05.
+    4. Otherwise supported; strong at ΔL ≥ 1.0.
+    """
+    from wf import constants as C
+
+    if any(v != v for v in (delta_L, ci[0], ci[1], holm_p)):
+        return "not computable"
+    if delta_L <= 0 or ci[0] <= 0 <= ci[1]:
+        return "not supported"
+    if delta_L < C.DELTA_L_SUPPORT_NATS:
+        return "weak (not support)"
+    if holm_p >= C.PERMUTATION_P_MAX:
+        return "not supported (fails significance threshold)"
+    return "supported (strong)" if delta_L >= C.DELTA_L_STRONG_NATS else "supported"
+
+
+def prereg_rq2_verdicts(per_model: dict[str, dict]) -> dict:
+    """Per-model and overall H2 verdicts. `per_model[m]` needs delta_L_nats, delta_L_ci and
+    delta_L_perm_p (the game-level permutation p); Holm runs across exactly these models."""
+    adjusted = holm({m: r["delta_L_perm_p"] for m, r in per_model.items()})
+    verdicts = {
+        m: {"verdict": prereg_rq2_verdict(r["delta_L_nats"], r["delta_L_ci"], adjusted[m]),
+            "holm_p": adjusted[m], "perm_p": r["delta_L_perm_p"]}
+        for m, r in per_model.items()
+    }
+    supported = [m for m, v in verdicts.items() if v["verdict"].startswith("supported")]
+    # The prereg: supported if, for at least one of the two co-primary models, all three conditions hold.
+    return {"per_model": verdicts, "overall": "supported" if supported else "not supported",
+            "supported_models": supported}

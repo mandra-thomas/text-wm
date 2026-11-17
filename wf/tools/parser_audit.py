@@ -42,7 +42,8 @@ def _stratum(cls: str) -> str:
     return "templated_success" if cls in TEMPLATED_SUCCESS else cls
 
 
-def export(gens_path: Path, transitions_path: Path, out_csv: Path, seed: int = C.RNG_SEED) -> Path:
+def export(gens_path: Path, transitions_path: Path, out_csv: Path, seed: int = C.RNG_SEED,
+           exclude: Path | None = None) -> Path:
     actions = {}
     for line in transitions_path.read_text(encoding="utf-8").splitlines():
         t = json.loads(line)
@@ -51,6 +52,8 @@ def export(gens_path: Path, transitions_path: Path, out_csv: Path, seed: int = C
     rng = random.Random(seed)
     picked: list[dict] = []
     seen_text: set[str] = set()
+    if exclude:  # rows an earlier audit (or parser development) already looked at
+        seen_text |= {json.loads(x)["text"] for x in exclude.read_text(encoding="utf-8").splitlines() if x.strip()}
     for stratum, n in STRATA.items():
         pools = {}
         for model in FEWSHOT_MODELS:
@@ -85,7 +88,7 @@ def export(gens_path: Path, transitions_path: Path, out_csv: Path, seed: int = C
         for i, g in enumerate(picked, 1):
             f.write(json.dumps({"row": i, "model": g["model"], "condition": g["condition"],
                                 "transition_id": g["transition_id"], "stratum": g["stratum"],
-                                "parser_class": g["generated_class"],
+                                "parser_class": g["generated_class"], "text": g["generated"],
                                 "parser_label": parser_label(g["generated_class"])}) + "\n")
     return key
 
@@ -128,11 +131,12 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("generations", type=Path)
     e.add_argument("transitions", type=Path)
     e.add_argument("out_csv", type=Path)
+    e.add_argument("--exclude", type=Path, help="a key file whose rows must not be drawn again")
     s = sub.add_parser("score")
     s.add_argument("filled_csv", type=Path)
     args = p.parse_args(argv)
     if args.cmd == "export":
-        key = export(args.generations, args.transitions, args.out_csv)
+        key = export(args.generations, args.transitions, args.out_csv, exclude=args.exclude)
         print(f"wrote {args.out_csv} and {key}")
         return 0
     result = score(args.filled_csv)

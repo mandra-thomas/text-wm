@@ -545,7 +545,7 @@ def run_t0_scoring_agreement(cfg: dict) -> int:
     for it in items:
         rec = done.get(it["id"])
         if rec is None:
-            gen_cls = parse_prediction(scorer.free_generate(build_messages(it, "aligned")))
+            gen_cls = parse_prediction(scorer.free_generate(build_messages(it, "aligned")), None, it["action"])
             sc = score_transition(scorer, it, "aligned")
             assert sc is not None
             gen_success = bool(gen_says_success(gen_cls))
@@ -843,7 +843,7 @@ def run_pilotA_score(cfg: dict) -> int:
                 continue
             text = scorer.free_generate(build_messages(t, cond, ft_prompt=ft))
             rec = {"model": tag, "transition_id": t["id"], "condition": cond, "game_id": t["game_id"],
-                   "generated": text, "generated_class": parse_prediction(text, t.get("goal_object")),
+                   "generated": text, "generated_class": parse_prediction(text, t.get("goal_object"), t["action"]),
                    "item_hash": hashes[t["id"]]}
             append_jsonl(d / "generations.jsonl", [rec])
             gens.append(rec)
@@ -1239,11 +1239,13 @@ def run_pilotA_reparse(cfg: dict) -> int:
     d = _init_run(run_id, cfg, inputs=(src_t, src_s, src_g))
     transitions = read_jsonl(src_t)
     goal_object = {t["id"]: t.get("goal_object") for t in transitions}
+    action = {t["id"]: t.get("action") for t in transitions}
     sets = _pilotA_item_sets(transitions)
     scores, original = read_jsonl(src_s), read_jsonl(src_g)
     reparsed = [
         {**g, "generated_class_v1": g["generated_class"],
-         "generated_class": parse_prediction(g["generated"], goal_object.get(g["transition_id"]))}
+         "generated_class": parse_prediction(g["generated"], goal_object.get(g["transition_id"]),
+                                             action.get(g["transition_id"]))}
         for g in original
     ]
     write_jsonl(d / "generations.jsonl", reparsed)
