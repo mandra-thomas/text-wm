@@ -132,3 +132,16 @@ def test_overall_verdict_needs_one_supported_model_and_holm_spans_both():
         "llama": {"delta_L_nats": -0.1, "delta_L_ci": [-0.3, 0.1], "delta_L_perm_p": 0.4},
     })
     assert none["overall"] == "not supported" and none["supported_models"] == []
+
+
+def test_shards_are_disjoint_complete_and_their_ids_never_collide(mock_root):
+    base = {"split": "valid_unseen", "n_games": 5, "step_cap": 12, "min_items": 1, "min_states": 1, "shard_count": 3}
+    games, ids = [], []
+    for i in range(3):
+        runs_mod.run_pilotA_transitions({**base, "run_id": f"rq12_transitions_s{i}", "shard_index": i})
+        recs = read_jsonl(mock_root / f"rq12_transitions_s{i}" / "transitions.jsonl")
+        games.append({r["game_id"] for r in recs})
+        ids += [r["id"] for r in recs]
+    assert sum(len(g) for g in games) == len(set().union(*games)) == 5
+    assert len(ids) == len(set(ids))
+    assert all(name in runs_mod.RUNNERS for name in ("rq12_transitions_s0", "rq12_transitions_s1", "rq12_transitions_s2"))

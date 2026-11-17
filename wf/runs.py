@@ -598,8 +598,11 @@ def run_pilotA_transitions(cfg: dict) -> int:
     n_games = int(cfg.get("n_games", 40))
     split = cfg.get("split", "train")
     games = _games(client, split, n_games, cfg)
+    # Shards split one collection across parallel jobs: disjoint games, disjoint item ids.
+    shard, shards = int(cfg.get("shard_index", 0)), int(cfg.get("shard_count", 1))
+    games = games[shard::shards]
     all_t, finished = _saved_games(d, "transitions.jsonl", cfg)
-    tid = len(all_t)
+    tid = shard * 1_000_000 + len(all_t)
     # The server leaks memory on every reset, so a long collection stops after this many new games
     # and a resume job (fresh server) carries on.
     per_job = int(cfg.get("max_games_per_job", 0)) or len(games)
@@ -1294,6 +1297,7 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "pilotA_transitions": run_pilotA_transitions,
     "rq12_transitions": run_pilotA_transitions,
     "rq12_transitions_smoke": run_pilotA_transitions,
+    **{f"rq12_transitions_s{i}": run_pilotA_transitions for i in range(3)},
     "pilotA_score": run_pilotA_score,
     "pilotA_reparse": run_pilotA_reparse,
     "pilotB_headroom": run_pilotB_headroom,

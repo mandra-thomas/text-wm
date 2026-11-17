@@ -1,0 +1,11 @@
+run_id: rq12_transitions_s0
+split: valid_unseen
+# Confirmatory RQ1/RQ2 items, shard 0 of 3: every third of the 134 solvable unseen games.
+# Prereg: n >= 1,000 items from >= 200 states, checked on the three shards together.
+n_games: 134
+shard_index: 0
+shard_count: 3
+step_cap: 12
+min_items: 1
+min_states: 1
+max_games_per_job: 30  # fresh server every 30 games (memory leak); resume jobs chain
