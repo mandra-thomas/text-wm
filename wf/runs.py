@@ -1299,7 +1299,17 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "pilotB_consumption": run_pilotB_consumption,
     "pilotB_eligibility": run_pilotB_eligibility,
     "pilotB_retention_minirun": run_pilotB_retention_minirun,
+    "rq3": lambda cfg: _rq3("run_rq3")(cfg),
+    "rq3_smoke": lambda cfg: _rq3("run_rq3")(cfg),
+    "rq3_analysis": lambda cfg: _rq3("run_rq3_analysis")(cfg),
+    "rq3_smoke_analysis": lambda cfg: _rq3("run_rq3_analysis")(cfg),
 }
+
+
+def _rq3(name: str) -> Callable[[dict], int]:
+    from wf import rq3  # wf/rq3.py imports this module, so it loads on first use
+
+    return getattr(rq3, name)
 
 
 def main(argv: list[str] | None = None) -> None:

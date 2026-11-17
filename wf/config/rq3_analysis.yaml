@@ -1,0 +1,3 @@
+run_id: rq3_analysis
+# Reads every shard of rq3 once all of them say "shard complete"; needs no GPU or server.
+source: rq3

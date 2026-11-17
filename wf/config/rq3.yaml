@@ -1,0 +1,14 @@
+run_id: rq3
+split: valid_unseen
+# Confirmatory RQ3 (decided 2026-11-17): every solvable unseen game, identical across cells.
+n_games: 134
+step_cap: 30
+# Three error schedules per game, shared across both retention modes.
+schedule_seeds: [20260924, 20260925, 20260926]
+# False-success arm: at each chance inject with this probability until fs_cap errors are delivered.
+fs_probability: 0.75
+fs_cap: 3  # = CORRUPTIONS_PER_EPISODE_TARGET
+# Games are dealt round-robin to shards; WF_SHARD / WF_N_SHARDS override shard / n_shards.
+n_shards: 4
+# Fresh server after this many new episodes (memory leak; ~74 s each); resume jobs chain.
+max_episodes_per_job: 250

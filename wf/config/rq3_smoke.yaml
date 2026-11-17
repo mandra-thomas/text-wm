@@ -1,0 +1,9 @@
+run_id: rq3_smoke
+split: train
+# Two train games through the confirmatory RQ3 runner, to check fields and timing on the real server.
+n_games: 2
+step_cap: 30
+schedule_seeds: [20260924, 20260925, 20260926]
+fs_probability: 0.75
+fs_cap: 3
+n_shards: 1
