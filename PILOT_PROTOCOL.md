@@ -7,7 +7,7 @@ alwaysApply: true
 
 **Install:** copy this file to `.cursor/rules/pilot-protocol.mdc` (keep the frontmatter) so it applies to every chat, or keep it at the repo root as `PILOT_PROTOCOL.md` and `@`-mention it. Treat everything below as fixed unless a human edits this file.
 
-**What this repo does.** It runs the preliminary experiments for a study of goal-conditioned bias in text world models and its effect on LLM agents in ALFWorld. There are three research questions; the pilot exists to (a) prove the infrastructure, (b) calibrate parameters the preregistration leaves to calibration, and (c) apply three preregistered pilot rules. The pilot does **not** decide what the study tests. Do not add experiments, change thresholds, or "improve" the design; log ideas in `notes/extensions.md`.
+**What this repo does.** It runs the preliminary experiments for a study of goal-conditioned bias in text world models and its effect on LLM agents in ALFWorld. There are three research questions; the pilot exists to (a) prove the infrastructure, (b) calibrate parameters the preregistration leaves to calibration, and (c) apply three pre-specified pilot rules (fixed in this repository's first commit on 2026-10-28, not in the filed preregistration; see decision 10 in `notes/deviations.md`). The pilot does **not** decide what the study tests. Do not add experiments, change thresholds, or "improve" the design; log ideas in `notes/extensions.md`.
 
 **Coding agent rules**
 
@@ -183,7 +183,9 @@ Parser: regex table over the templates observed in Tier 0.1 logs (starting point
 
 Scoring: for prompt `P` (few-shot world-model prompt + history under the condition's task line + action) and candidate `c`, compute `logp(c | P) = Σ log p(token_i | P, c_<i)` over candidate tokens only, thinking disabled, bf16, no sampling. Cache `(model, condition, transition_id)`.
 
-Validation (Tier 0.6): on 100 items, generate freely (greedy, max 64 tokens) under the aligned condition, parse to a class, and compare with `sign(L)`; report agreement.
+Validation (Tier 0.6): on 100 items, generate freely (greedy, max 64 tokens) under the aligned condition, parse to a class, and compare with `sign(L)`; report agreement. Pilot A repeats the comparison on its own determined true failures, the population RQ2 scores, and stops if agreement there is below `SCORING_STOP_FAILURES_MIN` (decision 13).
+
+Each score also keeps the first token of each text (`logp_first_plus`, `logp_first_minus`, the decoded tokens, and their combined probability `first_mass`). `L_first = logp_first_plus − logp_first_minus` is logit(q_first), the success belief without the wording penalty, and `c_hat = L_first − L` estimates that penalty (decision 5).
 
 ### 4.6 `env/expert.py`
 
@@ -217,7 +219,8 @@ Returns a function `(t, proposal_valid) -> corrupt_now`, deterministic in `(game
 
 - `delta_p(scores, primary_condition="aligned", control="swapped")`: mean over items of `sigmoid(L_aligned) − sigmoid(L_swapped)` in percentage points, restricted to `context_determined & true failure & history_goal_agnostic`. Pilot A's main test further requires `targets_goal_object` and not `shared_location`.
 - `delta_L(scores, primary_condition="aligned", control="swapped")`: the same comparison in nats, the preregistered headline metric.
-- `asymmetry_A(scores)`: on context-determined items, `P(sign(L)>0 | true failure) − P(sign(L)<0 | true success)`.
+- `asymmetry_A(generations)`: on context-determined items, `P(Ŷ_gen = success | true failure) − P(Ŷ_gen = failure | true success)`, where Ŷ_gen is the parsed class of the model's greedy free text under the aligned goal, as the proposal specifies. Unparseable texts are left out and counted. The sign of L is not used for A (decision 5).
+- `delta_L_first`, `delta_c`, `decision_flip_share`, `gen_success_shift`: secondary checks that ΔL reflects belief: the same shift on the first token only, the change in the wording penalty, the share of items whose first-token decision the goal flips, and the change in how often the model writes a success.
 - `cluster_bootstrap(stat_fn, items, cluster="game_id", B=BOOTSTRAP_RESAMPLES)`: percentile CI.
 - `pair_permutation(diffs, n=PERMUTATIONS, cluster_ids=None)`: sign-flip whole games, as the preregistration requires; p-value.
 - `icc(items, cluster="game_id")`: intraclass correlation of `L_aligned − L_swapped`.
@@ -235,7 +238,7 @@ Sign convention (preregistered): predicted `H_discarded > 0`, `H_retained < 0`, 
 2. `python scripts/download_data/download_data.py` (their renamed-action ALFWorld data). Remove any pre-existing ALFWorld data first.
 3. Start the server with `scripts/env_server/start_alfworld.sh`; confirm `train`, `valid_seen`, `valid_unseen` are selectable and record **solvable** game counts (§5.1).
 4. Pull `X1AOX1A/LLMasWorldModels` (ALFWorld) and the two fine-tuned checkpoints.
-5. Serve `Qwen/Qwen3-8B` with vLLM (`--max-model-len 8192`, `--enable-prefix-caching`); confirm `enable_thinking=false` takes effect by checking that no `<think>` block appears in 20 sampled responses.
+5. Serve `Qwen/Qwen3-8B` with vLLM (`--max-model-len 8192`, `--no-enable-prefix-caching`; with the cache on, 8 of 20 repeated games diverged at temperature 0 and 0 of 20 with it off, decision 14); confirm `enable_thinking=false` takes effect by checking that no `<think>` block appears in 20 sampled responses.
 
 Record versions (commit SHA of Word2World, vLLM, transformers, model revisions) in `runs/env.json`.
 
@@ -274,7 +277,7 @@ Run ids are fixed. Each run has a YAML in `wf/config/`, an acceptance criterion,
 
 ### Pilot A — RQ2 signal (after filing; job limit 6 h)
 
-Timing measured on the real server, with no model: item building averaged 207 s per game over 30 games, so the configured 30 games take about 1.7 hours. Agent rollouts add to that, and scoring has not been timed yet.
+Timing measured on the real server, with no model: item building averaged 207 s per game over 30 games, so the configured 50 games take about 2.9 hours. Agent rollouts add to that, and scoring is timed on a small real run before the full job. Pilot A scores Qwen3-8B and Llama-3.1-8B-Instruct few-shot (the preregistration's co-primary pair) and the fine-tuned Qwen2.5 checkpoint as a full-state positive control. A model whose weights cannot be loaded is recorded as not scored, and the run stays unfinished so a resume scores only that model.
 
 The main test uses goal-agnostic items that name the goal object (`targets_goal_object`) and are not `shared_location`. Other items stay scored. The sample-size gate counts this population and also reports the broader count. `shared_location` items are reported as a sensitivity check, on both sides of A. See "shared locations" in `notes/deviations.md`.
 
@@ -338,15 +341,17 @@ ENV_STEP_LIMIT = 50             # ALFWorld ends every episode here; not ours to 
 # Engineering thresholds — may be tuned, changes logged in STATUS.md
 MAX_UNPARSEABLE = 0.05
 SCORING_AGREEMENT_MIN = 0.90
+SCORING_STOP_FAILURES_MIN = 0.90 # Pilot A: sign(L) vs Ŷ_gen on determined failures, else stop
+FUTILITY_UPPER_NATS = 0.5       # goal-channel rule read in nats (advisory)
 CONSUMPTION_MIN = 0.10          # decision-critical rate below this => stop and report
 BOOTSTRAP_RESAMPLES = 2000
 PERMUTATIONS = 1000
 RNG_SEED = 20260924
 ```
 
-Pilot rules. **The one-page preregistration PDF does not contain these**, so the team still has to confirm where they come from (decision 10 in `notes/deviations.md`). `PILOT_RULE_GOAL_CHANNEL` runs in Δ_p as written here, while the preregistered headline is ΔL (decision 4); `pilotA_score` reports both and flags any conflict.
+Pilot rules. **These are pre-specified, not preregistered**: the one-page preregistration PDF does not contain them. They were fixed in this repository's first commit (`e2c1f1f`, 2026-10-28 12:48), before any ICE job ran (decision 10 in `notes/deviations.md`). `PILOT_RULE_GOAL_CHANNEL` is **advisory** (decision 4): it decides emphasis and effort only, and the preregistered RQ2 test runs and is reported whichever way the rule falls. It is evaluated as filed in Δ_p and also in nats, where it "fires" when every scored model's ΔL 95% CI upper bound is below `FUTILITY_UPPER_NATS` (0.5).
 
-- **PILOT_RULE_GOAL_CHANNEL**: if on every tested model the Pilot A Δ_p point estimate < `FUTILITY_EST_PP` and its 95% CI upper bound < `FUTILITY_UPPER_PP`, the goal channel is dropped from the headline; H3 and the validity-oracle decomposition become the headline; RQ2 is reported as a null. A wide interval alone does not fire the rule.
+- **PILOT_RULE_GOAL_CHANNEL** (advisory): if on every tested model the Pilot A Δ_p point estimate < `FUTILITY_EST_PP` and its 95% CI upper bound < `FUTILITY_UPPER_PP`, the goal channel is dropped from the headline; H3 and the validity-oracle decomposition become the headline; RQ2 is reported as a null. A wide interval alone does not fire the rule.
 - **PILOT_RULE_HEADROOM**: if oracle foresight improves ALFWorld success by less than `HEADROOM_MIN_PP` over none in `pilotB_headroom`, RQ3 moves to ScienceWorld before full runs; a borderline result (CI includes the threshold) triggers `pilotB_headroom_recheck` on `HEADROOM_RECHECK_GAMES` games first.
 - **PILOT_RULE_RETAINED_FORMAT**: if in `pilotB_retention_minirun` retention moves the favorable arm's rank outcome by less than `RETENTION_MARGIN`, the retained format switches to *state persistence* (the shown prediction updates the agent's maintained belief lines — inventory, receptacle contents, object states — and stays until a later observation naming the same fact overwrites it) for the full runs.
 

@@ -35,11 +35,20 @@ export VLLM_PORT="${VLLM_PORT:-8000}"
 export ALFWORLD_PORT="${ALFWORLD_PORT:-36001}"
 export PYTHONPATH="${PROJECT_ROOT}${PYTHONPATH:+:$PYTHONPATH}"
 
+# Home is a 30 GB quota that other work shares; a full home kills vLLM's compile cache and
+# anything else that writes there, so every tool cache lives in the checkout on /storage.
+export XDG_CACHE_HOME="${PROJECT_ROOT}/.cache"
+export VLLM_CACHE_ROOT="${XDG_CACHE_HOME}/vllm"
+export TRITON_CACHE_DIR="${XDG_CACHE_HOME}/triton"
+export TORCHINDUCTOR_CACHE_DIR="${XDG_CACHE_HOME}/torchinductor"
+export UV_CACHE_DIR="${XDG_CACHE_HOME}/uv"
+export PIP_CACHE_DIR="${XDG_CACHE_HOME}/pip"
+
 # Per-job pid files, so concurrent jobs sharing this checkout cannot stop each other's servers.
 export VLLM_PID_FILE="${PROJECT_ROOT}/logs/vllm_${SLURM_JOB_ID:-local}.pid"
 export ALFWORLD_PID_FILE="${PROJECT_ROOT}/logs/alfworld_${SLURM_JOB_ID:-local}.pid"
 
-mkdir -p "${RUNS_DIR}" "${PROJECT_ROOT}/logs"
+mkdir -p "${RUNS_DIR}" "${PROJECT_ROOT}/logs" "${XDG_CACHE_HOME}"
 
 cd "${PROJECT_ROOT}"
 
@@ -142,7 +151,7 @@ start_vllm() {
     --host 127.0.0.1 \
     --model "${model}" \
     --max-model-len "${VLLM_MAX_MODEL_LEN:-8192}" \
-    --enable-prefix-caching \
+    --no-enable-prefix-caching \
     --port "${VLLM_PORT}" \
     >"${log}" 2>&1 &
   echo $! >"${VLLM_PID_FILE}"

@@ -48,7 +48,8 @@ pip install "vllm>=0.8.5" "transformers>=4.51" torch accelerate datasets pyyaml 
 ```bash
 conda activate "$SERVE_ENV"
 export HF_HOME TRANSFORMERS_CACHE HF_HUB_CACHE
-# huggingface-cli login   # if HF_TOKEN unset and Llama needed later
+# Llama-3.1-8B-Instruct is gated: accept Meta's license on Hugging Face, then put a token with
+# access in pace/pace.env as HF_TOKEN=... (jobs read it at start; never commit pace.env).
 python - <<'PY'
 from huggingface_hub import snapshot_download
 for repo in [
@@ -59,7 +60,7 @@ for repo in [
     print("fetch", repo)
     snapshot_download(repo)
 snapshot_download("X1AOX1A/LLMasWorldModels", repo_type="dataset")
-# Optional / gated (confirmatory co-primary, not Pilot A):
+# Gated, co-primary, scored in Pilot A (needs HF_TOKEN with access):
 # snapshot_download("meta-llama/Llama-3.1-8B-Instruct")
 PY
 ```
@@ -71,7 +72,7 @@ conda activate "$SERVE_ENV"
 python -m vllm.entrypoints.openai.api_server \
   --model Qwen/Qwen3-8B \
   --max-model-len 8192 \
-  --enable-prefix-caching \
+  --no-enable-prefix-caching \
   --port "$VLLM_PORT" &
 sleep 60
 python scripts/smoke_vllm_thinking.py --base-url "http://127.0.0.1:${VLLM_PORT}/v1"

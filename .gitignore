@@ -45,3 +45,6 @@ logs/
 
 # Proposal / prereg PDFs (keep local)
 *.pdf
+
+# Tool caches kept off the ICE home quota (pace/_common.sh)
+.cache/

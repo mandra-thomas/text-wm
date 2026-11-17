@@ -386,9 +386,10 @@ def test_A_flips_sign_when_every_prediction_flips():
     items = [{"id": f"f{i}", "game_id": "g", "context_determined": True, "true_obs": "Nothing happens."} for i in range(3)]
     items += [{"id": f"s{i}", "game_id": "g", "context_determined": True, "true_obs": "You open it."} for i in range(3)]
     values = {"f0": 1, "f1": 1, "f2": -1, "s0": -1, "s1": 1, "s2": 1}
-    scores = [{"transition_id": k, "condition": "aligned", "L": float(v)} for k, v in values.items()]
-    flipped = [{**s, "L": -s["L"]} for s in scores]
-    assert stats.asymmetry_A(flipped, items)["A"] == pytest.approx(-stats.asymmetry_A(scores, items)["A"])
+    cls = {1: "state_change", -1: "noop"}
+    gens = [{"transition_id": k, "condition": "aligned", "generated_class": cls[v]} for k, v in values.items()]
+    flipped = [{**g, "generated_class": cls[-v]} for g, v in zip(gens, values.values())]
+    assert stats.asymmetry_A(flipped, items)["A"] == pytest.approx(-stats.asymmetry_A(gens, items)["A"])
 
 
 # --- Pilot A end to end with a planted scorer --------------------------------------------------
@@ -442,7 +443,7 @@ def test_pilot_a_recovers_a_planted_effect_end_to_end(monkeypatch, tmp_path):
 def test_pilot_a_flags_futility_that_contradicts_the_prereg_metric(monkeypatch, tmp_path):
     metrics = _pilot_a(monkeypatch, tmp_path, -7.0, 1.0)
     assert metrics["PILOT_RULE_GOAL_CHANNEL"] is True
-    assert set(metrics["rule_conflicts_with_delta_L"]) == {"qwen3-8b-fewshot", "w2w-qwen2.5-7b"}
+    assert set(metrics["rule_conflicts_with_delta_L"]) == {"qwen3-8b-fewshot", "llama3.1-8b-fewshot", "w2w-qwen2.5-7b"}
 
 
 def test_pilot_a_with_no_effect_does_not_look_significant(monkeypatch, tmp_path):

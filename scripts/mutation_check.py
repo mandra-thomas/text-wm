@@ -6,6 +6,7 @@ the repo, so the working tree is never touched.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -63,7 +64,7 @@ MUTANTS = [
     ("low agreement looks fine", "wf/runs.py", 'reported=f"agreement {mean_agree:.3f}" if ok else f"BELOW TARGET: agreement {mean_agree:.3f} < 0.95",', 'reported=f"agreement {mean_agree:.3f}",'),
     ("reported shows as PASS", "wf/util.py", 'status = (f"REPORTED ({reported})" if reported else "PASS" if ok else "FAIL")', 'status = ("PASS" if ok else "FAIL")'),
     ("main ignores finished runs", "wf/runs.py", '    if args.resume and _already_passed(args.run_id):\n', '    if False:\n'),
-    ("generations saved at the end", "wf/runs.py", '            append_jsonl(d / "generations.jsonl", [rec])\n', ''),
+    ("generations saved at the end", "wf/runs.py", '            append_jsonl(d / "generations.jsonl", [rec])\n        counts[', '        counts['),
     ("built games not saved", "wf/runs.py", '        _save_game(d, "items.jsonl", gid, kept)\n        items.extend(kept)\n    items = items[:n]\n', '        items.extend(kept)\n    items = items[:n]\n'),
     ("non-atomic json write", "wf/util.py", '    tmp = path.with_name(path.name + ".tmp")\n    tmp.write_text(text, encoding="utf-8")\n    os.replace(tmp, path)\n', '    path.write_text("", encoding="utf-8")\n    os.replace(path, path)\n    path.write_text(text, encoding="utf-8")\n'),
     ("scan skips a shared receptacle", "wf/env/scene.py", 'elif f"go to {receptacle}" not in state.admissible:', 'elif False:'),
@@ -71,7 +72,7 @@ MUTANTS = [
     ("flag never set", "wf/data/transitions.py", 'return bool(target and facts.location and scene.shares_spot(facts.location, target))', 'return False'),
     ("flagged items in the main test", "wf/data/transitions.py", 'return [t for t in items if not t.get("shared_location")]', 'return list(items)'),
     ("sensitivity omits flagged items", "wf/runs.py", '"goal_agnostic": _effect(scores, agnostic_all),', '"goal_agnostic": _effect(scores, agnostic),'),
-    ("A sensitivity omits flagged items", "wf/runs.py", '"A": asymmetry_A(scores, eligible + all_successes),', '"A": asymmetry_A(scores, main_test_items(eligible) + successes),'),
+    ("A sensitivity omits flagged items", "wf/runs.py", '"A": asymmetry_A(gens, eligible + all_successes),', '"A": asymmetry_A(gens, main_test_items(eligible) + successes),'),
     ("sample gate counts flagged items", "wf/runs.py", 'ok = len(main_items) >= 500 and len(states) >= 80', 'ok = len(eligible) >= 500 and len(states) >= 80'),
     ("to inside potato matches", "wf/data/transitions.py", 'r"\\b(?:from|to|with) (.+)$"', 'r"(?:from|to|with) (.+)$"'),
     ("sim has no shared spots", "wf/env/sim.py", 'shared = ("drawer 1", "countertop 1") if game % 2 else ()', 'shared = ()'),
@@ -123,7 +124,7 @@ MUTANTS = [
     ("report accepts any commit", "wf/tools/assemble_pilot_report.py", "elif not any(sha.startswith(c) for c in allowed if c):", "elif False:"),
     ("report accepts mock runs", "wf/tools/assemble_pilot_report.py", 'elif ("(MOCK)" in first) != is_mock():', "elif False:"),
     ("report writes despite problems", "wf/tools/assemble_pilot_report.py", "    if found:\n", "    if False:\n"),
-    ("scores join by id alone", "wf/runs.py", 'if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):', "if False:"),
+    ("scores join by id alone", "wf/runs.py", 'if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved + saved_gens):', "if False:"),
     ("resume ignores changed inputs", "wf/runs.py", 'if saved_inputs.exists() and json.loads(saved_inputs.read_text(encoding="utf-8"))["inputs"] != inputs:', "if False:"),
     ("skip ignores changed inputs", "wf/runs.py", "if any(not Path(path).exists() or file_sha(Path(path)) != digest for path, digest in inputs.items()):", "if False:"),
     ("resume ignores changed settings", "wf/runs.py", "if saved != json.loads(json.dumps(config)):", "if False:"),
@@ -155,6 +156,17 @@ MUTANTS = [
     ("sim has no step limit", "wf/env/sim.py", "self.done[idx] = world.won or world.steps >= ENV_STEP_LIMIT", "self.done[idx] = world.won"),
     ("duplicate LLM calls", "wf/agent/react.py", "            if key not in replies:\n                replies[key] = agent.complete(msgs)\n", "            replies[key] = agent.complete(msgs)\n"),
     ("prediction hides its action", "wf/scoring/prompts.py", '        body_parts.append(f"Proposed action: {proposal}")\n        body_parts.append(f"Expected outcome: {foresight_prediction}")', '        body_parts.append(f"Expected outcome: {foresight_prediction}")'),
+    # Decisions of 2026-11-17
+    ("2026-11-17 A reads the sign of L", "wf/analysis/stats.py", '        said = gen_says_success(g["generated_class"])\n        if said is None:\n            continue\n        out.append', '        said = g.get("L", 0) > 0\n        out.append'),
+    ("2026-11-17 Pilot A generations not saved", "wf/runs.py", '            append_jsonl(d / "generations.jsonl", [rec])\n            gens.append(rec)', '            gens.append(rec)'),
+    ("2026-11-17 stop rule never fires", "wf/runs.py", 'not rep["scoring_agreement_failures"]["agreement"] >= C.SCORING_STOP_FAILURES_MIN', 'False'),
+    ("2026-11-17 nats rule reads the lower bound", "wf/runs.py", 'rep["goal_agnostic"]["delta_L_ci"][1] < C.FUTILITY_UPPER_NATS', 'rep["goal_agnostic"]["delta_L_ci"][0] < C.FUTILITY_UPPER_NATS'),
+    ("2026-11-17 gated model crashes the run", "wf/runs.py", 'except OSError as e:  # gated', 'except ValueError as e:  # gated'),
+    ("2026-11-17 parser guesses the last line", "wf/scoring/prompts.py", '            return action or None\n    return None\n', '            return action or None\n    return lines[-1] if lines else None\n'),
+    ("2026-11-17 malformed reply counts as critical", "wf/agent/react.py", '"decision_critical": not under_true_format_error and action_under_true != proposal,', '"decision_critical": action_under_true != proposal,'),
+    ("2026-11-17 raw agent text dropped", "wf/agent/react.py", '            "proposal_raw": proposal_raw,\n', '            "proposal_raw": "",\n'),
+    ("2026-11-17 c_hat sign flipped", "wf/scoring/logodds.py", '        return self.L_first - self.L\n', '        return self.L - self.L_first\n'),
+    ("2026-11-17 prefix cache back on", "pace/_common.sh", '--no-enable-prefix-caching', '--enable-prefix-caching'),
 ]
 
 
@@ -163,6 +175,10 @@ def main() -> int:
     # `mutation_check.py 2/4` runs the third of four shards, so the check can use several cores.
     shard, shards = map(int, sys.argv[1].split("/")) if len(sys.argv) > 1 else (0, 1)
     chosen = MUTANTS[shard::shards]
+    # MUTANTS_MATCHING="2026-11-17" runs only the mutants whose name contains that text.
+    only = os.environ.get("MUTANTS_MATCHING")
+    if only:
+        chosen = [m for m in chosen if only in m[0]]
     survivors: list[str] = []
     broken: list[str] = []
     with tempfile.TemporaryDirectory() as tmp:

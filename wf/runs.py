@@ -22,15 +22,21 @@ from wf.analysis.stats import (
     H_success_points,
     asymmetry_A,
     asymmetry_ci,
+    asymmetry_items,
     cluster_bootstrap,
     corruption_diagnostics,
+    decision_flip_share,
+    delta_c,
     delta_L,
+    delta_L_first,
     delta_p,
+    gen_success_shift,
     icc,
     implied_se_delta_p,
     interaction_ci,
     pair_permutation,
     rank_outcome,
+    scoring_agreement_on_failures,
     success_gain_ci,
 )
 from wf.corruption.schedule import calibrate_p_arm, schedule
@@ -38,6 +44,7 @@ from wf.data.candidates import twin_available
 from wf.data.transitions import (
     action_type,
     build_transitions_from_rollout,
+    determination_reason,
     exclusion_counts,
     filter_pilot_a_items,
     main_test_items,
@@ -636,13 +643,21 @@ def run_pilotA_transitions(cfg: dict) -> int:
 
 def _effect(scores: list[dict], items: list[dict], require_agnostic: bool = True,
             primary: str = "aligned", control: str = "swapped") -> dict:
-    """Δp and ΔL on one population, each with a game-clustered CI and permutation p."""
+    """Δp, ΔL and first-token ΔL on one population, each with a game-clustered CI and permutation p."""
     dp = delta_p(scores, items, primary, control, require_agnostic)
     dl = delta_L(scores, items, primary, control, require_agnostic)
+    df = delta_L_first(scores, items, primary, control, require_agnostic)
+    # ΔL = Δlogit(q_first) - Δc: if the penalty moves with the goal, ΔL is not a belief shift alone.
+    dc = delta_c(scores, items, primary, control, require_agnostic)
+    masses = [s["first_mass"] for s in scores if s.get("first_mass") is not None and s["first_mass"] == s["first_mass"]
+              and s.get("condition") in (primary, control) and s["transition_id"] in {t["id"] for t in items}]
     games = dp["item_games"]
     mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
+    sd = lambda xs: statistics.stdev(xs) if len(xs) > 1 else float("nan")
     boot_p = cluster_bootstrap(mean, dp["item_diffs"], games, seed=C.RNG_SEED)
     boot_l = cluster_bootstrap(mean, dl["item_diffs"], games, seed=C.RNG_SEED)
+    boot_f = cluster_bootstrap(mean, df["item_diffs"], df["item_games"], seed=C.RNG_SEED)
+    boot_c = cluster_bootstrap(mean, dc["item_diffs"], dc["item_games"], seed=C.RNG_SEED)
     return {
         "n_items": dp["n_items"],
         "n_games": dp["n_games"],
@@ -652,9 +667,19 @@ def _effect(scores: list[dict], items: list[dict], require_agnostic: bool = True
         "delta_L_nats": dl["delta_L_nats"],
         "delta_L_ci": [boot_l["ci_low"], boot_l["ci_high"]],
         "delta_L_perm_p": pair_permutation(dl["item_diffs"], seed=C.RNG_SEED, cluster_ids=games),
+        # Secondary (decision 5): the same shift read off the first token only, free of the wording penalty.
+        "delta_L_first_nats": df["delta_L_first_nats"],
+        "delta_L_first_ci": [boot_f["ci_low"], boot_f["ci_high"]],
+        "delta_L_first_perm_p": pair_permutation(df["item_diffs"], seed=C.RNG_SEED, cluster_ids=df["item_games"]),
+        "delta_c_nats": dc["delta_c_nats"],
+        "delta_c_ci": [boot_c["ci_low"], boot_c["ci_high"]],
+        "first_mass_median": statistics.median(masses) if masses else float("nan"),
         "icc_L": icc(dl["item_diffs"], games),
+        "icc_L_first": icc(df["item_diffs"], df["item_games"]),
         "icc_p": icc(dp["item_diffs"], games),
-        "sd_p": statistics.stdev(dp["item_diffs"]) if len(dp["item_diffs"]) > 1 else float("nan"),
+        "sd_L": sd(dl["item_diffs"]),
+        "sd_L_first": sd(df["item_diffs"]),
+        "sd_p": sd(dp["item_diffs"]),
     }
 
 
@@ -662,6 +687,33 @@ def _item_hash(t: dict) -> str:
     """What a score depends on, so it can never attach to a different item with the same id."""
     fields = {k: t.get(k) for k in ("action", "history_text", "task_line", "swapped_task_line", "candidates")}
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def _n_for_power(icc_val: float, sd: float, effect: float) -> int | None:
+    """Smallest n (items over CONFIRMATORY_GAMES games) whose implied SE detects `effect` at 80% power."""
+    se_needed = effect / (C.POWER_Z_ALPHA + C.POWER_Z_BETA)
+    for n in range(200, 20001, 100):
+        se = implied_se_delta_p(icc_val, n, C.CONFIRMATORY_GAMES, sd)
+        if se == se and se <= se_needed:
+            return n
+    return None
+
+
+def _false_success_by_reason(generations: list[dict], failures: list[dict]) -> dict:
+    """Share of determined failures the model writes as successes, per deciding fact (decision 6)."""
+    out = {}
+    for reason in sorted({determination_reason(t) for t in failures}):
+        said = [s for _, (failed, s) in asymmetry_items(generations, [t for t in failures if determination_reason(t) == reason]) if failed]
+        out[reason] = {"rate": sum(said) / len(said) if said else float("nan"), "n": len(said)}
+    return out
+
+
+PILOT_A_MODELS = [
+    # (model id, tag, fine-tuned prompt with hidden state)
+    (C.WM_FEWSHOT_MODEL, "qwen3-8b-fewshot", False),
+    (C.WM_FEWSHOT_LLAMA, "llama3.1-8b-fewshot", False),
+    (C.WM_FT_QWEN, "w2w-qwen2.5-7b", True),
+]
 
 
 def run_pilotA_score(cfg: dict) -> int:
@@ -687,10 +739,7 @@ def run_pilotA_score(cfg: dict) -> int:
     ]
     successes = main_test_items(all_successes)
     conditions = ["aligned", "swapped", "absent", "committed", "candidate"]
-    models = [
-        (C.WM_FEWSHOT_MODEL, "qwen3-8b-fewshot", False),
-        (C.WM_FT_QWEN, "w2w-qwen2.5-7b", True),
-    ]
+    models = PILOT_A_MODELS
     # The aligned goal must be one the action's success would advance (prereg).
     targeted = [t for t in eligible if t.get("targets_goal_object")]
     agnostic_all = [t for t in targeted if t.get("history_goal_agnostic")]
@@ -707,14 +756,26 @@ def run_pilotA_score(cfg: dict) -> int:
         return 1
 
     reports = {}
+    skipped: dict[str, str] = {}
     saved = read_jsonl(d / "scoring.jsonl") if cfg.get("resume") else []
+    saved_gens = read_jsonl(d / "generations.jsonl") if cfg.get("resume") else []
     hashes = {t["id"]: _item_hash(t) for t in eligible + all_successes}
-    if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):
+    if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved + saved_gens):
         raise SystemExit(f"{run_id}: saved scores belong to different items; rerun without --resume.")
     done = {(s["model"], s["transition_id"], s["condition"]) for s in saved}
+    gen_done = {(g["model"], g["transition_id"], g["condition"]) for g in saved_gens}
+    # Ŷ_gen for RQ1 (aligned, every determined item); aligned and swapped on the main test, to check
+    # that ΔL moves with what the model writes.
+    gen_jobs = [(t, "aligned") for t in eligible + all_successes] + [(t, "swapped") for t in agnostic]
+    agnostic_per_game = len(agnostic) / max(len({t["game_id"] for t in transitions}), 1)
     for model_name, tag, ft in models:
-        scorer = LogoddsScorer(model_name, model_tag=tag)
+        try:
+            scorer = LogoddsScorer(model_name, model_tag=tag)
+        except OSError as e:  # gated or missing weights: record it, score the rest, finish later
+            skipped[tag] = f"{type(e).__name__}: {str(e).splitlines()[0][:160]}"
+            continue
         scores = [s for s in saved if s["model"] == tag]
+        gens = [g for g in saved_gens if g["model"] == tag]
         for t, cond in [(t, c) for t in eligible for c in conditions] + [(t, "aligned") for t in all_successes]:
             if (tag, t["id"], cond) in done:
                 continue
@@ -723,37 +784,74 @@ def run_pilotA_score(cfg: dict) -> int:
                 rec = {**sc.to_dict(), "game_id": t["game_id"], "item_hash": hashes[t["id"]]}
                 append_jsonl(d / "scoring.jsonl", [rec])
                 scores.append(rec)
+        for t, cond in gen_jobs:
+            if (tag, t["id"], cond) in gen_done:
+                continue
+            text = scorer.free_generate(build_messages(t, cond, ft_prompt=ft))
+            rec = {"model": tag, "transition_id": t["id"], "condition": cond, "game_id": t["game_id"],
+                   "generated": text, "generated_class": parse_observation(text, t.get("goal_object")),
+                   "item_hash": hashes[t["id"]]}
+            append_jsonl(d / "generations.jsonl", [rec])
+            gens.append(rec)
+        scorer.close()
         everything = main_test_items(eligible) + successes
+        core = _effect(scores, agnostic)
+        agreement = scoring_agreement_on_failures(scores, gens, main_test_items(eligible))
+        reasons = sorted({determination_reason(t) for t in agnostic})
         reports[tag] = {
-            "goal_agnostic": _effect(scores, agnostic),
+            "goal_agnostic": core,
             "goal_revealing": _effect(scores, revealing, require_agnostic=False),
             "by_history_len": {
                 name: _effect(scores, [t for t in agnostic if test(t.get("history_len", 0))])
                 for name, test in bins.items()
             },
+            # Decision 6: which fact decides each failure, so a reader can see where an effect lives.
+            "by_reason": {r: _effect(scores, [t for t in agnostic if determination_reason(t) == r]) for r in reasons},
             "committed_vs_candidate": _effect(scores, agnostic, primary="committed", control="candidate"),
-            "A": asymmetry_A(scores, everything),
-            "A_ci": asymmetry_ci(scores, everything, seed=C.RNG_SEED),
+            # Decision 5: RQ1 reads the model's own text (Ŷ_gen), never the sign of L.
+            "A": asymmetry_A(gens, everything),
+            "A_ci": asymmetry_ci(gens, everything, seed=C.RNG_SEED),
+            "false_success_by_reason": _false_success_by_reason(gens, main_test_items(eligible)),
+            # Checks that ΔL reflects belief: does the goal change what the model writes, or its decision?
+            "gen_success_shift": gen_success_shift(gens, agnostic),
+            "decision_flip": decision_flip_share(scores, agnostic),
+            "scoring_agreement_failures": agreement,
             # Sensitivity check, not a primary result: see notes/deviations.md
             "with_shared_location": {
                 "n_flagged": len(agnostic_all) - len(agnostic),
                 "goal_agnostic": _effect(scores, agnostic_all),
-                "A": asymmetry_A(scores, eligible + all_successes),
+                "A": asymmetry_A(gens, eligible + all_successes),
             },
         }
-        core = reports[tag]["goal_agnostic"]
         reports[tag]["implied_se_pp"] = {
             n: implied_se_delta_p(core["icc_p"], n, C.CONFIRMATORY_GAMES, core["sd_p"]) for n in (1000, 2000, 3000)
         }
+        reports[tag]["implied_se_nats"] = {
+            n: implied_se_delta_p(core["icc_L"], n, C.CONFIRMATORY_GAMES, core["sd_L"]) for n in (1000, 2000, 3000)
+        }
+        reports[tag]["n_for_80pct_power"] = {
+            str(effect): _n_for_power(core["icc_L"], core["sd_L"], effect) for effect in (0.5, 0.75, 1.0)
+        }
 
-    # PILOT_RULE_GOAL_CHANNEL, as filed: Δp on every tested model
+    if not reports:
+        write_status(run_id, f"no model could be scored: {skipped}", ok=False)
+        return 1
+    # PILOT_RULE_GOAL_CHANNEL, as filed: Δp on every tested model. Advisory since decision 4.
     fired = all(
         rep["goal_agnostic"]["delta_p_pp"] < C.FUTILITY_EST_PP
         and rep["goal_agnostic"]["delta_p_ci"][1] < C.FUTILITY_UPPER_PP
         for rep in reports.values()
     )
+    # The same rule on the prereg's scale: every scored model's ΔL CI sits below 0.5 nats.
+    fired_nats = all(rep["goal_agnostic"]["delta_L_ci"][1] < C.FUTILITY_UPPER_NATS for rep in reports.values())
     # Δp compresses when L is far from 0, so surface a filed rule that contradicts the prereg metric.
     conflict = [tag for tag, rep in reports.items() if fired and rep["goal_agnostic"]["delta_L_nats"] >= C.DELTA_L_SUPPORT_NATS]
+    # Decision 13: the few-shot models' scores stand only if sign(L) agrees with their own text on failures.
+    stop = [
+        f"{tag} {rep['scoring_agreement_failures']['agree']}/{rep['scoring_agreement_failures']['n']}"
+        for tag, rep in reports.items()
+        if not tag.startswith("w2w") and not rep["scoring_agreement_failures"]["agreement"] >= C.SCORING_STOP_FAILURES_MIN
+    ]
 
     # ELIGIBLE_SET_TARGET: smallest n ≥ the prereg floor with SE ≤ 1.5 on every model
     target_n = None
@@ -769,7 +867,13 @@ def run_pilotA_score(cfg: dict) -> int:
     cal = {
         "ELIGIBLE_SET_TARGET": target_n,
         "PILOT_RULE_GOAL_CHANNEL": fired,
+        "PILOT_RULE_GOAL_CHANNEL_nats": fired_nats,
+        "goal_channel_rule_is_advisory": True,
         "rule_conflicts_with_delta_L": conflict,
+        "scoring_stop": stop,
+        "models_not_scored": skipped,
+        "agnostic_items_per_game": agnostic_per_game,
+        "agnostic_items_supply_estimate": round(agnostic_per_game * C.CONFIRMATORY_GAMES),
         "exclusions": {"failures": exclusion_counts(transitions), "successes": success_exclusion_counts(transitions)},
         "reports": reports,
     }
@@ -777,23 +881,35 @@ def run_pilotA_score(cfg: dict) -> int:
         yaml.dump({"ELIGIBLE_SET_TARGET": target_n}, f)
     write_json(d / "metrics.json", cal)
     summary = {
-        tag: {k: rep["goal_agnostic"][k] for k in ("n_items", "n_games", "delta_p_pp", "delta_p_ci", "delta_L_nats", "delta_L_ci")}
+        tag: {k: rep["goal_agnostic"][k] for k in ("n_items", "n_games", "delta_p_pp", "delta_p_ci", "delta_L_nats",
+                                                    "delta_L_ci", "delta_L_first_nats", "icc_L", "sd_L")}
+        | {"A": rep["A"]["A"], "n_for_80pct_power": rep["n_for_80pct_power"]}
         for tag, rep in reports.items()
     }
     sensitivity = {
         tag: {"n_flagged": rep["with_shared_location"]["n_flagged"],
               "delta_L_nats": rep["with_shared_location"]["goal_agnostic"]["delta_L_nats"],
-              "A": rep["with_shared_location"]["A"]}
+              "A": rep["with_shared_location"]["A"]["A"]}
         for tag, rep in reports.items()
     }
     write_run_report(run_id, "pilotA_score", cal)
-    write_status(
-        run_id,
-        f"PILOT_RULE_GOAL_CHANNEL={'fired' if fired else 'not fired'}; ELIGIBLE_SET_TARGET={target_n}\n"
-        f"rule conflicts with ΔL on: {conflict or 'none'}\n{summary}\nsensitivity with shared_location items: {sensitivity}",
-        reported="rule output",
+    body = (
+        f"{'STOP: ' + ', '.join(stop) + ' — scoring agreement on determined failures below ' + str(C.SCORING_STOP_FAILURES_MIN) + chr(10) if stop else ''}"
+        f"PILOT_RULE_GOAL_CHANNEL (advisory) as filed in Δp: {'fired' if fired else 'not fired'}; "
+        f"in nats: {'fired' if fired_nats else 'not fired'}; ELIGIBLE_SET_TARGET={target_n}\n"
+        f"rule conflicts with ΔL on: {conflict or 'none'}\n{summary}\nsensitivity with shared_location items: {sensitivity}"
     )
+    if skipped:
+        # Not finished: a --resume after the weights become available scores only what is missing.
+        write_status(run_id, f"INCOMPLETE — not scored: {skipped}\n{body}", ok=False)
+        return 1
+    write_status(run_id, body, reported="rule output")
     return 0
+
+
+def _format_error_rate(episodes: list[dict]) -> float:
+    steps = [st for e in episodes for st in e["trace"]]
+    return sum(bool(st.get("proposal_format_error") or st.get("executed_format_error")) for st in steps) / max(len(steps), 1)
 
 
 def run_pilotB_headroom(cfg: dict) -> int:
@@ -826,7 +942,7 @@ def run_pilotB_headroom(cfg: dict) -> int:
     recovery = (succ_rate(validity) - succ_rate(none)) / oracle_gain if oracle_gain > 0 else float("nan")
 
     per_condition = {
-        name: {"success": succ_rate(eps), "mean_S": rank_outcome(eps)["mean_S"]}
+        name: {"success": succ_rate(eps), "mean_S": rank_outcome(eps)["mean_S"], "format_error_rate": _format_error_rate(eps)}
         for name, eps in (("none", none), ("oracle_discarded", oracle_d), ("oracle_retained", oracle_r), ("validity_only", validity))
     }
     if any(v != v for v in (gain["estimate"], gain["ci_low"], gain["ci_high"])):
@@ -1031,6 +1147,8 @@ def run_pilotB_retention_minirun(cfg: dict) -> int:
                 "mean_S": rank_outcome(eps)["mean_S"],
                 "mean_n_corrupted": sum(e["n_corrupted"] for e in eps) / max(len(eps), 1),
                 "mean_n_unavailable": sum(e["n_corruption_unavailable"] for e in eps) / max(len(eps), 1),
+                # Rule R reads this arm: replies with no Action line must not pass for agent choices.
+                "format_error_rate": _format_error_rate(eps),
             }
     oracle = [
         e for e in read_jsonl(runs_root() / "pilotB_headroom" / "episodes.jsonl")

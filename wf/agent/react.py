@@ -106,6 +106,11 @@ class AgentClient:
         return act if act in adm else "look"
 
 
+# A reply with no "Action:" line still costs the agent its step; it looks around and the step is
+# logged as a format error, kept apart from invalid actions so it cannot pose as one.
+FORMAT_ERROR_ACTION = "look"
+
+
 def run_episode(
     env: AlfworldClient,
     agent: AgentClient,
@@ -134,8 +139,9 @@ def run_episode(
 
         # Temperature 0: an identical prompt within a step gets the same answer, so ask once.
         replies: dict[str, str] = {}
+        last_raw = [""]  # the agent's unparsed text, so a parsing fault can be read off the trace
 
-        def ask(prediction: str | None = None, proposed: str | None = None) -> str:
+        def ask(prediction: str | None = None, proposed: str | None = None) -> str | None:
             msgs = agent_react_messages(
                 observation=state.observation,
                 history=history,
@@ -146,10 +152,14 @@ def run_episode(
             key = repr(msgs)
             if key not in replies:
                 replies[key] = agent.complete(msgs)
+            last_raw[0] = replies[key]
             return parse_react_action(replies[key])
 
         # 1) proposal without foresight
-        proposal = ask()
+        parsed = ask()
+        proposal_raw = last_raw[0]
+        proposal_format_error = parsed is None
+        proposal = parsed or FORMAT_ERROR_ACTION
 
         # 2) foresight hook
         fs = foresight_prediction(
@@ -167,16 +177,24 @@ def run_episode(
             n_unavailable += 1
 
         # 3) decision-critical: what would the agent do given the true prediction?
-        action_under_true = proposal
+        action_under_true: str | None = proposal
         if foresight.condition == "validity_only":
             verdict = "This action is valid." if fs["proposal_valid"] else "This action is not valid."
             action_under_true = ask(verdict, proposal)
         elif foresight.condition != "none":
             action_under_true = ask(fs["oracle_obs"], proposal)
+        # A malformed reply says nothing about what the agent would do, so it never counts as critical.
+        under_true_format_error = action_under_true is None
 
         # 4) decide with shown prediction; invalid choices are executed and fail in the env
         shown = fs["prediction_shown"]
-        executed = proposal if shown is None else ask(shown, proposal)
+        if shown is None:
+            executed, executed_raw, executed_format_error = proposal, proposal_raw, proposal_format_error
+        else:
+            parsed = ask(shown, proposal)
+            executed_raw = last_raw[0]
+            executed_format_error = parsed is None
+            executed = parsed or FORMAT_ERROR_ACTION
 
         new_state = env.step(state, executed)
         real_obs = new_state.observation
@@ -184,14 +202,19 @@ def run_episode(
         step_rec = {
             "t": t,
             "proposal": proposal,
+            "proposal_raw": proposal_raw,
+            "proposal_format_error": proposal_format_error,
             "proposal_valid": fs["proposal_valid"],
             "prediction_shown": shown,
             "prediction_type": fs["prediction_type"],
             "corruption_unavailable": bool(fs.get("corruption_unavailable")),
             "action_under_true_prediction": action_under_true,
             "executed": executed,
+            "executed_raw": executed_raw,
+            "executed_format_error": executed_format_error,
             "real_obs": real_obs,
-            "decision_critical": action_under_true != proposal,
+            "decision_critical": not under_true_format_error and action_under_true != proposal,
+            "under_true_format_error": under_true_format_error,
             "followed": _followed(fs, executed, proposal),
             "on_expert_path": on_expert_path(env, state, executed),
             "proposal_on_expert_path": on_expert_path(env, state, proposal),

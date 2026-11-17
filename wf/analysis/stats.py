@@ -16,8 +16,9 @@ def paired_conditions(
     primary_condition: str = "aligned",
     control: str = "swapped",
     require_agnostic: bool = True,
+    value: str = "L",
 ) -> list[tuple[str, float, float]]:
-    """(game_id, L_primary, L_control) per item.
+    """(game_id, value_primary, value_control) per item; value is a score field, L by default.
 
     With transitions given, only those items count, restricted to context_determined & true
     failure (& history_goal_agnostic unless require_agnostic=False).
@@ -41,7 +42,10 @@ def paired_conditions(
             if require_agnostic and not meta.get("history_goal_agnostic", True):
                 continue
             gid = meta["game_id"]
-        out.append((gid, conds[primary_condition]["L"], conds[control]["L"]))
+        a, c = conds[primary_condition].get(value), conds[control].get(value)
+        if a is None or c is None or a != a or c != c:  # scores saved before the field existed
+            continue
+        out.append((gid, a, c))
     return out
 
 
@@ -85,29 +89,90 @@ def delta_L(
     return _paired_effect(pairs, lambda a, c: a - c, "delta_L_nats")
 
 
-def asymmetry_A(scores: list[dict], transitions: list[dict]) -> dict[str, Any]:
-    """A = P(sign(L)>0 | true failure) - P(sign(L)<0 | true success) on context_determined."""
-    labelled = asymmetry_items(scores, transitions)
-    return _asymmetry([item for _, item in labelled])
+def delta_L_first(
+    scores: list[dict],
+    transitions: list[dict] | None = None,
+    primary_condition: str = "aligned",
+    control: str = "swapped",
+    require_agnostic: bool = True,
+) -> dict[str, Any]:
+    """Mean change in first-token log-odds, logit(q_first): ΔL without the wording penalty."""
+    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic, value="L_first")
+    return _paired_effect(pairs, lambda a, c: a - c, "delta_L_first_nats")
 
 
-def asymmetry_items(scores: list[dict], transitions: list[dict]) -> list[tuple[str, tuple[bool, float]]]:
-    """(game_id, (true_failure, L)) for aligned-condition context_determined items."""
-    tmeta = {t["id"]: t for t in transitions}
-    out = []
-    for s in scores:
-        meta = tmeta.get(s["transition_id"])
-        if s.get("condition") != "aligned" or not meta or not meta.get("context_determined"):
-            continue
-        out.append((meta["game_id"], ((meta.get("true_obs") or "").strip() == "Nothing happens.", s["L"])))
+def delta_c(
+    scores: list[dict],
+    transitions: list[dict] | None = None,
+    primary_condition: str = "aligned",
+    control: str = "swapped",
+    require_agnostic: bool = True,
+) -> dict[str, Any]:
+    """Mean change in the wording penalty c_hat = logit(q_first) - L between goals.
+
+    ΔL = Δlogit(q_first) - Δc, so ΔL reads as a belief shift only while this stays near 0.
+    """
+    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic, value="c_hat")
+    return _paired_effect(pairs, lambda a, c: a - c, "delta_c_nats")
+
+
+def decision_flip_share(scores: list[dict], transitions: list[dict], require_agnostic: bool = True) -> dict[str, Any]:
+    """Share of items where the goal changes the first-token decision (sign of L_first)."""
+    pairs = paired_conditions(scores, transitions, "aligned", "swapped", require_agnostic, value="L_first")
+    flips = [(a > 0) != (c > 0) for _, a, c in pairs]
+    toward = sum(1 for _, a, c in pairs if a > 0 >= c)
+    return {
+        "share": sum(flips) / len(flips) if flips else float("nan"),
+        "toward_success": toward,
+        "away_from_success": sum(flips) - toward,
+        "n_items": len(flips),
+    }
+
+
+GEN_SUCCESS_CLASSES = ("state_change", "reveal_with_goal", "reveal_without_goal", "info")
+
+
+def gen_says_success(generated_class: str) -> bool | None:
+    """Ŷ_gen: the parsed class of the model's own text. None when the parser could not read it."""
+    if generated_class == "unparseable":
+        return None
+    return generated_class in GEN_SUCCESS_CLASSES
+
+
+def asymmetry_A(generations: list[dict], transitions: list[dict]) -> dict[str, Any]:
+    """A = P(Ŷ_gen=success | true failure) - P(Ŷ_gen=failure | true success), on context_determined.
+
+    RQ1 reads the model's written prediction, as the proposal says, not the sign of L, whose
+    wording penalty pushes long success texts toward "failure" (notes/deviations.md, decision 5).
+    """
+    labelled = asymmetry_items(generations, transitions)
+    out = _asymmetry([item for _, item in labelled])
+    out["n_unparseable"] = sum(
+        1 for g in generations if g.get("condition", "aligned") == "aligned" and g.get("generated_class") == "unparseable"
+    )
     return out
 
 
-def _asymmetry(items: list[tuple[bool, float]]) -> dict[str, Any]:
+def asymmetry_items(generations: list[dict], transitions: list[dict]) -> list[tuple[str, tuple[bool, bool]]]:
+    """(game_id, (true_failure, Ŷ_gen says success)) for aligned, context_determined, parseable items."""
+    tmeta = {t["id"]: t for t in transitions}
+    out = []
+    for g in generations:
+        meta = tmeta.get(g["transition_id"])
+        if g.get("condition", "aligned") != "aligned" or not meta or not meta.get("context_determined"):
+            continue
+        said = gen_says_success(g["generated_class"])
+        if said is None:
+            continue
+        out.append((meta["game_id"], ((meta.get("true_obs") or "").strip() == "Nothing happens.", said)))
+    return out
+
+
+def _asymmetry(items: list[tuple[bool, bool]]) -> dict[str, Any]:
     fail_n = sum(1 for failed, _ in items if failed)
     succ_n = len(items) - fail_n
-    fail_pos = sum(1 for failed, L in items if failed and L > 0)
-    succ_neg = sum(1 for failed, L in items if not failed and L < 0)
+    fail_pos = sum(1 for failed, said in items if failed and said)
+    succ_neg = sum(1 for failed, said in items if not failed and not said)
     fs_rate = fail_pos / fail_n if fail_n else float("nan")
     ff_rate = succ_neg / succ_n if succ_n else float("nan")
     A = fs_rate - ff_rate if fail_n and succ_n else float("nan")
@@ -120,8 +185,8 @@ def _asymmetry(items: list[tuple[bool, float]]) -> dict[str, Any]:
     }
 
 
-def asymmetry_ci(scores: list[dict], transitions: list[dict], seed: int = 0) -> dict[str, float]:
-    labelled = asymmetry_items(scores, transitions)
+def asymmetry_ci(generations: list[dict], transitions: list[dict], seed: int = 0) -> dict[str, float]:
+    labelled = asymmetry_items(generations, transitions)
     return cluster_bootstrap(
         lambda items: _asymmetry(items)["A"],
         [item for _, item in labelled],
@@ -331,3 +396,49 @@ def implied_se_delta_p(icc_val: float, n_items: int, n_games: int, sd: float) ->
     m = n_items / n_games
     deff = 1 + (m - 1) * max(icc_val, 0.0)
     return sd * math.sqrt(deff / n_items)
+
+
+def gen_success_shift(generations: list[dict], transitions: list[dict], require_agnostic: bool = True) -> dict[str, Any]:
+    """Share of true failures the model writes as successes, aligned minus swapped.
+
+    A check that ΔL tracks the model's own written belief: if the goal moves L, it should also
+    move what the model says. Unparseable texts drop out of that item's pair.
+    """
+    tmeta = {t["id"]: t for t in transitions}
+    by_tid: dict[str, dict[str, bool]] = defaultdict(dict)
+    for g in generations:
+        said = gen_says_success(g["generated_class"])
+        if said is not None:
+            by_tid[g["transition_id"]][g.get("condition", "aligned")] = said
+    diffs, games = [], []
+    for tid, conds in by_tid.items():
+        meta = tmeta.get(tid)
+        if meta is None or "aligned" not in conds or "swapped" not in conds or not meta.get("context_determined"):
+            continue
+        if (meta.get("true_obs") or "").strip() != "Nothing happens.":
+            continue
+        if require_agnostic and not meta.get("history_goal_agnostic", True):
+            continue
+        diffs.append(float(conds["aligned"]) - float(conds["swapped"]))
+        games.append(meta["game_id"])
+    mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
+    boot = cluster_bootstrap(mean, diffs, games, seed=0) if diffs else {"ci_low": float("nan"), "ci_high": float("nan")}
+    return {"shift_pp": 100 * mean(diffs), "ci_pp": [100 * boot["ci_low"], 100 * boot["ci_high"]], "n_items": len(diffs)}
+
+
+def scoring_agreement_on_failures(scores: list[dict], generations: list[dict], transitions: list[dict]) -> dict[str, Any]:
+    """Sign of L against Ŷ_gen on aligned, context-determined true failures: the stop rule's population."""
+    tmeta = {t["id"]: t for t in transitions}
+    L = {s["transition_id"]: s["L"] for s in scores if s.get("condition") == "aligned"}
+    agree = n = 0
+    for g in generations:
+        meta = tmeta.get(g["transition_id"])
+        if g.get("condition", "aligned") != "aligned" or not meta or not meta.get("context_determined"):
+            continue
+        if (meta.get("true_obs") or "").strip() != "Nothing happens." or g["transition_id"] not in L:
+            continue
+        said = bool(gen_says_success(g["generated_class"]))  # unparseable counts as not success, as in Tier 0
+        n += 1
+        agree += (L[g["transition_id"]] > 0) == said
+    return {"agreement": agree / n if n else float("nan"), "agree": agree, "n": n}
+

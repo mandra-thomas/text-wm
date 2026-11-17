@@ -128,17 +128,22 @@ def agent_react_messages(
     return messages
 
 
-def parse_react_action(text: str) -> str:
-    """Extract the action from model output; it may sit on the line after "Action:"."""
+def parse_react_action(text: str) -> str | None:
+    """The action on the agent's explicit "Action:" line (or the line after a bare "Action:").
+
+    No such line is a format error, returned as None, never a guess: taking the last line once
+    turned "Expected outcome: ..." copied from retained history into a bogus invalid action.
+    """
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
-    action = lines[-1] if lines else "look"
     for i, line in enumerate(lines):
-        if line.lower().startswith("action:"):
-            action = line.split(":", 1)[1].strip()
+        bare = line.lstrip("*#> ").replace("**", "")
+        if bare.lower().startswith("action:"):
+            action = bare.split(":", 1)[1].strip()
             if not action and i + 1 < len(lines):
                 action = lines[i + 1]
-            break
-    return action.strip("`'\" ").rstrip(".") or "look"
+            action = action.strip("`'\" *").rstrip(".")
+            return action or None
+    return None
 
 
 def condition_task_line(

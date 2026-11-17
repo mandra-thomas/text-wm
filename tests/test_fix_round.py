@@ -447,7 +447,7 @@ def _pair(monkeypatch):
 
 def test_a_non_finite_score_stops_the_run(monkeypatch):
     scorer = _pair(monkeypatch)
-    monkeypatch.setattr(scorer, "_teacher_force_logprob", lambda m, c: (float("nan"), 1))
+    monkeypatch.setattr(scorer, "_teacher_force_logprob", lambda m, c: (float("nan"), 1, float("nan"), "x"))
     with pytest.raises(ValueError, match="non-finite"):
         scorer.score_pair("t", "aligned", [], "a", "b")
 

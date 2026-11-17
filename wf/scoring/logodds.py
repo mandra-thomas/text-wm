@@ -32,6 +32,27 @@ class ScoreResult:
     p_success: float
     n_tokens_plus: int
     n_tokens_minus: int
+    # First token of each text only ("You" vs "Nothing"): the belief without the wording penalty.
+    logp_first_plus: float = float("nan")
+    logp_first_minus: float = float("nan")
+    # The first token as the model saw it after the chat template, decoded, to confirm what was scored.
+    first_token_plus: str = ""
+    first_token_minus: str = ""
+
+    @property
+    def L_first(self) -> float:
+        """logit(q_first), q_first = P(t+) / (P(t+) + P(t-))."""
+        return self.logp_first_plus - self.logp_first_minus
+
+    @property
+    def first_mass(self) -> float:
+        """P(t+) + P(t-): how much of the next-token mass the two-way q_first actually covers."""
+        return math.exp(self.logp_first_plus) + math.exp(self.logp_first_minus)
+
+    @property
+    def c_hat(self) -> float:
+        """Wording penalty estimate, logit(q_first) - L."""
+        return self.L_first - self.L
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -44,6 +65,13 @@ class ScoreResult:
             "p_success": self.p_success,
             "n_tokens_plus": self.n_tokens_plus,
             "n_tokens_minus": self.n_tokens_minus,
+            "logp_first_plus": self.logp_first_plus,
+            "logp_first_minus": self.logp_first_minus,
+            "L_first": self.L_first,
+            "first_token_plus": self.first_token_plus,
+            "first_token_minus": self.first_token_minus,
+            "first_mass": self.first_mass,
+            "c_hat": self.c_hat,
         }
 
 
@@ -82,6 +110,19 @@ class LogoddsScorer:
         )
         self._model.eval()
 
+    def close(self) -> None:
+        """Free the GPU before the next model loads; one A100 holds one 8B model at a time."""
+        self._model = None
+        self._tok = None
+        if not self.mock:
+            import gc
+
+            import torch
+
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
     def _mock_prefer_success(self, prompt_messages_or_text: Any) -> bool:
         """Shared mock bias so free_generate and sign(L) agree (Tier 0.6)."""
         h = hashlib.sha256(repr(prompt_messages_or_text).encode()).hexdigest()
@@ -96,7 +137,8 @@ class LogoddsScorer:
             enable_thinking=False,
         )
 
-    def _teacher_force_logprob(self, messages: list[dict[str, str]], candidate: str) -> tuple[float, int]:
+    def _teacher_force_logprob(self, messages: list[dict[str, str]], candidate: str) -> tuple[float, int, float, str]:
+        """(log p of the whole candidate, its token count, log p of its first token, that token decoded)."""
         if self.mock:
             n_tok = max(1, len(candidate.split()))
             prefer_success = self._mock_prefer_success(messages)
@@ -108,7 +150,7 @@ class LogoddsScorer:
                 logp = -12.0 if not is_noop else -2.0
             # tiny stable jitter from candidate text
             jitter = int(hashlib.sha256(candidate.encode()).hexdigest()[:4], 16) / 0xFFFF
-            return logp - 0.01 * jitter, n_tok
+            return logp - 0.01 * jitter, n_tok, logp / n_tok, candidate.split()[0] if candidate.split() else ""
 
         import torch
 
@@ -130,7 +172,8 @@ class LogoddsScorer:
                 continue
             lp = torch.log_softmax(logits[0, pos], dim=-1)[tid].item()
             logprobs.append(lp)
-        return float(sum(logprobs)), len(logprobs)
+        first = self._tok.decode(cand_ids[0][:1]) if cand_ids.shape[1] else ""
+        return float(sum(logprobs)), len(logprobs), (logprobs[0] if logprobs else float("nan")), first
 
     def score_pair(
         self,
@@ -145,8 +188,8 @@ class LogoddsScorer:
         if key in self._cache:
             return self._cache[key]
 
-        logp_plus, n_plus = self._teacher_force_logprob(messages, o_plus)
-        logp_minus, n_minus = self._teacher_force_logprob(messages, o_minus)
+        logp_plus, n_plus, first_plus, tok_plus = self._teacher_force_logprob(messages, o_plus)
+        logp_minus, n_minus, first_minus, tok_minus = self._teacher_force_logprob(messages, o_minus)
         L = logp_plus - logp_minus
         if not math.isfinite(L):
             raise ValueError(f"non-finite L for {transition_id}/{condition} on {self.model_tag}: {L}")
@@ -160,6 +203,10 @@ class LogoddsScorer:
             p_success=sigmoid(L),
             n_tokens_plus=n_plus,
             n_tokens_minus=n_minus,
+            logp_first_plus=first_plus,
+            logp_first_minus=first_minus,
+            first_token_plus=tok_plus,
+            first_token_minus=tok_minus,
         )
         self._cache[key] = result
         return result

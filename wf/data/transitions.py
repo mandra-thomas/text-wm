@@ -376,3 +376,21 @@ def success_exclusion_counts(transitions: Iterable[dict]) -> dict[str, int]:
             continue
         counts[reason] = counts.get(reason, 0) + 1
     return counts
+
+
+def determination_reason(t: dict) -> str:
+    """Which single fact decides this failure, for the context_determined decision."""
+    facts = history_facts(t["history_text"])
+    if not t["context_determined"]:
+        return "not_determined"
+    m = re.fullmatch(r"(?:take|move|open|close|heat|cool|clean) .*?(?:from |to |with )?([a-z]+ \d+)", t["action"])
+    receptacle = m[1] if m else None
+    if receptacle and facts.location != receptacle:
+        if facts.location is None:
+            return "away_from_receptacle_never_moved"
+        return "away_from_receptacle"
+    if t["action"].startswith("take") and facts.holding:
+        return "hands_full"
+    if t["action"].startswith(("move", "heat", "cool", "clean")):
+        return "not_holding_object"
+    return "contents_or_open_state"

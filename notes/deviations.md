@@ -4,12 +4,33 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 
 ## Still open
 
-Numbers match the team's decision list. Settle 4, 5 and 6 before anyone reads Pilot A results.
+- **Decision 6, remaining parts.** Agreed, not built: a generator quota of 150 to 200 failures decided by observed contents or holding state, H1 run on those items (with the pooled number also reported, and the change of carrying items disclosed), and false-success versus false-failure comparisons matched on the deciding fact. H1 also needs the full-state condition for the few-shot models, which the code does not have yet. None of this blocks the pilots.
+- **ScienceWorld fallback.** If Pilot B confirms that perfect foresight barely helps (0.50 vs 0.50 on 20 games so far), `PILOT_RULE_HEADROOM` moves RQ3 to ScienceWorld. No harness exists.
 
-- **Decision 4.** **Metric for the goal-channel futility rule.** The prereg PDF defines the headline as ΔL in nats. `PILOT_RULE_GOAL_CHANNEL` in `PILOT_PROTOCOL.md` uses Δp in percentage points, and Δp compresses when L is far from 0: at L = −6, ΔL = 1.0 gives Δp = 0.42pp. The rule still runs as filed. `pilotA_score` now also reports ΔL and lists any model where the rule fired despite ΔL ≥ 0.5 (`rule_conflicts_with_delta_L`).
-- **Decision 5. How A is calculated.** The proposal has the model write its prediction for RQ1 and notes that text length cancels for ΔL. The code uses the sign of L, where length does not cancel, so long success texts can push A negative. A stays sign(L) until this is decided.
-- **Decision 6.** **How strict `context_determined` should be.** The label now requires a fact in the history, but the agent's location is always known, so `take X from Y` while standing elsewhere counts as determined. Nearly every failure passes on that basis, and shared locations show that basis is not airtight. If the team wants only failures decided by observed contents or holding state, tighten `_failure_determined` in `wf/data/transitions.py`. Successes need no supporting fact, except `go to` arrivals (see below), so the two sides of A are not held to one standard.
-- **Decision 10.** **Pilot rule provenance.** The protocol calls the pilot rules verbatim from the preregistration, but the one-page PDF does not contain them.
+## Decided 2026-11-17
+
+Made before any real Pilot A or Pilot B result existed. Pilot A on the old code produced no results (its folders hold only config files).
+
+| Decision | Outcome |
+| --- | --- |
+| 4. Goal-channel rule | Advisory. Evaluated as filed in Δp and also in nats (fires when every scored model's ΔL upper CI bound is below 0.5). The preregistered RQ2 test runs and is reported whichever way it falls. Δp stays, because the preregistration requires it. |
+| 5. RQ1 measure | A uses Ŷ_gen only, the parsed free generation, as the proposal says. The first-token log-odds, logit(q_first), is reported alongside ΔL as a secondary measure. |
+| 6. `context_determined` | Kept, with disclosure. Every Pilot A result is also split by the fact that decides each failure (`by_reason`, `false_success_by_reason`). See "Still open" for the rest. |
+| 10. Pilot rule provenance | "Pre-specified, not preregistered". See below. |
+| 13. Scoring gate | Continue with disclosure. Tier 0 on `d4fa809` failed at 87/100 and stays FAIL on record. The stop rule, written before resubmitting: Pilot A stops if sign(L) and Ŷ_gen agree on fewer than 90% of its determined true failures, for any few-shot model. Pilot B never waited on this gate in code; the queue dependency is removed. |
+| 14. vLLM prefix cache | Off (`--no-enable-prefix-caching`) for every agent run. Scoring runs in HF transformers, not vLLM, and already repeats exactly. |
+| Pilot A size | 50 games, up from 30, with chained resume jobs so a time limit loses nothing. |
+| Llama-3.1-8B-Instruct | Scored in Pilot A itself (replaces decision 7's later run). The model is gated; if its weights cannot be loaded, Pilot A records it as not scored and stays unfinished, and a resume scores only Llama. |
+
+**Decision 5 in detail.** Write q for the model's probability that the action succeeds in any wording. Since a failure always reads "Nothing happens.", L ≈ logit(q) − c, where c = −log P(o+ | success) ≥ 0 is a wording penalty that grows with every detail of the success text the model cannot guess. So the sign of L reads as "predicts success" only when c ≈ 0, which fails for `go to` texts that list unseen contents: on Tier 0's 100 train items, all 12 successes where the sign of L disagreed with the model's own text were such `go to` items. On context-determined items, the population A uses, A came out 0.24 from Ŷ_gen and 0.22 from the sign of L, but with only 9 determined successes. Each score now also saves the first token of each text, its decoded form (to confirm what follows the chat template), their combined probability `first_mass`, and `c_hat = L_first − L`; Pilot A reports the mean change in c_hat between goals, since ΔL = Δlogit(q_first) − Δc.
+
+**Decision 10 in detail.** All three rules and their thresholds (`FUTILITY_EST_PP`, `FUTILITY_UPPER_PP`, `HEADROOM_MIN_PP`, `RETENTION_MARGIN`) are in commit `e2c1f1f`, made 2026-10-28 12:48:36 and pushed to GitHub at 12:48:43 by the local reflog (confirm on GitHub's activity page). The first ICE job of any kind started at 13:02 that day. `docs/milestone_checkin.tex` names all three rules without thresholds. Suggested wording: "G, H and R were fixed in the project repository (commit `e2c1f1f`, pushed 2026-10-28) before any pilot data existed. They were not part of the filed preregistration. H and R are feasibility gates that select designs; G governs emphasis only, and the preregistered RQ2 test is reported regardless." Rule R reads the retention effect within the false-success (favorable) arm, in steps averaged per game; if it fires, the retained format changes to state persistence, and RQ3 is not dropped. Pilot games come from `train`, so none enter the confirmatory tests on the validation splits.
+
+**Agent action parser.** The parser took the last line of the agent's reply whenever no line began with "Action:". In the retained condition the history shows "Proposed action:" and "Expected outcome:" lines, so a reply copying that pattern could turn "Expected outcome: ..." into the action and count as an invalid proposal. This fits, but has not been shown to cause, the doubled invalid-proposal rate under retained perfect foresight (0.37 vs 0.19 on 20 games). The parser now requires an explicit "Action:" line. A reply without one is a format error: the agent looks around (`look`), the step is flagged (`proposal_format_error`, `executed_format_error`, `under_true_format_error`), it never counts as an invalid proposal or as decision-critical, and Pilot B reports the format-error rate per cell. Every step now saves the agent's raw text (`proposal_raw`, `executed_raw`). Fixed before Pilot B, because rule R reads the retained arm.
+
+**Tool caches.** The ICE home quota (30 GB) was full, mostly a 20 GB uv download cache written by this project's setup on 2026-10-28; it was cleared after confirming no environment links into it. Jobs now keep every tool cache (vLLM, triton, torch inductor, uv, pip, XDG) under the checkout on `/storage`; Hugging Face already used `/storage`.
+
+**Placebo spread, for sample size.** The Qwen3 placebo spread of 4.56 nats is the per-item SD of L under one irrelevant goal minus L under another, over 137 true failures from 20 train games, unclustered. The per-item values were not saved, so ρ cannot be estimated from it. Pilot A estimates ρ on the paired ΔL (`icc_L`) and reports the items needed for 80% power at true effects of 0.5, 0.75 and 1.0 (`n_for_80pct_power`, two-sided α = 0.005, 134 games). Plan on 0.75: the preregistered criterion needs the point estimate itself to reach 0.5, so a true effect of exactly 0.5 meets it about half the time at any n.
 
 ## Decided 2026-11-06
 
@@ -17,8 +38,8 @@ Numbers match the team's decision list. Settle 4, 5 and 6 before anyone reads Pi
 | --- | --- |
 | 1. Mini-run | Held until the calibration fixes below are in |
 | 2. Pilot B memory | 128 GB, because the server may reach the old 64 GB limit |
-| 3. vLLM prefix cache | A test with the cache off runs alongside the pilots; result pending |
-| 7. Llama-3.1-8B-Instruct | A small scoring run on Pilot A's saved items, after Pilot A. Not built yet |
+| 3. vLLM prefix cache | A test with the cache off ran alongside; see decision 14 on 2026-11-17 |
+| 7. Llama-3.1-8B-Instruct | Superseded on 2026-11-17: Llama is scored in Pilot A itself |
 | 8. `STEP_CAP` | Stays 30. A cap of 20 would have lost 2 of the 6 real Qwen3 wins seen, at steps 24 and 25 |
 | 9. Admissible list | Stays for now; revisit with the invalid rate under oracle runs |
 | 11. `ELIGIBLE_SET_TARGET` | No fallback. If no size up to 5,000 reaches SE ≤ 1.5 it reports null, and the team decides then |

@@ -12,6 +12,9 @@ DELTA_L_STRONG_NATS = 1.0  # prereg PDF: reported as a strong effect
 H_FLOOR_PP = 3.0  # cell-level sign claims need |H| >= this in success-rate points
 FUTILITY_EST_PP = 2.0  # pilot goal-channel rule: estimate below this AND ...
 FUTILITY_UPPER_PP = 5.0  # ... 95% CI upper bound below this, on every tested model
+# Decision 4 (2026-11-17): the goal-channel rule is advisory and also read in nats, the prereg's
+# headline scale: it "fires" when every scored model's ΔL 95% CI upper bound is below this.
+FUTILITY_UPPER_NATS = 0.5
 HEADROOM_MIN_PP = 5.0  # oracle must beat none by this in the pilot, else RQ3 -> ScienceWorld
 HEADROOM_RECHECK_GAMES = 100  # borderline headroom triggers a recheck before moving
 CORRUPTIONS_PER_EPISODE_TARGET = 3
@@ -26,6 +29,12 @@ ENV_STEP_LIMIT = 50  # ALFWorld ends every episode here (max_nb_steps_per_episod
 # Engineering thresholds — may be tuned, changes logged in STATUS.md
 MAX_UNPARSEABLE = 0.05
 SCORING_AGREEMENT_MIN = 0.90
+# Decision 13 (2026-11-17): Pilot A stops if sign(L) and the model's own text agree on fewer
+# than this share of determined true failures, the population RQ2 scores.
+SCORING_STOP_FAILURES_MIN = 0.90
+# Sample-size planning for ΔL: two-sided alpha 0.005 (Holm's first step at 0.01, two models), power 0.80.
+POWER_Z_ALPHA = 2.807
+POWER_Z_BETA = 0.842
 CONSUMPTION_MIN = 0.10  # decision-critical rate below this => stop and report
 BOOTSTRAP_RESAMPLES = 2000
 PERMUTATIONS = 1000
@@ -34,6 +43,7 @@ RNG_SEED = 20260924
 # Model IDs
 AGENT_MODEL = "Qwen/Qwen3-8B"
 WM_FEWSHOT_MODEL = "Qwen/Qwen3-8B"
+WM_FEWSHOT_LLAMA = "meta-llama/Llama-3.1-8B-Instruct"  # co-primary (prereg); gated on Hugging Face
 WM_FT_QWEN = "X1AOX1A/WorldModel-Alfworld-Qwen2.5-7B"
 WM_FT_LLAMA = "X1AOX1A/WorldModel-Alfworld-Llama3.1-8B"
 TRANSITION_DATASET = "X1AOX1A/LLMasWorldModels"

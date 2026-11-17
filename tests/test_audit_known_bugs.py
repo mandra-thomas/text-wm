@@ -343,7 +343,11 @@ def test_prediction_names_the_action_it_describes(isolated_foresight):
     ("Thought: x\nAction: open drawer 1", "open drawer 1"),
     ("Thought: x\nAction:\nopen drawer 1", "open drawer 1"),
     ("Thought: x\nAction: open drawer 1.", "open drawer 1"),
-    ("", "look"),
+    ("Thought: x\n**Action:** open drawer 1", "open drawer 1"),
+    ("", None),
+    # Copied retained-history lines with no Action line: a format error, not an action.
+    ("Thought: x\nProposed action: take mug 1 from drawer 1\nExpected outcome: You pick up the mug 1.", None),
+    ("open drawer 1", None),
 ])
 def test_parse_react_action(text, action):
     assert parse_react_action(text) == action
@@ -437,7 +441,8 @@ def test_interaction_ci_brackets_the_point_estimate():
 
 def test_asymmetry_is_computable_once_successes_are_scored():
     items = [_failure("f", "g1", True), {**_failure("s", "g1", True), "true_obs": "You open it."}]
-    scores = [{"transition_id": "f", "condition": "aligned", "L": 1.0},
-              {"transition_id": "s", "condition": "aligned", "L": -1.0}]
-    out = asymmetry_A(scores, items)
+    # The model writes "success" for the failure and "Nothing happens." for the success.
+    gens = [{"transition_id": "f", "condition": "aligned", "generated_class": "state_change"},
+            {"transition_id": "s", "condition": "aligned", "generated_class": "noop"}]
+    out = asymmetry_A(gens, items)
     assert out["false_success_rate"] == 1.0 and out["false_failure_rate"] == 1.0 and out["A"] == 0.0

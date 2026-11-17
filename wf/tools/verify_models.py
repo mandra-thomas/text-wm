@@ -201,6 +201,7 @@ def _agent_summary(episodes: list[dict]) -> dict:
         "mean_S": rank_outcome(episodes)["mean_S"],
         "mean_steps": sum(e["steps"] for e in episodes) / len(episodes),
         "invalid_proposal_rate": sum(not s["proposal_valid"] for s in steps) / max(len(steps), 1),
+        "format_error_rate": sum(bool(s.get("proposal_format_error")) for s in steps) / max(len(steps), 1),
         "noop_rate": sum(s["real_obs"].strip() == NOOP for s in steps) / max(len(steps), 1),
         "not_admissible_executed": sum(s["real_obs"].strip() == NOOP and s["executed"] == s["proposal"] for s in steps) / max(len(steps), 1),
         "decision_critical_rate": sum(bool(s["decision_critical"]) for s in steps) / max(len(steps), 1),

@@ -26,6 +26,7 @@ from wf.data.transitions import (
     exclusion_counts,
     filter_pilot_a_items,
     history_facts,
+    determination_reason as _determination_reason,
     main_test_items,
 )
 from wf.env.replay import history_text_from_state, replay, step_counterfactual
@@ -264,24 +265,6 @@ def check_games(client: AlfworldClient, games: list[str], contexts: list[str] | 
         if checkpoint:  # a time limit must not cost the games already done
             checkpoint(summary(done))
     return summary(len(games))
-
-
-def _determination_reason(t: dict) -> str:
-    """Which single fact decides this failure, for the context_determined decision."""
-    facts = history_facts(t["history_text"])
-    if not t["context_determined"]:
-        return "not_determined"
-    m = re.fullmatch(r"(?:take|move|open|close|heat|cool|clean) .*?(?:from |to |with )?([a-z]+ \d+)", t["action"])
-    receptacle = m[1] if m else None
-    if receptacle and facts.location != receptacle:
-        if facts.location is None:
-            return "away_from_receptacle_never_moved"
-        return "away_from_receptacle"
-    if t["action"].startswith("take") and facts.holding:
-        return "hands_full"
-    if t["action"].startswith(("move", "heat", "cool", "clean")):
-        return "not_holding_object"
-    return "contents_or_open_state"
 
 
 def check_winning(client: AlfworldClient, games: list[str], cap: int, checkpoint=None) -> dict:

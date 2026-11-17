@@ -34,6 +34,10 @@ trap cleanup EXIT
 
 start_alfworld_server
 
+# Tier 0's last stage never ran (Tier 0 stopped at its scoring gate). Minutes long, server only;
+# its result is a covariate label, so a failure here must not hold up Pilot A.
+run_wf t0_expert_labels || echo "WARN: t0_expert_labels failed; see runs/t0_expert_labels/STATUS.md"
+
 echo "=== Phase A: vLLM for pilotA_transitions ==="
 start_vllm
 run_wf pilotA_transitions
