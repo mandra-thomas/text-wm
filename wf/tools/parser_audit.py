@@ -21,12 +21,13 @@ from wf import constants as C
 from wf.analysis.stats import gen_says_success
 
 # How many rows each kind of reply gets. The hard cases are over-sampled on purpose.
+# Exact "Nothing happens." is one string, so it needs only a token presence.
 STRATA = {
-    "noop_paraphrase": 30,
-    "success_paraphrase": 15,
-    "unparseable": 15,
-    "templated_success": 25,
-    "noop": 15,
+    "noop_paraphrase": 35,
+    "success_paraphrase": 20,
+    "unparseable": 20,
+    "templated_success": 23,
+    "noop": 2,
 }
 TEMPLATED_SUCCESS = ("state_change", "reveal_with_goal", "reveal_without_goal", "info")
 FEWSHOT_MODELS = ("qwen3-8b-fewshot", "llama3.1-8b-fewshot")
@@ -51,18 +52,27 @@ def export(gens_path: Path, transitions_path: Path, out_csv: Path, seed: int = C
     picked: list[dict] = []
     seen_text: set[str] = set()
     for stratum, n in STRATA.items():
-        for model in FEWSHOT_MODELS:  # half from each few-shot model where the stratum allows
-            pool = [g for g in gens if g["model"] == model and _stratum(g["generated_class"]) == stratum]
-            rng.shuffle(pool)
-            want = n // 2 + (n % 2 if model == FEWSHOT_MODELS[0] else 0)
-            for g in pool:
-                if want == 0:
-                    break
-                if g["generated"] in seen_text:
+        pools = {}
+        for model in FEWSHOT_MODELS:
+            pools[model] = [g for g in gens if g["model"] == model and _stratum(g["generated_class"]) == stratum]
+            rng.shuffle(pools[model])
+
+        def take(model: str, want: int) -> int:
+            got = 0
+            while got < want and pools[model]:
+                g = pools[model].pop()
+                if g["generated"] in seen_text:  # distinct texts only
                     continue
                 seen_text.add(g["generated"])
                 picked.append({**g, "stratum": stratum})
-                want -= 1
+                got += 1
+            return got
+
+        # Half from each few-shot model; a model that runs out leaves its share to the other.
+        first, second = FEWSHOT_MODELS
+        got = take(first, n - n // 2)
+        got += take(second, n - got)
+        take(first, n - got)
     rng.shuffle(picked)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     key = out_csv.with_name(out_csv.stem + "_key.jsonl")

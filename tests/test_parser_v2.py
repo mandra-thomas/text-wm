@@ -152,3 +152,14 @@ def test_reparse_recomputes_pilot_a_from_saved_text(monkeypatch, tmp_path):
     saved = [json.loads(x) for x in (tmp_path / "pilotA_reparse" / "generations.jsonl").read_text().splitlines()]
     assert {g["generated_class_v1"] for g in saved} == {"unparseable", "state_change"}
     assert "REPORTED (parser v2 re-read" in (tmp_path / "pilotA_reparse" / "STATUS.md").read_text().splitlines()[0]
+
+
+def test_audit_tops_up_from_the_other_model(tmp_path):
+    g, t = _gens(tmp_path)
+    gens = [json.loads(x) for x in g.read_text().splitlines()]
+    gens = [x for x in gens if not (x["model"] == "qwen3-8b-fewshot" and x["generated_class"] == "success_paraphrase")]
+    g.write_text("\n".join(json.dumps(x) for x in gens))
+    key = parser_audit.export(g, t, tmp_path / "audit.csv")
+    rows = [json.loads(x) for x in key.read_text().splitlines()]
+    assert sum(r["stratum"] == "success_paraphrase" for r in rows) == parser_audit.STRATA["success_paraphrase"]
+    assert len(rows) == sum(parser_audit.STRATA.values())
