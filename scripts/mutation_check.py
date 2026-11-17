@@ -170,6 +170,11 @@ MUTANTS = [
     ("2026-11-17 headroom gates again", "wf/runs.py", "    return 1 if broken else 0\n", "    return 1 if broken else RULE_STOP_EXIT if summary['oracle_gain_pp']['estimate'] < C.HEADROOM_MIN_PP else 0\n"),
     ("2026-11-17 old headroom stop blocks", "wf/runs.py", ' and "PILOT_RULE_HEADROOM" not in _status_line(dep)', ""),
     ("2026-11-17 eligibility skips consumption", "wf/runs.py", '    require_passed(run_id, cfg, "pilotB_consumption")\n', ""),
+    ("2026-11-17 parser ignores failure wording", "wf/scoring/parser.py", "    if _FAIL_ANYWHERE.search(first) or _FAIL_START.match(first):\n        return \"noop_paraphrase\"\n", ""),
+    ("2026-11-17 paraphrased success not counted", "wf/analysis/stats.py", ', "info", "success_paraphrase")', ', "info")'),
+    ("2026-11-17 Pilot A keeps the old parser", "wf/runs.py", '"generated_class": parse_prediction(text, t.get("goal_object")),', '"generated_class": parse_observation(text, t.get("goal_object")),'),
+    ("2026-11-17 audit shows the parser label", "wf/tools/parser_audit.py", 'w.writerow([i, actions.get(g["transition_id"], ""), g["generated"], "", ""])', 'w.writerow([i, actions.get(g["transition_id"], ""), g["generated"], parser_label(g["generated_class"]), ""])'),
+    ("2026-11-17 audit ignores failure-as-success", "wf/tools/parser_audit.py", "                        and not paraphrase_opposite)", "                        )"),
     ("2026-11-17 steps gain sign flipped", "wf/analysis/stats.py", "[a[g] - b[g] for g in games],\n        games,\n        seed=seed,\n    )\n\n\ndef H_success_points", "[b[g] - a[g] for g in games],\n        games,\n        seed=seed,\n    )\n\n\ndef H_success_points"),
 ]
 

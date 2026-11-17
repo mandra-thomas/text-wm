@@ -129,7 +129,7 @@ def decision_flip_share(scores: list[dict], transitions: list[dict], require_agn
     }
 
 
-GEN_SUCCESS_CLASSES = ("state_change", "reveal_with_goal", "reveal_without_goal", "info")
+GEN_SUCCESS_CLASSES = ("state_change", "reveal_with_goal", "reveal_without_goal", "info", "success_paraphrase")
 
 
 def gen_says_success(generated_class: str) -> bool | None:

@@ -8,6 +8,7 @@ import os
 import random
 import statistics
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Callable
 
@@ -30,6 +31,7 @@ from wf.analysis.stats import (
     delta_L,
     delta_L_first,
     delta_p,
+    gen_says_success,
     gen_success_shift,
     icc,
     implied_se_delta_p,
@@ -56,7 +58,7 @@ from wf.env.expert import expert_available, label_action
 from wf.env.replay import replay, step_counterfactual
 from wf.env.server import AlfworldClient
 from wf.scoring.logodds import LogoddsScorer, build_messages, score_transition
-from wf.scoring.parser import parse_observation
+from wf.scoring.parser import parse_observation, parse_prediction
 from wf.util import (
     REPO_ROOT,
     append_jsonl,
@@ -543,10 +545,10 @@ def run_t0_scoring_agreement(cfg: dict) -> int:
     for it in items:
         rec = done.get(it["id"])
         if rec is None:
-            gen_cls = parse_observation(scorer.free_generate(build_messages(it, "aligned")))
+            gen_cls = parse_prediction(scorer.free_generate(build_messages(it, "aligned")))
             sc = score_transition(scorer, it, "aligned")
             assert sc is not None
-            gen_success = gen_cls != "noop" and gen_cls != "unparseable"
+            gen_success = bool(gen_says_success(gen_cls))
             rec = {**sc.to_dict(), "generated_class": gen_cls, "agree": (sc.L > 0) == gen_success}
             append_jsonl(d / "scoring.jsonl", [rec])
         agree += rec["agree"]
@@ -719,6 +721,47 @@ PILOT_A_MODELS = [
 ]
 
 
+def _pilotA_item_sets(transitions: list[dict]) -> dict[str, list[dict]]:
+    """The item sets Pilot A scores and analyses, built the same way for scoring and for re-parsing."""
+    eligible = filter_pilot_a_items(transitions)
+    # True successes get the aligned condition only, for A: false-failure needs them.
+    all_successes = [
+        t for t in transitions
+        if t.get("context_determined") and t.get("candidates")
+        and (t.get("true_obs") or "").strip() != "Nothing happens."
+        and t.get("outcome_class") != "unparseable"
+    ]
+    # The aligned goal must be one the action's success would advance (prereg).
+    targeted = [t for t in eligible if t.get("targets_goal_object")]
+    return {
+        "eligible": eligible,
+        "all_successes": all_successes,
+        "successes": main_test_items(all_successes),
+        "agnostic_all": [t for t in targeted if t.get("history_goal_agnostic")],
+        "agnostic": primary_items(eligible),
+        "revealing": main_test_items(t for t in targeted if not t.get("history_goal_agnostic")),
+    }
+
+
+def _generation_report(gens: list[dict], scores: list[dict], sets: dict[str, list[dict]]) -> dict:
+    """Everything Pilot A reads from the model's own text (Ŷ_gen), so a parser fix can recompute it."""
+    failures = main_test_items(sets["eligible"])
+    everything = failures + sets["successes"]
+    return {
+        # Decision 5: RQ1 reads the model's own text (Ŷ_gen), never the sign of L.
+        "A": asymmetry_A(gens, everything),
+        "A_ci": asymmetry_ci(gens, everything, seed=C.RNG_SEED),
+        "false_success_by_reason": _false_success_by_reason(gens, failures),
+        # Checks that ΔL reflects belief: does the goal change what the model writes?
+        "gen_success_shift": gen_success_shift(gens, sets["agnostic"]),
+        "scoring_agreement_failures": scoring_agreement_on_failures(scores, gens, failures),
+        "with_shared_location": {
+            "n_flagged": len(sets["agnostic_all"]) - len(sets["agnostic"]),
+            "A": asymmetry_A(gens, sets["eligible"] + sets["all_successes"]),
+        },
+    }
+
+
 def run_pilotA_score(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
@@ -732,22 +775,11 @@ def run_pilotA_score(cfg: dict) -> int:
     if not transitions:
         write_status(run_id, f"No transitions at {src}", ok=False)
         return 1
-    eligible = filter_pilot_a_items(transitions)
-    # True successes get the aligned condition only, for A: false-failure needs them.
-    all_successes = [
-        t for t in transitions
-        if t.get("context_determined") and t.get("candidates")
-        and (t.get("true_obs") or "").strip() != "Nothing happens."
-        and t.get("outcome_class") != "unparseable"
-    ]
-    successes = main_test_items(all_successes)
+    sets = _pilotA_item_sets(transitions)
+    eligible, all_successes, agnostic = sets["eligible"], sets["all_successes"], sets["agnostic"]
+    agnostic_all, revealing = sets["agnostic_all"], sets["revealing"]
     conditions = ["aligned", "swapped", "absent", "committed", "candidate"]
     models = PILOT_A_MODELS
-    # The aligned goal must be one the action's success would advance (prereg).
-    targeted = [t for t in eligible if t.get("targets_goal_object")]
-    agnostic_all = [t for t in targeted if t.get("history_goal_agnostic")]
-    agnostic = primary_items(eligible)
-    revealing = main_test_items(t for t in targeted if not t.get("history_goal_agnostic"))
     bins = {
         "0": lambda n: n == 0,
         "1-3": lambda n: 1 <= n <= 3,
@@ -792,14 +824,12 @@ def run_pilotA_score(cfg: dict) -> int:
                 continue
             text = scorer.free_generate(build_messages(t, cond, ft_prompt=ft))
             rec = {"model": tag, "transition_id": t["id"], "condition": cond, "game_id": t["game_id"],
-                   "generated": text, "generated_class": parse_observation(text, t.get("goal_object")),
+                   "generated": text, "generated_class": parse_prediction(text, t.get("goal_object")),
                    "item_hash": hashes[t["id"]]}
             append_jsonl(d / "generations.jsonl", [rec])
             gens.append(rec)
         scorer.close()
-        everything = main_test_items(eligible) + successes
         core = _effect(scores, agnostic)
-        agreement = scoring_agreement_on_failures(scores, gens, main_test_items(eligible))
         reasons = sorted({determination_reason(t) for t in agnostic})
         reports[tag] = {
             "goal_agnostic": core,
@@ -811,21 +841,11 @@ def run_pilotA_score(cfg: dict) -> int:
             # Decision 6: which fact decides each failure, so a reader can see where an effect lives.
             "by_reason": {r: _effect(scores, [t for t in agnostic if determination_reason(t) == r]) for r in reasons},
             "committed_vs_candidate": _effect(scores, agnostic, primary="committed", control="candidate"),
-            # Decision 5: RQ1 reads the model's own text (Ŷ_gen), never the sign of L.
-            "A": asymmetry_A(gens, everything),
-            "A_ci": asymmetry_ci(gens, everything, seed=C.RNG_SEED),
-            "false_success_by_reason": _false_success_by_reason(gens, main_test_items(eligible)),
-            # Checks that ΔL reflects belief: does the goal change what the model writes, or its decision?
-            "gen_success_shift": gen_success_shift(gens, agnostic),
+            **_generation_report(gens, scores, sets),
             "decision_flip": decision_flip_share(scores, agnostic),
-            "scoring_agreement_failures": agreement,
-            # Sensitivity check, not a primary result: see notes/deviations.md
-            "with_shared_location": {
-                "n_flagged": len(agnostic_all) - len(agnostic),
-                "goal_agnostic": _effect(scores, agnostic_all),
-                "A": asymmetry_A(gens, eligible + all_successes),
-            },
         }
+        # Sensitivity check, not a primary result: see notes/deviations.md
+        reports[tag]["with_shared_location"]["goal_agnostic"] = _effect(scores, agnostic_all)
         reports[tag]["implied_se_pp"] = {
             n: implied_se_delta_p(core["icc_p"], n, C.CONFIRMATORY_GAMES, core["sd_p"]) for n in (1000, 2000, 3000)
         }
@@ -1185,6 +1205,63 @@ def run_pilotB_retention_minirun(cfg: dict) -> int:
     return 0
 
 
+def run_pilotA_reparse(cfg: dict) -> int:
+    """Re-read Pilot A's saved generations with `parse_prediction`; no model is run (2026-11-17).
+
+    The first parser dropped failure predictions written in the model's own words, so every
+    measure built on Ŷ_gen is recomputed here, before and after, from the same saved text.
+    """
+    run_id = cfg["run_id"]
+    require_filed(run_id)
+    require_passed(run_id, cfg, "pilotA_score")
+    src_t = runs_root() / "pilotA_transitions" / "transitions.jsonl"
+    src_s = runs_root() / "pilotA_score" / "scoring.jsonl"
+    src_g = runs_root() / "pilotA_score" / "generations.jsonl"
+    d = _init_run(run_id, cfg, inputs=(src_t, src_s, src_g))
+    transitions = read_jsonl(src_t)
+    goal_object = {t["id"]: t.get("goal_object") for t in transitions}
+    sets = _pilotA_item_sets(transitions)
+    scores, original = read_jsonl(src_s), read_jsonl(src_g)
+    reparsed = [
+        {**g, "generated_class_v1": g["generated_class"],
+         "generated_class": parse_prediction(g["generated"], goal_object.get(g["transition_id"]))}
+        for g in original
+    ]
+    write_jsonl(d / "generations.jsonl", reparsed)
+
+    per_model = {}
+    for tag in sorted({g["model"] for g in reparsed}):
+        before = [g for g in original if g["model"] == tag]
+        after = [g for g in reparsed if g["model"] == tag]
+        mine = [s for s in scores if s["model"] == tag]
+        per_model[tag] = {
+            "before": _generation_report(before, mine, sets),
+            "after": _generation_report(after, mine, sets),
+            "classes_before": dict(Counter(g["generated_class"] for g in before)),
+            "classes_after": dict(Counter(g["generated_class"] for g in after)),
+        }
+    stop = [
+        f"{tag} {r['after']['scoring_agreement_failures']['agree']}/{r['after']['scoring_agreement_failures']['n']}"
+        for tag, r in per_model.items()
+        if not tag.startswith("w2w")
+        and not r["after"]["scoring_agreement_failures"]["agreement"] >= C.SCORING_STOP_FAILURES_MIN
+    ]
+    metrics = {"per_model": per_model, "scoring_stop_after": stop}
+    write_json(d / "metrics.json", metrics)
+    write_run_report(run_id, "pilotA_reparse", metrics)
+    lines = [
+        f"{tag}: A {r['before']['A']['A']:.3f} -> {r['after']['A']['A']:.3f}; "
+        f"unparseable {r['before']['A']['n_unparseable']} -> {r['after']['A']['n_unparseable']}; "
+        f"written shift {r['before']['gen_success_shift']['shift_pp']:.1f} -> {r['after']['gen_success_shift']['shift_pp']:.1f} pp; "
+        f"agreement {r['before']['scoring_agreement_failures']['agreement']:.3f} -> "
+        f"{r['after']['scoring_agreement_failures']['agreement']:.3f}"
+        for tag, r in per_model.items()
+    ]
+    write_status(run_id, "\n".join(lines) + f"\nscoring stop after re-parse: {stop or 'none'}",
+                 ok=False, reported="parser v2 re-read; not yet audited")
+    return 0
+
+
 RUNNERS: dict[str, Callable[[dict], int]] = {
     "t0_smoke": run_t0_smoke,
     "t0_replay": run_t0_replay,
@@ -1195,6 +1272,7 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "t0_expert_labels": run_t0_expert_labels,
     "pilotA_transitions": run_pilotA_transitions,
     "pilotA_score": run_pilotA_score,
+    "pilotA_reparse": run_pilotA_reparse,
     "pilotB_headroom": run_pilotB_headroom,
     "pilotB_headroom_recheck": run_pilotB_headroom,
     "pilotB_consumption": run_pilotB_consumption,

@@ -53,3 +53,7 @@ CONFIRMATORY_GAMES = 134  # solvable valid_unseen; the game count sample sizes a
 # Serving defaults
 VLLM_BASE_URL_DEFAULT = "http://127.0.0.1:8000/v1"
 ALFWORLD_BASE_URL_DEFAULT = "http://127.0.0.1:36001"
+
+# Parser audit for model-written predictions (2026-11-17), fixed before the audit is read
+PARSER_AUDIT_N = 100
+PARSER_AUDIT_MIN_AGREEMENT = 0.95  # on rows the reader labels S or F; the parser's "?" counts as a miss
