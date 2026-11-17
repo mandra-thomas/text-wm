@@ -15,8 +15,8 @@ FUTILITY_UPPER_PP = 5.0  # ... 95% CI upper bound below this, on every tested mo
 # Decision 4 (2026-11-17): the goal-channel rule is advisory and also read in nats, the prereg's
 # headline scale: it "fires" when every scored model's ΔL 95% CI upper bound is below this.
 FUTILITY_UPPER_NATS = 0.5
-HEADROOM_MIN_PP = 5.0  # oracle must beat none by this in the pilot, else RQ3 -> ScienceWorld
-HEADROOM_RECHECK_GAMES = 100  # borderline headroom triggers a recheck before moving
+HEADROOM_MIN_PP = 5.0  # advisory line for the oracle-over-none success gain; not a gate since 2026-11-17
+HEADROOM_RECHECK_GAMES = 100  # unused since 2026-11-17 (the recheck is skipped)
 CORRUPTIONS_PER_EPISODE_TARGET = 3
 N_SCHEDULES = 3
 # Minimum |Δ mean rank-outcome S| for retained vs discarded on the favorable arm

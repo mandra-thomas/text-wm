@@ -137,12 +137,12 @@ MUTANTS = [
     ("mock records unmarked", "wf/util.py", 'return {**rec, "mock": True} if is_mock() else rec', "return rec"),
     ("real run reads mock records", "wf/util.py", 'if rec.get("mock") and not is_mock():', "if False:"),
     ("resume skips a rule stop", "wf/runs.py", 'return _finished(run_id) and "STOP:" not in _status_line(run_id)', "return _finished(run_id)"),
-    ("stages ignore a rule stop", "wf/runs.py", 'if not problem and "STOP:" in _status_line(dep) and not _already_passed("pilotB_headroom_recheck"):', "if False:"),
+    ("stages ignore a rule stop", "wf/runs.py", 'if (not problem and "STOP:" in _status_line(dep) and "PILOT_RULE_HEADROOM" not in _status_line(dep)', "if (False"),
     ("dependencies not enforced", "wf/runs.py", "    if problem:\n        write_status(run_id, problem, ok=False)\n        raise SystemExit(1)\n", ""),
     ("earlier commits accepted silently", "wf/runs.py", "if any(sha.startswith(c) for c in commits):", "if True:"),
-    ("headroom passes on no data", "wf/runs.py", 'if any(v != v for v in (gain["estimate"], gain["ci_low"], gain["ci_high"])):', "if False:"),
+    ("headroom passes on no data", "wf/runs.py", 'if any(v != v for v in (summary["oracle_gain_pp"]["estimate"], summary["oracle_gain_pp"]["ci_low"],', "if False and ((0,"),
     ("rule stop exits zero", "wf/runs.py", "return 1 if broken else RULE_STOP_EXIT if stop else 0", "return 1 if broken else 0"),
-    ("headroom says PASS", "wf/runs.py", 'reported=None if broken else f"STOP: {rule}" if stop else "rule not fired",\n', "reported=None,\n"),
+    ("headroom says PASS", "wf/runs.py", 'reported=None if broken else "headroom advisory",\n', "reported=None,\n"),
     ("gate counts the broad population", "wf/runs.py", "main_items = primary_items(eligible)", "main_items = main_test_items(eligible)"),
     ("verify job hides a failed check", "wf/tools/verify_real_env.py", "    if failed:\n", "    if False:\n"),
     ("review saved only at the end", "wf/tools/export_review.py", "        append_jsonl(progress, built)\n", ""),
@@ -167,6 +167,10 @@ MUTANTS = [
     ("2026-11-17 raw agent text dropped", "wf/agent/react.py", '            "proposal_raw": proposal_raw,\n', '            "proposal_raw": "",\n'),
     ("2026-11-17 c_hat sign flipped", "wf/scoring/logodds.py", '        return self.L_first - self.L\n', '        return self.L - self.L_first\n'),
     ("2026-11-17 prefix cache back on", "pace/_common.sh", '--no-enable-prefix-caching', '--enable-prefix-caching'),
+    ("2026-11-17 headroom gates again", "wf/runs.py", "    return 1 if broken else 0\n", "    return 1 if broken else RULE_STOP_EXIT if summary['oracle_gain_pp']['estimate'] < C.HEADROOM_MIN_PP else 0\n"),
+    ("2026-11-17 old headroom stop blocks", "wf/runs.py", ' and "PILOT_RULE_HEADROOM" not in _status_line(dep)', ""),
+    ("2026-11-17 eligibility skips consumption", "wf/runs.py", '    require_passed(run_id, cfg, "pilotB_consumption")\n', ""),
+    ("2026-11-17 steps gain sign flipped", "wf/analysis/stats.py", "[a[g] - b[g] for g in games],\n        games,\n        seed=seed,\n    )\n\n\ndef H_success_points", "[b[g] - a[g] for g in games],\n        games,\n        seed=seed,\n    )\n\n\ndef H_success_points"),
 ]
 
 

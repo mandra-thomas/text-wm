@@ -301,15 +301,15 @@ Decisions: apply `PILOT_RULE_GOAL_CHANNEL` (§7); set `ELIGIBLE_SET_TARGET` from
 
 `pilotB_headroom`: 50 train games × {`none`, `oracle/discarded`, `oracle/retained`, `validity_only`}; 1 run each (schedules irrelevant without corruption).
 
-Report: success rate and rank outcome per condition; oracle gain over none with a game-bootstrap CI; validity-only recovery fraction = (validity_only − none) / (oracle − none); retained-oracle minus discarded-oracle (must not be materially negative, meaning its whole CI sits below zero — if it is, the retained format is broken; stop and fix before the mini-run).
+Report: success rate and rank outcome per condition; oracle gain over none with a game-bootstrap CI, in success points and in steps to completion (paired per-game difference in the rank outcome S, failures last; positive means fewer steps); validity-only recovery fraction = (validity_only − none) / (oracle − none); retained-oracle minus discarded-oracle (must not be materially negative, meaning its whole CI sits below zero — if it is, the retained format is broken; stop and fix before the mini-run).
 
-`pilotB_consumption`: from the oracle episodes, the **decision-critical rate** = fraction of steps where `action_under_true_prediction` differs from the no-foresight proposal, and the follow-rate on oracle predictions. If the decision-critical rate is below `CONSUMPTION_MIN` (0.10), stop: the agent is not consuming foresight and the presentation format must be strengthened before any corruption run is meaningful. Report this before proceeding.
+`pilotB_consumption`: from the oracle episodes, the **decision-critical rate** = fraction of steps where `action_under_true_prediction` differs from the no-foresight proposal, and the follow-rate on oracle predictions. This is the proposal's own pilot check ("checks that perfect foresight changes the agent's actions") and the gate for the later stages: `pilotB_eligibility` requires it to pass. It also repeats the advisory headroom numbers. If the decision-critical rate is below `CONSUMPTION_MIN` (0.10), stop: the agent is not consuming foresight and the presentation format must be strengthened before any corruption run is meaningful. Report this before proceeding.
 
 `pilotB_eligibility`: on oracle episodes only, per step, the fraction of proposals that are invalid, corruptible (a success twin exists, so `done` never counts) and valid; expert-path membership among valid proposals; compute `p_favorable`, `p_unfavorable` such that expected realized corruptions per episode match in both arms, at `CORRUPTIONS_PER_EPISODE_TARGET` (3) or the lower of what each arm can reach. Report the corruption mix by action type. Write both to `wf/config/calibrated.yaml` with the derivation.
 
 `pilotB_retention_minirun`: 30 train games × {favorable, unfavorable} × {discarded, retained} × 1 schedule (120 episodes). Report all four cells' rank outcome and success rate, `H_discarded`, `H_retained`, preliminary `I`, realized corruptions per episode per arm, follow-rate on corrupted vs correct predictions, steps lost after each error type, retry rate after unfavorable errors on valid actions.
 
-Decisions: apply `PILOT_RULE_HEADROOM` and `PILOT_RULE_RETAINED_FORMAT` (§7). A borderline or fired headroom rule stops the job with exit code 3. A borderline result runs `pilotB_headroom_recheck` (100 games, `pace/pilotB_recheck.sbatch`), and the later stages wait for it to clear the rule.
+Decisions: report `PILOT_RULE_HEADROOM` (advisory since 2026-11-17, never stops the job) and apply `PILOT_RULE_RETAINED_FORMAT` (§7). The gate is `pilotB_consumption`. `pilotB_headroom_recheck` and `pace/pilotB_recheck.sbatch` are no longer used: the main RQ3 runs measure headroom on 274 games.
 
 ### Tier 3 — only if Pilots A and B finish cleanly
 
@@ -329,8 +329,8 @@ DELTA_L_STRONG_NATS = 1.0       # preregistration PDF: reported as a strong effe
 H_FLOOR_PP = 3.0                # cell-level sign claims need |H| >= this in success-rate points
 FUTILITY_EST_PP = 2.0           # pilot goal-channel rule: estimate below this AND ...
 FUTILITY_UPPER_PP = 5.0         # ... 95% CI upper bound below this, on every tested model
-HEADROOM_MIN_PP = 5.0           # oracle must beat none by this in the pilot, else RQ3 -> ScienceWorld
-HEADROOM_RECHECK_GAMES = 100    # borderline headroom triggers a recheck before moving
+HEADROOM_MIN_PP = 5.0           # advisory line for the oracle-over-none success gain (not a gate since 2026-11-17)
+HEADROOM_RECHECK_GAMES = 100    # unused since 2026-11-17 (the recheck is skipped)
 CORRUPTIONS_PER_EPISODE_TARGET = 3
 N_SCHEDULES = 3
 RETENTION_MARGIN = 1.0          # minimum rank-outcome shift for the trace-line retained format to be
@@ -352,7 +352,7 @@ RNG_SEED = 20260924
 Pilot rules. **These are pre-specified, not preregistered**: the one-page preregistration PDF does not contain them. They were fixed in this repository's first commit (`e2c1f1f`, 2026-10-28 12:48), before any ICE job ran (decision 10 in `notes/deviations.md`). `PILOT_RULE_GOAL_CHANNEL` is **advisory** (decision 4): it decides emphasis and effort only, and the preregistered RQ2 test runs and is reported whichever way the rule falls. It is evaluated as filed in Δ_p and also in nats, where it "fires" when every scored model's ΔL 95% CI upper bound is below `FUTILITY_UPPER_NATS` (0.5).
 
 - **PILOT_RULE_GOAL_CHANNEL** (advisory): if on every tested model the Pilot A Δ_p point estimate < `FUTILITY_EST_PP` and its 95% CI upper bound < `FUTILITY_UPPER_PP`, the goal channel is dropped from the headline; H3 and the validity-oracle decomposition become the headline; RQ2 is reported as a null. A wide interval alone does not fire the rule.
-- **PILOT_RULE_HEADROOM**: if oracle foresight improves ALFWorld success by less than `HEADROOM_MIN_PP` over none in `pilotB_headroom`, RQ3 moves to ScienceWorld before full runs; a borderline result (CI includes the threshold) triggers `pilotB_headroom_recheck` on `HEADROOM_RECHECK_GAMES` games first.
+- **PILOT_RULE_HEADROOM** (advisory since 2026-11-17): reports whether oracle foresight improves ALFWorld success by at least `HEADROOM_MIN_PP` over none in `pilotB_headroom`, plus the gain in steps to completion. It no longer moves RQ3 or stops the job. The proposal's pilot check is whether perfect foresight changes the agent's actions, which `pilotB_consumption` tests; the 5-point success line existed only in the pilot code. As filed, this rule moved RQ3 to ScienceWorld and sent borderline results to a 100-game recheck.
 - **PILOT_RULE_RETAINED_FORMAT**: if in `pilotB_retention_minirun` retention moves the favorable arm's rank outcome by less than `RETENTION_MARGIN`, the retained format switches to *state persistence* (the shown prediction updates the agent's maintained belief lines — inventory, receptacle contents, object states — and stays until a later observation naming the same fact overwrites it) for the full runs.
 
 ---

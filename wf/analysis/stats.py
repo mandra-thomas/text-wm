@@ -327,6 +327,22 @@ def success_gain_ci(better: list[dict], baseline: list[dict], seed: int = 0) -> 
     )
 
 
+def rank_gain_ci(better: list[dict], baseline: list[dict], seed: int = 0) -> dict[str, float]:
+    """Mean per-game difference in the steps-to-completion rank S (failures last), game-bootstrapped.
+
+    Positive means `better` finishes in fewer steps; one unit is one step saved.
+    """
+    a = rank_outcome(better)["per_game_S"]
+    b = rank_outcome(baseline)["per_game_S"]
+    games = sorted(set(a) & set(b))
+    return cluster_bootstrap(
+        lambda xs: sum(xs) / len(xs) if xs else float("nan"),
+        [a[g] - b[g] for g in games],
+        games,
+        seed=seed,
+    )
+
+
 def H_success_points(episodes: list[dict], retention: str) -> float:
     """H in success-rate points, the scale of H_FLOOR_PP."""
     cell = [e for e in episodes if e.get("retention") == retention]

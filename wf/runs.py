@@ -35,6 +35,7 @@ from wf.analysis.stats import (
     implied_se_delta_p,
     interaction_ci,
     pair_permutation,
+    rank_gain_ci,
     rank_outcome,
     scoring_agreement_on_failures,
     success_gain_ci,
@@ -210,7 +211,9 @@ def require_passed(run_id: str, cfg: dict, dep: str) -> None:
         return
     commits = tuple((cfg.get("accept_commits") or {}).get(dep, ()))
     problem = None if _finished(dep, commits) else f"{dep} has not finished cleanly at this commit: {_status_line(dep) or 'no status'}"
-    if not problem and "STOP:" in _status_line(dep) and not _already_passed("pilotB_headroom_recheck"):
+    # PILOT_RULE_HEADROOM is advisory since 2026-11-17, so a headroom stop from older code does not block.
+    if (not problem and "STOP:" in _status_line(dep) and "PILOT_RULE_HEADROOM" not in _status_line(dep)
+            and not _already_passed("pilotB_headroom_recheck")):
         problem = f"{dep} says stop and its recheck has not cleared it: {_status_line(dep)}"
     if problem:
         write_status(run_id, problem, ok=False)
@@ -929,6 +932,34 @@ def run_pilotB_headroom(cfg: dict) -> int:
     ]
     episodes = _run_jobs(d, cfg, client, agent, [(gid, fc, None) for gid in games for fc in conditions])
 
+    summary = _headroom_summary(episodes)
+    if any(v != v for v in (summary["oracle_gain_pp"]["estimate"], summary["oracle_gain_pp"]["ci_low"],
+                            summary["oracle_gain_pp"]["ci_high"])):
+        write_status(run_id, f"oracle gain cannot be computed: {summary['oracle_gain_pp']}\n{summary['per_condition']}", ok=False)
+        return 1
+
+    # "Materially negative": the whole interval sits below zero, not one game's flip.
+    broken = summary["retained_minus_discarded_pp"]["ci_high"] < 0
+    write_run_report(run_id, "pilotB_headroom", summary)
+    write_status(
+        run_id,
+        f"{summary['per_condition']}\noracle_gain={summary['oracle_gain_pp']}\noracle_steps_gain={summary['oracle_steps_gain']}"
+        f"\nrecovery={summary['validity_recovery']}\nretained_minus_discarded={summary['retained_minus_discarded_pp']}"
+        f"\n{summary['rule']}"
+        + ("\nretained-oracle minus discarded-oracle is materially negative — retained format broken; "
+           "stop before mini-run." if broken else ""),
+        ok=False,
+        reported=None if broken else "headroom advisory",
+    )
+    return 1 if broken else 0
+
+
+def _headroom_summary(episodes: list[dict]) -> dict:
+    """What perfect foresight does to success and to steps-to-completion. Reported, never a gate.
+
+    The proposal's pilot check is whether perfect foresight changes the agent's actions
+    (`pilotB_consumption`); the 5-point success line came only from the pilot code (2026-11-17).
+    """
     def cell(cond: str, ret: str | None = None) -> list[dict]:
         return [e for e in episodes if e["condition"] == cond and (ret is None or e.get("retention") == ret)]
 
@@ -937,45 +968,22 @@ def run_pilotB_headroom(cfg: dict) -> int:
 
     none, oracle_d, oracle_r, validity = cell("none"), cell("oracle", "discarded"), cell("oracle", "retained"), cell("validity_only")
     gain = success_gain_ci(oracle_d, none, seed=C.RNG_SEED)
-    retained_minus = success_gain_ci(oracle_r, oracle_d, seed=C.RNG_SEED)
     oracle_gain = succ_rate(oracle_d) - succ_rate(none)
     recovery = (succ_rate(validity) - succ_rate(none)) / oracle_gain if oracle_gain > 0 else float("nan")
-
     per_condition = {
         name: {"success": succ_rate(eps), "mean_S": rank_outcome(eps)["mean_S"], "format_error_rate": _format_error_rate(eps)}
         for name, eps in (("none", none), ("oracle_discarded", oracle_d), ("oracle_retained", oracle_r), ("validity_only", validity))
     }
-    if any(v != v for v in (gain["estimate"], gain["ci_low"], gain["ci_high"])):
-        write_status(run_id, f"oracle gain cannot be computed: {gain}\n{per_condition}", ok=False)
-        return 1
-
-    # PILOT_RULE_HEADROOM; a borderline result gets the 100-game recheck first
-    borderline = gain["ci_low"] <= C.HEADROOM_MIN_PP <= gain["ci_high"]
-    if borderline and run_id != "pilotB_headroom_recheck":
-        rule = f"PILOT_RULE_HEADROOM borderline — run pilotB_headroom_recheck ({C.HEADROOM_RECHECK_GAMES} games) first"
-    elif gain["estimate"] < C.HEADROOM_MIN_PP:
-        rule = "PILOT_RULE_HEADROOM fired — RQ3 moves to ScienceWorld"
-    else:
-        rule = "PILOT_RULE_HEADROOM not fired"
-    stop = rule != "PILOT_RULE_HEADROOM not fired"
-
-    # "Materially negative": the whole interval sits below zero, not one game's flip.
-    broken = retained_minus["ci_high"] < 0
-    write_run_report(
-        run_id,
-        "pilotB_headroom",
-        {**per_condition, "oracle_gain_pp": gain, "validity_recovery": recovery,
-         "retained_minus_discarded_pp": retained_minus, "rule": rule},
-    )
-    write_status(
-        run_id,
-        f"{per_condition}\noracle_gain={gain} recovery={recovery}\nretained_minus_discarded={retained_minus}\n{rule}"
-        + ("\nretained-oracle minus discarded-oracle is materially negative — retained format broken; "
-           "stop before mini-run." if broken else ""),
-        ok=False,
-        reported=None if broken else f"STOP: {rule}" if stop else "rule not fired",
-    )
-    return 1 if broken else RULE_STOP_EXIT if stop else 0
+    below = gain["estimate"] < C.HEADROOM_MIN_PP
+    return {
+        "per_condition": per_condition,
+        "oracle_gain_pp": gain,
+        "oracle_steps_gain": rank_gain_ci(oracle_d, none, seed=C.RNG_SEED),
+        "validity_recovery": recovery,
+        "retained_minus_discarded_pp": success_gain_ci(oracle_r, oracle_d, seed=C.RNG_SEED),
+        "rule": f"PILOT_RULE_HEADROOM advisory (not a gate): oracle gain {gain['estimate']:.1f} pp is "
+                f"{'below' if below else 'at or above'} the {C.HEADROOM_MIN_PP:g}-pp line",
+    }
 
 
 def run_pilotB_consumption(cfg: dict) -> int:
@@ -985,7 +993,8 @@ def run_pilotB_consumption(cfg: dict) -> int:
     # Reuse headroom oracle episodes if present
     src = Path(cfg.get("episodes_path", runs_root() / "pilotB_headroom" / "episodes.jsonl"))
     d = _init_run(run_id, cfg, inputs=(src,) if src.exists() else ())
-    episodes = [e for e in read_jsonl(src) if e.get("condition") == "oracle"]
+    all_episodes = read_jsonl(src)
+    episodes = [e for e in all_episodes if e.get("condition") == "oracle"]
     if not episodes:
         write_status(run_id, f"No oracle episodes at {src}; run pilotB_headroom first", ok=False)
         return 1
@@ -997,13 +1006,18 @@ def run_pilotB_consumption(cfg: dict) -> int:
             follow += int(bool(tr.get("followed")))
     rate = crit / total if total else 0.0
     follow_rate = follow / total if total else 0.0
+    # The proposal's pilot check (perfect foresight changes the agent's actions) is the gate; headroom rides along.
     ok = rate >= C.CONSUMPTION_MIN
-    write_json(d / "metrics.json", {"decision_critical_rate": rate, "follow_rate": follow_rate})
-    write_run_report(run_id, "pilotB_consumption", {"decision_critical_rate": rate, "follow_rate": follow_rate})
+    headroom = _headroom_summary(all_episodes)
+    metrics = {"decision_critical_rate": rate, "follow_rate": follow_rate,
+               "headroom_advisory": {k: headroom[k] for k in ("oracle_gain_pp", "oracle_steps_gain", "rule")}}
+    write_json(d / "metrics.json", metrics)
+    write_run_report(run_id, "pilotB_consumption", metrics)
     write_status(
         run_id,
         f"decision_critical_rate={rate:.3f} follow_rate={follow_rate:.3f} "
-        f"min={C.CONSUMPTION_MIN} — {'PASS' if ok else 'FAIL: strengthen foresight presentation'}",
+        f"min={C.CONSUMPTION_MIN} — {'PASS' if ok else 'FAIL: strengthen foresight presentation'}"
+        f"\noracle_gain={headroom['oracle_gain_pp']}\noracle_steps_gain={headroom['oracle_steps_gain']}\n{headroom['rule']}",
         ok=ok,
     )
     return 0 if ok else 1
@@ -1013,6 +1027,7 @@ def run_pilotB_eligibility(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
     require_passed(run_id, cfg, "pilotB_headroom")
+    require_passed(run_id, cfg, "pilotB_consumption")
     src = Path(cfg.get("episodes_path", runs_root() / "pilotB_headroom" / "episodes.jsonl"))
     d = _init_run(run_id, cfg, inputs=(src,) if src.exists() else ())
     # Corrupted arms run with a prediction on screen, so only oracle episodes show their rates.

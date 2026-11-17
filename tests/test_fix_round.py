@@ -675,17 +675,25 @@ def test_determinism_note_does_not_recommend_a_seed(mock_runs, monkeypatch):
 def test_headroom_never_says_pass_and_a_clear_result_continues(mock_runs, monkeypatch):
     assert _headroom(monkeypatch, mock_runs, _headroom_episodes(0.0, 1.0)) == 0
     first = (mock_runs / "pilotB_headroom" / "STATUS.md").read_text().splitlines()[0]
-    assert "REPORTED (rule not fired)" in first and "PASS" not in first
+    assert "REPORTED (headroom advisory)" in first and "PASS" not in first
 
 
-def test_fired_headroom_stops_the_job_with_its_own_exit_code(mock_runs, monkeypatch):
-    assert _headroom(monkeypatch, mock_runs, _headroom_episodes(0.5, 0.5)) == runs_mod.RULE_STOP_EXIT
-    assert "STOP: PILOT_RULE_HEADROOM" in (mock_runs / "pilotB_headroom" / "STATUS.md").read_text()
+@pytest.mark.parametrize("none, oracle", [(0.5, 0.5), (0.25, 0.5)])  # below the line, and borderline
+def test_headroom_is_advisory_and_never_stops_the_job(mock_runs, monkeypatch, none, oracle):
+    assert _headroom(monkeypatch, mock_runs, _headroom_episodes(none, oracle)) == 0
+    status = (mock_runs / "pilotB_headroom" / "STATUS.md").read_text()
+    assert "STOP:" not in status and "advisory (not a gate)" in status
 
 
-def test_borderline_headroom_stops_the_job(mock_runs, monkeypatch):
-    assert _headroom(monkeypatch, mock_runs, _headroom_episodes(0.25, 0.5)) == runs_mod.RULE_STOP_EXIT
-    assert "borderline" in (mock_runs / "pilotB_headroom" / "STATUS.md").read_text()
+def test_headroom_reports_steps_to_completion(mock_runs, monkeypatch):
+    eps = _headroom_episodes(0.5, 0.5)
+    for e in eps:  # same wins, but perfect foresight finishes in 5 steps instead of 15
+        e["steps"] = 5 if e["condition"] == "oracle" else 15
+    _headroom(monkeypatch, mock_runs, eps)
+    report = (mock_runs / "pilotB_headroom" / "REPORT.md").read_text()
+    assert "oracle_steps_gain" in report
+    gain = runs_mod._headroom_summary(eps)["oracle_steps_gain"]
+    assert gain["estimate"] == pytest.approx(5.0)  # half the games won 10 steps sooner; losses tie
 
 
 def test_headroom_with_no_data_fails_instead_of_passing(mock_runs, monkeypatch):
@@ -699,15 +707,43 @@ def test_a_rule_stop_is_never_skipped_by_resume(real_runs):
     assert runs_mod._already_passed("pilotB_headroom") is False
 
 
-def test_later_stages_wait_for_the_recheck(real_runs):
+def test_an_old_headroom_stop_no_longer_blocks_later_stages(real_runs):
     finished(real_runs, "pilotB_headroom", "REPORTED (STOP: PILOT_RULE_HEADROOM borderline)")
-    with pytest.raises(SystemExit):
-        runs_mod.require_passed("pilotB_consumption", {}, "pilotB_headroom")
-    finished(real_runs, "pilotB_headroom_recheck", "REPORTED (STOP: PILOT_RULE_HEADROOM fired)")
-    with pytest.raises(SystemExit):
-        runs_mod.require_passed("pilotB_consumption", {}, "pilotB_headroom")
-    finished(real_runs, "pilotB_headroom_recheck", "REPORTED (rule not fired)")
     runs_mod.require_passed("pilotB_consumption", {}, "pilotB_headroom")
+
+
+@pytest.mark.parametrize("stage", ["pilotB_consumption", "pilotB_eligibility"])
+def test_later_stages_accept_the_headroom_run_from_28a396d(real_runs, stage):
+    import yaml
+    cfg = yaml.safe_load((Path(runs_mod.__file__).parent / "config" / f"{stage}.yaml").read_text())
+    finished(real_runs, "pilotB_headroom", "REPORTED (STOP: PILOT_RULE_HEADROOM borderline)", sha="28a396d")
+    runs_mod.require_passed(stage, cfg, "pilotB_headroom")
+    with pytest.raises(SystemExit):  # without the config's accept_commits, other commits stay untrusted
+        runs_mod.require_passed(stage, {}, "pilotB_headroom")
+
+
+def test_other_rule_stops_still_block(real_runs):
+    finished(real_runs, "pilotA_score", "REPORTED (STOP: scoring disagrees with generation)")
+    with pytest.raises(SystemExit):
+        runs_mod.require_passed("later", {}, "pilotA_score")
+
+
+def test_eligibility_waits_for_consumption(real_runs):
+    finished(real_runs, "pilotB_headroom", "REPORTED (headroom advisory)")
+    finished(real_runs, "pilotB_consumption", "FAIL")
+    with pytest.raises(SystemExit):
+        runs_mod.run_pilotB_eligibility({"run_id": "pilotB_eligibility"})
+
+
+def test_consumption_gates_on_changed_actions_and_reports_headroom(mock_runs):
+    eps = _headroom_episodes(0.5, 0.5)
+    for e in eps:
+        for step in e["trace"]:
+            step["decision_critical"] = True
+    write_jsonl(mock_runs / "pilotB_headroom" / "episodes.jsonl", eps)
+    assert runs_mod.run_pilotB_consumption({"run_id": "pilotB_consumption"}) == 0
+    status = (mock_runs / "pilotB_consumption" / "STATUS.md").read_text()
+    assert "PASS" in status.splitlines()[0] and "oracle_steps_gain" in status
 
 
 # --- dependencies, resume, provenance --------------------------------------------------------------
