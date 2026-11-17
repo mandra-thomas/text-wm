@@ -1,0 +1,8 @@
+run_id: rq12_transitions
+split: valid_unseen
+# Confirmatory RQ1/RQ2 items: every solvable unseen game. Prereg: n >= 1,000 items from >= 200 states.
+n_games: 134
+step_cap: 12
+min_items: 1000
+min_states: 200
+max_games_per_job: 30  # fresh server every 30 games (memory leak); resume jobs chain

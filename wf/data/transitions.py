@@ -1,6 +1,7 @@
 """Counterfactual transition builder (§4.2)."""
 from __future__ import annotations
 
+import hashlib
 import random
 import re
 from dataclasses import dataclass, field
@@ -219,6 +220,49 @@ def generate_alternatives(
     return list(out.values())
 
 
+def contents_holding_alternatives(
+    facts: HistoryFacts, goal: str, target: str, scene: Scene
+) -> list[tuple[str, str, bool]]:
+    """Every failure the history decides through observed contents, open state or holding state.
+
+    Generated at every visited step, with no sampling (decision 6, 2026-11-17). Which fact
+    actually decides each one is recorded afterwards by `determination_reason`.
+    """
+    alts: list[tuple[str, str, bool]] = []
+    loc = facts.location
+    if loc:
+        seen = facts.contents.get(loc)
+        # contents or open state: the goal object is not where the agent stands, as far as it has seen
+        if loc in facts.closed or (seen is not None and goal not in seen):
+            alts.append((f"take {goal} from {loc}", "validity", True))
+        # hands full: taking anything here while holding something else
+        if facts.holding:
+            for inst in sorted(seen or ()):
+                if inst != facts.holding:
+                    alts.append((f"take {inst} from {loc}", "precondition", inst.rsplit(" ", 1)[0] == goal.rsplit(" ", 1)[0]))
+    if facts.knows_position and facts.holding != goal:
+        # holding: placing or transforming the goal object without holding it
+        if loc:
+            alts.append((f"move {goal} to {loc}", "precondition", True))
+        for verb, tool in (("heat", "microwave 1"), ("cool", "fridge 1"), ("clean", "sinkbasin 1")):
+            if tool in scene.receptacles:
+                alts.append((f"{verb} {goal} with {tool}", "precondition", True))
+        for r in scene.receptacles:
+            if r.rsplit(" ", 1)[0] == target:
+                alts.append((f"move {goal} to {r}", "precondition", True))
+    return alts
+
+
+def _hidden_state(game_id: str, task_line: str) -> str | None:
+    """Word2World's starting hidden state for this game, the full-state condition's input."""
+    from wf.scoring.logodds import world_model_context  # scoring imports stay out of module load
+
+    try:
+        return world_model_context({"game_id": game_id, "task_line": task_line})
+    except (KeyError, ValueError, FileNotFoundError):
+        return None
+
+
 def build_transitions_at_state(
     client: AlfworldClient,
     game_id: str,
@@ -229,6 +273,7 @@ def build_transitions_at_state(
     id_start: int,
     rng_seed: int = 0,
     success_cache: dict | None = None,
+    contents_holding_only: bool = False,
 ) -> list[dict]:
     rng = random.Random(f"{rng_seed}|{game_id}|{state_idx}")
     scene = scan_scene(client, game_id, split)
@@ -236,10 +281,23 @@ def build_transitions_at_state(
     spec = parse_task_line(state.task_line)
     goal_object = spec.goal_object
     hist = history_text_from_state(state)
+    goal = (scene.instances(goal_object) or [f"{goal_object} 1"])[0]
+    exhaustive = contents_holding_alternatives(history_facts(hist), goal, spec.receptacle, scene)
+    alts = exhaustive if contents_holding_only else (
+        generate_alternatives(state, proposal, goal_object, spec.receptacle, scene, rng) + exhaustive
+    )
+    unique: dict[str, tuple[str, str, bool]] = {}
+    for alt in alts:
+        unique.setdefault(alt[0], alt)
+    hidden = _hidden_state(game_id, state.task_line)
+    scene_record = {
+        "scene_receptacles": list(scene.receptacles),
+        "scene_locations": {inst: sorted(places) for inst, places in sorted(scene.locations.items())},
+    }
 
     records: list[dict] = []
     tid = id_start
-    for action, error_type, targets in generate_alternatives(state, proposal, goal_object, spec.receptacle, scene, rng):
+    for action, error_type, targets in unique.values():
         # fresh replay each counterfactual
         h2 = replay(client, game_id, prefix_actions, split=split)
         obs, info = step_counterfactual(h2, action)
@@ -273,6 +331,10 @@ def build_transitions_at_state(
             "on_expert_path": on_expert_path(client, state, action),
             "candidates": None,
         }
+        rec["determination_reason"] = determination_reason(rec) if failed else None
+        rec["hidden_state"] = hidden
+        rec["hidden_state_sha256"] = hashlib.sha256(hidden.encode("utf-8")).hexdigest() if hidden else None
+        rec.update(scene_record)
         attach_candidates(client, rec, success_cache=success_cache)
         if swap_obj is None:
             rec.setdefault("exclusion_reason", "no_swap_object")
@@ -292,7 +354,7 @@ def build_transitions_from_rollout(
     k: int = 2,
     rng_seed: int = 0,
 ) -> list[dict]:
-    """Sample every k-th step plus invalid proposals from a logged action sequence."""
+    """Every k-th step plus invalid proposals, and contents/holding failures at every step."""
     success_cache: dict = {}
     all_recs: list[dict] = []
     tid = id_start
@@ -302,20 +364,20 @@ def build_transitions_from_rollout(
         handle = replay(client, game_id, prefix, split=split)
         obs, _ = step_counterfactual(handle, act)
         invalid = obs.strip() == "Nothing happens."
-        if (i % k == 0) or invalid:
-            recs = build_transitions_at_state(
-                client,
-                game_id,
-                split,
-                prefix,
-                proposal=act,
-                state_idx=i,
-                id_start=tid,
-                rng_seed=rng_seed,
-                success_cache=success_cache,
-            )
-            all_recs.extend(recs)
-            tid += len(recs)
+        recs = build_transitions_at_state(
+            client,
+            game_id,
+            split,
+            prefix,
+            proposal=act,
+            state_idx=i,
+            id_start=tid,
+            rng_seed=rng_seed,
+            success_cache=success_cache,
+            contents_holding_only=not ((i % k == 0) or invalid),
+        )
+        all_recs.extend(recs)
+        tid += len(recs)
     return all_recs
 
 

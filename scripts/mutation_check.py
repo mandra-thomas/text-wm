@@ -175,6 +175,8 @@ MUTANTS = [
     ("2026-11-17 Pilot A keeps the old parser", "wf/runs.py", '"generated_class": parse_prediction(text, t.get("goal_object")),', '"generated_class": parse_observation(text, t.get("goal_object")),'),
     ("2026-11-17 audit shows the parser label", "wf/tools/parser_audit.py", 'w.writerow([i, actions.get(g["transition_id"], ""), g["generated"], "", ""])', 'w.writerow([i, actions.get(g["transition_id"], ""), g["generated"], parser_label(g["generated_class"]), ""])'),
     ("2026-11-17 audit ignores failure-as-success", "wf/tools/parser_audit.py", "                        and not paraphrase_opposite)", "                        )"),
+    ("2026-11-17 collector samples contents failures", "wf/data/transitions.py", "            contents_holding_only=not ((i % k == 0) or invalid),\n", ""),
+    ("2026-11-17 hidden state not saved", "wf/data/transitions.py", '        rec["hidden_state"] = hidden\n', '        rec["hidden_state"] = None\n'),
     ("2026-11-17 steps gain sign flipped", "wf/analysis/stats.py", "[a[g] - b[g] for g in games],\n        games,\n        seed=seed,\n    )\n\n\ndef H_success_points", "[b[g] - a[g] for g in games],\n        games,\n        seed=seed,\n    )\n\n\ndef H_success_points"),
 ]
 

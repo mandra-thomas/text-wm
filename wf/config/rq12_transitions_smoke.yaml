@@ -1,0 +1,7 @@
+run_id: rq12_transitions_smoke
+split: train
+# Two train games through the confirmatory collector, to check fields and timing on the real server.
+n_games: 2
+step_cap: 12
+min_items: 1
+min_states: 1

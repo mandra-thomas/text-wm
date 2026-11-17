@@ -596,28 +596,45 @@ def run_pilotA_transitions(cfg: dict) -> int:
     agent = AgentClient(base_url=cfg.get("vllm_base_url"))
     client.create()
     n_games = int(cfg.get("n_games", 40))
-    games = _games(client, "train", n_games, cfg)
+    split = cfg.get("split", "train")
+    games = _games(client, split, n_games, cfg)
     all_t, finished = _saved_games(d, "transitions.jsonl", cfg)
     tid = len(all_t)
+    # The server leaks memory on every reset, so a long collection stops after this many new games
+    # and a resume job (fresh server) carries on.
+    per_job = int(cfg.get("max_games_per_job", 0)) or len(games)
+    new_games = 0
     for gid in games:
         if gid in finished:
             continue
+        if new_games == per_job:
+            done = sum(g in finished for g in games)
+            write_status(run_id, f"PARTIAL — {done}/{len(games)} games saved; resubmit with WF_RESUME=1", ok=False)
+            return 1
+        new_games += 1
         # short rollout to collect proposals
-        ep = run_episode(client, agent, gid, "train", run_id, ForesightConfig("none"),
+        ep = run_episode(client, agent, gid, split, run_id, ForesightConfig("none"),
                          step_cap=int(cfg.get("step_cap", 12)))
         actions = [t["executed"] for t in ep["trace"]]
         if ep["success"]:  # the winning step leaves no state to branch from
             actions = actions[:-1]
         recs = build_transitions_from_rollout(
-            client, gid, "train", actions, id_start=tid, k=2, rng_seed=C.RNG_SEED
+            client, gid, split, actions, id_start=tid, k=2, rng_seed=C.RNG_SEED
         )
         tid += len(recs)
         all_t.extend(recs)
         _save_game(d, "transitions.jsonl", gid, recs)
+        finished.add(gid)
     eligible = filter_pilot_a_items(all_t)
     main_items = primary_items(eligible)
     states = {t["game_id"] + f"#{t['state_idx']}" for t in main_items}
-    ok = len(main_items) >= 500 and len(states) >= 80
+    min_items, min_states = int(cfg.get("min_items", 500)), int(cfg.get("min_states", 80))
+    ok = len(main_items) >= min_items and len(states) >= min_states
+    by_reason: dict[str, int] = {}
+    for t in eligible:
+        reason = t.get("determination_reason") or determination_reason(t)
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+    no_hidden_state = sorted({t["game_id"] for t in all_t if "hidden_state" in t and not t["hidden_state"]})
     counts: dict[str, int] = {}
     for t in eligible:
         kind = "goal-agnostic" if t.get("history_goal_agnostic") else "goal-revealing"
@@ -633,14 +650,16 @@ def run_pilotA_transitions(cfg: dict) -> int:
         "pilotA_transitions",
         {"n_total": len(all_t), "n_eligible": len(eligible), "n_main_test": len(main_items),
          "n_shared_location": n_flagged, "n_targeted": targeted, "n_states": len(states),
-         "counts": counts, "balance": balance, "exclusions": exclusions},
+         "counts": counts, "balance": balance, "exclusions": exclusions,
+         "eligible_by_reason": by_reason, "games_without_hidden_state": no_hidden_state},
     )
     write_status(
         run_id,
         f"total={len(all_t)} eligible_failure_determined={len(eligible)} main_test={len(main_items)} "
         f"shared_location={n_flagged} targeted={targeted} states={len(states)}\n"
         f"counts={counts}\nbalance={balance}\nexclusions={exclusions}\n"
-        f"Acceptance ≥500 main-test items / ≥80 states — {'PASS' if ok else 'FAIL'}",
+        f"eligible_by_reason={by_reason}\ngames_without_hidden_state={no_hidden_state}\n"
+        f"Acceptance ≥{min_items} main-test items / ≥{min_states} states — {'PASS' if ok else 'FAIL'}",
         ok=ok,
     )
     return 0 if ok else 1
@@ -1271,6 +1290,8 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "t0_scoring_agreement": run_t0_scoring_agreement,
     "t0_expert_labels": run_t0_expert_labels,
     "pilotA_transitions": run_pilotA_transitions,
+    "rq12_transitions": run_pilotA_transitions,
+    "rq12_transitions_smoke": run_pilotA_transitions,
     "pilotA_score": run_pilotA_score,
     "pilotA_reparse": run_pilotA_reparse,
     "pilotB_headroom": run_pilotB_headroom,
