@@ -1,5 +1,5 @@
 run_id: rq2_analysis
-source: rq2
+source: rq2_score
 sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
 min_items: 1000  # preregistration: n >= 1,000 items
 min_states: 200  # from at least 200 states
