@@ -170,7 +170,8 @@ class LogoddsScorer:
             pos = prompt_len + i - 1
             if pos < 0:
                 continue
-            lp = torch.log_softmax(logits[0, pos], dim=-1)[tid].item()
+            # float32: a bfloat16 log_softmax rounds each log-probability to about 3 significant digits
+            lp = torch.log_softmax(logits[0, pos].float(), dim=-1)[tid].item()
             logprobs.append(lp)
         first = self._tok.decode(cand_ids[0][:1]) if cand_ids.shape[1] else ""
         return float(sum(logprobs)), len(logprobs), (logprobs[0] if logprobs else float("nan")), first
