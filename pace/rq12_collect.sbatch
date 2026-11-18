@@ -6,7 +6,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=14:00:00
-#SBATCH --gres=gpu:A100:1
+#SBATCH --gres=gpu:1
+#SBATCH --constraint=gpu-l40s|gpu-a40|gpu-a100
 #SBATCH --output=logs/rq12col_%j.out
 #SBATCH --error=logs/rq12col_%j.err
 #
@@ -28,6 +29,7 @@ echo "=== RQ1/RQ2 collection ${RUN} START $(date) host=$(hostname) ==="
 cleanup() { stop_vllm || true; stop_alfworld_server || true; }
 trap cleanup EXIT
 start_vllm
+nvidia-smi --query-gpu=name,memory.total --format=csv || true  # which GPU this job got
 # The ALFWorld server leaks memory on every reset, so it is restarted after every max_games_per_job
 # games (the run stops with a PARTIAL status) while vLLM stays up; the run then resumes.
 while true; do

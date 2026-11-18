@@ -237,10 +237,12 @@ def main() -> int:
     # `mutation_check.py 2/4` runs the third of four shards, so the check can use several cores.
     shard, shards = map(int, sys.argv[1].split("/")) if len(sys.argv) > 1 else (0, 1)
     chosen = MUTANTS[shard::shards]
-    # MUTANTS_MATCHING="2026-11-17" runs only the mutants whose name contains that text.
+    # MUTANTS_MATCHING="2026-11-17" runs only the mutants whose name contains that text ("a|b": either).
     only = os.environ.get("MUTANTS_MATCHING")
     if only:
-        chosen = [m for m in chosen if only in m[0]]
+        chosen = [m for m in chosen if any(o in m[0] for o in only.split("|"))]
+    # MUTATION_TIMEOUT: seconds per test run (raise it when shards share a machine and the suite is slow).
+    timeout = int(os.environ.get("MUTATION_TIMEOUT", "900"))
     survivors: list[str] = []
     broken: list[str] = []
     timeouts: list[str] = []
@@ -261,9 +263,9 @@ def main() -> int:
             path.write_text(source.replace(good, bad), encoding="utf-8")
             # Fast path: the test files that name the mutated module. A mutant that survives them is run
             # against the whole suite before it counts as a survivor; a timeout is never counted as a kill.
-            outcome = _run_tests(python, work, _covering_tests(work, rel))
+            outcome = _run_tests(python, work, _covering_tests(work, rel), timeout)
             if outcome == "survived":
-                outcome = _run_tests(python, work, ["tests"])
+                outcome = _run_tests(python, work, ["tests"], timeout)
             path.write_text(source, encoding="utf-8")
             label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]
             print(f"{label}  {name}", flush=True)

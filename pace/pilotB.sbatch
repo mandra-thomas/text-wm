@@ -6,7 +6,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
 #SBATCH --time=14:00:00
-#SBATCH --gres=gpu:A100:1
+#SBATCH --gres=gpu:1
+#SBATCH --constraint=gpu-l40s|gpu-a40|gpu-a100
 #SBATCH --output=logs/pilotB_%j.out
 #SBATCH --error=logs/pilotB_%j.err
 

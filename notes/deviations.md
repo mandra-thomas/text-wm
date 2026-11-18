@@ -220,3 +220,7 @@ Foresight on a private env id; task and history in every condition; invalid acti
 ## Tier 0 results invalidated
 
 Job 6685206 ran the old code, so the Tier 0 claims in `docs/milestone_checkin.tex` need replacing. Every `t0_ckpt_accuracy` figure before 2026-11-06 is invalid. Tier 0 must be rerun on the commit that holds the changes above: `t0_scoring_agreement` uses the new few-shot examples, and items now use the new swaps and labels. `runs/` in older checkouts still holds old mock output, which real runs refuse.
+
+## GPU type for confirmatory jobs (2026-11-17)
+
+All 32 L40S GPUs on ICE were taken when the confirmatory collection and RQ2 scoring were queued. GPU jobs now take the first free L40S, A40 or A100 (all run the models in bfloat16 with at least 40 GB). The 16 GB V100s are excluded: an 8B model does not fit in 16-bit precision, and V100s have no bfloat16. The collector and RQ3 jobs log the GPU they got. This cannot change item correctness, because every collected item is replayed on the real server before scoring. Log-probabilities can differ across GPU types only by floating-point rounding, far below the 0.5-nat threshold.
