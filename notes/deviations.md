@@ -36,6 +36,8 @@ Everything in this section was decided after the confirmatory RQ2 scores had bee
   - **Reporting:** A is reported for each example set with the SD across sets, and both sensitivity rules are kept.
 - **Size and sharding.** About 20 GPU-hours in 8 game shards; records are saved one by one and resumed after a time limit. The analysis waits for every shard and one commit, and re-reads every prediction with the current parser.
 
+**Items whose task matches an example's task.** For 49 of the 4,666 RQ2 items, the game's task line is word-for-word the task line of one of example set 1's examples (91 items for set 2, 66 for set 3). That example's history then shows the item's true task under both goals, identically, so it is not a leak of the item's goal. It was equally true in the confirmatory RQ2 run. Found by `scripts/check_rq1_prompts.py`, which builds every new prompt on the real items. The same script found that no swapped, no-goal or ignore-goal query turn shows the item's true task line, and that every full-state turn carries its layout.
+
 **RQ2 scoring fix for the fine-tuned prompt.** In `wf/rq2.py` the 2×2's mention and fourth lines were always built with the few-shot prompt. The confirmatory RQ2 run scored only the few-shot models, so no result is affected. The task-line override now goes through `build_messages(..., task_line=...)`, which uses each model's own prompt. A test checks the Word2World prompt carries the override.
 
 ## Decided 2026-11-17, after the pilots (before any confirmatory data)

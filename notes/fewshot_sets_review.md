@@ -1,5 +1,14 @@
 # Prompt example sets 2 and 3: drafts for review (2026-11-17)
 
+**Decided 2026-11-18.** Set 3 is approved as drafted. Set 2 is redrawn because of the verb cue (check 3 below) and the creditcard move (check 4). The redrawn set 2, frozen in `wf/scoring/prompts.py` and `notes/fewshot_sets_frozen.json`, is:
+
+- goal-relevant success: "clean some soapbar and put it in cabinet", at countertop 1 with a soapbar 2 shown; `take soapbar 2 from countertop 1` gives "You pick up the soapbar 2 from the countertop 1." (train/1213)
+- goal-irrelevant contents failure: "clean some potato and put it in microwave", the open fridge shows a cup, an egg and a potato; `take apple 1 from fridge 1` gives "Nothing happens." (train/1183)
+- goal-relevant location failure: "put some creditcard on armchair", the agent is at drawer 1; `take creditcard 1 from sofa 1` gives "Nothing happens." (train/403)
+- goal-irrelevant success: "find two creditcard and put them in coffeetable", the agent is at the closed drawer 1; `open drawer 1` gives "You open the drawer 1. The drawer 1 is open. In it, you see a watch 1." (train/2128)
+
+The drafts below are kept for the record.
+
 Drawn by rule and a fixed seed (20260924) from Pilot A train transitions; every string is logged server output; no pilot score was used. Set 1's games (train/700, train/270, train/2332) are excluded and no game is used twice. Each set has four examples: a goal-relevant success, a goal-irrelevant success, a location failure and a contents failure. In set 2 the location failure is goal-relevant; in set 3 the contents failure is. Every outcome follows from the two-step history shown: failures pass the context-determined check, and for successes the history shows every precondition the action needs. Histories are the task line plus the last two steps, as in set 1. The order within each set was shuffled by the same seed.
 
 Set 1 (filed, kept for the primary analysis) has one goal-irrelevant success and two goal-relevant failures, so goal relevance predicts the outcome in it. See notes/deviations.md.
