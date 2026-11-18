@@ -1,0 +1,4 @@
+run_id: rq1_analysis
+# Reads every shard of rq1_score once all say "shard complete" and ran at one commit; no GPU needed.
+source: rq1_score
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot, w2w-qwen2.5-7b, w2w-llama3.1-8b]

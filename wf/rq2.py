@@ -103,11 +103,13 @@ def shard_items(items: list[dict], i: int, n: int) -> list[dict]:
 # ---------------- scoring ----------------
 
 
-def _score(scorer: LogoddsScorer, t: dict, condition: str, task_line: str | None = None) -> Any:
-    """Score o+ against o- with `task_line` as the goal (the aligned slot), recorded under `condition`."""
-    item = {**t, "task_line": task_line} if task_line else t
-    base = "aligned" if task_line else condition
-    return scorer.score_pair(transition_id=t["id"], condition=condition, messages=build_messages(item, base),
+def _score(scorer: LogoddsScorer, t: dict, condition: str, task_line: str | None = None, ft: bool = False) -> Any:
+    """Score o+ against o- with `task_line` as the goal (the aligned slot), recorded under `condition`.
+
+    The item keeps its own task line, so a fine-tuned model's hidden-state context is still found by it.
+    """
+    messages = build_messages(t, "aligned" if task_line else condition, ft_prompt=ft, task_line=task_line)
+    return scorer.score_pair(transition_id=t["id"], condition=condition, messages=messages,
                              o_plus=t["candidates"]["o_plus"], o_minus=t["candidates"]["o_minus"])
 
 
@@ -149,10 +151,7 @@ def run_rq2_score(cfg: dict) -> int:
             for cond, line in jobs:
                 if (tag, t["id"], cond) in done:
                     continue
-                if line is None:
-                    sc = _score(scorer, t, cond)
-                else:
-                    sc = _score(scorer, t, cond, task_line=line)
+                sc = _score(scorer, t, cond, task_line=line, ft=ft)
                 rec = {**sc.to_dict(), "game_id": t["game_id"], "item_hash": hashes[t["id"]],
                        "task_line_used": line}
                 append_jsonl(d / "scoring.jsonl", [rec])
@@ -207,10 +206,10 @@ def mention_estimands(scores: list[dict], items: list[dict]) -> dict:
     return {"goal_directed": _mean_ci_p(did, did_g), "mention": _mean_ci_p(men, men_g)}
 
 
-def run_rq2_analysis(cfg: dict) -> int:
-    run_id = cfg["run_id"]
-    require_filed(run_id)
-    source = runs_root() / cfg["source"]
+def complete_shards(source_run: str) -> tuple[list[Path], list[str]]:
+    """The scoring run's shard folders, and why an analysis must wait: a shard missing or unfinished,
+    or shards at different commits."""
+    source = runs_root() / source_run
     folders = sorted(p for p in source.glob("shard_*_of_*") if p.is_dir())
     problems = []
     counts = {p.name.rsplit("_of_", 1)[1] for p in folders}
@@ -227,6 +226,13 @@ def run_rq2_analysis(cfg: dict) -> int:
         shas = {(p / "git_sha").read_text().strip() for p in folders if (p / "git_sha").exists()}
         if len(shas) != 1:
             problems.append(f"shards ran at different commits: {sorted(shas)}")
+    return folders, problems
+
+
+def run_rq2_analysis(cfg: dict) -> int:
+    run_id = cfg["run_id"]
+    require_filed(run_id)
+    folders, problems = complete_shards(cfg["source"])
     d = _init_run(run_id, {**cfg, "resume": False},
                   inputs=tuple(p / "scoring.jsonl" for p in folders if (p / "scoring.jsonl").exists()))
     if problems:

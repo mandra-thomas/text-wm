@@ -1361,6 +1361,10 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "rq3_smoke": lambda cfg: _rq3("run_rq3")(cfg),
     "rq3_analysis": lambda cfg: _rq3("run_rq3_analysis")(cfg),
     "rq3_smoke_analysis": lambda cfg: _rq3("run_rq3_analysis")(cfg),
+    "rq1_score": lambda cfg: _rq1("run_rq1_score")(cfg),
+    "rq1_score_smoke": lambda cfg: _rq1("run_rq1_score")(cfg),
+    "rq1_analysis": lambda cfg: _rq1("run_rq1_analysis")(cfg),
+    "rq1_smoke_analysis": lambda cfg: _rq1("run_rq1_analysis")(cfg),
     "rq2_score": lambda cfg: _rq2("run_rq2_score")(cfg),
     "rq2_score_smoke": lambda cfg: _rq2("run_rq2_score")(cfg),
     "rq2_analysis": lambda cfg: _rq2("run_rq2_analysis")(cfg),
@@ -1372,6 +1376,12 @@ def _rq2(name: str) -> Callable[[dict], int]:
     from wf import rq2  # wf/rq2.py imports this module, so it loads on first use
 
     return getattr(rq2, name)
+
+
+def _rq1(name: str) -> Callable[[dict], int]:
+    from wf import rq1  # wf/rq1.py imports this module, so it loads on first use
+
+    return getattr(rq1, name)
 
 
 def _rq3(name: str) -> Callable[[dict], int]:

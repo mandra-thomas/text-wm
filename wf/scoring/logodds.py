@@ -13,8 +13,11 @@ from typing import Any
 from wf.data.goals import make_swapped_task_line
 from wf.env.server import parse_game_id
 from wf.scoring.prompts import (
+    WM_FEWSHOT_GAMES,
+    WM_FEWSHOT_SETS,
     _replace_task_line,
     condition_task_line,
+    hidden_block,
     world_model_ft_messages,
     world_model_prompt,
 )
@@ -279,17 +282,43 @@ def world_model_context(transition: dict) -> str:
     return context
 
 
-def build_messages(transition: dict, condition: str, ft_prompt: bool = False) -> list[dict[str, str]]:
-    """The prompt for one item under one condition; only the task line and framing vary."""
+def _layout(context: str) -> str:
+    """The starting layout; the mock context has none, so mock runs get a fixed stand-in."""
+    if os.environ.get("WF_MOCK_SCORE", "0") == "1" and "=== Objects on Receptacles ===" not in context:
+        return "=== Objects on Receptacles ===\n - (mock layout)"
+    return hidden_block(context)
+
+
+@lru_cache(maxsize=None)
+def _fewshot_hidden(fewshot_set: int) -> tuple[str, ...]:
+    """Each example's starting layout; the lookup proves the game by its task line."""
+    shots, games = WM_FEWSHOT_SETS[fewshot_set], WM_FEWSHOT_GAMES[fewshot_set]
+    return tuple(_layout(world_model_context({"game_id": g, "task_line": ex["history"].splitlines()[0]}))
+                 for ex, g in zip(shots, games))
+
+
+def build_messages(transition: dict, condition: str, ft_prompt: bool = False, *, task_line: str | None = None,
+                   fewshot_set: int = 1, full_state: bool = False, note: str | None = None) -> list[dict[str, str]]:
+    """The prompt for one item under one condition; only the task line and framing vary.
+
+    `task_line` overrides the condition's goal line. The others are few-shot options: which example set,
+    the full-state condition (the starting layout shown before the history), and a note before
+    "Next observation:". The fine-tuned prompt always carries the full state, as trained.
+    """
     aligned, swapped = transition["task_line"], _swapped_task(transition)
-    task = condition_task_line(condition, aligned, swapped)
-    note = _FRAMING.get(condition)
+    task = task_line or condition_task_line(condition, aligned, swapped)
+    note = "\n\n".join(x for x in (_FRAMING.get(condition), note) if x) or None
     if ft_prompt:
         system = _replace_task_line(world_model_context(transition), task)
         if note:
             system = f"{system}{note}\n"
         return world_model_ft_messages(system, transition.get("history_pairs") or [], transition["action"])
-    messages = world_model_prompt(transition["history_text"], transition["action"], task_line_override=task)
+    hidden = fewshot_hidden = None
+    if full_state:
+        hidden = _layout(transition.get("hidden_state") or world_model_context(transition))
+        fewshot_hidden = list(_fewshot_hidden(fewshot_set))
+    messages = world_model_prompt(transition["history_text"], transition["action"], fewshot=WM_FEWSHOT_SETS[fewshot_set],
+                                  task_line_override=task, hidden=hidden, fewshot_hidden=fewshot_hidden)
     if note:
         last = messages[-1]
         messages[-1] = {**last, "content": last["content"].replace("Next observation:", f"{note}\n\nNext observation:")}

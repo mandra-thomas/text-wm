@@ -18,6 +18,9 @@
 #   sbatch ... --export=ALL,RQ2_RUN=rq2_score,WF_SHARD=0,WF_N_SHARDS=4 pace/rq2_score.sbatch
 # Every score is saved as it finishes; resubmit with WF_RESUME=1 after a timeout. When every shard says
 # "shard complete": python -m wf.runs rq2_analysis  (no GPU needed).
+# The RQ1 run uses this script too, with a longer limit (about 2.5 GPU-hours per eighth of the games):
+#   sbatch --time=4:00:00 ... --export=ALL,RQ2_RUN=rq1_score,WF_SHARD=0,WF_N_SHARDS=8 pace/rq2_score.sbatch
+# and a resume job queued behind each with --dependency=afternotok:<job> and WF_RESUME=1.
 
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"

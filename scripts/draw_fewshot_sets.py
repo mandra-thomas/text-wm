@@ -55,6 +55,52 @@ for t in T:
     elif obs and len(obs) <= 160:
         cells[(rel, "S", None)].append((t["id"], h))
 print({str(k): len(v) for k, v in sorted(cells.items(), key=str)})
+
+# Redraw of set 2 (decided 2026-11-18, set 3 approved as drafted): `python scripts/draw_fewshot_sets.py
+# <transitions> <out> <drafts.json>` keeps set 3 from the drafts and draws set 2 again with its own seed.
+# Both of set 2's failures are takes, so one success must be a take too, or the verb alone predicts the
+# outcome. The history may hold no malformed command (an object or receptacle without its number) and no
+# walk that failed ("go to" answered "Nothing happens."), and a success may not undo the step before it
+# (moving an object back where it was just taken from).
+ACTION_OK = re.compile(r"(?:go to|open|close|examine|use) [a-z]+ \d+|take [a-z]+ \d+ from [a-z]+ \d+|"
+                       r"move [a-z]+ \d+ to [a-z]+ \d+|(?:heat|cool|clean) [a-z]+ \d+ with [a-z]+ \d+|inventory|look")
+
+def well_formed(h):
+    lines = h.splitlines()
+    failed_walk = any(l.startswith("> go to ") and i + 1 < len(lines) and lines[i + 1].strip() == "Nothing happens."
+                      for i, l in enumerate(lines))
+    return not failed_walk and all(ACTION_OK.fullmatch(l[2:].strip()) for l in lines if l.startswith("> "))
+
+def undoes_last(h, action):
+    m = re.fullmatch(r"move (.+) to (.+)", action)
+    last = [l[2:] for l in h.splitlines() if l.startswith("> ")][-1]
+    return bool(m) and last == f"take {m[1]} from {m[2]}"
+
+if len(sys.argv) > 3:
+    drafts = json.load(open(sys.argv[3]))
+    used = set(SET1_GAMES) | {e["game"] for e in drafts["set3"]}
+    rng = random.Random("20260924|set2-redraw")
+    spec = [(True, "S", None), (False, "S", None), (True, "F", "location"), (False, "F", "contents")]
+    take_success = rng.choice([0, 1])  # which success is the take, drawn, not chosen
+    ex = []
+    for k, cell in enumerate(spec):
+        pool = [c for c in cells[cell] if Tid[c[0]]["game_id"] not in used and well_formed(c[1])
+                and not undoes_last(c[1], Tid[c[0]]["action"])]
+        if k == take_success:
+            pool = [c for c in pool if Tid[c[0]]["action"].startswith("take ")]
+        tid, h = rng.choice(sorted(pool)); t = Tid[tid]
+        used.add(t["game_id"])
+        ex.append({"cell": list(cell), "id": tid, "game": t["game_id"], "history": h, "action": t["action"],
+                   "observation": t["true_obs"].strip()})
+    rng.shuffle(ex)
+    out = {"set2": ex, "set3": drafts["set3"], "set2_draft_replaced": drafts["set2"]}
+    json.dump(out, open(out_path, "w"), indent=1)
+    for e in ex:
+        rel = "goal-relevant" if e["cell"][0] else "goal-irrelevant"
+        kind = "success" if e["cell"][1] == "S" else f"failure ({e['cell'][2]})"
+        print(f"--- {rel} {kind} | {e['game']} {e['id']}"); print(e["history"]); print("ACTION:", e["action"]); print("OBSERVATION:", e["observation"])
+    sys.exit(0)
+
 rng = random.Random(20260924)
 design = {"set2": [(True, "S", None), (False, "S", None), (True, "F", "location"), (False, "F", "contents")],
           "set3": [(True, "S", None), (False, "S", None), (False, "F", "location"), (True, "F", "contents")]}

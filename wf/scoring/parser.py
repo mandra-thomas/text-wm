@@ -159,7 +159,10 @@ _MORE_FAIL = re.compile(
     r"\b(?:nothing (?:happened|will happen)"
     r"|(?:is|are) not in the world|(?:is|are) not (?:here|there)|(?:is|are) not (?:in|on|inside) (?:the|your|any)"
     r"|there is not\b|you see no\b|hands are full"
-    r"|first,? you (?:need|have|must)|(?:open|go to|pick up|take) .+ first\b)",
+    r"|first,? you (?:need|have|must)|(?:open|go to|pick up|take) .+ first\b"
+    # third audit (2026-11-18): refusals "The egg 1 is not dirty.", "... already at room temperature.",
+    # "The action '...' is not valid."
+    r"|(?:is|are) not dirty|already at room temperature|(?:is|are) not (?:a )?valid|invalid (?:action|command))",
     re.IGNORECASE,
 )
 _NO_SUCH = re.compile(r"^no [a-z]+(?: \d+)? (?:is|are)\b", re.IGNORECASE)
@@ -174,7 +177,8 @@ _NOT_A_RESULT = re.compile(
 )
 _RECEPTACLE_AFTER = re.compile(r"\b(?:to|in|into|on|onto|using|with|from) (?:the )?([a-z]+ \d+)", re.IGNORECASE)
 _SUCCESS_VERBS = {
-    "take": r"(?:pick up|picked up|take|took|grab|grabbed|get|got|now have|are now holding)",
+    # "You are carrying the cd 2." states the take worked (third audit, 2026-11-18)
+    "take": r"(?:pick up|picked up|take|took|grab|grabbed|get|got|now have|are (?:now )?(?:holding|carrying))",
     "move": r"(?:move|moved|put|place|placed|set|drop|dropped)",
     "slice": r"(?:slice|sliced|cut)",
 }

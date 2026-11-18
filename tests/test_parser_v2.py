@@ -310,7 +310,17 @@ def test_reviewed_cases_land_on_the_right_side(action, text, side):
     ("move pot 1 to stoveburner 1", "You pick up the pot 1 from the cabinet 1.", "different_effect"),
     ("take mug 2 from cabinet 1", "You pick up the mug 1 from the cabinet 1.", "different_effect"),
     ("examine cabinet 4", "You arrive at cabinet 4. The cabinet 4 is closed.", "different_effect"),
-    ("take knife 1 from drawer 3", "You are holding the knife 1.", "unparseable"),
+    # third audit (2026-11-18): holding or carrying the object after a take says the take worked
+    ("take knife 1 from drawer 3", "You are holding the knife 1.", "success_paraphrase"),
+    ("take cd 2 from desk 1", "You are carrying the cd 2.", "success_paraphrase"),
+    ("take potato 1 from countertop 2", "You are carrying: a lettuce 1, a potato 1.", "success_paraphrase"),
+    ("take cd 2 from desk 1", "You are carrying the mug 1.", "different_effect"),
+    ("take cd 2 from desk 1", "You are already holding the cd 2.", "noop_paraphrase"),
+    ("cool tomato 1 with fridge 1",
+     "You try to cool the tomato 1 with the fridge 1. The tomato 1 is already at room temperature.", "noop_paraphrase"),
+    ("clean egg 1 with sinkbasin 1", "You try to clean the egg 1 with the sinkbasin 1. The egg 1 is not dirty.",
+     "noop_paraphrase"),
+    ("heat bread 1 with microwave 1", "The action 'heat bread 1 with microwave 1' is not valid.", "noop_paraphrase"),
 ])
 def test_reviewed_cases_land_in_the_right_category(action, text, cls):
     assert parse_prediction(text, None, action) == cls

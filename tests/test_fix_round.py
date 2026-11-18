@@ -1101,7 +1101,7 @@ def test_every_job_refuses_requeue():
 
 def test_servers_are_checked_for_life_before_health():
     text = (REPO / "pace" / "_common.sh").read_text()
-    for life, health in (('kill -0 "$(cat "${ALFWORLD_PID_FILE}")"', 'curl -sf "${ALFWORLD_BASE_URL}/"'),
+    for life, health in (('if ! kill -0 "${pid}" 2>/dev/null; then\n        break', 'curl -sf "${ALFWORLD_BASE_URL}/"'),
                          ('kill -0 "$(cat "${VLLM_PID_FILE}")" 2>/dev/null; then\n      echo "ERROR', '/health')):
         assert text.index(life) < text.rindex(health)
 

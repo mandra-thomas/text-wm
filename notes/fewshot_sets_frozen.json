@@ -1,0 +1,152 @@
+{
+ "set2": [
+  {
+   "cell": [
+    true,
+    "S",
+    null
+   ],
+   "id": "t_001474",
+   "game": "train/1213",
+   "history": "Your task is to: clean some soapbar and put it in cabinet.\n> go to sinkbasin 2\nYou arrive at sinkbasin 2. On the sinkbasin 2, you see nothing.\n> go to countertop 1\nYou arrive at countertop 1. On the countertop 1, you see a candle 1, and a soapbar 2.",
+   "action": "take soapbar 2 from countertop 1",
+   "observation": "You pick up the soapbar 2 from the countertop 1."
+  },
+  {
+   "cell": [
+    false,
+    "F",
+    "contents"
+   ],
+   "id": "t_000612",
+   "game": "train/1183",
+   "history": "Your task is to: clean some potato and put it in microwave.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a cup 1, a egg 1, and a potato 1.",
+   "action": "take apple 1 from fridge 1",
+   "observation": "Nothing happens."
+  },
+  {
+   "cell": [
+    true,
+    "F",
+    "location"
+   ],
+   "id": "t_000561",
+   "game": "train/403",
+   "history": "Your task is to: put some creditcard on armchair.\n> go to sidetable 2\nYou arrive at sidetable 2. On the sidetable 2, you see a houseplant 1, a keychain 1, and a newspaper 2.\n> go to drawer 1\nYou arrive at drawer 1. The drawer 1 is closed.",
+   "action": "take creditcard 1 from sofa 1",
+   "observation": "Nothing happens."
+  },
+  {
+   "cell": [
+    false,
+    "S",
+    null
+   ],
+   "id": "t_001673",
+   "game": "train/2128",
+   "history": "Your task is to: find two creditcard and put them in coffeetable.\n> open cabinet 4\nYou open the cabinet 4. The cabinet 4 is open. In it, you see nothing.\n> go to drawer 1\nYou arrive at drawer 1. The drawer 1 is closed.",
+   "action": "open drawer 1",
+   "observation": "You open the drawer 1. The drawer 1 is open. In it, you see a watch 1."
+  }
+ ],
+ "set3": [
+  {
+   "cell": [
+    true,
+    "S",
+    null
+   ],
+   "id": "t_001924",
+   "game": "train/49",
+   "history": "Your task is to: examine the cd with the desklamp.\n> go to desk 1\nYou arrive at desk 1. On the desk 1, you see a alarmclock 1, a book 1, a bowl 2, a cd 3, a cd 2, a cd 1, a keychain 3, a keychain 2, a pencil 3, and a pencil 2.\n> take desklamp from desk 1\nNothing happens.",
+   "action": "take cd 1 from desk 1",
+   "observation": "You pick up the cd 1 from the desk 1."
+  },
+  {
+   "cell": [
+    true,
+    "F",
+    "contents"
+   ],
+   "id": "t_002384",
+   "game": "train/2165",
+   "history": "Your task is to: find two handtowel and put them in toilet.\n> go to handtowelholder 2\nYou arrive at handtowelholder 2. On the handtowelholder 2, you see a handtowel 2.\n> go to toilet 1\nYou arrive at toilet 1. On the toilet 1, you see a candle 2, a dishsponge 2, and a soapbottle 1.",
+   "action": "take handtowel 1 from toilet 1",
+   "observation": "Nothing happens."
+  },
+  {
+   "cell": [
+    false,
+    "S",
+    null
+   ],
+   "id": "t_001426",
+   "game": "train/336",
+   "history": "Your task is to: put a cellphone in armchair.\n> open drawer 1\nYou open the drawer 1. The drawer 1 is open. In it, you see nothing.\n> go to drawer 2\nYou arrive at drawer 2. The drawer 2 is closed.",
+   "action": "go to drawer 11",
+   "observation": "You arrive at drawer 11. The drawer 11 is closed."
+  },
+  {
+   "cell": [
+    false,
+    "F",
+    "location"
+   ],
+   "id": "t_001798",
+   "game": "train/1670",
+   "history": "Your task is to: cool some tomato and put it in countertop.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a apple 2, a apple 1, a bread 2, a egg 1, a mug 1, a pan 1, a plate 3, and a potato 2.",
+   "action": "take potato 2 from cabinet 12",
+   "observation": "Nothing happens."
+  }
+ ],
+ "set2_draft_replaced": [
+  {
+   "cell": [
+    false,
+    "F",
+    "contents"
+   ],
+   "id": "t_002940",
+   "game": "train/745",
+   "history": "Your task is to: put a spraybottle in garbagecan.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see nothing.\n> go to countertop 1\nYou arrive at countertop 1. On the countertop 1, you see a candle 3, a candle 2, a cloth 2, a soapbar 1, a soapbottle 2, a soapbottle 1, and a spraybottle 1.",
+   "action": "take candle 1 from countertop 1",
+   "observation": "Nothing happens."
+  },
+  {
+   "cell": [
+    true,
+    "S",
+    null
+   ],
+   "id": "t_000591",
+   "game": "train/403",
+   "history": "Your task is to: put some creditcard on armchair.\n> go to diningtable 1\nYou arrive at diningtable 1. On the diningtable 1, you see a box 1, a creditcard 2, and a remotecontrol 1.\n> take creditcard 2 from diningtable 1\nYou pick up the creditcard 2 from the diningtable 1.",
+   "action": "move creditcard 2 to diningtable 1",
+   "observation": "You move the creditcard 2 to the diningtable 1."
+  },
+  {
+   "cell": [
+    true,
+    "F",
+    "location"
+   ],
+   "id": "t_002179",
+   "game": "train/1770",
+   "history": "Your task is to: heat some cup and put it in countertop.\n> go to cabinet 8\nYou arrive at cabinet 8. The cabinet 8 is closed.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.",
+   "action": "take cup 1 from cabinet 3",
+   "observation": "Nothing happens."
+  },
+  {
+   "cell": [
+    false,
+    "S",
+    null
+   ],
+   "id": "t_002771",
+   "game": "train/258",
+   "history": "Your task is to: put some bread on microwave.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a apple 2, a bowl 3, a egg 2, a mug 3, a mug 2, and a tomato 2.",
+   "action": "go to countertop 2",
+   "observation": "You arrive at countertop 2. On the countertop 2, you see a bowl 1, a bread 1, a butterknife 1, a fork 1, a soapbottle 1, a spatula 2, and a winebottle 1."
+  }
+ ]
+}

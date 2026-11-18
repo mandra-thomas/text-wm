@@ -1,0 +1,4 @@
+run_id: rq1_smoke_analysis
+source: rq1_score_smoke
+sources: [rq12_transitions_smoke]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot, w2w-qwen2.5-7b, w2w-llama3.1-8b]

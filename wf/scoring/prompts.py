@@ -45,6 +45,81 @@ WM_FEWSHOT_SET0: list[dict[str, str]] = [
     },
 ]
 
+# Set 2, redrawn 2026-11-18 by rule and seed (scripts/draw_fewshot_sets.py); games train/1213, train/1183, train/403, train/2128.
+# Two successes (one a take) and two failures, one goal-relevant of each; see notes/fewshot_sets_review.md.
+WM_FEWSHOT_SET2: list[dict[str, str]] = [
+    {
+        "history": "Your task is to: clean some soapbar and put it in cabinet.\n> go to sinkbasin 2\nYou arrive at sinkbasin 2. On the sinkbasin 2, you see nothing.\n> go to countertop 1\nYou arrive at countertop 1. On the countertop 1, you see a candle 1, and a soapbar 2.",
+        "action": "take soapbar 2 from countertop 1",
+        "observation": "You pick up the soapbar 2 from the countertop 1.",
+    },
+    {
+        "history": "Your task is to: clean some potato and put it in microwave.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a cup 1, a egg 1, and a potato 1.",
+        "action": "take apple 1 from fridge 1",
+        "observation": "Nothing happens.",
+    },
+    {
+        "history": "Your task is to: put some creditcard on armchair.\n> go to sidetable 2\nYou arrive at sidetable 2. On the sidetable 2, you see a houseplant 1, a keychain 1, and a newspaper 2.\n> go to drawer 1\nYou arrive at drawer 1. The drawer 1 is closed.",
+        "action": "take creditcard 1 from sofa 1",
+        "observation": "Nothing happens.",
+    },
+    {
+        "history": "Your task is to: find two creditcard and put them in coffeetable.\n> open cabinet 4\nYou open the cabinet 4. The cabinet 4 is open. In it, you see nothing.\n> go to drawer 1\nYou arrive at drawer 1. The drawer 1 is closed.",
+        "action": "open drawer 1",
+        "observation": "You open the drawer 1. The drawer 1 is open. In it, you see a watch 1.",
+    },
+]
+
+# Set 3, drawn 2026-11-17 and approved as drafted; games train/49, train/2165, train/336, train/1670.
+WM_FEWSHOT_SET3: list[dict[str, str]] = [
+    {
+        "history": "Your task is to: examine the cd with the desklamp.\n> go to desk 1\nYou arrive at desk 1. On the desk 1, you see a alarmclock 1, a book 1, a bowl 2, a cd 3, a cd 2, a cd 1, a keychain 3, a keychain 2, a pencil 3, and a pencil 2.\n> take desklamp from desk 1\nNothing happens.",
+        "action": "take cd 1 from desk 1",
+        "observation": "You pick up the cd 1 from the desk 1.",
+    },
+    {
+        "history": "Your task is to: find two handtowel and put them in toilet.\n> go to handtowelholder 2\nYou arrive at handtowelholder 2. On the handtowelholder 2, you see a handtowel 2.\n> go to toilet 1\nYou arrive at toilet 1. On the toilet 1, you see a candle 2, a dishsponge 2, and a soapbottle 1.",
+        "action": "take handtowel 1 from toilet 1",
+        "observation": "Nothing happens.",
+    },
+    {
+        "history": "Your task is to: put a cellphone in armchair.\n> open drawer 1\nYou open the drawer 1. The drawer 1 is open. In it, you see nothing.\n> go to drawer 2\nYou arrive at drawer 2. The drawer 2 is closed.",
+        "action": "go to drawer 11",
+        "observation": "You arrive at drawer 11. The drawer 11 is closed.",
+    },
+    {
+        "history": "Your task is to: cool some tomato and put it in countertop.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a apple 2, a apple 1, a bread 2, a egg 1, a mug 1, a pan 1, a plate 3, and a potato 2.",
+        "action": "take potato 2 from cabinet 12",
+        "observation": "Nothing happens.",
+    },
+]
+
+# The three prompt-example sets; set 1 (WM_FEWSHOT_SET0) is primary, as filed.
+WM_FEWSHOT_SETS = {1: WM_FEWSHOT_SET0, 2: WM_FEWSHOT_SET2, 3: WM_FEWSHOT_SET3}
+# Each example's game, in order, so the full-state prompt can show that game's hidden state too.
+WM_FEWSHOT_GAMES = {
+    1: ("train/700", "train/270", "train/2332"),
+    2: ("train/1213", "train/1183", "train/403", "train/2128"),
+    3: ("train/49", "train/2165", "train/336", "train/1670"),
+}
+
+_OBJECTS_HEADER = "=== Objects on Receptacles ==="
+
+
+def hidden_block(context: str) -> str:
+    """The starting layout from a Word2World context, without the first observation or the task line.
+
+    The context also carries the task line (under "User Environment Information"), so passing it whole
+    would show the true goal in every condition, the swapped one included.
+    """
+    start = context.find(_OBJECTS_HEADER)
+    if start < 0:
+        raise ValueError("hidden state has no objects section")
+    block = context[start:].split("\n# ", 1)[0].strip()
+    if "Your task is to" in block:
+        raise ValueError("hidden state block carries a task line")
+    return block
+
 WM_SYSTEM = (
     "You are a text world model for household embodied tasks. "
     "Given the interaction history and the next action, predict the environment's "
@@ -52,25 +127,39 @@ WM_SYSTEM = (
 )
 
 
+HIDDEN_INTRO = "Hidden state (where every object is at the start of the episode; the agent cannot see this):"
+
+
 def world_model_prompt(
     history_text: str,
     action: str,
     fewshot: list[dict[str, str]] | None = None,
     task_line_override: str | None = None,
+    hidden: str | None = None,
+    fewshot_hidden: list[str] | None = None,
 ) -> list[dict[str, str]]:
-    """Chat messages for next-observation prediction / scoring."""
+    """Chat messages for next-observation prediction / scoring.
+
+    With `hidden` (the full-state condition) every turn, the examples included, opens with its game's
+    starting layout, so the examples show the format the query uses.
+    """
     shots = fewshot if fewshot is not None else WM_FEWSHOT_SET0
+    if hidden is not None and (fewshot_hidden is None or len(fewshot_hidden) != len(shots)):
+        raise ValueError("the full-state prompt needs a hidden state for every example")
     hist = history_text
     if task_line_override:
         hist = _replace_task_line(hist, task_line_override)
 
+    def turn(h: str, act: str, layout: str | None) -> str:
+        head = f"{HIDDEN_INTRO}\n{layout}\n\n" if layout is not None else ""
+        return f"{head}History:\n{h}\n\nAction: {act}\n\nNext observation:"
+
     messages: list[dict[str, str]] = [{"role": "system", "content": WM_SYSTEM}]
-    for ex in shots:
-        user = f"History:\n{ex['history']}\n\nAction: {ex['action']}\n\nNext observation:"
-        messages.append({"role": "user", "content": user})
+    for i, ex in enumerate(shots):
+        messages.append({"role": "user", "content": turn(ex["history"], ex["action"],
+                                                         fewshot_hidden[i] if hidden is not None else None)})
         messages.append({"role": "assistant", "content": ex["observation"]})
-    user = f"History:\n{hist}\n\nAction: {action}\n\nNext observation:"
-    messages.append({"role": "user", "content": user})
+    messages.append({"role": "user", "content": turn(hist, action, hidden)})
     return messages
 
 
