@@ -17,7 +17,7 @@ The harness talks to a stateful text environment (ALFWorld through the AgentGym 
 
 - **Full replay of every collected item** on CPU nodes (no GPU), not just a sample. History and true outcome must reproduce exactly. The attached success text must be what the server prints when the action works. No two items may be the same state and action. RQ2 scoring uses only items that pass.
 - **Failure labels checked against the hidden state.** A failure labelled as decided by contents is checked against Word2World's hidden state, an independent source. Where they disagree, one of the two is wrong.
-- **Simulator conformance.** Replay a sample of real traces through the simulator and compare the replies line by line.
+- **Rule and template conformance against the real server.** The simulator uses fixed made-up rooms, so real traces cannot be replayed through it. Instead, every collected item is checked against what the real server did. No item that the history-reading rules call a sure failure may have succeeded. Every real reply must match a template the code knows. The live scene scan must place every object where Word2World's hidden state does. Every contents-decided failure must agree with the hidden state. On the 11 unseen games collected before the restart, the scan and the hidden state agreed on every object (14 to 56 per game), 88 contents labels agreed, and each planted error was flagged. (`wf/tools/verify_items.py`; RQ2 scoring refuses a collection shard without a full pass on its exact file.)
 - **Calibration of the statistics.** Under a true null with the real data's clustering, the game-level permutation test should reject at its nominal rate. The game-bootstrap interval should cover the true value at its nominal rate.
 - **Honest bug checks.** Each deliberate bug is run against the tests that cover its module. A timeout is reported as inconclusive, not as caught.
 
@@ -38,4 +38,5 @@ The harness talks to a stateful text environment (ALFWorld through the AgentGym 
   - games with unusual item counts;
   - large shifts in the mix of determination reasons or action types against the pilot;
   - any episode longer than the step cap.
+- [ ] **Line-by-line simulator comparison.** Give `wf/env/sim.py` the layouts of a few real games, replay real traces through it, and compare every reply with the real server's. Any difference marks a place where a test passing in simulation means nothing.
 - [ ] **Human spot-checks per run.** Twenty random items or episodes from each confirmatory run, read by a person, using the existing `HUMAN_REVIEW.md` export.
