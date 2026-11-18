@@ -238,3 +238,17 @@ def test_vllm_runs_without_prefix_caching_and_caches_stay_off_home():
 
 def test_sigmoid_still_maps_L_for_the_filed_delta_p():
     assert sigmoid(0.0) == 0.5
+
+
+class SaysCannot(PlantedScorer):
+    """Writes failures in its own words, as Llama does."""
+
+    def free_generate(self, messages, max_new_tokens=64):
+        return "You can't find the mug 1 here."
+
+
+def test_pilot_a_reads_written_failures_with_the_prediction_parser(monkeypatch, tmp_path):
+    from wf.util import read_jsonl
+    _run(monkeypatch, tmp_path / "cannot", SaysCannot)
+    gens = read_jsonl(tmp_path / "cannot" / "pilotA_score" / "generations.jsonl")
+    assert gens and {g["generated_class"] for g in gens} == {"noop_paraphrase"}  # the old parser said "unparseable"
