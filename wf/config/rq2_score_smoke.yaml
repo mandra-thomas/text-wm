@@ -5,3 +5,5 @@ models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
 mention: true
 generations: true
 n_shards: 1
+accept_commits:
+  rq12_transitions_smoke: ["f8d20c1"]
