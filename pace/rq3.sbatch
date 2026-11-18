@@ -7,7 +7,8 @@
 #SBATCH --mem=64G
 #SBATCH --time=4:00:00
 #SBATCH --gres=gpu:1
-#SBATCH --constraint=gpu-l40s|gpu-a40|gpu-a100
+# Any free L40S, A40 or A100; brackets because ICE appends &cuda13 to the constraint.
+#SBATCH --constraint=(gpu-l40s|gpu-a40|gpu-a100)
 #SBATCH --output=logs/rq3_%j.out
 #SBATCH --error=logs/rq3_%j.err
 #
