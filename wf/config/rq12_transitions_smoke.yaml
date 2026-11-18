@@ -5,3 +5,4 @@ n_games: 2
 step_cap: 12
 min_items: 1
 min_states: 1
+verify_sample: 20

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -10,7 +11,7 @@ import statistics
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import yaml
 
@@ -40,6 +41,7 @@ from wf.analysis.stats import (
     rank_gain_ci,
     rank_outcome,
     scoring_agreement_on_failures,
+    with_partial_rule,
     success_gain_ci,
 )
 from wf.corruption.schedule import calibrate_p_arm, schedule
@@ -55,7 +57,7 @@ from wf.data.transitions import (
     success_exclusion_counts,
 )
 from wf.env.expert import expert_available, label_action
-from wf.env.replay import replay, step_counterfactual
+from wf.env.replay import history_text_from_state, replay, step_counterfactual
 from wf.env.server import AlfworldClient
 from wf.scoring.logodds import LogoddsScorer, build_messages, score_transition
 from wf.scoring.parser import parse_observation, parse_prediction
@@ -111,8 +113,25 @@ def _check_resume(d: Path, run_id: str, config: dict, inputs: dict[str, str]) ->
         raise SystemExit(f"{run_id}: its input files changed since the saved work; rerun without --resume.")
 
 
+_RUN_LOCKS: dict[str, Any] = {}
+
+
+def _lock_run(run_id: str, d: Path) -> None:
+    """Two jobs on one run would append to the same files; the second refuses to start."""
+    if run_id in _RUN_LOCKS:
+        return
+    handle = (d / ".lock").open("w")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        raise SystemExit(f"{run_id}: another job is already running this run ({d}).")
+    _RUN_LOCKS[run_id] = handle
+
+
 def _init_run(run_id: str, cfg: dict, inputs: tuple[Path, ...] = ()) -> Path:
     d = run_dir(run_id)
+    _lock_run(run_id, d)
     if not is_mock() and git_sha() == "unknown":
         raise SystemExit(f"{run_id}: no git commit to attribute results to.")
     config = {k: v for k, v in cfg.items() if k != "resume"}
@@ -619,8 +638,6 @@ def run_pilotA_transitions(cfg: dict) -> int:
         ep = run_episode(client, agent, gid, split, run_id, ForesightConfig("none"),
                          step_cap=int(cfg.get("step_cap", 12)))
         actions = [t["executed"] for t in ep["trace"]]
-        if ep["success"]:  # the winning step leaves no state to branch from
-            actions = actions[:-1]
         recs = build_transitions_from_rollout(
             client, gid, split, actions, id_start=tid, k=2, rng_seed=C.RNG_SEED
         )
@@ -631,13 +648,18 @@ def run_pilotA_transitions(cfg: dict) -> int:
     eligible = filter_pilot_a_items(all_t)
     main_items = primary_items(eligible)
     states = {t["game_id"] + f"#{t['state_idx']}" for t in main_items}
+    no_hidden_state = sorted({t["game_id"] for t in all_t if "hidden_state" in t and not t["hidden_state"]})
+    # the hidden state must describe this game's own scene: every object the live scan found appears in it
+    mismatched = sorted({t["game_id"] for t in all_t if not is_mock() and t.get("hidden_state") and t.get("scene_locations")
+                         and any(inst not in t["hidden_state"] for inst in t["scene_locations"])})
+    verify = _verify_items(client, all_t, split, int(cfg.get("verify_sample", 0)))
     min_items, min_states = int(cfg.get("min_items", 500)), int(cfg.get("min_states", 80))
-    ok = len(main_items) >= min_items and len(states) >= min_states
+    ok = (len(main_items) >= min_items and len(states) >= min_states and not no_hidden_state and not mismatched
+          and not verify["mismatches"])
     by_reason: dict[str, int] = {}
     for t in eligible:
         reason = t.get("determination_reason") or determination_reason(t)
         by_reason[reason] = by_reason.get(reason, 0) + 1
-    no_hidden_state = sorted({t["game_id"] for t in all_t if "hidden_state" in t and not t["hidden_state"]})
     counts: dict[str, int] = {}
     for t in eligible:
         kind = "goal-agnostic" if t.get("history_goal_agnostic") else "goal-revealing"
@@ -654,7 +676,8 @@ def run_pilotA_transitions(cfg: dict) -> int:
         {"n_total": len(all_t), "n_eligible": len(eligible), "n_main_test": len(main_items),
          "n_shared_location": n_flagged, "n_targeted": targeted, "n_states": len(states),
          "counts": counts, "balance": balance, "exclusions": exclusions,
-         "eligible_by_reason": by_reason, "games_without_hidden_state": no_hidden_state},
+         "eligible_by_reason": by_reason, "games_without_hidden_state": no_hidden_state,
+         "games_with_mismatched_hidden_state": mismatched, "replay_check": verify},
     )
     write_status(
         run_id,
@@ -662,10 +685,33 @@ def run_pilotA_transitions(cfg: dict) -> int:
         f"shared_location={n_flagged} targeted={targeted} states={len(states)}\n"
         f"counts={counts}\nbalance={balance}\nexclusions={exclusions}\n"
         f"eligible_by_reason={by_reason}\ngames_without_hidden_state={no_hidden_state}\n"
+        f"games_with_mismatched_hidden_state={mismatched}\n"
+        f"replay_check: {verify['checked']} items replayed, mismatches={verify['mismatches']}\n"
         f"Acceptance ≥{min_items} main-test items / ≥{min_states} states — {'PASS' if ok else 'FAIL'}",
         ok=ok,
     )
     return 0 if ok else 1
+
+
+def _verify_items(client: AlfworldClient, records: list[dict], split: str, n: int) -> dict:
+    """Replay a seeded sample of saved items on the server: the history and the true outcome must
+    reproduce exactly, or the saved data does not describe what the environment does."""
+    if n <= 0 or not records:
+        return {"checked": 0, "mismatches": []}
+    sample = random.Random(f"{C.RNG_SEED}|verify").sample(records, min(n, len(records)))
+    mismatches = []
+    for rec in sample:
+        handle = replay(client, rec["game_id"], list(rec["prefix_actions"]), split=split)
+        history = history_text_from_state(handle.state)
+        obs, _ = step_counterfactual(handle, rec["action"])
+        problems = []
+        if history != rec["history_text"]:
+            problems.append("history")
+        if obs.strip() != (rec["true_obs"] or "").strip():
+            problems.append("true_obs")
+        if problems:
+            mismatches.append({"id": rec["id"], "game_id": rec["game_id"], "action": rec["action"], "fields": problems})
+    return {"checked": len(sample), "mismatches": mismatches}
 
 
 def _effect(scores: list[dict], items: list[dict], require_agnostic: bool = True,
@@ -773,6 +819,12 @@ def _generation_report(gens: list[dict], scores: list[dict], sets: dict[str, lis
         # Decision 5: RQ1 reads the model's own text (Ŷ_gen), never the sign of L.
         "A": asymmetry_A(gens, everything),
         "A_ci": asymmetry_ci(gens, everything, seed=C.RNG_SEED),
+        "A_sensitivity": {rule: asymmetry_A(with_partial_rule(gens, rule), everything)
+                          for rule in ("exclude_partial", "partial_as_failure")},
+        # what the model predicted for actions that fail, by kind of predicted effect
+        "failure_predictions_by_class": dict(Counter(
+            g["generated_class"] for g in gens
+            if g.get("condition", "aligned") == "aligned" and g["transition_id"] in {t["id"] for t in failures})),
         "false_success_by_reason": _false_success_by_reason(gens, failures),
         # Checks that ΔL reflects belief: does the goal change what the model writes?
         "gen_success_shift": gen_success_shift(gens, sets["agnostic"]),

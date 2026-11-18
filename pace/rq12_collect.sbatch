@@ -23,10 +23,25 @@ if [[ ! -f "${RUNS_DIR}/FILED.txt" ]]; then
   exit 2
 fi
 
-echo "=== RQ1/RQ2 collection START $(date) host=$(hostname) ==="
+RUN="${RQ12_RUN:?set RQ12_RUN to a shard, e.g. --export=ALL,RQ12_RUN=rq12_transitions_s0}"
+echo "=== RQ1/RQ2 collection ${RUN} START $(date) host=$(hostname) ==="
 cleanup() { stop_vllm || true; stop_alfworld_server || true; }
 trap cleanup EXIT
-start_alfworld_server
 start_vllm
-run_wf "${RQ12_RUN:-rq12_transitions}"  # RQ12_RUN=rq12_transitions_smoke for the train-game check
-echo "=== RQ1/RQ2 collection END $(date) ==="
+# The ALFWorld server leaks memory on every reset, so it is restarted after every max_games_per_job
+# games (the run stops with a PARTIAL status) while vLLM stays up; the run then resumes.
+while true; do
+  start_alfworld_server
+  set +e
+  run_wf "${RUN}"
+  rc=$?
+  set -e
+  stop_alfworld_server || true
+  if [[ -f "${RUNS_DIR}/${RUN}/STATUS.md" ]] && grep -q "PARTIAL" "${RUNS_DIR}/${RUN}/STATUS.md"; then
+    export WF_RESUME=1
+    continue
+  fi
+  break
+done
+echo "=== RQ1/RQ2 collection ${RUN} END $(date) rc=${rc} ==="
+exit "${rc}"

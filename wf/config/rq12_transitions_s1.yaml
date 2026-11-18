@@ -8,4 +8,5 @@ shard_count: 3
 step_cap: 12
 min_items: 1
 min_states: 1
-max_games_per_job: 30  # fresh server every 30 games (memory leak); resume jobs chain
+max_games_per_job: 6  # the server restarts every 6 games (memory leak); the job loops until the shard is done
+verify_sample: 40  # replay this many saved items on the server at the end; any mismatch fails the run

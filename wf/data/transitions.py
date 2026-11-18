@@ -225,31 +225,37 @@ def contents_holding_alternatives(
 ) -> list[tuple[str, str, bool]]:
     """Every failure the history decides through observed contents, open state or holding state.
 
-    Generated at every visited step, with no sampling (decision 6, 2026-11-17). Which fact
-    actually decides each one is recorded afterwards by `determination_reason`.
+    Generated at every visited step, with no sampling (decision 6, 2026-11-17). Only actions at the
+    agent's own receptacle qualify: anywhere else the failure is decided by location instead. Which
+    fact decides each one is recorded afterwards by `determination_reason`.
     """
     alts: list[tuple[str, str, bool]] = []
     loc = facts.location
-    if loc:
-        seen = facts.contents.get(loc)
-        # contents or open state: the goal object is not where the agent stands, as far as it has seen
-        if loc in facts.closed or (seen is not None and goal not in seen):
-            alts.append((f"take {goal} from {loc}", "validity", True))
-        # hands full: taking anything here while holding something else
-        if facts.holding:
-            for inst in sorted(seen or ()):
-                if inst != facts.holding:
-                    alts.append((f"take {inst} from {loc}", "precondition", inst.rsplit(" ", 1)[0] == goal.rsplit(" ", 1)[0]))
-    if facts.knows_position and facts.holding != goal:
-        # holding: placing or transforming the goal object without holding it
-        if loc:
-            alts.append((f"move {goal} to {loc}", "precondition", True))
-        for verb, tool in (("heat", "microwave 1"), ("cool", "fridge 1"), ("clean", "sinkbasin 1")):
-            if tool in scene.receptacles:
-                alts.append((f"{verb} {goal} with {tool}", "precondition", True))
-        for r in scene.receptacles:
-            if r.rsplit(" ", 1)[0] == target:
-                alts.append((f"move {goal} to {r}", "precondition", True))
+    if not (facts.knows_position and loc):
+        return alts
+    goal_object = goal.rsplit(" ", 1)[0]
+    seen = facts.contents.get(loc)
+    # contents or open state: a goal instance the agent can see is not here, or the receptacle is closed
+    for inst in scene.instances(goal_object) or [goal]:
+        if loc in facts.closed or (seen is not None and inst not in seen):
+            alts.append((f"take {inst} from {loc}", "validity", True))
+    # open state: opening what is already open, closing what is already closed
+    if loc in facts.opened:
+        alts.append((f"open {loc}", "precondition", False))
+    if loc in facts.closed:
+        alts.append((f"close {loc}", "precondition", False))
+    # hands full: taking anything here while holding something else
+    if facts.holding:
+        for inst in sorted(seen or ()):
+            if inst != facts.holding:
+                alts.append((f"take {inst} from {loc}", "precondition", inst.rsplit(" ", 1)[0] == goal_object))
+    # holding: placing or transforming the goal object here without holding it
+    if facts.holding != goal:
+        alts.append((f"move {goal} to {loc}", "precondition", True))
+        kind = loc.rsplit(" ", 1)[0]
+        verb = {"microwave": "heat", "fridge": "cool", "sinkbasin": "clean"}.get(kind)
+        if verb:
+            alts.append((f"{verb} {goal} with {loc}", "precondition", True))
     return alts
 
 
@@ -445,6 +451,9 @@ def determination_reason(t: dict) -> str:
     facts = history_facts(t["history_text"])
     if not t["context_determined"]:
         return "not_determined"
+    go = re.fullmatch(r"go to ([a-z]+ \d+)", t["action"])
+    if go:  # location decides: already there, or no such receptacle in the room
+        return "already_there" if facts.location == go[1] else "location_other"
     m = re.fullmatch(r"(?:take|move|open|close|heat|cool|clean) .*?(?:from |to |with )?([a-z]+ \d+)", t["action"])
     receptacle = m[1] if m else None
     if receptacle and facts.location != receptacle:

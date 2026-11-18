@@ -156,5 +156,5 @@ def test_A_is_computed_without_and_then_with_flagged_items(monkeypatch, tmp_path
     flagged_successes = len([t for t in transitions if t["context_determined"] and t["candidates"] and t["shared_location"]
                              and t["true_obs"].strip() != "Nothing happens."])
     assert flagged_failures > 0 and flagged_successes > 0
-    main, with_flagged = sizes[0], sizes[1]
+    main, with_flagged = sizes[0], max(sizes)  # the primary A first; the sensitivity analyses reuse its items
     assert with_flagged - main == flagged_failures + flagged_successes  # back on both sides

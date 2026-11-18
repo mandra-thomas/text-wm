@@ -129,14 +129,31 @@ def decision_flip_share(scores: list[dict], transitions: list[dict], require_agn
     }
 
 
-GEN_SUCCESS_CLASSES = ("state_change", "reveal_with_goal", "reveal_without_goal", "info", "success_paraphrase")
+# RQ1 primary definition: a prediction is a failure if and only if it predicts no effect, so the
+# partial effects (process only, a different effect) count on the success side (2026-11-17).
+GEN_SUCCESS_CLASSES = ("state_change", "reveal_with_goal", "reveal_without_goal", "info", "success_paraphrase",
+                       "process_only", "different_effect")
+PARTIAL_EFFECT_CLASSES = ("process_only", "different_effect")
+
+
+def with_partial_rule(generations: list[dict], rule: str) -> list[dict]:
+    """The RQ1 sensitivity analyses: partial effects excluded, or counted as failures. "primary" is as is."""
+    if rule == "primary":
+        return generations
+    to = {"exclude_partial": "unparseable", "partial_as_failure": "noop_paraphrase"}[rule]
+    return [{**g, "generated_class": to} if g.get("generated_class") in PARTIAL_EFFECT_CLASSES else g
+            for g in generations]
 
 
 def gen_says_success(generated_class: str) -> bool | None:
     """Ŷ_gen: the parsed class of the model's own text. None when the parser could not read it."""
     if generated_class == "unparseable":
         return None
-    return generated_class in GEN_SUCCESS_CLASSES
+    if generated_class in GEN_SUCCESS_CLASSES:
+        return True
+    if generated_class in ("noop", "noop_paraphrase"):
+        return False
+    raise ValueError(f"unknown prediction class {generated_class!r}")
 
 
 def asymmetry_A(generations: list[dict], transitions: list[dict]) -> dict[str, Any]:
@@ -486,7 +503,9 @@ def prereg_rq2_verdict(delta_L: float, ci: list[float], holm_p: float) -> str:
 
     if any(v != v for v in (delta_L, ci[0], ci[1], holm_p)):
         return "not computable"
-    if delta_L <= 0 or ci[0] <= 0 <= ci[1]:
+    if ci[0] > ci[1]:
+        return "not computable (malformed CI)"
+    if delta_L <= 0 or ci[0] <= 0:  # an interval that includes zero, or lies below it
         return "not supported"
     if delta_L < C.DELTA_L_SUPPORT_NATS:
         return "weak (not support)"
@@ -495,10 +514,17 @@ def prereg_rq2_verdict(delta_L: float, ci: list[float], holm_p: float) -> str:
     return "supported (strong)" if delta_L >= C.DELTA_L_STRONG_NATS else "supported"
 
 
-def prereg_rq2_verdicts(per_model: dict[str, dict]) -> dict:
-    """Per-model and overall H2 verdicts. `per_model[m]` needs delta_L_nats, delta_L_ci and
-    delta_L_perm_p (the game-level permutation p); Holm runs across exactly these models."""
-    adjusted = holm({m: r["delta_L_perm_p"] for m, r in per_model.items()})
+CO_PRIMARY_MODELS = ("qwen3-8b-fewshot", "llama3.1-8b-fewshot")
+
+
+def prereg_rq2_verdicts(per_model: dict[str, dict], co_primary: tuple[str, ...] = CO_PRIMARY_MODELS) -> dict:
+    """Per-model and overall H2 verdicts for the co-primary models. `per_model[m]` needs delta_L_nats,
+    delta_L_ci and delta_L_perm_p (the game-level permutation p). Holm always runs across both
+    co-primary models: a model that was not scored counts as p = 1, so it is never a free pass."""
+    missing = [m for m in co_primary if m not in per_model or per_model[m].get("delta_L_perm_p") != per_model[m].get("delta_L_perm_p")]
+    adjusted = holm({m: (1.0 if m in missing else per_model[m]["delta_L_perm_p"]) for m in co_primary})
+    per_model = {m: per_model.get(m, {"delta_L_nats": float("nan"), "delta_L_ci": [float("nan")] * 2,
+                                     "delta_L_perm_p": float("nan")}) for m in co_primary}
     verdicts = {
         m: {"verdict": prereg_rq2_verdict(r["delta_L_nats"], r["delta_L_ci"], adjusted[m]),
             "holm_p": adjusted[m], "perm_p": r["delta_L_perm_p"]}
@@ -507,4 +533,4 @@ def prereg_rq2_verdicts(per_model: dict[str, dict]) -> dict:
     supported = [m for m, v in verdicts.items() if v["verdict"].startswith("supported")]
     # The prereg: supported if, for at least one of the two co-primary models, all three conditions hold.
     return {"per_model": verdicts, "overall": "supported" if supported else "not supported",
-            "supported_models": supported}
+            "supported_models": supported, "not_scored": missing}

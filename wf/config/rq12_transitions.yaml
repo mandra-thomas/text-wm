@@ -5,4 +5,5 @@ n_games: 134
 step_cap: 12
 min_items: 1000
 min_states: 200
-max_games_per_job: 30  # fresh server every 30 games (memory leak); resume jobs chain
+max_games_per_job: 6
+verify_sample: 40
