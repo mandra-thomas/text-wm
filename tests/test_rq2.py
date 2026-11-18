@@ -61,6 +61,8 @@ def mock_root(monkeypatch, tmp_path):
     (tmp_path / "FILED.txt").write_text("filed_date: x\n")
     assert runs_mod.run_pilotA_transitions({"run_id": "rq12_transitions_smoke", "split": "train", "n_games": 6,
                                             "step_cap": 12, "min_items": 1, "min_states": 1}) == 0
+    from wf.tools.verify_items import verify_run
+    assert verify_run("rq12_transitions_smoke", server=True)["passed"]
     return tmp_path
 
 

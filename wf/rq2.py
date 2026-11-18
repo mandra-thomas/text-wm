@@ -27,6 +27,7 @@ from wf.runs import (
 )
 from wf.scoring.logodds import LogoddsScorer, build_messages
 from wf.scoring.parser import parse_prediction
+from wf.tools.verify_items import verified
 from wf.util import append_jsonl, read_jsonl, require_filed, runs_root, write_json, write_status
 
 CO_PRIMARY = ("qwen3-8b-fewshot", "llama3.1-8b-fewshot")
@@ -119,6 +120,11 @@ def run_rq2_score(cfg: dict) -> int:
     problems = [s for s in sources if not _finished(s, tuple(cfg.get("accept_commits", {}).get(s, ())))]
     if problems:
         write_status(run_id, f"collection not finished cleanly: {problems}", ok=False)
+        return 1
+    # Only items that a full replay on the real server has verified (wf/tools/verify_items.py).
+    unverified = {s: why for s in sources for ok, why in [verified(s)] if not ok}
+    if unverified:
+        write_status(run_id, f"collection not verified: {unverified}", ok=False)
         return 1
     run_id = f"{run_id}/shard_{i:02d}_of_{n:02d}"
     cfg = {**cfg, "run_id": run_id, "shard": i, "n_shards": n}

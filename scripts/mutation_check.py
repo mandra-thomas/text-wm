@@ -211,6 +211,27 @@ MUTANTS = [
 ]
 
 
+def _covering_tests(work: Path, rel: str) -> list[str]:
+    """Test files that reference the mutated module (dotted name, `from pkg import mod`, or file name)."""
+    path = Path(rel)
+    names = [path.name]
+    if path.suffix == ".py":
+        dotted = ".".join(path.with_suffix("").parts)
+        names += [dotted, f"from {'.'.join(path.parent.parts)} import {path.stem}"]
+    found = [str(p.relative_to(work)) for p in sorted((work / "tests").glob("test_*.py"))
+             if any(n in p.read_text(encoding="utf-8") for n in names)]
+    return found or ["tests"]
+
+
+def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900) -> str:
+    try:
+        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", *targets],
+                                cwd=work, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return "timeout"
+    return "killed" if result.returncode != 0 else "survived"
+
+
 def main() -> int:
     python = sys.executable
     # `mutation_check.py 2/4` runs the third of four shards, so the check can use several cores.
@@ -222,6 +243,7 @@ def main() -> int:
         chosen = [m for m in chosen if only in m[0]]
     survivors: list[str] = []
     broken: list[str] = []
+    timeouts: list[str] = []
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp) / "repo"
         def skip(folder: str, names: list[str]) -> list[str]:
@@ -237,20 +259,22 @@ def main() -> int:
                 print(f"NOT APPLIED  {name}")
                 continue
             path.write_text(source.replace(good, bad), encoding="utf-8")
-            try:
-                result = subprocess.run(
-                    [python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", "tests/test_fix_round.py", "tests"],
-                    cwd=work, capture_output=True, text=True, timeout=300,
-                )
-                killed = result.returncode != 0
-            except subprocess.TimeoutExpired:  # a mutant that hangs the tests has been noticed
-                killed = True
+            # Fast path: the test files that name the mutated module. A mutant that survives them is run
+            # against the whole suite before it counts as a survivor; a timeout is never counted as a kill.
+            outcome = _run_tests(python, work, _covering_tests(work, rel))
+            if outcome == "survived":
+                outcome = _run_tests(python, work, ["tests"])
             path.write_text(source, encoding="utf-8")
-            print(f"{'killed  ' if killed else 'SURVIVED'}  {name}", flush=True)
-            if not killed:
+            label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]
+            print(f"{label}  {name}", flush=True)
+            if outcome == "survived":
                 survivors.append(name)
-    print(f"\n{len(chosen) - len(survivors) - len(broken)}/{len(chosen)} killed; survivors={survivors}; not applied={broken}")
-    return 1 if survivors or broken else 0
+            elif outcome == "timeout":
+                timeouts.append(name)
+    killed = len(chosen) - len(survivors) - len(broken) - len(timeouts)
+    print(f"\n{killed}/{len(chosen)} killed; survivors={survivors}; inconclusive (timeout)={timeouts}; "
+          f"not applied={broken}")
+    return 1 if survivors or broken or timeouts else 0
 
 
 if __name__ == "__main__":
