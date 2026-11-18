@@ -177,6 +177,17 @@ stop_alfworld_server() {
     kids="$(_descendants "${pid}")"  # the listener can be a child; collect before the parent goes
     # shellcheck disable=SC2086
     kill "${pid}" ${kids} 2>/dev/null || true
+    # Wait until they are gone: a dying server still answers on its port, and the next start must not
+    # take that answer for its own (shard 2's collection job crashed this way on 2026-11-18).
+    local p _
+    for _ in $(seq 1 30); do
+      local alive=0
+      for p in ${pid} ${kids}; do kill -0 "${p}" 2>/dev/null && alive=1; done
+      [[ "${alive}" == 0 ]] && break
+      sleep 1
+    done
+    # shellcheck disable=SC2086
+    kill -KILL "${pid}" ${kids} 2>/dev/null || true
     rm -f "${ALFWORLD_PID_FILE}"
   fi
 }

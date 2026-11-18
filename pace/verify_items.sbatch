@@ -3,9 +3,11 @@
 #SBATCH --no-requeue
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+# Sized 2026-11-18: about 1 busy core; the server grows about 36 MB per reset, about one reset per item.
+# Keep parts to about 1,300 items (about 50 GB, about 1 h): VERIFY_PART=i/k with k = ceil(items / 1300).
+#SBATCH --cpus-per-task=2
 #SBATCH --mem=64G
-#SBATCH --time=06:00:00
+#SBATCH --time=2:00:00
 #SBATCH --partition=coc-cpu
 #SBATCH --output=logs/verify_items_%j.out
 #SBATCH --error=logs/verify_items_%j.err

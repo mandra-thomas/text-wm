@@ -3,9 +3,10 @@
 #SBATCH --no-requeue
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+# Sized from the confirmatory collection (2026-11-18): about 1 busy core, 46.5 GB peak (server leak).
+#SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
-#SBATCH --time=14:00:00
+#SBATCH --time=4:00:00
 #SBATCH --gres=gpu:1
 # Any free L40S, A40 or A100; brackets because ICE appends &cuda13 to the constraint.
 #SBATCH --constraint=(gpu-l40s|gpu-a40|gpu-a100)

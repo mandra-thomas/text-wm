@@ -3,9 +3,11 @@
 #SBATCH --no-requeue
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=4:00:00
+# Sized from the real-data smoke (2026-11-18): 65 items, both models, 6 min, 11.7 GB peak, under 1 core.
+# A quarter of the confirmatory items is about 1,100: roughly an hour, so 2 h; scores resume if cut off.
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --time=2:00:00
 #SBATCH --gres=gpu:1
 # Any free L40S, A40 or A100; brackets because ICE appends &cuda13 to the constraint.
 #SBATCH --constraint=(gpu-l40s|gpu-a40|gpu-a100)

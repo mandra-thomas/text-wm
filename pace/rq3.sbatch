@@ -3,7 +3,8 @@
 #SBATCH --no-requeue
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+# 4 CPUs: the agent and server jobs used about 1 busy core (2026-11-18).
+#SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
 #SBATCH --time=4:00:00
 #SBATCH --gres=gpu:1
