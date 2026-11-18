@@ -1,0 +1,9 @@
+run_id: rq2
+# Confirmatory RQ2 scoring: the preregistered main-test items from the unseen-game collection, aligned and
+# swapped goals, history only, prompt example set 1, both co-primary models; plus the exploratory
+# object-mention 2x2 and the written predictions (behavioural check). Sharded by game: WF_SHARD / WF_N_SHARDS.
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+mention: true
+generations: true
+n_shards: 4

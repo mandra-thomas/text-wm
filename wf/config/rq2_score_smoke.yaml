@@ -1,0 +1,7 @@
+run_id: rq2_smoke
+# Train-game smoke test of the RQ2 scoring run, on the collector's smoke items.
+sources: [rq12_transitions_smoke]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+mention: true
+generations: true
+n_shards: 1

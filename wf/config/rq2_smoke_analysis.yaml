@@ -1,0 +1,5 @@
+run_id: rq2_smoke_analysis
+source: rq2_smoke
+sources: [rq12_transitions_smoke]
+min_items: 1
+min_states: 1
