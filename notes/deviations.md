@@ -224,3 +224,7 @@ Job 6685206 ran the old code, so the Tier 0 claims in `docs/milestone_checkin.te
 ## GPU type for confirmatory jobs (2026-11-17)
 
 All 32 L40S GPUs on ICE were taken when the confirmatory collection and RQ2 scoring were queued. GPU jobs now take the first free L40S, A40 or A100 (all run the models in bfloat16 with at least 40 GB). The 16 GB V100s are excluded: an 8B model does not fit in 16-bit precision, and V100s have no bfloat16. The collector and RQ3 jobs log the GPU they got. This cannot change item correctness, because every collected item is replayed on the real server before scoring. Log-probabilities can differ across GPU types only by floating-point rounding, far below the 0.5-nat threshold.
+
+## Scorer precision (2026-11-18)
+
+The RQ2 smoke run on real items showed first-token log-probabilities that were exact bfloat16 values (−4.5, −7.75), with exact ties between candidates. The scorer took `log_softmax` of the model's bfloat16 logits without converting them to float32, so every per-token log-probability was rounded to about 3 significant digits. That is up to 0.016 nats for a token near −8. The rounding is the same in every condition and averages out, so it cannot create or hide a 0.5-nat ΔL. It did make exact ties in the first-token measures, and first-token probability sums slightly above 1. From commit db3eb56 the scorer converts to float32 first. The pilots used the old scorer. Confirmatory RQ2 scoring uses the new one. The model's own logits stay bfloat16.

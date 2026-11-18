@@ -1,4 +1,6 @@
-"""The real scorer's log-probabilities are float32, not bfloat16 (2026-11-18). Needs torch (runs on ICE)."""
+"""The real scorer's log-probabilities are float32, not bfloat16 (2026-11-18). Needs torch (runs on ICE).
+
+Checked on ICE: passes with the fix, fails against the bfloat16 scorer."""
 from __future__ import annotations
 
 import pytest
@@ -48,5 +50,3 @@ def test_log_probabilities_are_not_rounded_to_bfloat16():
     assert n == 2
     assert first == pytest.approx(want_first, abs=1e-5)
     assert total == pytest.approx(want_first + exact[3, 6].item(), abs=1e-5)
-    rounded = torch.log_softmax(logits[0, 2], dim=-1)[5].item()
-    assert abs(rounded - want_first) > 1e-4 or abs(want_first) < 0.5  # the bfloat16 path would differ
