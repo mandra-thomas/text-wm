@@ -90,6 +90,47 @@ PY
   echo "python=$(command -v python) ($(python -c 'import sys; print(sys.version.split()[0])' 2>/dev/null || echo missing))"
 }
 
+# --- ports (2026-11-18) -------------------------------------------------------------------------------
+# Jobs share nodes. Checking that a port is free and then starting a server is a race: a server takes
+# seconds (ALFWorld) or minutes (vLLM) to bind, and meanwhile another job's server can answer on that port.
+# On 2026-11-18 three verification jobs on one node all used a fourth job's ALFWorld server this way.
+# So each job starts from a port derived from its job id, skips ports in use, and a server counts as ready
+# only when the process listening on the port is our own (or a child of it).
+_port_in_use() {
+  ss -ltnH "sport = :$1" 2>/dev/null | grep -q . || curl -s --max-time 2 "http://127.0.0.1:$1/" >/dev/null 2>&1
+}
+
+_pick_port() {  # base span -> a free port in [base, base+span), starting from this job's offset
+  local base="$1" span="$2" start i q
+  start=$(( ${SLURM_JOB_ID:-0} % span ))
+  for i in $(seq 0 $((span - 1))); do
+    q=$(( base + (start + i) % span ))
+    if ! _port_in_use "${q}"; then
+      echo "${q}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_descendants() {
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null); do
+    echo "${c}"
+    _descendants "${c}"
+  done
+}
+
+_owns_port() {  # pid port -> is the listener on port this pid or one of its descendants?
+  local pid="$1" port="$2" mine listeners l
+  mine=" ${pid} $(_descendants "${pid}" | tr '\n' ' ') "
+  listeners=$(ss -ltnpH "sport = :${port}" 2>/dev/null | grep -oE 'pid=[0-9]+' | cut -d= -f2)
+  for l in ${listeners}; do
+    [[ "${mine}" == *" ${l} "* ]] && return 0
+  done
+  return 1
+}
+
 start_alfworld_server() {
   local log="${PROJECT_ROOT}/logs/alfworld_${SLURM_JOB_ID:-local}.log"
   local alfworld="${WORD2WORLD_ROOT}/uv_alfworld/bin/alfworld"
@@ -97,32 +138,33 @@ start_alfworld_server() {
     echo "ERROR: ALFWorld server missing at ${alfworld}" >&2
     return 1
   fi
-  # Jobs can share a node, so a busy port must not silently connect us to another job's server.
-  if curl -sf "http://127.0.0.1:${ALFWORLD_PORT}/" >/dev/null 2>&1; then
-    ALFWORLD_PORT=$((36100 + (${SLURM_JOB_ID:-0} % 800)))
-    echo "WARN: default ALFWorld port busy; using ${ALFWORLD_PORT}"
-  fi
-  export ALFWORLD_PORT
-  export ALFWORLD_BASE_URL="http://127.0.0.1:${ALFWORLD_PORT}"
-  (
-    cd "${WORD2WORLD_ROOT}"
-    # shellcheck disable=SC1091
-    source uv_alfworld/bin/activate
-    exec alfworld --host 127.0.0.1 --port "${ALFWORLD_PORT}"
-  ) >"${log}" 2>&1 &
-  echo $! >"${ALFWORLD_PID_FILE}"
-  echo "ALFWorld server starting port=${ALFWORLD_PORT} (log=${log})"
-  for _ in $(seq 1 60); do
-    # Our own process first: an answer on this port could come from another job's server.
-    if ! kill -0 "$(cat "${ALFWORLD_PID_FILE}")" 2>/dev/null; then
-      echo "ERROR: ALFWorld server exited early; see ${log}" >&2
-      return 1
-    fi
-    if curl -sf "${ALFWORLD_BASE_URL}/" >/dev/null 2>&1; then
-      echo "ALFWorld ready at ${ALFWORLD_BASE_URL}"
-      return 0
-    fi
-    sleep 5
+  local attempt pid
+  for attempt in 1 2 3; do
+    ALFWORLD_PORT=$(_pick_port 36100 800) || { echo "ERROR: no free ALFWorld port" >&2; return 1; }
+    export ALFWORLD_PORT
+    export ALFWORLD_BASE_URL="http://127.0.0.1:${ALFWORLD_PORT}"
+    (
+      cd "${WORD2WORLD_ROOT}"
+      # shellcheck disable=SC1091
+      source uv_alfworld/bin/activate
+      exec alfworld --host 127.0.0.1 --port "${ALFWORLD_PORT}"
+    ) >"${log}" 2>&1 &
+    pid=$!
+    echo "${pid}" >"${ALFWORLD_PID_FILE}"
+    echo "ALFWorld server starting port=${ALFWORLD_PORT} pid=${pid} attempt=${attempt} (log=${log})"
+    for _ in $(seq 1 60); do
+      if ! kill -0 "${pid}" 2>/dev/null; then
+        break  # exited: most likely another job took the port first; try another
+      fi
+      # Ready only when the listener is our own process, not another job's server on the same port.
+      if curl -sf "${ALFWORLD_BASE_URL}/" >/dev/null 2>&1 && _owns_port "${pid}" "${ALFWORLD_PORT}"; then
+        echo "ALFWorld ready at ${ALFWORLD_BASE_URL} (pid ${pid})"
+        return 0
+      fi
+      sleep 5
+    done
+    kill "${pid}" 2>/dev/null || true
+    echo "WARN: ALFWorld server on port ${ALFWORLD_PORT} did not come up as ours; see ${log}" >&2
   done
   echo "ERROR: ALFWorld server failed to become ready" >&2
   return 1
@@ -130,7 +172,11 @@ start_alfworld_server() {
 
 stop_alfworld_server() {
   if [[ -f "${ALFWORLD_PID_FILE}" ]]; then
-    kill "$(cat "${ALFWORLD_PID_FILE}")" 2>/dev/null || true
+    local pid kids
+    pid="$(cat "${ALFWORLD_PID_FILE}")"
+    kids="$(_descendants "${pid}")"  # the listener can be a child; collect before the parent goes
+    # shellcheck disable=SC2086
+    kill "${pid}" ${kids} 2>/dev/null || true
     rm -f "${ALFWORLD_PID_FILE}"
   fi
 }
@@ -139,13 +185,8 @@ start_vllm() {
   local model="${VLLM_MODEL:-Qwen/Qwen3-8B}"
   local log="${PROJECT_ROOT}/logs/vllm_${SLURM_JOB_ID:-local}.log"
   activate_serve
-  # Prefer configured port; if busy, fall back to 8000+job offset and export it
-  if curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1 \
-    || ss -ltn 2>/dev/null | grep -q ":${VLLM_PORT} "; then
-    VLLM_PORT=$((8000 + (${SLURM_JOB_ID:-0} % 1000)))
-    export VLLM_PORT
-    echo "WARN: default vLLM port busy; using ${VLLM_PORT}"
-  fi
+  VLLM_PORT=$(_pick_port 8000 1000) || { echo "ERROR: no free vLLM port" >&2; return 1; }
+  export VLLM_PORT
   export VLLM_BASE_URL="http://127.0.0.1:${VLLM_PORT}/v1"
   python -m vllm.entrypoints.openai.api_server \
     --host 127.0.0.1 \
@@ -163,8 +204,9 @@ start_vllm() {
       echo "ERROR: vLLM process exited early; see ${log}" >&2
       return 1
     fi
-    if curl -sf "http://127.0.0.1:${VLLM_PORT}/health" >/dev/null 2>&1 \
-      || curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; then
+    if { curl -sf "http://127.0.0.1:${VLLM_PORT}/health" >/dev/null 2>&1 \
+      || curl -sf "http://127.0.0.1:${VLLM_PORT}/v1/models" >/dev/null 2>&1; } \
+      && _owns_port "$(cat "${VLLM_PID_FILE}")" "${VLLM_PORT}"; then
       echo "vLLM ready at ${VLLM_BASE_URL}"
       return 0
     fi
