@@ -15,6 +15,7 @@ from wf.rq2 import SOURCES, load_items
 
 sets = rq1.rq1_sets(load_items(SOURCES))
 problems: Counter = Counter()
+examples_share_task: Counter = Counter()
 lengths: dict[str, list[int]] = {}
 tok = None
 if len(sys.argv) > 1:
@@ -28,11 +29,14 @@ def check(t: dict, arm: str, ft: bool) -> None:
     text = "\n".join(m["content"] for m in msgs)
     goal = rq1.ARMS[arm][0]
     query = msgs[0]["content"] if ft else msgs[-1]["content"]
-    if goal != "aligned" and goal != "aligned_plus" and t["task_line"] in text:
+    if goal != "aligned" and goal != "aligned_plus" and t["task_line"] in query:
         problems[f"{arm}: true task line shown"] += 1
+    if goal != "aligned" and goal != "aligned_plus" and t["task_line"] in text:
+        examples_share_task[arm] += 1  # an example from another game has the same task; same in both goals
     if goal in ("aligned", "aligned_plus") and t["task_line"] not in query:
         problems[f"{arm}: aligned task line missing"] += 1
-    if arm.endswith("_full") and sum(m["content"].startswith("Hidden state") for m in msgs if m["role"] == "user") != (len(msgs) - 1) // 2:
+    users = [m for m in msgs if m["role"] == "user"]
+    if arm.endswith("_full") and not all(m["content"].startswith("Hidden state") for m in users):
         problems[f"{arm}: a turn without its layout"] += 1
     if ft and rq1.goal_line(t, goal) not in msgs[0]["content"]:
         problems[f"{arm} (fine-tuned): goal line missing"] += 1
@@ -51,6 +55,7 @@ for t in sets["failures"] + sets["successes"]:
     check(t, "aligned", True)
 print({k: len(v) for k, v in sets.items()})
 print("problems:", dict(problems) or "none")
+print("items whose task is also an example's task (not a leak):", dict(examples_share_task))
 for k, v in lengths.items():
     print(f"{k}: median {statistics.median(v)} tokens, max {max(v)}")
 sys.exit(1 if problems else 0)
