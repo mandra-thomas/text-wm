@@ -89,3 +89,53 @@ def test_verification_goes_stale_when_the_items_change(mock_root):
 def test_a_sample_is_not_a_full_verification(mock_root):
     V.verify_run("rq12_transitions_smoke", server=True, sample=5)
     assert V.verified("rq12_transitions_smoke")[0] is False
+
+
+# --- part-wise verification (2026-11-18): a fresh server per part, since the server leaks per reset -------
+
+
+def test_a_complete_set_of_parts_counts_as_full_and_covers_every_item(mock_root):
+    n = len(read_jsonl(mock_root / "rq12_transitions_smoke" / "transitions.jsonl"))
+    rs = [V.verify_run("rq12_transitions_smoke", server=True, part=(i, 3)) for i in range(3)]
+    assert sum(r["server"]["replayed"] for r in rs) == n
+    assert not (mock_root / "rq12_transitions_smoke" / "VERIFY.json").exists()
+    assert V.verified("rq12_transitions_smoke") == (True, "ok")
+
+
+def test_a_missing_part_is_not_a_full_verification(mock_root):
+    for i in (0, 2):
+        V.verify_run("rq12_transitions_smoke", server=True, part=(i, 3))
+    ok, why = V.verified("rq12_transitions_smoke")
+    assert not ok and "missing" in why
+
+
+def test_a_failing_part_blocks(mock_root):
+    path = mock_root / "rq12_transitions_smoke" / "transitions.jsonl"
+    items = read_jsonl(path)
+    items[1]["true_obs"] = "You pick up the mug 9 from the moon 1." if items[1]["true_obs"].strip() == "Nothing happens." else "Nothing happens."
+    write_jsonl(path, items)
+    rs = [V.verify_run("rq12_transitions_smoke", server=True, part=(i, 2)) for i in range(2)]
+    assert rs[1]["server"]["replay_mismatches"] and not rs[0]["server"]["replay_mismatches"]  # item 1: part 1
+    assert not rs[1]["passed"]
+    assert V.verified("rq12_transitions_smoke")[0] is False
+
+
+def test_parts_go_stale_when_the_items_change(mock_root):
+    for i in range(2):
+        V.verify_run("rq12_transitions_smoke", server=True, part=(i, 2))
+    path = mock_root / "rq12_transitions_smoke" / "transitions.jsonl"
+    with path.open("a") as f:
+        f.write(json.dumps(read_jsonl(path)[0]) + "\n")
+    assert V.verified("rq12_transitions_smoke")[0] is False
+
+
+def test_parts_from_two_splits_do_not_combine(mock_root):
+    V.verify_run("rq12_transitions_smoke", server=True, part=(0, 2))
+    V.verify_run("rq12_transitions_smoke", server=True, part=(1, 3))
+    V.verify_run("rq12_transitions_smoke", server=True, part=(2, 3))
+    assert V.verified("rq12_transitions_smoke")[0] is False
+
+
+def test_part_and_sample_are_exclusive(mock_root):
+    with pytest.raises(ValueError):
+        V.verify_run("rq12_transitions_smoke", server=True, sample=3, part=(0, 2))

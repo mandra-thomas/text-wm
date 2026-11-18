@@ -13,6 +13,8 @@
 # Full verification of collected items on the real server, CPU only (no GPU, outside the GPU cap):
 #   sbatch ... --export=ALL,VERIFY_RUNS="rq12_transitions_s0" pace/verify_items.sbatch
 # Writes runs/<run>/VERIFY.json; rq2_score refuses a shard without a full pass on its exact file.
+# Large runs: one job per part, each with a fresh server (it leaks memory per reset):
+#   for i in 0 1 2 3; do sbatch --export=ALL,VERIFY_RUNS=rq12_transitions_s0,VERIFY_PART=$i/4 pace/verify_items.sbatch; done
 
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
@@ -24,4 +26,4 @@ trap cleanup EXIT
 start_alfworld_server
 activate_serve
 # shellcheck disable=SC2086
-python -m wf.tools.verify_items ${RUNS} --server
+python -m wf.tools.verify_items ${RUNS} --server ${VERIFY_PART:+--part "${VERIFY_PART}"}

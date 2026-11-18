@@ -248,3 +248,18 @@ def test_a_missing_co_primary_model_still_counts_in_holm():
 def test_prereg_verdict_checks_the_interval(dl, ci, verdict):
     from wf.analysis.stats import prereg_rq2_verdict
     assert prereg_rq2_verdict(dl, ci, 0.002) == verdict
+
+
+def test_full_alternatives_only_at_every_kth_step_or_an_invalid_proposal(monkeypatch):
+    """Elsewhere only contents/holding failures: the full set at every step ran out of memory (2026-11-17)."""
+    import wf.data.transitions as T
+
+    calls = []
+    monkeypatch.setattr(T, "replay", lambda client, game, prefix, split: object())
+    # proposal at step 3 is invalid; the others work
+    monkeypatch.setattr(T, "step_counterfactual",
+                        lambda handle, act: ("Nothing happens." if act == "bad" else "You do it.", {}))
+    monkeypatch.setattr(T, "build_transitions_at_state",
+                        lambda *a, state_idx, contents_holding_only, **k: calls.append((state_idx, contents_holding_only)) or [])
+    T.build_transitions_from_rollout(None, "g", "train", ["a", "b", "c", "bad", "e"], k=2)
+    assert calls == [(0, False), (1, True), (2, False), (3, False), (4, False)]

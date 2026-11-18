@@ -184,6 +184,10 @@ MUTANTS = [
     ("2026-11-17 winning state dropped", "wf/runs.py", '        actions = [t["executed"] for t in ep["trace"]]\n', '        actions = [t["executed"] for t in ep["trace"]]\n        if ep["success"]:\n            actions = actions[:-1]\n'),
     ("2026-11-17 effect action read by whole reply", "wf/scoring/parser.py", "        if _no_effect_words(first) or _ALREADY_STATE.search(first):", "        if _no_effect_words(body) or _ALREADY_STATE.search(body):"),
     ("2026-11-17 steps gain sign flipped", "wf/analysis/stats.py", "[a[g] - b[g] for g in games],\n        games,\n        seed=seed,\n    )\n\n\ndef H_success_points", "[b[g] - a[g] for g in games],\n        games,\n        seed=seed,\n    )\n\n\ndef H_success_points"),
+    ("2026-11-18 verification parts may be missing", "wf/tools/verify_items.py", "    if have != set(range(k)):\n", "    if False:\n"),
+    ("2026-11-18 verification parts ignore the file hash", "wf/tools/verify_items.py", "    if r.get(\"transitions_sha256\") != sha:\n", "    if False:\n"),
+    ("2026-11-18 scorer rounds to bfloat16", "wf/scoring/logodds.py", "logits[0, pos].float()", "logits[0, pos]"),
+    ("2026-11-18 config run_id differs from its file", "wf/config/rq2_score.yaml", "run_id: rq2_score\n", "run_id: rq2\n"),
     # Confirmatory RQ3 runner (cap and yoke, primary set, shards)
     ("rq3 draws follow the step", "wf/rq3.py", "        k = self.chances\n", "        k = t\n"),
     ("rq3 no cap on false successes", "wf/rq3.py", "if valid or len(self.injections) >= self.cap:", "if valid:"),

@@ -12,8 +12,11 @@ With the server (--server): every item's history and true outcome replay exactly
 success text regenerates exactly (and is not "Nothing happens.").
 
 Writes <run>/VERIFY.json with the transitions file's SHA-256; `rq2_score` refuses items without a pass.
+`--part i/k` replays only every k-th item from the i-th (a fresh server per part, since the server leaks
+memory on each reset) and writes VERIFY_part_i_of_k.json; a complete set of passing parts on the same
+file counts as a full verification.
 
-    python -m wf.tools.verify_items rq12_transitions_s0 [--server] [--sample N]
+    python -m wf.tools.verify_items rq12_transitions_s0 [--server] [--sample N | --part i/k]
 """
 from __future__ import annotations
 
@@ -118,7 +121,14 @@ def server_checks(client, items: list[dict], split: str, sample: int | None = No
             "twin_mismatches": twin_bad, "passed": not replay_bad and not twin_bad}
 
 
-def verify_run(run: str, server: bool = False, sample: int | None = None) -> dict:
+def _part_name(i: int, k: int) -> str:
+    return f"VERIFY_part_{i}_of_{k}.json"
+
+
+def verify_run(run: str, server: bool = False, sample: int | None = None,
+               part: tuple[int, int] | None = None) -> dict:
+    if sample and part:
+        raise ValueError("--sample and --part are exclusive")
     path = runs_root() / run / "transitions.jsonl"
     items = read_jsonl(path)
     result = {"run": run, "transitions_sha256": file_sha(path), "offline": offline_checks(items)}
@@ -128,24 +138,57 @@ def verify_run(run: str, server: bool = False, sample: int | None = None) -> dic
         client = AlfworldClient()
         client.create()
         split = items[0].get("split", "train") if items else "train"
-        result["server"] = server_checks(client, items, split, sample)
+        chosen = items[part[0]::part[1]] if part else items
+        result["server"] = server_checks(client, chosen, split, sample)
         result["server_sample"] = sample
+        result["part"] = list(part) if part else None
+        result["part_items"] = len(chosen)
     result["passed"] = result["offline"]["passed"] and result.get("server", {"passed": True})["passed"]
     result["full"] = bool(server and not sample)
-    (runs_root() / run / "VERIFY.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
+    name = _part_name(*part) if part else "VERIFY.json"
+    (runs_root() / run / name).write_text(json.dumps(result, indent=1), encoding="utf-8")
     return result
 
 
-def verified(run: str) -> tuple[bool, str]:
-    """Did a full server verification pass on exactly the current transitions file?"""
-    report = runs_root() / run / "VERIFY.json"
-    if not report.exists():
-        return False, "no VERIFY.json"
-    r = json.loads(report.read_text(encoding="utf-8"))
-    if r.get("transitions_sha256") != file_sha(runs_root() / run / "transitions.jsonl"):
-        return False, "transitions changed after verification"
+def _check_report(r: dict, sha: str) -> str | None:
+    if r.get("transitions_sha256") != sha:
+        return "transitions changed after verification"
     if not (r.get("passed") and r.get("full")):
-        return False, f"verification passed={r.get('passed')} full={r.get('full')}"
+        return f"verification passed={r.get('passed')} full={r.get('full')}"
+    return None
+
+
+def verified(run: str) -> tuple[bool, str]:
+    """Did a full server verification pass on exactly the current transitions file (whole, or every part)?"""
+    d = runs_root() / run
+    sha = file_sha(d / "transitions.jsonl")
+    whole = None
+    if (d / "VERIFY.json").exists():
+        whole = _check_report(json.loads((d / "VERIFY.json").read_text(encoding="utf-8")), sha)
+        if whole is None:
+            return True, "ok"
+    parts = sorted(d.glob("VERIFY_part_*_of_*.json"))
+    if not parts:
+        return False, whole or "no VERIFY.json"
+    ks = {p.stem.rsplit("_of_", 1)[1] for p in parts}
+    if len(ks) != 1:
+        return False, f"verification parts from different splits: {[p.name for p in parts]}"
+    k = int(ks.pop())
+    have = {int(p.stem.split("_")[2]) for p in parts}
+    if have != set(range(k)):
+        return False, f"verification parts missing: {sorted(set(range(k)) - have)} of {k}"
+    n_items = len(read_jsonl(d / "transitions.jsonl"))
+    replayed = 0
+    for p in parts:
+        r = json.loads(p.read_text(encoding="utf-8"))
+        problem = _check_report(r, sha)
+        if problem:
+            return False, f"{p.name}: {problem}"
+        if r.get("part") != [int(p.stem.split("_")[2]), k]:
+            return False, f"{p.name}: records part {r.get('part')}"
+        replayed += r["server"]["replayed"]
+    if replayed != n_items:
+        return False, f"parts replayed {replayed} of {n_items} items"
     return True, "ok"
 
 
@@ -154,10 +197,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("runs", nargs="+")
     p.add_argument("--server", action="store_true", help="also replay on the real server")
     p.add_argument("--sample", type=int, default=None, help="replay only this many items (not a full pass)")
+    p.add_argument("--part", default=None, help="i/k: replay every k-th item from the i-th")
     args = p.parse_args(argv)
+    part = tuple(map(int, args.part.split("/"))) if args.part else None
+    if part and not (0 <= part[0] < part[1]):
+        p.error("--part i/k needs 0 <= i < k")
     ok = True
     for run in args.runs:
-        r = verify_run(run, args.server, args.sample)
+        r = verify_run(run, args.server, args.sample, part)
         summary = {k: len(v) for k, v in r["offline"]["problems"].items()}
         if "server" in r:
             summary.update(replay_mismatches=len(r["server"]["replay_mismatches"]),
