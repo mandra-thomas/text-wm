@@ -4,6 +4,17 @@ Drawn by rule and a fixed seed (20260924) from Pilot A train transitions; every 
 
 Set 1 (filed, kept for the primary analysis) has one goal-irrelevant success and two goal-relevant failures, so goal relevance predicts the outcome in it. See notes/deviations.md.
 
+## What to check (added 2026-11-18)
+
+In each block, the last `>` line is the example's action and the line after it is the outcome the model is shown. For each set:
+
+1. **The outcome follows from what is shown.** Would a careful person, reading only the task line and the two earlier steps, know the action's outcome? Failures should be forced: the object is not listed where the agent stands, or the agent is somewhere else. Successes should have every precondition visible.
+2. **The labels are right.** Goal-relevant means the action names the task's object or target receptacle. A location failure means the agent is not at the place the action names. A contents failure means the object is not there.
+3. **No accidental cue predicts the outcome.** Within a set, nothing besides the state should separate successes from failures: not the action verb, the length, or goal relevance. Set 2 has one such cue: both failures are `take` and neither success is, so the set could teach "take fails". Set 3 does not have it, because one of its successes is a `take`.
+4. **Nothing odd that a model might copy.** Check for malformed commands such as `take desklamp from desk 1` with no number (set 3, example 1, in the history), and for nonsense moves such as moving the creditcard back where it came from (set 2, example 2).
+
+Reply per set: approve, or redraw (say which check failed).
+
 ## Set 2
 
 ### Example 1: goal-irrelevant failure (contents) (train/745, t_002940)
