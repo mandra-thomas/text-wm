@@ -1,0 +1,5 @@
+run_id: thinking_analysis
+# Reads thinking_probe, and the thinking-off scores for the same items from rq1_score and rq1x_score.
+source: thinking_probe
+direct_sources: [rq1_score, rq1x_score]
+n_items: 1000
