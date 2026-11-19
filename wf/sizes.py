@@ -7,26 +7,30 @@ sharded by game, so each model can run on the GPU it needs; `size_analysis` read
 """
 from __future__ import annotations
 
+import math
 import os
+import random
+from collections import defaultdict
 from typing import Any
 
 from wf import constants as C
 from wf import rq1, rq1v, rq1x
 from wf.analysis.report import write_run_report
+from wf.analysis.stats import decision_flip_share
 from wf.rq2 import SOURCES, complete_shards, load_items, shard_items
 from wf.runs import _effect, _finished, _init_run, _item_hash
 from wf.scoring.logodds import LogoddsScorer
 from wf.tools.verify_items import verified
 from wf.util import append_jsonl, read_jsonl, require_filed, write_json, write_status
 
-# tag: (Hugging Face name, parameters in billions)
+# tag: (Hugging Face name, actual parameters in billions, from the checkpoints; the names are nominal)
 SIZES = {
-    "qwen3-0.6b": ("Qwen/Qwen3-0.6B", 0.6),
-    "qwen3-1.7b": ("Qwen/Qwen3-1.7B", 1.7),
-    "qwen3-4b": ("Qwen/Qwen3-4B", 4.0),
-    "qwen3-8b": ("Qwen/Qwen3-8B", 8.0),
-    "qwen3-14b": ("Qwen/Qwen3-14B", 14.0),
-    "qwen3-32b": ("Qwen/Qwen3-32B", 32.0),
+    "qwen3-0.6b": ("Qwen/Qwen3-0.6B", 0.75),
+    "qwen3-1.7b": ("Qwen/Qwen3-1.7B", 2.03),
+    "qwen3-4b": ("Qwen/Qwen3-4B", 4.02),
+    "qwen3-8b": ("Qwen/Qwen3-8B", 8.19),
+    "qwen3-14b": ("Qwen/Qwen3-14B", 14.77),
+    "qwen3-32b": ("Qwen/Qwen3-32B", 32.76),
 }
 PRED_ARMS = ("aligned", "swapped", "absent")
 YN_ARMS = rq1v.YN_ARMS  # yn_aligned, yn_swapped, yn_absent
@@ -107,15 +111,57 @@ def model_block(s: list[dict], primary: list[dict], successes: list[dict]) -> di
              "goal_effect_history_0": _effect(s, h0), "goal_effect_history_1plus": _effect(s, h1),
              "goal_effect_contents_or_open": _effect(s, seen),
              "flips_to_success": _flips(s, primary), "flips_history_0": _flips(s, h0), "flips_history_1plus": _flips(s, h1),
+             # the confirmatory definition: the sign of the first-token L changes (comparable with RQ2's tables)
+             "decision_flip": decision_flip_share(s, primary),
              "mean_s_failures": {a: _mean_s(s, primary, a) for a in PRED_ARMS},
              "mean_s_successes": {a: _mean_s(s, successes, a) for a in ("aligned", "absent")},
              "auc": {a: rq1x._auc_ci(by, both, a) for a in ("aligned", "absent")},
              "auc_aligned_minus_neutral": rq1x._auc_diff(by, both, "aligned", "absent"),
              "yes_no": {"goal_effect": _effect(s, primary, primary="yn_aligned", control="yn_swapped"),
+                        "goal_effect_history_0": _effect(s, h0, primary="yn_aligned", control="yn_swapped"),
+                        "goal_effect_history_1plus": _effect(s, h1, primary="yn_aligned", control="yn_swapped"),
+                        "goal_effect_contents_or_open": _effect(s, seen, primary="yn_aligned", control="yn_swapped"),
                         "yes_share_failures": {a: _mean_s(s, primary, a) for a in YN_ARMS},
+                        "yes_share_successes": {a: _mean_s(s, successes, a) for a in ("yn_aligned", "yn_absent")},
                         "auc": {a: rq1x._auc_ci(by, both, a) for a in ("yn_aligned", "yn_absent")},
                         "auc_aligned_minus_neutral": rq1x._auc_diff(by, both, "yn_aligned", "yn_absent")}}
     return block
+
+
+def _diffs_by_game(s: list[dict], items: list[dict], a: str, b: str) -> dict[str, list[float]]:
+    by = {(x["transition_id"], x["condition"]): x["L"] for x in s if x["L"] == x["L"]}
+    out: dict[str, list[float]] = defaultdict(list)
+    for t in items:
+        if (t["id"], a) in by and (t["id"], b) in by:
+            out[t["game_id"]].append(by[(t["id"], a)] - by[(t["id"], b)])
+    return dict(out)
+
+
+def _ols_slope(xs: list[float], ys: list[float]) -> float:
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    sxx = sum((x - mx) ** 2 for x in xs)
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx if sxx else float("nan")
+
+
+def size_slope(per_model: dict[str, dict[str, list[float]]], B: int = 1000) -> dict[str, Any]:
+    """Slope of the mean goal effect against log(parameters), nats per e-fold of size. The game bootstrap
+    resamples games jointly across sizes, since every size scores the same items."""
+    tags = sorted(per_model, key=lambda m: SIZES[m][1])
+    xs = [math.log(SIZES[m][1]) for m in tags]
+
+    def slope(games: list[str]) -> float:
+        ys = []
+        for m in tags:
+            v = [d for g in games for d in per_model[m].get(g, [])]
+            ys.append(sum(v) / len(v) if v else float("nan"))
+        return _ols_slope(xs, ys)
+
+    games = sorted({g for m in tags for g in per_model[m]})
+    est = slope(games)
+    rng = random.Random(C.RNG_SEED)
+    boots = sorted(slope([rng.choice(games) for _ in games]) for _ in range(B))
+    return {"estimate": est, "ci": [boots[int(0.025 * B)], boots[int(0.975 * B) - 1]], "models": tags,
+            "log_params": xs}
 
 
 def run_size_analysis(cfg: dict) -> int:
@@ -125,6 +171,7 @@ def run_size_analysis(cfg: dict) -> int:
     sets = rq1x.rq1x_sets(load_items(tuple(cfg.get("sources", SOURCES))))
     report: dict[str, Any] = {"items": {"n_primary": len(sets["primary"]), "n_successes": len(sets["successes"])},
                               "models": {}, "waiting": {}}
+    per_model: dict[str, dict] = {}
     for tag in cfg["models"]:
         folders, problems = complete_shards(f"size_score_{tag}")
         if problems:
@@ -132,6 +179,11 @@ def run_size_analysis(cfg: dict) -> int:
             continue
         s = [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag]
         report["models"][tag] = {"params_b": SIZES[tag][1], **model_block(s, sets["primary"], sets["successes"])}
+        per_model[tag] = {arms: _diffs_by_game(s, sets["primary"], *arms)
+                          for arms in (("aligned", "swapped"), ("yn_aligned", "yn_swapped"))}
+    if len(per_model) >= 3:
+        report["slope_vs_log_params"] = {arms[0]: size_slope({m: v[arms] for m, v in per_model.items()})
+                                         for arms in (("aligned", "swapped"), ("yn_aligned", "yn_swapped"))}
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Model-size series, Qwen3 dense (exploratory)", report)
     lines = [f"{tag} ({m['params_b']}B): dL {m['goal_effect']['delta_L_nats']:.2f}, flips {m['flips_to_success']:.3f}, "

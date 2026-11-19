@@ -26,3 +26,11 @@ def test_end_to_end(mock_root):
     m = json.loads((mock_root / "size_smoke_analysis" / "metrics.json").read_text())
     assert "qwen3-0.6b" in m["models"] and "qwen3-1.7b" in m["waiting"]
     assert {"goal_effect", "yes_no", "auc", "flips_to_success"} <= set(m["models"]["qwen3-0.6b"])
+
+
+def test_size_slope_recovers_a_known_trend():
+    import math
+    tags = ["qwen3-0.6b", "qwen3-4b", "qwen3-32b"]
+    per = {m: {f"g{k}": [2.0 * math.log(sizes.SIZES[m][1]) + (0.1 if k % 2 else -0.1)] for k in range(10)} for m in tags}
+    out = sizes.size_slope(per, B=200)
+    assert abs(out["estimate"] - 2.0) < 1e-9 and out["ci"][0] <= 2.0 <= out["ci"][1]

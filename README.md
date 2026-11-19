@@ -44,7 +44,7 @@ The two models differ in where the effect lands:
   - it holds with each of three few-shot example sets;
   - an instruction to ignore the goal removes 9% of Qwen's effect and none of Llama's;
   - showing the hidden state cuts it by about 70% without removing it;
-  - the fine-tuned Word2World models show none.
+  - the fine-tuned Word2World Qwen model shows none, and the fine-tuned Llama model a small reversed effect (−0.28 nats, CI −0.42 to −0.15).
 - **Caveat.** The written-prediction numbers are provisional, because the prediction parser has not met its prespecified audit rule. The decision log records audits three to six.
 - **Superseded reading.** The note's reading that "most of the RQ2 effect comes from the action's object being named" was overturned by the exploratory runs below: with object-free task descriptions, 61% (Qwen) and 92% (Llama) of the effect remains.
 
@@ -56,9 +56,9 @@ The two models differ in where the effect lands:
 
 **Exploratory follow-ups.** Details are in [notes/exploratory_results.md](notes/exploratory_results.md). None was preregistered; each design was logged before its data.
 
-- **Meaning, not wording.** The effect goes mostly through meaning: it survives object-free task descriptions.
+- **Not only the object's name.** Most of the effect survives task descriptions that never name the object (61% for Qwen, 92% for Llama). But for Qwen, merely stating that the object is somewhere in the room reproduces nearly all of it.
 - **Other formats and tasks.** It replicates when the model answers a fixed yes/no question. It is unchanged when the aligned task is not the exact one the agent pursued.
-- **Discrimination.** It lowers how well the models rank working actions above failing ones. The drop is large for Llama and small for Qwen.
+- **Discrimination.** On our candidates it lowers how well the models rank working actions above failing ones: a large drop for Llama, a small one for Qwen. All failing candidates act on the goal's object while most working ones do not, so this reflects the task promoting actions on its object over unrelated working actions.
 - **Practical size depends on model and format.**
   - Llama's predicted success moves by 13–40 points.
   - Qwen's moves by 42 points before the agent has acted, and little after, because Qwen stays confident that these actions fail.

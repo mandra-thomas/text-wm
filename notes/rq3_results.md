@@ -19,7 +19,7 @@ The test statistic is the interaction
 
 $$I = [S_{FS} - S_{FF}]_{\text{kept}} - [S_{FS} - S_{FF}]_{\text{dropped}},$$
 
-which H3 predicted to be negative. The primary set is the game–schedule units where both error types were delivered: 160 units in 61 games. An interim look at 112 games came before this final analysis.
+which H3 predicted to be negative. The primary set is the game–schedule units where the false-success episode received at least one error in both storage modes: 160 units in 61 games. A false-failure episode in this set can still have received none. An interim look at 112 games came before this final analysis.
 
 ## Result
 
@@ -48,7 +48,7 @@ which H3 predicted to be negative. The primary set is the game–schedule units 
 
 ## Checks
 
-- **Determinism.** 332 of 342 copied false-failure episodes replayed identically; the 10 that differ come from 3 games.
-- **Fallbacks.** Where a yoked false failure had nothing to yoke to, the baseline episode was reused: 36 times in the dropped condition and 119 in the kept condition.
+- **Determinism.** Where a false-success episode received no error, its false-failure partner was copied from the perfect-foresight baseline; this happened for 342 episodes. Those 342 false-success episodes were compared with the baseline, which they should match exactly. 332 are identical; the 10 that differ come from 3 games.
+- **Fallbacks.** When no working proposal with the same verb came, a false failure was placed on a working proposal with a different verb: 36 times in 26 episodes in the dropped condition, and 119 times in 84 episodes in the kept condition.
 
-Both checks are listed in the metrics file.
+Both are listed in the metrics file (`determinism_check`, `fallbacks`, `fallback_episodes`).

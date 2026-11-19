@@ -22,7 +22,7 @@ This run uses a secondary scoring of the same items, which carries all the contr
   - Most of the effect survives: Qwen 3.71 nats [3.30, 4.11], 61% of the named-goal effect; Llama 1.51 [1.36, 1.67], 92%.
   - On items where both descriptions passed a strict naming test, 61% and 84% survive.
   - The effect therefore goes through meaning, not only through repeating the object's name.
-- **Extra-mention design.** "There is a {obj} somewhere in the room." is added to the swapped task for the action's object, or to the aligned task for the swapped object. The goal effect then splits exactly into three parts:
+- **Extra-mention design** (from `rq1_score`, in `rq1_metrics.json` under `rq2_secondary.extra_mention`, not from `rq1x`). "There is a {obj} somewhere in the room." is added to the swapped task for the action's object, or to the aligned task for the swapped object. The goal effect then splits exactly into three parts. Each is shown as its contribution to the effect. For the aligned-prompt sentence this is minus its effect on the aligned prompt: the sentence lowers that prompt's L, by 1.09 nats for Qwen and 0.06 for Llama.
 
   | Part | Qwen | Llama |
   | --- | --- | --- |
@@ -30,14 +30,14 @@ This run uses a secondary scoring of the same items, which carries all the contr
   | Goal role, with both objects named | −0.99 [−1.42, −0.55] | +0.59 [0.43, 0.74] |
   | Sentence added to the aligned prompt | 1.09 | 0.06 |
 
-  For Qwen, on average, mentioning the object does most of the work. At step 0, where Qwen's effect is 11.0 nats, the sentence accounts for 4.6 and the goal role is +2.8 (**post hoc**). For Llama about a third of the effect depends on the object being the goal. That part is concentrated in take actions and after step 0.
+  For Qwen, on average, mentioning the object does most of the work. At step 0, where Qwen's effect is 11.0 nats, the sentence accounts for 4.5 and the goal role is +2.8 (both in the metrics, under `history_0`). For Llama about a third of the effect depends on the object being the goal. That part is concentrated in take actions and after step 0.
 - **2×2 design** (1,076 move, heat, cool and clean items). The part due to usefulness is 0.72 for Qwen and −0.18 for Llama.
 - **Neutral task ("explore the room").** Against it, even the swapped task raises L, by 2.56 nats for Qwen and 1.20 for Llama.
 - **Determined successes** (292 items; they are not built like the failures).
   - **Matched successes.** On the 37 that meet all of the failures' criteria (**post hoc**), the goal effect is as large as on failures: 10.3 nats [8.3, 12.8] for Qwen and 1.5 [1.1, 2.1] for Llama.
   - **Discrimination (AUC).** This measures how well L ranks working actions above failing ones. Moving from the neutral to the aligned task, Llama falls from 0.87 to 0.77 (−0.10 [−0.12, −0.08]) and Qwen from 0.93 to 0.91.
   - **Discrimination on the first-word term** (**post hoc**). Llama falls from 0.88 to 0.75 and Qwen from 0.99 to 0.97.
-  - **Top-ranked candidate.** This is counted at the 181 states with both a working and a failing candidate. A failing action is ranked first at 19% of states under the aligned task and 9% under the neutral task for Llama, and 8% and 8% for Qwen.
+  - **Top-ranked candidate.** This is counted at the 181 states with both a working and a failing candidate. A failing action is ranked first at 19% of states under the aligned task and 9% under the neutral task for Llama, and 8% and 8% for Qwen (**post hoc**, one-off script; not in the metrics file).
 - **Ignore-goal instruction.** "(The agent's goal does not change what happens. Predict the observation from the history and the action alone.)" removes 9% of Qwen's effect and none of Llama's.
 
 ## 2. Qwen3 thinking mode (`thinking_probe`, `thinking_analysis`)
@@ -46,7 +46,7 @@ Qwen3-8B reasoned before answering. The run used 1,000 sampled items and five ta
 
 - **Smaller gap.** The aligned-vs-swapped effect is 4.01 nats [2.87, 5.12] with reasoning, against 6.06 [5.31, 6.76] with thinking off on the same items.
 - **But not less lift.** Relative to the neutral task, the aligned task raises L about equally: 9.0 nats with reasoning and 8.6 without. The swapped task's lift doubles, from 2.5 to 5.0. Reasoning spreads the lift to other tasks; it does not remove it.
-- **Answers off target.** In 14% of answers the reasoning drifted to another object or to a few-shot example. On the answers that stayed on target (**post hoc**), the pattern holds.
+- **Answers off target** (**post hoc**, by reading the reasoning). In 14% of answers the reasoning drifted to another object or to a few-shot example. On the answers that stayed on target (**post hoc**), the pattern holds.
 - **Written predictions.** Their aligned-vs-swapped shift is 4.7 points [1.6, 8.3] (final parser version). These rates are not used further, because of the off-target answers.
 
 ## 3. Dissociation test (`rq1d_score`, `rq1d_analysis`)
@@ -76,7 +76,7 @@ The readouts are mixed. They need a confirmatory test with a design that separat
   - **What this rules out:** that the effect needs the exact real task. It does not rule out that the history fits the task's object.
 - **Yes/no question.** The final prompt line is replaced by a fixed question: will the action succeed, or will the environment reply "Nothing happens."? "Yes" is scored against "No".
   - **Goal effect.** It replicates in log-odds: 2.80 [2.59, 3.02] for Qwen and 2.21 [2.05, 2.39] for Llama.
-  - **Yes-share.** Qwen almost never says yes to these failures (0.2% under the aligned task). Llama's yes-share shifts by 16 points: 40 at step 0 and 13 afterwards (**post hoc**).
+  - **Yes-share.** Qwen almost never says yes to these failures (0.2% under the aligned task, **post hoc**). Llama's yes-share shifts by 16 points: 40 at step 0 and 13 afterwards (**post hoc**).
   - **Discrimination.**
     - AUC falls from 0.99 to 0.95 for Qwen and from 0.97 to 0.85 for Llama.
     - A failing action is ranked first at 8% against 2% of states for Qwen, and 20% against 7% for Llama.
