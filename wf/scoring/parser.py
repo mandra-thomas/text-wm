@@ -162,7 +162,16 @@ _MORE_FAIL = re.compile(
     r"|first,? you (?:need|have|must)|(?:open|go to|pick up|take) .+ first\b"
     # third audit (2026-11-18): refusals "The egg 1 is not dirty.", "... already at room temperature.",
     # "The action '...' is not valid."
-    r"|(?:is|are) not dirty|already at room temperature|(?:is|are) not (?:a )?valid|invalid (?:action|command))",
+    r"|(?:is|are) not dirty|already at room temperature|(?:is|are) not (?:a )?valid|invalid (?:action|command)"
+    # fourth audit and thinking-mode replies (2026-11-19): "The plate 1 is not heatable.", "The cup 1 is not hot.",
+    # "The fridge 1 is still closed.", "The mug 1 is already on desk 1.", "You still hold the egg 2.",
+    # "The pan is not found.", "The tomato 1 is not present here.", "You are not at shelf 2.",
+    # "The fridge 1 does not contain a tomato 1."
+    r"|(?:is|are) not (?:heatable|coolable|cleanable)"
+    r"|still (?:closed|locked)|(?:is|are) already (?:in|on|at|inside)\b|you still (?:hold|have|carry)"
+    r"|(?:is|are) still (?:holding|carrying)"
+    r"|(?:is|are) not (?:found|present|available|visible|located)|you are not at\b"
+    r"|(?:does|do) not (?:contain|have)\b)",
     re.IGNORECASE,
 )
 _NO_SUCH = re.compile(r"^no [a-z]+(?: \d+)? (?:is|are)\b", re.IGNORECASE)
@@ -259,6 +268,9 @@ def parse_prediction(text: str, goal_object: str | None = None, action: str | No
     if verb in _EFFECT_VERBS:
         if _no_effect_words(first) or _ALREADY_STATE.search(first):
             return "noop_paraphrase"
+        if verb == "use" and _names(obj, first) and re.search(
+                r"\b(?:is|are) (?:now )?(?:on|lit|turned on|switched on)\b", first, re.IGNORECASE):
+            return "success_paraphrase"  # "The desklamp 1 is on." (fourth audit, 2026-11-19)
         if _other_instance(obj, a["inst"], first):
             return "different_effect"
         if verb == "examine":
@@ -302,6 +314,12 @@ def parse_prediction(text: str, goal_object: str | None = None, action: str | No
         if verb in ("move", "heat", "cool", "clean", "slice") and re.search(
                 r"\bnot (?:carrying|holding) anything\b", body, re.IGNORECASE):
             return "noop_paraphrase"  # the action needs the object in hand
+        if verb in _RESULT_WORDS and re.search(
+                rf"\b{re.escape(obj)}(?: \d+)? (?:is|are) not (?:{_RESULT_WORDS[verb][1]})\b", body, re.IGNORECASE):
+            return "noop_paraphrase"  # "The cup 1 is not hot." for a heat: the action's own result is denied
+        if verb == "move" and re.match(r"^you are (?:still )?(?:carrying|holding) (?:the )?[a-z]+(?: \d+)?\.?$", body,
+                                       re.IGNORECASE):
+            return "noop_paraphrase"  # "You are carrying the book 1." for a move: it was not put down (fourth audit)
         if re.match(r"^you see nothing\.?$", body, re.IGNORECASE):
             return "noop_paraphrase"
         if verb == "take" and a["recep"] and re.search(

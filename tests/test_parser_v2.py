@@ -321,6 +321,23 @@ def test_reviewed_cases_land_on_the_right_side(action, text, side):
     ("clean egg 1 with sinkbasin 1", "You try to clean the egg 1 with the sinkbasin 1. The egg 1 is not dirty.",
      "noop_paraphrase"),
     ("heat bread 1 with microwave 1", "The action 'heat bread 1 with microwave 1' is not valid.", "noop_paraphrase"),
+    # fourth audit and thinking-mode replies (2026-11-19)
+    ("move mug 1 to desk 1", "The mug 1 is already on desk 1.", "noop_paraphrase"),
+    ("take egg 1 from fridge 1", "You still hold the egg 2.", "noop_paraphrase"),
+    ("move book 1 to shelf 1", "You are carrying the book 1.", "noop_paraphrase"),
+    ("use desklamp 1", "The desklamp 1 is on.", "success_paraphrase"),
+    ("heat plate 1 with microwave 1", "You attempt to heat the plate 1 with the microwave 1. The plate 1 is not heatable.",
+     "noop_paraphrase"),
+    ("heat cup 1 with microwave 1", "You put the cup 1 in the microwave 1. The cup 1 is not hot.", "noop_paraphrase"),
+    ("take apple 1 from fridge 1", "The fridge 1 is still closed.", "noop_paraphrase"),
+    ("take pan 1 from stoveburner 1", "The pan is not found.", "noop_paraphrase"),
+    ("take tomato 1 from countertop 1", "The tomato 1 is not present here.", "noop_paraphrase"),
+    ("take vase 1 from shelf 2", "You are not at shelf 2.", "noop_paraphrase"),
+    ("cool tomato 1 with fridge 1", "The fridge 1 does not contain a tomato 1.", "noop_paraphrase"),
+    ("take cd 2 from desk 1", "You are carrying the cd 2.", "success_paraphrase"),  # unchanged for a take
+    ("use desklamp 1", "You turn on the desklamp 1.", "state_change"),
+    ("move egg 1 to fridge 1", "You are carrying the egg 1. The egg 1 is now in the fridge 1.", "success_paraphrase"),
+    ("heat tomato 1 with microwave 1", "The tomato 1 is not cool.", "different_effect"),
 ])
 def test_reviewed_cases_land_in_the_right_category(action, text, cls):
     assert parse_prediction(text, None, action) == cls
