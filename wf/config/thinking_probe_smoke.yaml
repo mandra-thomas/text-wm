@@ -1,0 +1,13 @@
+run_id: thinking_probe_smoke
+# Smoke test of thinking_probe on 10 items (50 generations): memory, timing and output format on the real GPU.
+# Exploratory (decided 2026-11-19, notes/deviations.md): Qwen3-8B with thinking enabled on a fixed random
+# 1,000 of RQ2's items, under the aligned, swapped, neutral and object-free goals. One GPU job, vLLM.
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_items: 10
+max_tokens: 4096
+max_model_len: 8192
+chunk: 25
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

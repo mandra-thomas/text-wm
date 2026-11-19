@@ -1368,6 +1368,7 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "rq1x_score": lambda cfg: _rq1x("run_rq1x_score")(cfg),
     "rq1x_analysis": lambda cfg: _rq1x("run_rq1x_analysis")(cfg),
     "thinking_probe": lambda cfg: _thinking("run_thinking")(cfg),
+    "thinking_probe_smoke": lambda cfg: _thinking("run_thinking")(cfg),
     "thinking_analysis": lambda cfg: _thinking("run_thinking_analysis")(cfg),
     "rq2_score": lambda cfg: _rq2("run_rq2_score")(cfg),
     "rq2_score_smoke": lambda cfg: _rq2("run_rq2_score")(cfg),
