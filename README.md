@@ -46,14 +46,25 @@ The two models differ in where the effect lands:
   - showing the hidden state cuts it by about 70% without removing it;
   - the fine-tuned Word2World models show none.
 - **Caveat.** The written-prediction numbers are provisional, because the prediction parser has not met its prespecified audit rule. The decision log records audits three to six.
-- **Superseded reading.** The note's reading that "most of the RQ2 effect comes from the action's object being named" was overturned by later exploratory runs, which have not yet been written up here.
+- **Superseded reading.** The note's reading that "most of the RQ2 effect comes from the action's object being named" was overturned by the exploratory runs below: with object-free task descriptions, 61% (Qwen) and 92% (Llama) of the effect remains.
 
-**Not yet recorded here.** These runs are finished, but their results are not yet written up in the repository:
+**RQ3, confirmatory.** Details are in [notes/rq3_results.md](notes/rq3_results.md). H3 is not supported: the interaction is +0.94 steps (95% CI −0.20 to 2.14), opposite in sign to the prediction. The experiment could not test the question well:
 
-- the final RQ3 analysis;
-- the exploratory follow-ups: object-free goals and working actions, Qwen3 thinking mode, the dissociation test, the counterfactual aligned task, and yes/no feasibility.
+- keeping even perfect predictions in the agent's history lowered success below having no foresight at all;
+- most episodes in the primary set failed;
+- its errors were injected, not the world models' own.
 
-Their designs and predictions are in [notes/deviations.md](notes/deviations.md), dated before their data. The RQ3 pilot result is recorded there too.
+**Exploratory follow-ups.** Details are in [notes/exploratory_results.md](notes/exploratory_results.md). None was preregistered; each design was logged before its data.
+
+- **Meaning, not wording.** The effect goes mostly through meaning: it survives object-free task descriptions.
+- **Other formats and tasks.** It replicates when the model answers a fixed yes/no question. It is unchanged when the aligned task is not the exact one the agent pursued.
+- **Discrimination.** It lowers how well the models rank working actions above failing ones. The drop is large for Llama and small for Qwen.
+- **Practical size depends on model and format.**
+  - Llama's predicted success moves by 13–40 points.
+  - Qwen's moves by 42 points before the agent has acted, and little after, because Qwen stays confident that these actions fail.
+- **Instructions.** An instruction to ignore the goal barely helps.
+- **Reasoning.** Qwen3 thinking mode narrows the aligned-vs-swapped gap by a third, but does not reduce the lift over a neutral task.
+- **Mechanism.** The dissociation test of "the task as evidence that its object exists" gave mixed readouts and needs a confirmatory test.
 
 ## Status (2026-11-19)
 
@@ -63,11 +74,11 @@ Their designs and predictions are in [notes/deviations.md](notes/deviations.md),
 | Item collection, 134 `valid_unseen` games | `rq12_transitions_s0..s2` | Done; every item replay-verified |
 | RQ2 confirmatory (preregistered) | `rq2_score`, `rq2_analysis` | Done; results in `notes/rq2_results.md` |
 | RQ1, H1 and secondary RQ2 conditions | `rq1_score`, `rq1_analysis` | Done; results in `notes/rq1_results.md` (written-prediction numbers provisional) |
-| RQ3 confirmatory | `rq3`, `rq3_analysis` | Done; results not yet written up |
-| Object-free goals, working actions | `rq1x_score`, `rq1x_analysis` | Done (exploratory); not yet written up |
-| Qwen3 thinking mode | `thinking_probe`, `thinking_analysis` | Done (exploratory); not yet written up |
-| Dissociation: object exists / located / absent | `rq1d_score`, `rq1d_analysis` | Done (exploratory); not yet written up |
-| Counterfactual aligned task, yes/no feasibility | `rq1v_score`, `rq1v_analysis` | Done (exploratory); not yet written up |
+| RQ3 confirmatory | `rq3`, `rq3_analysis` | Done; results in `notes/rq3_results.md` (H3 not supported) |
+| Object-free goals, working actions | `rq1x_score`, `rq1x_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
+| Qwen3 thinking mode | `thinking_probe`, `thinking_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
+| Dissociation: object exists / located / absent | `rq1d_score`, `rq1d_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
+| Counterfactual aligned task, yes/no feasibility | `rq1v_score`, `rq1v_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 
 Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring shard reports `shard complete`. Run output is not tracked by git, so a fresh clone has none. Real runs refuse mock files and work saved at another commit.
 
@@ -76,6 +87,8 @@ Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring 
 - [PILOT_PROTOCOL.md](PILOT_PROTOCOL.md): the implementation spec for the pilots.
 - [notes/deviations.md](notes/deviations.md): the dated decision log. It records every change since the study was filed, and each exploratory design, logged before its data. It also holds the parser audits and what the write-up must mention. Where it and the protocol disagree, it is current.
 - [notes/rq2_results.md](notes/rq2_results.md) and [notes/rq1_results.md](notes/rq1_results.md): confirmatory results, with metrics in [notes/rq2_confirmatory_metrics.json](notes/rq2_confirmatory_metrics.json) and [notes/rq1_metrics.json](notes/rq1_metrics.json).
+- [notes/rq3_results.md](notes/rq3_results.md): the agent experiment (RQ3), with metrics in [notes/rq3_metrics.json](notes/rq3_metrics.json).
+- [notes/exploratory_results.md](notes/exploratory_results.md): the exploratory follow-ups, with metrics in `notes/rq1x_metrics.json`, `notes/thinking_metrics.json`, `notes/rq1d_metrics.json` and `notes/rq1v_metrics.json`.
 - [notes/testing.md](notes/testing.md): test suite, mutation check and calibration of the statistics.
 
 The filed proposal and preregistration are not in this repository.

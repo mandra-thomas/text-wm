@@ -1,0 +1,961 @@
+{
+  "all_units": {
+    "H_discarded": {
+      "ci_high": 0.48258706467661694,
+      "ci_low": -0.24626865671641784,
+      "estimate": 0.10199004975124376
+    },
+    "H_retained": {
+      "ci_high": 1.007462686567164,
+      "ci_low": -0.3606965174129352,
+      "estimate": 0.3383084577114429
+    },
+    "I": {
+      "ci_high": 0.9278606965174131,
+      "ci_low": -0.4527363184079602,
+      "estimate": 0.236318407960199
+    },
+    "games_by_schedules_in_set": {
+      "3": 134
+    },
+    "n_games": 134,
+    "n_units": 402
+  },
+  "baselines": {
+    "oracle_steps_gain": {
+      "ci_high": 2.5970149253731343,
+      "ci_low": 0.9104477611940298,
+      "estimate": 1.7164179104477613
+    },
+    "oracle_success_gain_pp": {
+      "ci_high": 18.65671641791045,
+      "ci_low": 4.477611940298507,
+      "estimate": 11.194029850746269
+    },
+    "per_condition": {
+      "none/discarded": {
+        "episodes": 134,
+        "mean_S": -22.71641791044776,
+        "success_pct": 47.014925373134325
+      },
+      "oracle/discarded": {
+        "episodes": 134,
+        "mean_S": -21.0,
+        "success_pct": 58.208955223880594
+      },
+      "oracle/retained": {
+        "episodes": 134,
+        "mean_S": -24.78358208955224,
+        "success_pct": 32.83582089552239
+      },
+      "validity_only/discarded": {
+        "episodes": 134,
+        "mean_S": -21.425373134328357,
+        "success_pct": 60.44776119402985
+      }
+    },
+    "retained_minus_discarded_oracle_steps": {
+      "ci_high": -2.462686567164179,
+      "ci_low": -5.097014925373134,
+      "estimate": -3.783582089552239
+    }
+  },
+  "cells": {
+    "favorable/discarded": {
+      "delivered_errors": 462,
+      "delivered_histogram": {
+        "0": 197,
+        "1": 59,
+        "2": 35,
+        "3": 111
+      },
+      "episodes": 402,
+      "fallback_episodes": 0,
+      "fallbacks": 0,
+      "format_error_rate": 0.0,
+      "mean_S": -21.05970149253731,
+      "mean_delivered": 1.1492537313432836,
+      "planned_errors": 1206,
+      "restarted_episodes": 0,
+      "shortfall_episodes": 291,
+      "shortfall_errors": 744,
+      "success_pct": 58.95522388059702
+    },
+    "favorable/retained": {
+      "delivered_errors": 645,
+      "delivered_histogram": {
+        "0": 145,
+        "1": 50,
+        "2": 26,
+        "3": 181
+      },
+      "episodes": 402,
+      "fallback_episodes": 0,
+      "fallbacks": 0,
+      "format_error_rate": 0.0,
+      "mean_S": -24.25870646766169,
+      "mean_delivered": 1.6044776119402986,
+      "planned_errors": 1206,
+      "restarted_episodes": 0,
+      "shortfall_episodes": 221,
+      "shortfall_errors": 561,
+      "success_pct": 35.07462686567164
+    },
+    "unfavorable/discarded": {
+      "delivered_errors": 343,
+      "delivered_histogram": {
+        "0": 215,
+        "1": 88,
+        "2": 42,
+        "3": 57
+      },
+      "episodes": 402,
+      "fallback_episodes": 26,
+      "fallbacks": 36,
+      "format_error_rate": 0.0,
+      "mean_S": -21.161691542288555,
+      "mean_delivered": 0.8532338308457711,
+      "planned_errors": 462,
+      "restarted_episodes": 26,
+      "shortfall_episodes": 64,
+      "shortfall_errors": 119,
+      "success_pct": 55.97014925373134
+    },
+    "unfavorable/retained": {
+      "delivered_errors": 533,
+      "delivered_histogram": {
+        "0": 165,
+        "1": 67,
+        "2": 44,
+        "3": 126
+      },
+      "episodes": 402,
+      "fallback_episodes": 84,
+      "fallbacks": 119,
+      "format_error_rate": 0.0,
+      "mean_S": -24.59701492537313,
+      "mean_delivered": 1.3258706467661692,
+      "planned_errors": 645,
+      "restarted_episodes": 84,
+      "shortfall_episodes": 70,
+      "shortfall_errors": 112,
+      "success_pct": 34.82587064676617
+    }
+  },
+  "cost_per_error_all_units": {
+    "favorable/discarded": {
+      "ci_high": 0.3152610441767069,
+      "ci_low": -0.10612244897959186,
+      "estimate": 0.09959349593495938,
+      "n_games": 76
+    },
+    "favorable/retained": {
+      "ci_high": -0.05247813411078719,
+      "ci_low": -0.6688125894134478,
+      "estimate": -0.34,
+      "n_games": 91
+    },
+    "unfavorable/discarded": {
+      "ci_high": 0.4227642276422764,
+      "ci_low": -0.03191489361702128,
+      "estimate": 0.17886178861788615,
+      "n_games": 70
+    },
+    "unfavorable/retained": {
+      "ci_high": 0.3669724770642201,
+      "ci_low": -0.4214285714285715,
+      "estimate": -0.024778761061946892,
+      "n_games": 85
+    }
+  },
+  "cost_per_error_primary": {
+    "favorable/discarded": {
+      "ci_high": 0.29752066115702486,
+      "ci_low": -0.14117647058823524,
+      "estimate": 0.06791569086651056,
+      "n_games": 61
+    },
+    "favorable/retained": {
+      "ci_high": -0.10119695321001089,
+      "ci_low": -0.6970046082949308,
+      "estimate": -0.3615127919911012,
+      "n_games": 61
+    },
+    "unfavorable/discarded": {
+      "ci_high": 0.4656084656084656,
+      "ci_low": -0.07430340557275542,
+      "estimate": 0.17224880382775118,
+      "n_games": 56
+    },
+    "unfavorable/retained": {
+      "ci_high": 0.6191709844559585,
+      "ci_low": -0.38675496688741723,
+      "estimate": 0.08510638297872343,
+      "n_games": 58
+    }
+  },
+  "delivered_covariate_primary": {
+    "mean_fs_delivered": {
+      "discarded": {
+        "ci_high": 2.5300546448087435,
+        "ci_low": 2.12568306010929,
+        "estimate": 2.333333333333333
+      },
+      "retained": {
+        "ci_high": 2.64207650273224,
+        "ci_low": 2.259562841530055,
+        "estimate": 2.4562841530054644
+      }
+    },
+    "retained_minus_discarded": {
+      "ci_high": 0.36338797814207646,
+      "ci_low": -0.14207650273224043,
+      "estimate": 0.12295081967213109
+    }
+  },
+  "determinism_check": {
+    "checked": 342,
+    "copied_false_failure_episodes": 342,
+    "differing": [
+      [
+        "valid_unseen/143",
+        "retained",
+        20260925
+      ],
+      [
+        "valid_unseen/143",
+        "retained",
+        20260926
+      ],
+      [
+        "valid_unseen/180",
+        "discarded",
+        20260925
+      ],
+      [
+        "valid_unseen/180",
+        "retained",
+        20260925
+      ],
+      [
+        "valid_unseen/180",
+        "discarded",
+        20260926
+      ],
+      [
+        "valid_unseen/180",
+        "retained",
+        20260926
+      ],
+      [
+        "valid_unseen/126",
+        "retained",
+        20260924
+      ],
+      [
+        "valid_unseen/126",
+        "retained",
+        20260925
+      ],
+      [
+        "valid_unseen/126",
+        "discarded",
+        20260926
+      ],
+      [
+        "valid_unseen/126",
+        "retained",
+        20260926
+      ]
+    ],
+    "identical": 332
+  },
+  "fallbacks": {
+    "unfavorable/discarded": 36,
+    "unfavorable/retained": 119
+  },
+  "primary": {
+    "H_discarded": {
+      "ci_high": 0.7978142076502731,
+      "ci_low": -0.5027322404371586,
+      "estimate": 0.13661202185792348
+    },
+    "H_retained": {
+      "ci_high": 2.371584699453552,
+      "ci_low": -0.13661202185792354,
+      "estimate": 1.0737704918032787
+    },
+    "I": {
+      "ci_high": 2.144808743169399,
+      "ci_low": -0.19945355191256828,
+      "estimate": 0.9371584699453552
+    },
+    "games_by_schedules_in_set": {
+      "1": 5,
+      "2": 13,
+      "3": 43
+    },
+    "n_games": 61,
+    "n_units": 160
+  },
+  "primary_units": [
+    [
+      "valid_unseen/10",
+      20260924
+    ],
+    [
+      "valid_unseen/10",
+      20260925
+    ],
+    [
+      "valid_unseen/102",
+      20260924
+    ],
+    [
+      "valid_unseen/102",
+      20260925
+    ],
+    [
+      "valid_unseen/102",
+      20260926
+    ],
+    [
+      "valid_unseen/103",
+      20260924
+    ],
+    [
+      "valid_unseen/103",
+      20260925
+    ],
+    [
+      "valid_unseen/103",
+      20260926
+    ],
+    [
+      "valid_unseen/104",
+      20260924
+    ],
+    [
+      "valid_unseen/104",
+      20260925
+    ],
+    [
+      "valid_unseen/104",
+      20260926
+    ],
+    [
+      "valid_unseen/105",
+      20260925
+    ],
+    [
+      "valid_unseen/105",
+      20260926
+    ],
+    [
+      "valid_unseen/108",
+      20260924
+    ],
+    [
+      "valid_unseen/108",
+      20260925
+    ],
+    [
+      "valid_unseen/108",
+      20260926
+    ],
+    [
+      "valid_unseen/11",
+      20260924
+    ],
+    [
+      "valid_unseen/11",
+      20260925
+    ],
+    [
+      "valid_unseen/111",
+      20260924
+    ],
+    [
+      "valid_unseen/111",
+      20260926
+    ],
+    [
+      "valid_unseen/113",
+      20260924
+    ],
+    [
+      "valid_unseen/113",
+      20260925
+    ],
+    [
+      "valid_unseen/113",
+      20260926
+    ],
+    [
+      "valid_unseen/114",
+      20260924
+    ],
+    [
+      "valid_unseen/114",
+      20260925
+    ],
+    [
+      "valid_unseen/114",
+      20260926
+    ],
+    [
+      "valid_unseen/117",
+      20260924
+    ],
+    [
+      "valid_unseen/117",
+      20260925
+    ],
+    [
+      "valid_unseen/117",
+      20260926
+    ],
+    [
+      "valid_unseen/118",
+      20260924
+    ],
+    [
+      "valid_unseen/118",
+      20260925
+    ],
+    [
+      "valid_unseen/119",
+      20260924
+    ],
+    [
+      "valid_unseen/119",
+      20260926
+    ],
+    [
+      "valid_unseen/120",
+      20260926
+    ],
+    [
+      "valid_unseen/135",
+      20260924
+    ],
+    [
+      "valid_unseen/135",
+      20260925
+    ],
+    [
+      "valid_unseen/135",
+      20260926
+    ],
+    [
+      "valid_unseen/138",
+      20260924
+    ],
+    [
+      "valid_unseen/138",
+      20260925
+    ],
+    [
+      "valid_unseen/138",
+      20260926
+    ],
+    [
+      "valid_unseen/140",
+      20260925
+    ],
+    [
+      "valid_unseen/140",
+      20260926
+    ],
+    [
+      "valid_unseen/141",
+      20260924
+    ],
+    [
+      "valid_unseen/141",
+      20260925
+    ],
+    [
+      "valid_unseen/141",
+      20260926
+    ],
+    [
+      "valid_unseen/144",
+      20260924
+    ],
+    [
+      "valid_unseen/144",
+      20260925
+    ],
+    [
+      "valid_unseen/144",
+      20260926
+    ],
+    [
+      "valid_unseen/145",
+      20260925
+    ],
+    [
+      "valid_unseen/145",
+      20260926
+    ],
+    [
+      "valid_unseen/147",
+      20260924
+    ],
+    [
+      "valid_unseen/147",
+      20260925
+    ],
+    [
+      "valid_unseen/147",
+      20260926
+    ],
+    [
+      "valid_unseen/150",
+      20260926
+    ],
+    [
+      "valid_unseen/152",
+      20260924
+    ],
+    [
+      "valid_unseen/152",
+      20260925
+    ],
+    [
+      "valid_unseen/152",
+      20260926
+    ],
+    [
+      "valid_unseen/158",
+      20260924
+    ],
+    [
+      "valid_unseen/158",
+      20260926
+    ],
+    [
+      "valid_unseen/159",
+      20260925
+    ],
+    [
+      "valid_unseen/159",
+      20260926
+    ],
+    [
+      "valid_unseen/160",
+      20260924
+    ],
+    [
+      "valid_unseen/160",
+      20260925
+    ],
+    [
+      "valid_unseen/160",
+      20260926
+    ],
+    [
+      "valid_unseen/167",
+      20260924
+    ],
+    [
+      "valid_unseen/167",
+      20260925
+    ],
+    [
+      "valid_unseen/167",
+      20260926
+    ],
+    [
+      "valid_unseen/170",
+      20260924
+    ],
+    [
+      "valid_unseen/170",
+      20260925
+    ],
+    [
+      "valid_unseen/170",
+      20260926
+    ],
+    [
+      "valid_unseen/171",
+      20260924
+    ],
+    [
+      "valid_unseen/171",
+      20260925
+    ],
+    [
+      "valid_unseen/171",
+      20260926
+    ],
+    [
+      "valid_unseen/174",
+      20260924
+    ],
+    [
+      "valid_unseen/174",
+      20260925
+    ],
+    [
+      "valid_unseen/174",
+      20260926
+    ],
+    [
+      "valid_unseen/175",
+      20260924
+    ],
+    [
+      "valid_unseen/175",
+      20260925
+    ],
+    [
+      "valid_unseen/175",
+      20260926
+    ],
+    [
+      "valid_unseen/176",
+      20260924
+    ],
+    [
+      "valid_unseen/176",
+      20260925
+    ],
+    [
+      "valid_unseen/176",
+      20260926
+    ],
+    [
+      "valid_unseen/177",
+      20260925
+    ],
+    [
+      "valid_unseen/177",
+      20260926
+    ],
+    [
+      "valid_unseen/179",
+      20260924
+    ],
+    [
+      "valid_unseen/179",
+      20260925
+    ],
+    [
+      "valid_unseen/179",
+      20260926
+    ],
+    [
+      "valid_unseen/180",
+      20260924
+    ],
+    [
+      "valid_unseen/181",
+      20260924
+    ],
+    [
+      "valid_unseen/181",
+      20260925
+    ],
+    [
+      "valid_unseen/181",
+      20260926
+    ],
+    [
+      "valid_unseen/182",
+      20260924
+    ],
+    [
+      "valid_unseen/182",
+      20260925
+    ],
+    [
+      "valid_unseen/182",
+      20260926
+    ],
+    [
+      "valid_unseen/183",
+      20260924
+    ],
+    [
+      "valid_unseen/183",
+      20260925
+    ],
+    [
+      "valid_unseen/183",
+      20260926
+    ],
+    [
+      "valid_unseen/184",
+      20260924
+    ],
+    [
+      "valid_unseen/184",
+      20260925
+    ],
+    [
+      "valid_unseen/184",
+      20260926
+    ],
+    [
+      "valid_unseen/185",
+      20260924
+    ],
+    [
+      "valid_unseen/185",
+      20260925
+    ],
+    [
+      "valid_unseen/185",
+      20260926
+    ],
+    [
+      "valid_unseen/186",
+      20260924
+    ],
+    [
+      "valid_unseen/186",
+      20260925
+    ],
+    [
+      "valid_unseen/186",
+      20260926
+    ],
+    [
+      "valid_unseen/187",
+      20260924
+    ],
+    [
+      "valid_unseen/187",
+      20260925
+    ],
+    [
+      "valid_unseen/187",
+      20260926
+    ],
+    [
+      "valid_unseen/189",
+      20260924
+    ],
+    [
+      "valid_unseen/189",
+      20260925
+    ],
+    [
+      "valid_unseen/189",
+      20260926
+    ],
+    [
+      "valid_unseen/19",
+      20260924
+    ],
+    [
+      "valid_unseen/19",
+      20260925
+    ],
+    [
+      "valid_unseen/19",
+      20260926
+    ],
+    [
+      "valid_unseen/193",
+      20260924
+    ],
+    [
+      "valid_unseen/193",
+      20260925
+    ],
+    [
+      "valid_unseen/193",
+      20260926
+    ],
+    [
+      "valid_unseen/63",
+      20260924
+    ],
+    [
+      "valid_unseen/69",
+      20260924
+    ],
+    [
+      "valid_unseen/69",
+      20260925
+    ],
+    [
+      "valid_unseen/69",
+      20260926
+    ],
+    [
+      "valid_unseen/71",
+      20260924
+    ],
+    [
+      "valid_unseen/71",
+      20260925
+    ],
+    [
+      "valid_unseen/71",
+      20260926
+    ],
+    [
+      "valid_unseen/74",
+      20260924
+    ],
+    [
+      "valid_unseen/74",
+      20260925
+    ],
+    [
+      "valid_unseen/74",
+      20260926
+    ],
+    [
+      "valid_unseen/78",
+      20260925
+    ],
+    [
+      "valid_unseen/78",
+      20260926
+    ],
+    [
+      "valid_unseen/79",
+      20260924
+    ],
+    [
+      "valid_unseen/79",
+      20260925
+    ],
+    [
+      "valid_unseen/79",
+      20260926
+    ],
+    [
+      "valid_unseen/80",
+      20260925
+    ],
+    [
+      "valid_unseen/81",
+      20260924
+    ],
+    [
+      "valid_unseen/81",
+      20260925
+    ],
+    [
+      "valid_unseen/81",
+      20260926
+    ],
+    [
+      "valid_unseen/85",
+      20260924
+    ],
+    [
+      "valid_unseen/85",
+      20260925
+    ],
+    [
+      "valid_unseen/85",
+      20260926
+    ],
+    [
+      "valid_unseen/88",
+      20260924
+    ],
+    [
+      "valid_unseen/88",
+      20260925
+    ],
+    [
+      "valid_unseen/88",
+      20260926
+    ],
+    [
+      "valid_unseen/90",
+      20260924
+    ],
+    [
+      "valid_unseen/90",
+      20260925
+    ],
+    [
+      "valid_unseen/90",
+      20260926
+    ],
+    [
+      "valid_unseen/93",
+      20260924
+    ],
+    [
+      "valid_unseen/93",
+      20260925
+    ],
+    [
+      "valid_unseen/93",
+      20260926
+    ],
+    [
+      "valid_unseen/95",
+      20260924
+    ],
+    [
+      "valid_unseen/95",
+      20260925
+    ],
+    [
+      "valid_unseen/95",
+      20260926
+    ],
+    [
+      "valid_unseen/97",
+      20260924
+    ],
+    [
+      "valid_unseen/97",
+      20260925
+    ],
+    [
+      "valid_unseen/97",
+      20260926
+    ],
+    [
+      "valid_unseen/98",
+      20260925
+    ],
+    [
+      "valid_unseen/98",
+      20260926
+    ],
+    [
+      "valid_unseen/99",
+      20260924
+    ],
+    [
+      "valid_unseen/99",
+      20260925
+    ],
+    [
+      "valid_unseen/99",
+      20260926
+    ]
+  ],
+  "provenance": {
+    "episodes_sha256": {
+      "shard_00_of_04": "a77f88b4a7375edfa68fc2586a75118ef8182eb19fe079351c91472b48ad07e6",
+      "shard_01_of_04": "2c7faad1492d3f153483d49c0c27ccd8809416f32eb4861b45b437475f70d7bb",
+      "shard_02_of_04": "df9349212042c4167d6d02ffcfa1bd0dfd0d71497c85155beaa23133ea0692c2",
+      "shard_03_of_04": "c2d8f0b0edfeadfcfdb27bc3a66c495cd3273cf7eaca26dcc1ecac5cc6ea7768"
+    },
+    "git_sha": "ddeabc2072d2db26c6dd0504873294b7f5826b49",
+    "shards": 4,
+    "source": "rq3"
+  },
+  "reading": "I = 0.94 steps (95% game-bootstrap CI -0.20 to 2.14): the CI includes zero",
+  "shortfalls": {
+    "favorable/discarded": 291,
+    "favorable/retained": 221,
+    "unfavorable/discarded": 64,
+    "unfavorable/retained": 70
+  }
+}
