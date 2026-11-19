@@ -4,7 +4,7 @@ run_id: thinking_probe_smoke
 # 1,000 of RQ2's items, under the aligned, swapped, neutral and object-free goals. One GPU job, vLLM.
 sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
 n_items: 10
-max_tokens: 4096
+max_tokens: 3072
 max_model_len: 8192
 chunk: 25
 accept_commits:

@@ -26,6 +26,7 @@ def test_end_to_end_mock(mock_root, monkeypatch):
     recs = read_jsonl(mock_root / "thinking_smoke" / "thinking.jsonl")
     assert recs and {r["condition"] for r in recs} <= set(thinking.ARMS)
     assert all(r["finished"] and "L" in r for r in recs)
+    assert "forced" in recs[0]
     n = len(recs)
     assert thinking.run_thinking({**cfg, "resume": True}) == 0  # resume adds nothing
     assert len(read_jsonl(mock_root / "thinking_smoke" / "thinking.jsonl")) == n
@@ -33,3 +34,20 @@ def test_end_to_end_mock(mock_root, monkeypatch):
     assert thinking.run_thinking_analysis(acfg) == 0
     m = json.loads((mock_root / "thinking_smoke_analysis" / "metrics.json").read_text())
     assert {"written_shift_pp", "L_after_reasoning", "reasoning_mentions"} <= set(m)
+
+
+def test_budget_forcing_closes_unfinished_reasoning(mock_root, monkeypatch):
+    calls = []
+
+    def gen(self, prompts, keys, max_tokens):
+        calls.append(max_tokens)
+        if max_tokens == 64:
+            return [("Nothing happens.", 4) for _ in prompts]
+        return [("<think>\nloops forever", max_tokens) for _ in prompts]
+
+    monkeypatch.setattr(thinking._MockEngine, "generate", gen)
+    cfg = {"run_id": "thinking_force", "sources": ["rq12_transitions_smoke"], "n_items": 4, "chunk": 50, "max_tokens": 100}
+    assert thinking.run_thinking(cfg) == 0
+    recs = read_jsonl(mock_root / "thinking_force" / "thinking.jsonl")
+    assert recs and all(r["forced"] and r["finished"] and r["answer"] == "Nothing happens." for r in recs)
+    assert all(r["text"].endswith(thinking.FORCE_CLOSE + "Nothing happens.") for r in recs) and 64 in calls

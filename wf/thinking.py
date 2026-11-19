@@ -29,6 +29,7 @@ from wf.util import append_jsonl, read_jsonl, require_filed, write_json, write_s
 
 ARMS = ("aligned", "swapped", "absent", "aligned_desc", "swapped_desc")
 END_THINK = "</think>"
+FORCE_CLOSE = "\n</think>\n\n"
 GOAL_WORDS = re.compile(r"\b(goal|task|objective)\b", re.I)
 
 
@@ -135,12 +136,19 @@ def run_thinking(cfg: dict) -> int:
         part = todo[s:s + chunk]
         prompts = [eng.prompt(messages(t, a)) for t, a in part]
         gens = eng.generate(prompts, [f"{t['id']}|{a}" for t, a in part], max_tokens)
+        # Budget forcing: reasoning that reaches the cap is closed and the model then answers (forced=True).
+        cut = [k for k, (text, _) in enumerate(gens) if END_THINK not in text]
+        if cut:
+            closes = [prompts[k] + gens[k][0] + FORCE_CLOSE for k in cut]
+            tails = eng.generate(closes, [f"{part[k][0]['id']}|{part[k][1]}|answer" for k in cut], 64)
+            for k, (tail, n2) in zip(cut, tails):
+                gens[k] = (gens[k][0] + FORCE_CLOSE + tail, gens[k][1] + n2)
         recs = []
-        for (t, a), p, (text, n_tok) in zip(part, prompts, gens):
+        for k, ((t, a), p, (text, n_tok)) in enumerate(zip(part, prompts, gens)):
             think, answer, finished = split_output(text)
             cls = parse_prediction(answer, t.get("goal_object"), t["action"]) if finished else "unparseable"
             recs.append({"transition_id": t["id"], "game_id": t["game_id"], "condition": a, "item_hash": hashes[t["id"]],
-                         "text": text, "answer": answer, "finished": finished, "n_tokens": n_tok,
+                         "text": text, "answer": answer, "finished": finished, "forced": k in cut, "n_tokens": n_tok,
                          "generated_class": cls, "says_success": gen_says_success(cls),
                          "mentions_goal_word": bool(GOAL_WORDS.search(think)),
                          "mentions_object": bool(re.search(rf"\b{re.escape(t.get('goal_object') or '~')}\b", think, re.I)),
@@ -190,6 +198,7 @@ def run_thinking_analysis(cfg: dict) -> int:
         if not problems:
             base += [s for p in folders for s in read_jsonl(p / "scoring.jsonl") if s["model"] == "qwen3-8b-fewshot"]
     direct = {(s["transition_id"], s["condition"]): {"L": s["L"]} for s in base}
+    natural = {k: v for k, v in by.items() if not v.get("forced")}
     pairs = (("aligned", "swapped"), ("aligned", "absent"), ("swapped", "absent"), ("aligned_desc", "swapped_desc"))
     rep: dict[str, Any] = {
         "n_items": len(items), "n_records": len(recs),
@@ -201,6 +210,11 @@ def run_thinking_analysis(cfg: dict) -> int:
                                              for k, v in _paired(by, items, a, b, "says").items()} for a, b in pairs},
         "L_after_reasoning": {f"{a}_vs_{b}": _paired(by, items, a, b, "L") for a, b in pairs},
         "L_thinking_off_same_items": {f"{a}_vs_{b}": _paired(direct, items, a, b, "L") for a, b in pairs},
+        "forced_rate": {a: _rate([by[k] for k in by if k[1] == a], "forced") for a in ARMS},
+        "unforced_only": {
+            "written_shift_pp": {f"{a}_vs_{b}": {k: (v * 100 if k == "estimate" else [x * 100 for x in v] if k == "ci" else v)
+                                                 for k, v in _paired(natural, items, a, b, "says").items()} for a, b in pairs},
+            "L_after_reasoning": {f"{a}_vs_{b}": _paired(natural, items, a, b, "L") for a, b in pairs}},
         "reasoning_mentions": {a: {
             "goal_word_when_says_success": _rate([by[k] for k in by if k[1] == a and by[k]["says"] == 1.0], "mentions_goal_word"),
             "goal_word_when_says_nothing": _rate([by[k] for k in by if k[1] == a and by[k]["says"] == 0.0], "mentions_goal_word"),
