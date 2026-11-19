@@ -1,0 +1,5 @@
+run_id: rq1x_analysis
+# Reads every shard of rq1x_score and of rq1_score (the named-goal, neutral and extra-mention scores); no GPU.
+source: rq1x_score
+base: rq1_score
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
