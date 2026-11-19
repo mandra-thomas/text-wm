@@ -74,3 +74,12 @@ def test_end_to_end(mock_root):
     m = json.loads((mock_root / "mech_smoke_analysis" / "metrics.json").read_text())
     for tag in rq1.FEWSHOT:
         assert {"interventions", "questions", "split_by_knowledge", "policy"} <= set(m[tag])
+
+
+def test_rules_and_yes_keys_match_alfworld_pddl():
+    # Acting works from any receptacle at the same spot; putting into a closed receptacle fails.
+    assert "same spot" in mech.RULES and "or put one into, a closed receptacle" in mech.RULES
+    _, yes = mech.rule_questions(_item(determination_reason="not_holding_object", action="move saltshaker 1 to cabinet 1"))
+    assert "open" in yes and "can hold that object" in yes
+    no, yes = mech.rule_questions(_item(determination_reason="away_from_receptacle", action="heat saltshaker 1 with microwave 1"))
+    assert "another part of the room" in no and "can be heated" in yes

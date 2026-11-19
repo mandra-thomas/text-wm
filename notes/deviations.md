@@ -60,6 +60,20 @@ No forced step-by-step reasoning arm is included; free reasoning was covered by 
 
 (The two descriptions above were corrected the same day, before any score of this run existed, after an independent check showed the first wording overstated both results.)
 
+**Corrections to the design after an independent code check (2026-11-19, before any score of this run existed).** The check verified the answer key of every state question on all 4,666 items against the starting layout. It found three things in the rules material, now fixed:
+
+- **Acting from the same spot.** The rules statement said the agent can act only on the receptacle it is at. ALFWorld's PDDL allows any receptacle at the same spot, and the data contain such successes. The statement now says so, and the "away" rule question asks about a receptacle "in another part of the room".
+- **Putting into a closed receptacle.** The statement omitted that this fails. It now says so.
+- **The move and heat/cool/clean twin questions.** Their "Yes" answers needed qualifying: the receptacle must be open or not openable and able to hold the object, and the object must be of a kind that can be heated, cooled or cleaned.
+
+The analysis now also computes three readouts in the form logged above:
+
+- the share of the effect removed, as a ratio with its own game-bootstrap interval (readout 1);
+- the known-state items' effect as a share of the overall effect, with an interval (readout 2);
+- intervals for the within-reason correlations (readout 4).
+
+It also reports the goal's effect on the twin questions as a control for a general shift toward "Yes" (readout 3). The agent-preference score is read from its full L only: both of its candidates begin with "Action", so the first-token term is zero.
+
 **Exploratory: model-size series, Qwen3 dense (decided 2026-11-19, same meeting, before any of these scores).** `wf/sizes.py`, runs `size_score_<model>` (one per size, sharded by game) and `size_analysis`. Models: Qwen3-0.6B, 1.7B, 4B, 8B, 14B and 32B instruct, with thinking off. Each is scored with the RQ2 prompt (example set 1, history only) on the 4,666 primary items and the determined successes. Arms: aligned, swapped and neutral tasks, as two-candidate L and as the yes/no question. Qwen3-8B is rescored in this run, so every size shares code and settings; its confirmatory numbers stand as filed.
 
 Reported per size:

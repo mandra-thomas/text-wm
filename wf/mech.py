@@ -15,7 +15,8 @@ One scoring run on RQ2's primary items, few-shot models, example set 1, history 
     twin whose correct answer is Yes, so a model that always says No is not counted as knowing;
   - `apply`: whether every condition the action needs holds now (correct: No);
   - `rule` (a fixed subsample): whether the rule behind the failure holds in this environment, with a twin.
-- `policy`: the agent's own preference for the action. The ReAct agent prompt, built from the item's history,
+- `policy`: the agent's own preference for the action (only its full L is read: both candidates begin with "Action",
+  so their first-token term is zero by construction). The ReAct agent prompt, built from the item's history,
   asks for the action only; "Action: <the item's action>" is scored against "Action: look".
 
 The facts come from wf.data.transitions.history_facts, the parser that decided the item was determined, so
@@ -41,11 +42,12 @@ from wf.tools.verify_items import verified
 from wf.util import append_jsonl, read_jsonl, require_filed, write_json, write_status
 
 GOALS = ("aligned", "swapped", "absent")
-RULES = ("Rules of this environment: the agent can take an object from, put an object in or on, open, close, or use "
-         "(to heat, cool or clean) only the receptacle it is currently at. It cannot take an object from a closed "
-         "receptacle. It holds at most one object, so it can take an object only when its hands are empty, and only "
-         "if the object is at that receptacle. It must be holding an object to put it somewhere or to heat, cool or "
-         "clean it. When an action is not possible, the environment replies \"Nothing happens.\"")
+RULES = ("Rules of this environment: the agent can take an object from, put an object in or on, open or close a "
+         "receptacle, or heat, cool or clean an object with one, only when it is at that receptacle (or at another "
+         "receptacle in the same spot of the room). It cannot take an object from, or put one into, a closed receptacle. "
+         "It holds at most one object, so it can take an object only when its hands are empty, and only if the object "
+         "is in or on that receptacle. It must be holding an object to put it somewhere or to heat, cool or clean it. "
+         "When an action is not possible, the environment replies \"Nothing happens.\"")
 PRED_ARMS = tuple(f"pred_{v}_{g}" for v in ("plain", "facts", "rules", "both") for g in ("aligned", "swapped"))
 Q_ARMS = tuple(f"{q}_{g}" for q in ("state", "statetwin", "apply") for g in GOALS)
 RULE_ARMS = tuple(f"{q}_{g}" for q in ("rule", "ruletwin") for g in GOALS)
@@ -120,19 +122,25 @@ def rule_questions(t: dict) -> tuple[str, str] | None:
     reason = t.get("determination_reason")
     take_ok = ("can the agent take an object from an open receptacle it is at, when the object is there and the "
                "agent's hands are empty?")
-    act = {"take": "take an object from", "move": "put an object it is holding in or on"}.get(
-        verb, f"{verb} an object it is holding with")
-    where = "a receptacle" if verb in ("take", "move") else f"a {_rtype(rec)}"
+    # Yes-keys must hold under ALFWorld's PDDL: putting needs an open (or non-opening) receptacle that can hold the
+    # object; heating, cooling and cleaning need an object of a kind that can be heated, cooled or cleaned.
+    put_ok = ("can the agent put an object it is holding in or on a receptacle it is at, when the receptacle is open "
+              "(or does not open) and can hold that object?")
+    use_ok = lambda v, r: f"can the agent {v} an object it is holding, of a kind that can be {v}ed, with a {r} it is at?"
     if reason in ("away_from_receptacle", "away_from_receptacle_never_moved"):
-        return (f"In this environment, can the agent {act} {where} it is not at?",
-                f"In this environment, can the agent {act} {where} it is at?" if verb != "take" else f"In this environment, {take_ok}")
+        act = {"take": "take an object from a receptacle", "move": "put an object it is holding in or on a receptacle"}.get(
+            verb, f"{verb} an object it is holding with a {_rtype(rec)}")
+        twin = take_ok if verb == "take" else put_ok if verb == "move" else use_ok(verb, _rtype(rec))
+        return (f"In this environment, can the agent {act} that is in another part of the room, without going there first?",
+                f"In this environment, {twin}")
     if reason == "hands_full":
         return ("In this environment, can the agent pick up an object while it is already holding another object?",
                 f"In this environment, {take_ok}")
     if reason == "not_holding_object":
         doing = "put an object in or on a receptacle" if verb == "move" else f"{verb} an object with a {_rtype(rec)}"
+        twin = put_ok if verb == "move" else use_ok(verb, _rtype(rec))
         return (f"In this environment, can the agent {doing} when it is not holding that object?",
-                f"In this environment, can the agent {doing} when it is holding that object and is at the {_rtype(rec)}?")
+                f"In this environment, {twin}")
     if reason == "contents_or_open_state" and verb == "take":
         f = history_facts(t["history_text"])
         if rec in f.closed:
@@ -190,7 +198,7 @@ def arm_messages(t: dict, arm: str) -> list[dict[str, str]] | None:
         qs = rule_questions(t)
         return _question(base, qs[kind == "ruletwin"]) if qs else None
     if kind == "apply":
-        return _question(base, "before this action is taken, are all the conditions it needs met?")
+        return _question(base, "Before this action is taken, are all the conditions it needs met?")
     raise ValueError(arm)
 
 
@@ -277,6 +285,14 @@ def _mean_ci(rows: list[tuple[str, float]]) -> dict:
     return {"estimate": boot["estimate"], "ci": [boot["ci_low"], boot["ci_high"]], "n": len(rows)}
 
 
+def _ratio_ci(rows: list[tuple[str, Any]], stat) -> dict:
+    """A ratio statistic over item-level tuples, with a game-clustered interval from the same resamples."""
+    if not rows:
+        return None
+    boot = cluster_bootstrap(stat, [x for _, x in rows], [g for g, _ in rows], seed=C.RNG_SEED)
+    return {"estimate": boot["estimate"], "ci": [boot["ci_low"], boot["ci_high"]], "n": len(rows)}
+
+
 def _diff_rows(by: dict, items: list[dict], a: str, b: str) -> list[tuple[str, float]]:
     return [(t["game_id"], by[(t["id"], a)] - by[(t["id"], b)]) for t in items if (t["id"], a) in by and (t["id"], b) in by]
 
@@ -302,6 +318,14 @@ def _model_block(s: list[dict], items: list[dict]) -> dict:
                     for t in items if all((t["id"], a) in by for a in ("pred_plain_aligned", "pred_plain_swapped",
                                                                          f"pred_{v}_aligned", f"pred_{v}_swapped"))]
             out["interventions"][v]["reduction_vs_plain"] = _mean_ci(rows)
+            # Readout 1 as logged: the share of the plain effect removed, (plain - v) / plain on the same items,
+            # computed inside each resample so its interval is the ratio's own.
+            quads = [(t["game_id"], (by[(t["id"], "pred_plain_aligned")] - by[(t["id"], "pred_plain_swapped")],
+                                     by[(t["id"], f"pred_{v}_aligned")] - by[(t["id"], f"pred_{v}_swapped")]))
+                     for t in items if all((t["id"], a) in by for a in ("pred_plain_aligned", "pred_plain_swapped",
+                                                                          f"pred_{v}_aligned", f"pred_{v}_swapped"))]
+            out["interventions"][v]["share_of_effect_removed"] = _ratio_ci(
+                quads, lambda xs: 1 - sum(b for _, b in xs) / sum(a for a, _ in xs) if sum(a for a, _ in xs) else float("nan"))
     for q in ("state", "apply", "rule"):
         block = {}
         for g in GOALS:
@@ -311,6 +335,13 @@ def _model_block(s: list[dict], items: list[dict]) -> dict:
                 both = [(t["game_id"], 1.0 if _correct(by, t, q, g) else 0.0) for t in items if _correct(by, t, q, g) is not None]
                 block[f"both_correct_{g}"] = _mean_ci(both) if both else None
         block["goal_effect_on_main_L"] = _mean_ci(_diff_rows(by, items, f"{q}_aligned", f"{q}_swapped")) if _diff_rows(by, items, f"{q}_aligned", f"{q}_swapped") else None
+        if q != "apply":
+            # Readout 3's control: a goal that raises "Yes" to every question would also raise the twin's.
+            block["goal_effect_on_twin_L"] = _mean_ci(_diff_rows(by, items, f"{q}twin_aligned", f"{q}twin_swapped")) if _diff_rows(by, items, f"{q}twin_aligned", f"{q}twin_swapped") else None
+            mt = [(t["game_id"], (by[(t["id"], f"{q}_aligned")] - by[(t["id"], f"{q}_swapped")])
+                   - (by[(t["id"], f"{q}twin_aligned")] - by[(t["id"], f"{q}twin_swapped")]))
+                  for t in items if all((t["id"], f"{a}_{g}") in by for a in (q, f"{q}twin") for g in ("aligned", "swapped"))]
+            block["goal_effect_main_minus_twin"] = _mean_ci(mt) if mt else None
         block["aligned_minus_neutral_main_L"] = _mean_ci(_diff_rows(by, items, f"{q}_aligned", f"{q}_absent")) if _diff_rows(by, items, f"{q}_aligned", f"{q}_absent") else None
         out["questions"][q] = block
     plain = lambda ts: _mean_ci(_diff_rows(by, ts, "pred_plain_aligned", "pred_plain_swapped")) if ts else None
@@ -318,6 +349,16 @@ def _model_block(s: list[dict], items: list[dict]) -> dict:
         known = [t for t in items if _correct(by, t, q, "absent") is True]
         unknown = [t for t in items if _correct(by, t, q, "absent") is False]
         out["split_by_knowledge"][q] = {"known_under_neutral": plain(known), "not_known_under_neutral": plain(unknown)}
+        # Readout 2 as logged: the known-state items' effect as a share of the effect on all items with a verdict.
+        flagged = [(t["game_id"], (by[(t["id"], "pred_plain_aligned")] - by[(t["id"], "pred_plain_swapped")],
+                                   _correct(by, t, q, "absent")))
+                   for t in known + unknown if (t["id"], "pred_plain_aligned") in by and (t["id"], "pred_plain_swapped") in by]
+
+        def _share(xs):
+            k = [d for d, ok in xs if ok]
+            return (sum(k) / len(k)) / (sum(d for d, _ in xs) / len(xs)) if k and xs and sum(d for d, _ in xs) else float("nan")
+
+        out["split_by_knowledge"][q]["known_effect_share_of_overall"] = _ratio_ci(flagged, _share)
     by_reason = {}
     for r in sorted({t.get("determination_reason") for t in items}):
         ts = [t for t in items if t.get("determination_reason") == r]
@@ -338,7 +379,11 @@ def _model_block(s: list[dict], items: list[dict]) -> dict:
             sub = [(t["game_id"], (by[(t["id"], "policy_aligned")] - by[(t["id"], "policy_swapped")],
                                    by[(t["id"], "pred_plain_aligned")] - by[(t["id"], "pred_plain_swapped")]))
                    for t in items if t["id"] in ids and all((t["id"], a) in by for a in ("policy_aligned", "policy_swapped", "pred_plain_aligned", "pred_plain_swapped"))]
-            within[r] = {"spearman": spearman([p for _, p in sub]), "n": len(sub)}
+            if len(sub) >= 3:
+                b = cluster_bootstrap(lambda xs: spearman(xs), [p for _, p in sub], [g for g, _ in sub], seed=C.RNG_SEED)
+                within[r] = {"spearman": b["estimate"], "ci": [b["ci_low"], b["ci_high"]], "n": len(sub)}
+            else:
+                within[r] = {"spearman": float("nan"), "n": len(sub)}
         out["policy"]["within_reason"] = within
     return out
 
