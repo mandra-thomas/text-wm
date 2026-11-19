@@ -337,7 +337,13 @@ def test_reviewed_cases_land_on_the_right_side(action, text, side):
     ("take cd 2 from desk 1", "You are carrying the cd 2.", "success_paraphrase"),  # unchanged for a take
     ("use desklamp 1", "You turn on the desklamp 1.", "state_change"),
     ("move egg 1 to fridge 1", "You are carrying the egg 1. The egg 1 is now in the fridge 1.", "success_paraphrase"),
-    ("heat tomato 1 with microwave 1", "The tomato 1 is not cool.", "different_effect"),
+    ("heat tomato 1 with microwave 1", "The tomato 1 is not cool.", "noop_paraphrase"),
+    # fifth audit (2026-11-19)
+    ("heat tomato 1 with microwave 1", "The action is invalid. You must have a tomato in your inventory to heat it.",
+     "noop_paraphrase"),
+    ("cool pan 1 with fridge 1", "You open the fridge 1. The fridge 1 is open. In it, you see nothing. You close the "
+     "fridge 1. The fridge 1 is closed. The pan 1 is still normal.", "noop_paraphrase"),
+    ("heat egg 1 with microwave 1", "The egg 1 is not clean.", "noop_paraphrase"),
 ])
 def test_reviewed_cases_land_in_the_right_category(action, text, cls):
     assert parse_prediction(text, None, action) == cls

@@ -171,7 +171,11 @@ _MORE_FAIL = re.compile(
     r"|still (?:closed|locked)|(?:is|are) already (?:in|on|at|inside)\b|you still (?:hold|have|carry)"
     r"|(?:is|are) still (?:holding|carrying)"
     r"|(?:is|are) not (?:found|present|available|visible|located)|you are not at\b"
-    r"|(?:does|do) not (?:contain|have)\b)",
+    r"|(?:does|do) not (?:contain|have)\b"
+    # fifth audit (2026-11-19): "The action is invalid. You must have a tomato in your inventory to heat it.",
+    # "The pan 1 is still normal."
+    r"|(?:action|command) (?:is|was) (?:invalid|not valid)|\byou must (?:have|hold|carry|be holding|be carrying)\b"
+    r"|(?:is|are) still (?:normal|dirty|unchanged|the same))",
     re.IGNORECASE,
 )
 _NO_SUCH = re.compile(r"^no [a-z]+(?: \d+)? (?:is|are)\b", re.IGNORECASE)
@@ -315,8 +319,11 @@ def parse_prediction(text: str, goal_object: str | None = None, action: str | No
                 r"\bnot (?:carrying|holding) anything\b", body, re.IGNORECASE):
             return "noop_paraphrase"  # the action needs the object in hand
         if verb in _RESULT_WORDS and re.search(
-                rf"\b{re.escape(obj)}(?: \d+)? (?:is|are) not (?:{_RESULT_WORDS[verb][1]})\b", body, re.IGNORECASE):
-            return "noop_paraphrase"  # "The cup 1 is not hot." for a heat: the action's own result is denied
+                rf"\b{re.escape(obj)}(?: \d+)? (?:is|are) not (?:{'|'.join(w[1] for w in _RESULT_WORDS.values())})\b",
+                body, re.IGNORECASE):
+            # "The cup 1 is not hot." for a heat; "The egg 1 is not clean." for a heat (fifth audit): a state denied,
+            # nothing done
+            return "noop_paraphrase"
         if verb == "move" and re.match(r"^you are (?:still )?(?:carrying|holding) (?:the )?[a-z]+(?: \d+)?\.?$", body,
                                        re.IGNORECASE):
             return "noop_paraphrase"  # "You are carrying the book 1." for a move: it was not put down (fourth audit)
