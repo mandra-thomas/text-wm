@@ -1,42 +1,84 @@
-# Wishful Foresight — Pilot
+# Wishful Foresight: does the agent's goal leak into an LLM world model?
 
-Does a language-model world simulator predict what an agent wants to happen instead of what will happen, and does that hurt the agent? This repo holds the staged pilot for that study, run on ALFWorld through the Word2World AgentGym server. The confirmatory study is not built yet.
+Language-model agents increasingly consult a **world model**, a language model asked what the environment will reply to an action, before they act. That world model is often shown the agent's task.
+
+In a goal-independent environment, an action whose failure is already settled by what the agent has seen should be predicted to fail, whatever the task says. This project tests whether it is. The study is preregistered and runs on ALFWorld (text household tasks). It compares two prompted models, Qwen3-8B (thinking off) and Llama-3.1-8B-Instruct, and also scores Word2World's fine-tuned ALFWorld world models.
+
+## The test
+
+Each test item is an action that fails, and whose failure follows from the history. An example: `take mug 1 from cabinet 3` when the agent has not gone to cabinet 3. The environment's reply is "Nothing happens."
+
+For each item:
+
+- We teacher-force two candidate replies: the action's success text and "Nothing happens."
+- We compute L, the log-odds of the first over the second.
+- We do this under two task lines that differ only in one object. The **aligned** task is the episode's real task, for example "cool some mug and put it in cabinet". The **swapped** task uses another object in the room, for example "cool some plate and put it in cabinet".
+
+The goal effect **ΔL** is the mean of L(aligned) − L(swapped), in nats. A correct world model gives ΔL = 0.
 
 | Question | What it measures |
 | --- | --- |
-| RQ1 | Direction of errors: false-success rate minus false-failure rate (A) |
-| RQ2 | Goal effect: change in log-odds of success between the agent's real goal and a swapped goal (ΔL, in nats) |
-| RQ3 | Cost to the agent: false successes against false failures, with predictions discarded or retained |
+| RQ2 (primary, preregistered) | ΔL on determined failures |
+| RQ1 | Direction of errors in written predictions: false-success rate minus false-failure rate (A) |
+| RQ3 | Cost to an agent of injected false successes against false failures, with predictions dropped or kept |
 
-Design documents:
+## Results recorded in this repository
 
-- [cs8803_dlt_proposal.pdf](cs8803_dlt_proposal.pdf) and [cs8803_dlt_preregistration.pdf](cs8803_dlt_preregistration.pdf): the study.
-- [PILOT_PROTOCOL.md](PILOT_PROTOCOL.md): the implementation spec. Its time estimates predate the fixes below.
-- [notes/deviations.md](notes/deviations.md): every change since filing, the team decisions (most made 2026-11-17), what is still open, and what the write-up must mention. Where this and the protocol disagree, this is current.
-- [notes/extensions.md](notes/extensions.md): ideas parked until the pilot report exists.
+**RQ2, confirmatory.** Details are in [notes/rq2_results.md](notes/rq2_results.md). The test used 4,666 replay-verified failing actions from 125 of the 134 unseen games. Both models pass the preregistered test, whose threshold was 0.5 nats:
 
-## Status (2026-11-17)
+| Model | ΔL | 95% CI | Holm p | Verdict |
+| --- | --- | --- | --- | --- |
+| Qwen3-8B | 6.12 nats | 5.48 to 6.75 | 0.002 | supported (strong) |
+| Llama-3.1-8B-Instruct | 1.65 nats | 1.51 to 1.78 | 0.002 | supported (strong) |
 
-An audit on 2026-11-05 found the original harness passed on mocks but broke on the real server. The fixes and the 2026-11-17 decisions are merged into `main`. The pilots ran on ICE on 2026-11-17: Pilot A and Pilot B's headroom stage at `28a396d`, Pilot B's later stages at `9fb5e0c`.
+The two models differ in where the effect lands:
 
-| Stage | Code | Real results |
+- **Qwen:** concentrated where the agent has not acted yet.
+- **Llama:** spread across the episode.
+
+**RQ1, H1 and secondary RQ2 conditions.** Details are in [notes/rq1_results.md](notes/rq1_results.md).
+
+- **Lean toward success.** Both prompted models lean toward predicting success, Llama far more (A = 0.77 against 0.19).
+- **H1.** H1b holds. H1a holds for Llama and is reversed for Qwen.
+- **The goal effect under other conditions:**
+  - it holds with each of three few-shot example sets;
+  - an instruction to ignore the goal removes 9% of Qwen's effect and none of Llama's;
+  - showing the hidden state cuts it by about 70% without removing it;
+  - the fine-tuned Word2World models show none.
+- **Caveat.** The written-prediction numbers are provisional, because the prediction parser has not met its prespecified audit rule. The decision log records audits three to six.
+- **Superseded reading.** The note's reading that "most of the RQ2 effect comes from the action's object being named" was overturned by later exploratory runs, which have not yet been written up here.
+
+**Not yet recorded here.** These runs are finished, but their results are not yet written up in the repository:
+
+- the final RQ3 analysis;
+- the exploratory follow-ups: object-free goals and working actions, Qwen3 thinking mode, the dissociation test, the counterfactual aligned task, and yes/no feasibility.
+
+Their designs and predictions are in [notes/deviations.md](notes/deviations.md), dated before their data. The RQ3 pilot result is recorded there too.
+
+## Status (2026-11-19)
+
+| Stage | Run(s) | State |
 | --- | --- | --- |
-| Real-server checks | Done | Pass |
-| Tier 0: infrastructure | Done | Scoring gate failed at 87/100 on `d4fa809`; continued with disclosure and a stop rule (decision 13) |
-| Known-answer model checks | Done | Done; human review file awaits a reader |
-| Pilot A: RQ1 and RQ2 signal, sample size | Done | Qwen3-8B and the fine-tuned Word2World model scored; Llama-3.1-8B scoring |
-| Pilot B: headroom, consumption, calibration, retention | Done | Headroom, consumption and calibration done; retention mini-run running |
-| Tier 3: optional extras | Not built | None |
-| Confirmatory RQ1, RQ2, RQ3 | Not built | None |
+| Pilots A and B | `pilotA_*`, `pilotB_*` | Done (2026-11-17) |
+| Item collection, 134 `valid_unseen` games | `rq12_transitions_s0..s2` | Done; every item replay-verified |
+| RQ2 confirmatory (preregistered) | `rq2_score`, `rq2_analysis` | Done; results in `notes/rq2_results.md` |
+| RQ1, H1 and secondary RQ2 conditions | `rq1_score`, `rq1_analysis` | Done; results in `notes/rq1_results.md` (written-prediction numbers provisional) |
+| RQ3 confirmatory | `rq3`, `rq3_analysis` | Done; results not yet written up |
+| Object-free goals, working actions | `rq1x_score`, `rq1x_analysis` | Done (exploratory); not yet written up |
+| Qwen3 thinking mode | `thinking_probe`, `thinking_analysis` | Done (exploratory); not yet written up |
+| Dissociation: object exists / located / absent | `rq1d_score`, `rq1d_analysis` | Done (exploratory); not yet written up |
+| Counterfactual aligned task, yes/no feasibility | `rq1v_score`, `rq1v_analysis` | Done (exploratory); not yet written up |
 
-Pilot results so far, on 50 train games. They are pilot numbers, not the confirmatory test.
+Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring shard reports `shard complete`. Run output is not tracked by git, so a fresh clone has none. Real runs refuse mock files and work saved at another commit.
 
-- **RQ2 (goal effect).** For Qwen3-8B, history only, on 920 failing items from 49 games, ΔL is 7.1 nats (95% CI 5.9 to 8.3, permutation p = 0.001), against the preregistered 0.5. About half of that is the first word alone (3.6 nats). Its own written predictions say "success" 12.8 points more often under the aligned goal. The fine-tuned Word2World model, which sees the full hidden state, shows no goal effect (−0.2 nats, CI −0.43 to 0.05).
-- **RQ1 (direction).** Qwen3-8B, history only, leans optimistic: A = 0.23 (CI 0.17 to 0.29), with 27% false successes and 3% false failures. Word2World with full state leans slightly pessimistic: A = −0.08. The two differ in model as well as in state, so H1 still needs the full-state condition for the few-shot models, which is not built.
-- **RQ3 (agent).** Perfect foresight does not raise the agent's win rate (54% against 56% with no predictions, CI for the gain −14 to +10 points). This is consistent with the proposal's premise that agents misuse foresight. Perfect predictions change the agent's action on 28% of steps, which passes the proposal's pilot check. Both error types can be injected at 3 per episode.
-- **Checks.** The Pilot A scoring stop rule did not fire (sign of L and written prediction agree on 91% of determined failures for Qwen3-8B). The goal-channel rule did not fire.
+## Documents in this repository
 
-Run output is no longer tracked by git, so a fresh clone has none. Older checkouts may still hold old mock files under `runs/`, which real runs refuse. `python -m wf.tools.assemble_pilot_report` refuses to write a report from missing, stale or mock runs; add `--accept-commit RUN=SHA` to keep a run from an earlier commit, which the report then shows.
+- [PILOT_PROTOCOL.md](PILOT_PROTOCOL.md): the implementation spec for the pilots.
+- [notes/deviations.md](notes/deviations.md): the dated decision log. It records every change since the study was filed, and each exploratory design, logged before its data. It also holds the parser audits and what the write-up must mention. Where it and the protocol disagree, it is current.
+- [notes/rq2_results.md](notes/rq2_results.md) and [notes/rq1_results.md](notes/rq1_results.md): confirmatory results, with metrics in [notes/rq2_confirmatory_metrics.json](notes/rq2_confirmatory_metrics.json) and [notes/rq1_metrics.json](notes/rq1_metrics.json).
+- [notes/testing.md](notes/testing.md): test suite, mutation check and calibration of the statistics.
+
+The filed proposal and preregistration are not in this repository.
 
 ## How the stages fit together
 
