@@ -1,0 +1,11 @@
+run_id: rq1v_score
+# Exploratory validation runs (decided 2026-11-19; notes/deviations.md): a counterfactual aligned task
+# (not the real task) with its swapped and extra-mention pairs, and yes/no feasibility scores.
+# Few-shot models only. Sharded by game: WF_SHARD / WF_N_SHARDS.
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+n_shards: 8
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

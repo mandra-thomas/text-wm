@@ -1368,6 +1368,8 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "rq1x_score": lambda cfg: _rq1x("run_rq1x_score")(cfg),
     "rq1x_analysis": lambda cfg: _rq1x("run_rq1x_analysis")(cfg),
     "rq1d_score": lambda cfg: _rq1d("run_rq1d_score")(cfg),
+    "rq1v_score": lambda cfg: _rq1v("run_rq1v_score")(cfg),
+    "rq1v_analysis": lambda cfg: _rq1v("run_rq1v_analysis")(cfg),
     "rq1d_analysis": lambda cfg: _rq1d("run_rq1d_analysis")(cfg),
     "thinking_probe": lambda cfg: _thinking("run_thinking")(cfg),
     "thinking_probe_smoke": lambda cfg: _thinking("run_thinking")(cfg),
@@ -1395,6 +1397,12 @@ def _rq1x(name: str) -> Callable[[dict], int]:
     from wf import rq1x  # wf/rq1x.py imports this module, so it loads on first use
 
     return getattr(rq1x, name)
+
+
+def _rq1v(name: str) -> Callable[[dict], int]:
+    from wf import rq1v  # wf/rq1v.py imports this module, so it loads on first use
+
+    return getattr(rq1v, name)
 
 
 def _rq1d(name: str) -> Callable[[dict], int]:
