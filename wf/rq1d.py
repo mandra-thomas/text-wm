@@ -114,6 +114,12 @@ def _block(s: list[dict], items: list[dict]) -> dict:
     return out
 
 
+def location_matches(t: dict) -> bool:
+    """Whether the object's true location is the receptacle the action names (most location failures)."""
+    from wf.scoring.parser import _action_full
+    return location(t) == _action_full(t.get("action"))["recep"]
+
+
 def run_rq1d_analysis(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
@@ -136,6 +142,10 @@ def run_rq1d_analysis(cfg: dict) -> int:
             "history_0": _block(s, [t for t in located if t.get("history_len", 0) == 0]),
             "history_1plus": _block(s, [t for t in located if t.get("history_len", 0) > 0]),
             "by_failure_reason": {r: _block(s, its) for r, its in sorted(reasons.items()) if len(its) >= 50},
+            # amendment (2026-11-19, before any result was read): the located sentence either agrees with the
+            # action's receptacle or contradicts it
+            "location_matches_action": _block(s, [t for t in located if location_matches(t)]),
+            "location_differs_from_action": _block(s, [t for t in located if not location_matches(t)]),
         }
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Dissociation test (exploratory)", report)

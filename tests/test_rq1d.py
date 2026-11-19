@@ -43,3 +43,9 @@ def test_end_to_end(mock_root, monkeypatch):
     m = json.loads((mock_root / "rq1d_smoke_analysis" / "metrics.json").read_text())
     for tag in rq1.FEWSHOT:
         assert {"plain", "exist", "located", "absent"} <= set(m[tag]["all"])
+        assert "location_differs_from_action" in m[tag]
+
+
+def test_location_match_reads_the_action_receptacle():
+    assert rq1d.location_matches(_item(action="take saltshaker 1 from cabinet 1", scene_locations={"saltshaker 1": ["cabinet 1"]}))
+    assert not rq1d.location_matches(_item(action="take saltshaker 1 from cabinet 1", scene_locations={"saltshaker 1": ["shelf 2"]}))
