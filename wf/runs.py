@@ -1373,6 +1373,7 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "rq1d_analysis": lambda cfg: _rq1d("run_rq1d_analysis")(cfg),
     "mech_score": lambda cfg: _lazy("mech", "run_mech_score")(cfg),
     "mech_analysis": lambda cfg: _lazy("mech", "run_mech_analysis")(cfg),
+    "mech_score_smoke": lambda cfg: _lazy("mech", "run_mech_score")(cfg),
     "size_analysis": lambda cfg: _lazy("sizes", "run_size_analysis")(cfg),
     **{f"size_score_{tag}": (lambda cfg: _lazy("sizes", "run_size_score")(cfg))
        for tag in ("qwen3-0.6b", "qwen3-1.7b", "qwen3-4b", "qwen3-8b", "qwen3-14b", "qwen3-32b")},

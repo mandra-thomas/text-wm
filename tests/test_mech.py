@@ -17,7 +17,7 @@ def test_facts_come_from_the_history_only():
 def test_state_questions_ask_the_deciding_fact_with_a_yes_twin():
     t = _item(determination_reason="away_from_receptacle")
     no, yes = mech.state_questions(t)
-    assert no == "Is the agent at the cabinet 1 right now?" and yes == "Is the agent at the shelf 1 right now?"
+    assert no == "Before this action, is the agent at the cabinet 1?" and yes == "Before this action, is the agent at the shelf 1?"
     t = _item(determination_reason="contents_or_open_state", action="take saltshaker 2 from shelf 1")
     no, yes = mech.state_questions(t)
     assert "was the saltshaker 2 there" in no and "was the saltshaker 1 there" in yes

@@ -11,7 +11,7 @@ One scoring run on RQ2's primary items, few-shot models, example set 1, history 
   stated (`rules`); both.
 - Questions under the aligned, swapped and neutral tasks, scored as "Yes" against "No" in place of
   "Next observation:":
-  - `state`: the deciding fact (e.g. "Is the agent at cabinet 3 right now?"; correct answer No), with a
+  - `state`: the deciding fact (e.g. "Before this action, is the agent at the cabinet 3?"; correct answer No), with a
     twin whose correct answer is Yes, so a model that always says No is not counted as knowing;
   - `apply`: whether every condition the action needs holds now (correct: No);
   - `rule` (a fixed subsample): whether the rule behind the failure holds in this environment, with a twin.
@@ -79,7 +79,7 @@ def facts_text(f: HistoryFacts) -> str:
         parts.append("Closed: " + ", ".join(sorted(f.closed)) + ".")
     for r in sorted(f.contents):
         seen = ", ".join(sorted(f.contents[r])) or "nothing"
-        parts.append(f"When the agent last saw the {r}, it held: {seen}.")
+        parts.append(f"When the agent last saw the {r}, it contained: {seen}.")
     return "Current state, as the history establishes it: " + " ".join(parts)
 
 
@@ -92,17 +92,17 @@ def state_questions(t: dict) -> tuple[str, str] | None:
     f = history_facts(t["history_text"])
     reason = t.get("determination_reason")
     if reason in ("away_from_receptacle", "away_from_receptacle_never_moved"):
-        twin = (f"Is the agent at the {f.location} right now?" if f.location else
-                "Is the agent still in the middle of the room, without having gone to any receptacle?")
-        return f"Is the agent at the {rec} right now?", twin
+        twin = (f"Before this action, is the agent at the {f.location}?" if f.location else
+                "Before this action, is the agent still in the middle of the room, without having gone to any receptacle?")
+        return f"Before this action, is the agent at the {rec}?", twin
     if reason == "hands_full" and f.holding:
-        return "Are the agent's hands empty right now?", f"Is the agent holding the {f.holding} right now?"
+        return "Before this action, are the agent's hands empty?", f"Before this action, is the agent holding the {f.holding}?"
     if reason == "not_holding_object":
-        twin = f"Is the agent holding the {f.holding} right now?" if f.holding else "Are the agent's hands empty right now?"
-        return f"Is the agent holding the {obj} right now?", twin
+        twin = f"Before this action, is the agent holding the {f.holding}?" if f.holding else "Before this action, are the agent's hands empty?"
+        return f"Before this action, is the agent holding the {obj}?", twin
     if reason == "contents_or_open_state" and verb == "take":
         if rec in f.closed:
-            return f"Is the {rec} open right now?", f"Is the {rec} closed right now?"
+            return f"Before this action, is the {rec} open?", f"Before this action, is the {rec} closed?"
         if rec in f.contents and obj not in f.contents[rec]:
             seen = sorted(f.contents[rec])
             twin = (f"When the agent last saw the {rec}, was the {seen[0]} there?" if seen else
@@ -190,7 +190,7 @@ def arm_messages(t: dict, arm: str) -> list[dict[str, str]] | None:
         qs = rule_questions(t)
         return _question(base, qs[kind == "ruletwin"]) if qs else None
     if kind == "apply":
-        return _question(base, f"are all the conditions needed for the action \"{t['action']}\" met right now?")
+        return _question(base, "before this action is taken, are all the conditions it needs met?")
     raise ValueError(arm)
 
 
