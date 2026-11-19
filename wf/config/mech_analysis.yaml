@@ -1,0 +1,4 @@
+run_id: mech_analysis
+# Reads every shard of mech_score; no GPU.
+source: mech_score
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]

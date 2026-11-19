@@ -1,0 +1,10 @@
+run_id: size_score_qwen3-14b
+# Exploratory model-size series (decided 2026-11-19; notes/deviations.md). One Qwen3 size per run.
+# Sharded by game: WF_SHARD / WF_N_SHARDS.
+model: qwen3-14b
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_shards: 2
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

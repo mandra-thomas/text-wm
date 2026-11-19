@@ -1,0 +1,11 @@
+run_id: mech_score
+# Exploratory mechanism diagnostic (decided 2026-11-19; notes/deviations.md): prediction with the deciding facts
+# and/or the rules stated, yes/no questions on the state, the rule and the preconditions, and the agent's own
+# preference for the action. Few-shot models. Sharded by game: WF_SHARD / WF_N_SHARDS.
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+n_shards: 8
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

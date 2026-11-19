@@ -215,6 +215,40 @@ class LogoddsScorer:
         self._cache[key] = result
         return result
 
+    def score_one_token_pair(
+        self,
+        transition_id: str,
+        condition: str,
+        messages: list[dict[str, str]],
+        o_plus: str,
+        o_minus: str,
+    ) -> ScoreResult:
+        """score_pair for two candidates of one token each, read off a single forward pass.
+
+        The result equals score_pair's: each candidate's log-probability is the next-token log-probability
+        after the prompt. Candidates longer than one token are refused rather than truncated.
+        """
+        if self.mock:
+            return self.score_pair(transition_id, condition, messages, o_plus, o_minus)
+        import torch
+
+        assert self._model is not None and self._tok is not None
+        ids = [self._tok(c, return_tensors="pt", add_special_tokens=False).input_ids[0].tolist() for c in (o_plus, o_minus)]
+        if any(len(i) != 1 for i in ids):
+            raise ValueError(f"not single tokens: {o_plus!r} -> {ids[0]}, {o_minus!r} -> {ids[1]}")
+        prompt_ids = self._encode(messages).to(next(self._model.parameters()).device)
+        with torch.no_grad():
+            logits = self._model(input_ids=prompt_ids).logits
+        lp = torch.log_softmax(logits[0, -1].float(), dim=-1)
+        plus, minus = lp[ids[0][0]].item(), lp[ids[1][0]].item()
+        L = plus - minus
+        if not math.isfinite(L):
+            raise ValueError(f"non-finite L for {transition_id}/{condition} on {self.model_tag}: {L}")
+        return ScoreResult(transition_id=transition_id, model=self.model_tag, condition=condition, logp_plus=plus,
+                           logp_minus=minus, L=L, p_success=sigmoid(L), n_tokens_plus=1, n_tokens_minus=1,
+                           logp_first_plus=plus, logp_first_minus=minus, first_token_plus=self._tok.decode(ids[0]),
+                           first_token_minus=self._tok.decode(ids[1]))
+
     def _stop_tokens(self) -> list[int]:
         """Every end-of-turn token. Fine-tuned checkpoints leave the tokenizer's out of their generation config."""
         configured = self._model.generation_config.eos_token_id
