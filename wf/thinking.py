@@ -67,9 +67,10 @@ class _Engine:
         from vllm import LLM
         self.tok = AutoTokenizer.from_pretrained(model)
         # Prompt log-probabilities are computed over the whole vocabulary for every prompt token in a step, so the
-        # step size is capped to keep that transient within the memory left free.
-        self.llm = LLM(model=model, dtype="bfloat16", max_model_len=max_len, gpu_memory_utilization=0.80,
-                       max_num_batched_tokens=4096, seed=C.RNG_SEED)
+        # step size is capped to keep that transient within the memory left free (4,096 tokens at 80% ran out
+        # of memory on a 48 GB L40S, job 7168409).
+        self.llm = LLM(model=model, dtype="bfloat16", max_model_len=max_len, gpu_memory_utilization=0.70,
+                       max_num_batched_tokens=2048, seed=C.RNG_SEED)
 
     def prompt(self, msgs: list[dict[str, str]]) -> str:
         return self.tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True, enable_thinking=True)
