@@ -89,7 +89,11 @@ The two models differ in where the effect lands:
 | Mechanism diagnostic: state inference or judgement | `mech_score`, `mech_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Model-size series, Qwen3 0.6B to 32B | `size_score_<model>`, `size_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Audit analyses and reruns (CPU) | `audit_analysis`, `rq2_shared_analysis`, `rq1_analysis_v2`, `rq1x_analysis_v2`, `rq1v_analysis_v2`, `thinking_analysis_v2`, `size_analysis_v2` | Done (2026-11-20); changes listed in `notes/deviations.md` |
-| Second environment (ScienceWorld) | not in this repository yet | In development; not yet merged. Its histories need redesign before it can replicate the main test |
+| Model families, wave A (Gemma-2-9B, Mistral-7B-v0.3, Llama-3.2-1B/3B) | `family_score_<model>`, `families_analysis` (branch `families`) | Scored; primary measure and competence rule fixed before any score was read; analysis pending. Design: `notes/families_design.md` on that branch |
+| Model families, wave B and post-training (Gemma 4, Ministral 3, Qwen3.5, OLMo 3) | not yet built | Planned; a separate pinned software environment is built |
+| Second environment: TextCraft | branch `textcraft` | Items built and checked (two independent checkers agree on every item); design reviewed; not yet scored. Design: `notes/textcraft_design.md` on that branch |
+| Second environment: τ-bench retail | branch `taubench` | Items built and checked (two independent checkers agree on every item); design reviewed; not yet scored. Design: `notes/tau_design.md` on that branch |
+| ScienceWorld | not in this repository | Paused. A pre-specified feasibility probe found almost no determined failures on the task's own object (99.6% of the few found were one generic parser reply), so it cannot replicate the main test; a set of control items on unrelated objects is available |
 
 Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring shard reports `shard complete`. Run output is not tracked by git, so a fresh clone has none; the data live on ICE (see [notes/reproducing.md](notes/reproducing.md)). Real runs refuse mock files and work saved at another commit.
 
