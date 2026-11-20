@@ -76,7 +76,7 @@ def _natural_paths(cfg: dict) -> tuple[list[Path] | None, str | None]:
 def strata_counts(items: list[dict]) -> dict[str, Any]:
     main = [t for t in items if t["main_pool"]]
     users = lambda xs: len({t["user_id"] for t in xs})
-    by = lambda xs, f: {str(k): {"items": len(v), "users": users(v)} for k, v in sorted(_group(xs, f).items())}
+    by = lambda xs, f: {str(k): {"items": len(v), "users": users(v)} for k, v in sorted(_group(xs, f).items(), key=lambda kv: str(kv[0]))}
     return {"all": {"items": len(items), "users": users(items)},
             "main": {"items": len(main), "users": users(main)},
             "main_status_matched": {"items": sum(t["status_matched"] for t in main), "users": users([t for t in main if t["status_matched"]])},
@@ -346,8 +346,8 @@ def model_block(by: dict, main: list[dict], natural: list[dict], unach: list[dic
     for r in ("first", "yn", "full", "full_norm"):
         out[r] = {"main": effects(by, main, r),
                   "by_class": {k: effects(by, v, r) for k, v in sorted(_group(main, lambda t: t["cls"]).items())},
-                  "by_swapped_achievable": {str(k): effects(by, v, r) for k, v in sorted(_group(main, lambda t: t["swapped_achievable"]).items())},
-                  "by_status_matched": {str(k): effects(by, v, r) for k, v in sorted(_group(main, lambda t: t["status_matched"]).items())},
+                  "by_swapped_achievable": {str(k): effects(by, v, r) for k, v in sorted(_group(main, lambda t: str(t["swapped_achievable"])).items())},
+                  "by_status_matched": {str(k): effects(by, v, r) for k, v in sorted(_group(main, lambda t: str(t["status_matched"])).items())},
                   "natural": effects(by, natural, r) if natural else None,
                   "natural_aligned_achievable": effects(by, [t for t in natural if t["main_pool"]], r) if natural else None,
                   "natural_by_class": {k: effects(by, v, r) for k, v in sorted(_group(natural, lambda t: t["cls"]).items())} if natural else None,

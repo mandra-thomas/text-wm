@@ -162,6 +162,13 @@ def test_paired_effects_cluster_by_user():
     assert spread["perm_p"] < 0.01 and spread["estimate"] == pytest.approx(one_user["estimate"])
 
 
+def test_strata_allow_items_without_a_swapped_line():
+    """Natural items with no other order shown have swapped_achievable None (regression, 2026-11-20)."""
+    xs = [{"user_id": "u", "main_pool": True, "status_matched": False, "cls": "status", "swapped_achievable": v,
+           "action": {"name": "x"}} for v in (True, None, False)]
+    assert P.strata_counts(xs)["main_by_swapped_achievable"] == {k: {"items": 1, "users": 1} for k in ("False", "None", "True")}
+
+
 def test_full_norm_is_per_token():
     rec = {"L": -40.0, "logp_plus": -60.0, "n_tokens_plus": 300, "logp_minus": -20.0, "n_tokens_minus": 10}
     assert P.value(rec, "full") == -40.0 and P.value(rec, "full_norm") == pytest.approx(-0.2 + 2.0)
