@@ -1,6 +1,6 @@
 # Mechanism battery: why does naming the action's object push predictions toward success? (design, 2026-11-20)
 
-Exploratory, not preregistered. This note fixes the design, the predictions and the readouts before any score of this run exists. Code: `wf/mech2.py`; runs `mech2_score` (8 game shards), `mech2_score_smoke` (one game, format and timing only) and `mech2_analysis`; checks on the real items: `scripts/check_mech2_prompts.py`; tests: `tests/test_mech2.py`.
+Exploratory, not preregistered. This note fixes the design, the predictions and the readouts before any score of this run exists. **Amended after review 1, still before any score (section 11): where section 11 differs from sections 1 to 9, section 11 holds.** Code: `wf/mech2.py`; runs `mech2_score` (8 game shards), `mech2_score_smoke` (one game, format and timing only) and `mech2_analysis`; checks on the real items: `scripts/check_mech2_prompts.py`; tests: `tests/test_mech2.py`.
 
 ## 1. Question and candidate accounts
 
@@ -17,7 +17,7 @@ On RQ2's determined failures, a task line that names the action's object raises 
 
 **Items.** RQ2's 4,666 primary items (`rq1.rq1_sets(...)["primary"]`).
 
-- A **stratified sample of 1,000 items** (`SAMPLE_N`): strata are (game, failure reason), 495 strata; each stratum gets its proportional share of 1,000, rounded by largest remainder (ties broken by a hash of the stratum), and within a stratum the items with the smallest `sha256("20261120|mech2|<item id>")` are taken. Inclusion probability is about 0.214 for every item, so sample means estimate the population's item-weighted means. The sample holds 1,000 items in 124 games: 113 never-moved, 416 away from the receptacle, 197 not holding the object, 236 contents or open state, 38 hands full; by task type 132 pick, 153 pick-two, 251 clean, 168 heat, 183 cool, 113 examine; 111 are step-0 items.
+- A **stratified sample of 1,000 items** (`SAMPLE_N`): strata are (game, failure reason), 495 strata; each stratum gets its proportional share of 1,000, rounded by largest remainder (ties broken by a hash of the stratum), and within a stratum the items with the smallest `sha256("20261120|mech2|<item id>")` are taken. ~~Inclusion probability is about 0.214 for every item, so sample means estimate the population's item-weighted means.~~ *Corrected after review 1 (section 11.8):* rounding small strata makes inclusion probabilities range from 0 to 0.33 (mean 0.214, SD 0.046), and 117 items in 72 strata of one or two items can never be drawn, among them all four items of one game (valid_unseen/73). Sample means are unweighted and estimate the mean over the strata the sample covers, not exactly the population's item-weighted mean. The sample holds 1,000 items in 124 games: 113 never-moved, 416 away from the receptacle, 197 not holding the object, 236 contents or open state, 38 hands full; by task type 132 pick, 153 pick-two, 251 clean, 168 heat, 183 cool, 113 examine; 111 are step-0 items.
 - **Every step-0 item** (history length 0): 514 items in all 125 games, every one decided by "agent has not moved".
 - Every arm is scored on the **union**, 1,403 items. Contrasts P1 to P5 read the sample; P6 reads the 514 step-0 items.
 
@@ -211,4 +211,133 @@ Per model the run scores 20,017 two-candidate and 20,017 yes/no prompts (`script
 
 ## 10. Stub for `notes/deviations.md` (exploratory entry, to be merged)
 
-**Exploratory: mechanism battery, which account the goal effect follows (decided 2026-11-20, before any of these scores).** `wf/mech2.py`, runs `mech2_score` (8 shards), `mech2_score_smoke` and `mech2_analysis`; design, templates, prediction table and readouts in `notes/mechanism2_design.md`. Not preregistered. Few-shot Qwen3-8B and Llama-3.1-8B at their pinned revisions, example set 1, history only, two-candidate and yes/no formats. Items: a 1,000-item sample of RQ2's primary items stratified by game and failure reason (seed "20261120|mech2"), plus all 514 step-0 items (1,403 in all). Six accounts (no state tracking, task as evidence, salience, wishful prediction, policy blending, prompt artefacts) predict different signs for task lines that differ from the aligned and swapped tasks only in the task line: a reversed desire with the object presupposed ("make sure that the {obj} is not {pp}; leave it where it is.") and without it ("find out whether {a} {obj} can be {pp} {prep} the {rec}; the user hopes it cannot."), the swapped task plus "Ignore the {obj}.", the object-free description of the real task, the real task marked done or cancelled, and the aligned and swapped lines moved to the top or bottom of the history. Primary: six contrasts per model on the two-candidate format, Holm within model (desire_keep − swapped, desire_check − swapped, mention_ignore − swapped, described − swapped, done − cancelled on placement tasks, and the step-0 change in the goal effect when the task line moves to the top), each classified NEG, NULL, POS_SMALL, POS_LARGE, POS or INCONCLUSIVE by fixed rules and read against the prediction table; the yes/no format is the replication family. Analysis-only checks on earlier runs: few-shot task overlap (`rq1_score`, 206 aligned-overlap item-set pairs) and the knowledge split (`mech_score`). Estimated 10 to 15 GPU-hours.
+**Exploratory: mechanism battery, which account the goal effect follows (decided 2026-11-20, before any of these scores).** `wf/mech2.py`, runs `mech2_score` (8 shards), `mech2_score_smoke` and `mech2_analysis`; design, templates, prediction table and readouts in `notes/mechanism2_design.md`. Not preregistered. Few-shot Qwen3-8B and Llama-3.1-8B at their pinned revisions, example set 1, history only, two-candidate and yes/no formats. Items: a 1,000-item sample of RQ2's primary items stratified by game and failure reason (seed "20261120|mech2"), plus all 514 step-0 items (1,403 in all). Six accounts (no state tracking, task as evidence, salience, wishful prediction, policy blending, prompt artefacts) predict different signs for task lines that differ from the aligned and swapped tasks only in the task line: a reversed desire with the object presupposed ("make sure that the {obj} is not {pp}; leave it where it is.") and without it ("find out whether {a} {obj} can be {pp} {prep} the {rec}; the user hopes it cannot."), the swapped task plus "Ignore the {obj}.", the object-free description of the real task, the real task marked done or cancelled, and the aligned and swapped lines moved to the top or bottom of the history. Primary: six contrasts per model on the two-candidate format, Holm within model (desire_keep − swapped, desire_check − swapped, mention_ignore − swapped, described − swapped, done − cancelled on placement tasks, and the step-0 change in the goal effect when the task line moves to the top), each classified NEG, NULL, POS_SMALL, POS_LARGE, POS or INCONCLUSIVE by fixed rules and read against the prediction table; the yes/no format is the replication family. Analysis-only checks on earlier runs: few-shot task overlap (`rq1_score`, 206 aligned-overlap item-set pairs) and the knowledge split (`mech_score`). Estimated 10 to 15 GPU-hours. *Amended after review 1, still before any score (section 11):* H3 defined as referent salience and name salience read with word overlap (H6_lexical); a negated-existence arm on take items ("{swapped} The user says there is no {obj} in the {rec}."); seven primary contrasts per model and format (desire_keep − mention_ignore replaces desire_keep − swapped; negated − swapped added; P5 on 746 items), Holm within model and format; size zones with a TRIVIAL label (an r interval inside ±0.25 counts as ≈0 whatever its p) and a 2% dropped-draw rule for r; P6 counts only for the position account; a contrast is decided only when both formats agree; verdicts consistent, contradicted or untested; the sampling claim corrected; Mistral-7B-Instruct-v0.3 scored as a secondary, descriptive model. Estimated 15 to 22 GPU-hours.
+
+## 11. Amendments after review 1, before any score (2026-11-20)
+
+A review of the design and code (decision rules simulated on the real items, 20 deliberate bugs, a sampling check) found that the decision rules could contradict accounts on effects too small to matter, that P6 counted against accounts that predict nothing about position, that some of H2's predictions did not follow from its own definition, and that the sampling note was wrong. Nothing had been scored. The amendments below were made, tested and committed before any GPU run of this battery; where they differ from sections 1 to 9, they hold. Code: `wf/mech2.py`; synthetic check: `scripts/mech2_simulate.py`.
+
+### 11.1 Accounts, made precise
+
+- **H1 (no state tracking) is not falsifiable by this battery.** Its prediction is about where the effect sits (items whose deciding fact the model does not know), not about the arms, so no pattern of the seven contrasts can contradict it. Its only readout is the knowledge split (section 6). It is left out of the readout.
+- **H3 is referent salience**: making the action's object salient in the task line, by name or by description, raises the success reading at answer time, whatever the line says about it. A described object is still salient, so H3 now predicts P4 positive.
+- **Name salience** (only the object's word matters) is not separable here from word overlap between the task line and the action, so it is read as part of H6: **H6_lexical** carries the content predictions of name salience and word overlap (P4 near zero, since the described line does not contain the name), and **H6_position** carries P6 alone. The few-shot overlap check (section 6) stays descriptive.
+- **Mixtures can fit any pattern.** The accounts are not exclusive, and a weighted mixture of two accounts can produce any value between their predictions on every contrast. The battery can contradict a single account; it cannot show that one account alone is at work, and it cannot rule out a mixture.
+
+### 11.2 New arm: negated existence
+
+Template, for take actions only (the one verb whose success needs the object in the receptacle the action names):
+
+> {swapped} The user says there is no {obj} in the {rec}.
+
+Example: "Your task is to: put a clean pan in cabinet. The user says there is no bowl in the cabinet 1." It names the action's object (and receptacle) exactly as the other mention arms do, but denies that the object is where the action needs it. So it separates mention from evidence: under H3 the mention raises the success reading; under H2 the claim lowers it.
+
+Why "the user says". On the 522 take items of the sample the claim is true of the scene at the start of the game on 356 and false on 166. The history shows the receptacle's contents without the object on 210 items (the claim is established), shows them with the object on 19 (the claim is contradicted), and does not show them on 293. A bare "There is no …" would put a false statement in the narrator's voice on a third of the items. Attributed to the user, the sentence is true as a report on every item, and it is still information about a hidden fact, which is what H2 says the task line is read as. The 19 items whose history contradicts the claim are left out of P7 (a rational reader would discount the claim there), leaving 503 items. "in" is used for every receptacle, as ALFWorld's own task lines write it ("put a cool apple in countertop.").
+
+The arm adds 714 prompts per format and model (the take items of the union). `scripts/check_mech2_prompts.py` checks it on every real item: it is built exactly for take items of the goal object, names no instance but the action's receptacle, and differs from the aligned prompt only in the task line.
+
+### 11.3 Primary family: seven contrasts per model and format
+
+| Contrast | Arms | Items | What it separates |
+| --- | --- | --- | --- |
+| P1 keep vs ignore | desire_keep − mention_ignore | sample (1,000) | same presupposed object ("the {obj}") in both lines, only the desire differs: wishful prediction against salience and evidence |
+| P2 desire check | desire_check − swapped | sample | wishful prediction against the rest |
+| P3 mention without need | mention_ignore − swapped | sample | policy blending and wishful prediction against mention |
+| P4 need without name | described − swapped | sample | name or word overlap against the rest |
+| P5 done vs cancelled | done − cancelled | 746 placement items (11.6) | evidence against the rest |
+| P6 position at step 0 | as in section 5 | 514 step-0 items | position artefact |
+| P7 negated existence | negated − swapped | 503 take items | evidence against salience (and word overlap) |
+
+desire_keep − swapped (the old P1) is now secondary: it equals P1 plus P3. Holm's correction runs over the seven p-values within each model and format, at a fixed family size of seven (a missing or undefined p enters as 1). Each contrast's r uses the aligned-minus-swapped effect on the same items and in the same format as its denominator.
+
+### 11.4 Size zones, TRIVIAL, and the 2% rule
+
+r is read on four zones that do not overlap:
+
+- N: r below −0.25;
+- Z (≈0): r between −0.25 and 0.25, both included;
+- S (small): r above 0.25 and below 0.5;
+- L (large): r at 0.5 or above.
+
+A contrast's observed zones are the run of zones its 95% interval for r touches. Labels: NEG (N), NEG_OR_TRIVIAL (N and Z), NULL (Z, Holm p at least 0.05), **TRIVIAL (Z, Holm p below 0.05)**, TRIVIAL_OR_SMALL (Z and S), POS_SMALL (S), POS (S and L), POS_LARGE (L), WIDE (three or more zones). An interval inside ±0.25 counts as ≈0 whatever its p-value, so a small but significant effect never contradicts a ≈0 prediction. A contrast is INCONCLUSIVE (undecided for every account) when its estimate or interval is undefined, when its interval lies wholly outside the band (a claim of a non-trivial effect) but Holm's p is at least 0.05, or when r is not estimable: the reference effect is at or below zero, or more than 2% of the bootstrap draws leave r undefined (a resample whose reference mean is at or below zero), the rule the families analysis uses. Every r reports its number of dropped draws.
+
+### 11.5 Prediction table (amended)
+
+Each cell is the set of zones the account allows; "+" means S or L (positive beyond the band). An empty cell is no prediction.
+
+| Contrast | H2 evidence | H3 referent salience | H4 wishful | H5 policy blending | H6_lexical | H6_position |
+| --- | --- | --- | --- | --- | --- | --- |
+| P1 keep vs ignore | Z or S | Z or S | N | N or Z | Z or S | |
+| P2 desire check | + | + | N | + | + | |
+| P3 mention without need | + | + | Z | N or Z | + | |
+| P4 need without name | L | + | L | L | Z | |
+| P5 done vs cancelled | N | Z | Z | Z | Z | |
+| P6 position at step 0 | | | | | | N, S or L |
+| P7 negated existence | N | + | Z | Z | + | |
+
+Reasons for the cells that changed:
+
+- **H2 on P1, P2, P3.** mention_ignore and desire_keep both presuppose the object ("the {obj}"), and the earlier sentence "There is a {obj} somewhere in the room." added to the swapped task reproduced 6.00 of Qwen's 6.12 nats and 0.99 of Llama's 1.65 (`exploratory_results.md`, section 1), so H2 predicts P3 positive. It does not insist on large: "Ignore the {obj}." presupposes the object instead of asserting it. P1 compares two lines with the same presupposition; "leave it where it is" may add that the object sits somewhere untaken, so H2 allows Z or S. desire_check names the receptacle and asks whether the object can be taken from it, an open question that raises the possibility that it is there, so H2 predicts P2 positive.
+- **H3 on P4.** Referent salience predicts the described object raises the success reading too (positive). H6_lexical, which needs the name, predicts ≈0.
+- **H4, H5 on P1.** Wishful prediction: the user wants the action not to happen in desire_keep and is indifferent in mention_ignore, so N. Policy blending: neither line makes the action a sensible step, and desire_keep makes it a counter-step, so N or Z.
+- **P7.** H2: the user's report that the object is not in the receptacle lowers the success reading (N). H3 and H6_lexical: the line names the object (and the receptacle, which the take success text repeats), so positive. H4 and H5: the desire and the sensible steps are the swapped task's, unchanged (Z).
+- **P5.** On the 746 items (11.6) every reading of H2 predicts done below cancelled (N); the other accounts predict Z.
+- **P6 counts only for H6_position.** H2, H4 and H5 predict nothing about position, and H3 as defined does not either (salience by mention, not by distance). P6 no longer counts for or against them. Reading P6 as "the effect rides on the task line's position" needs r's interval to lie wholly beyond ±0.25 (|r| above 0.25 with the interval excluding the band, which also excludes 0) and Holm's p below 0.05. A P6 inside the band contradicts H6_position; one that straddles 0.25 leaves it undecided, and is reported as "position moves the effect, size not established" when its interval excludes 0.
+
+Discriminating contrasts: H2 against H3 on P5 and P7 (and P4 only weakly: L against +); H2 against H6_lexical on P4, P5, P7; H3 against H6_lexical on P4; H4 against the rest on P1 and P2; H5 against H4 on P2, against H2, H3 and H6_lexical on P3, against H3 and H6_lexical on P7.
+
+### 11.6 P5's items
+
+Of the sample's 887 placement items, 94 take the object from a receptacle of the task's target type (for example "take cloth 1 from cabinet 1" for "clean some cloth and put it in cabinet."). There "done" says the object sits at a target-type receptacle, possibly this one, which makes the take more likely to work under H2, not less. 62 items have a history that contradicts "done" (section 3). 15 items are both. P5 reads the remaining 746. Secondary, descriptive: done − cancelled on the 94 take-from-target items (H2 predicts done above cancelled there), on the 62 contradicted items, and on all 887 placement items as first designed. Move, heat, cool and clean actions toward a target-type receptacle stay in P5: "done" says the object has been put down, so the agent no longer holds it, and these actions need it in hand.
+
+### 11.7 Reading rules
+
+Per format, each (account, contrast) the account predicts is **consistent** when every observed zone is allowed, **contradicted** when none is, and **undecided** otherwise (or when the contrast is INCONCLUSIVE).
+
+**Formats: both must agree.** A contrast is decided for an account only when the two-candidate and yes/no readings agree (both consistent or both contradicted). One consistent and one contradicted is reported as **format-dependent** and counts as undecided; one decided and one undecided is undecided. Reasons for this rule over naming one deciding format per contrast: the two-candidate format can gain from copying words of the success text (desire_check and negated name the action's receptacle, which the take success text repeats; the desire lines' participles share a stem with the move, heat, cool and clean texts), while the yes/no format has its own answer biases (both models lean toward No on state questions), so neither format is clean for every contrast, and picking one per contrast would rest on guesses about which artefact is larger. Requiring agreement makes a contradiction harder to get and is the conservative choice when the question is which accounts survive. Each format's own readout is reported next to the joint one.
+
+**Verdicts, per model:**
+
+- **contradicted**: at least one contrast contradicted (in both formats); the report names them;
+- **consistent**: no contrast contradicted and at least one contrast consistent (in both formats); the report gives the count, since one consistent contrast is weak support;
+- **untested**: no contrast decided either way (only undecided or format-dependent contrasts). An untested account is not called consistent.
+
+**When every content account is contradicted** (H2, H3, H4, H5 and H6_lexical), the report says "no single account; mixture or an account not on the list", lists the contrasts each account fails, and does not pick the least contradicted one. When the formats disagree on a contrast, the report names the contrast and the two readings. A positive P5 or a P7 above zero together with a P5 below zero are reported as such; no account predicts the first, and the second fits no single account. H1 is reported from the knowledge split alone, and the report says that this battery cannot test it.
+
+### 11.8 Sampling claim, corrected
+
+The note said inclusion probability was about 0.214 for every item. It is not: rounding the strata (game by failure reason, many of one to three items) makes inclusion probabilities range from 0 to 0.33 (mean 0.214, SD 0.046); 117 items in 72 strata of one or two items can never be drawn, among them all four items of one game (valid_unseen/73, whose two step-0 items still enter P6). The design is not reweighted. The battery's questions are about the sign and size of within-item contrasts, read against predictions that hold item by item, not about a population mean; inverse-probability weights would only reweight strata the sample already covers and cannot bring back the 117 items. The estimand is stated instead: unweighted means over the sample, which stand for the strata it covers, with each game represented about in proportion to its items (game sample share over population share between 0.52 and 1.33, apart from the one game left out).
+
+### 11.9 Mistral-7B-Instruct-v0.3 as a secondary model
+
+Mistral showed the largest practical effect in the families' wave A (item share toward Yes 0.879). It is scored on every prompt of the battery, both formats, at the families registry's pin (`mistralai/Mistral-7B-Instruct-v0.3`, revision `c170c708c41dac9275d15a8fff4eca08d52bab71`, `wf/constants.py`), with its chat-template handling from `wf/families.py`: the system text is passed as a system message and the template places it in the last user turn, as in its family run (`family_score_mistral-7b-v0.3`), no extra template settings, default attention. The tokenization gate runs for it as for the others. It is not part of any primary family; its contrasts, categories and readouts are reported descriptively, and no conclusion rests on them. The few-shot overlap and knowledge-split checks need earlier runs that did not score Mistral and are not computed for it.
+
+### 11.10 Synthetic check of the rules
+
+`scripts/mech2_simulate.py` plants patterns of r in synthetic scores for the battery's 1,403 real items (real games, populations and arms), both formats, with each model's spread and within-game correlation from the earlier runs (two-candidate: aligned effect 6.12 nats, item SD 6.0, correlation 0.26 for Qwen; 1.65, 1.94, 0.12 for Llama; yes/no: 2.80, 3.20, 0.10 and 2.21, 1.97, 0.19 from `rq1v_v2_metrics.json`), and reads them with the amended code: 40 replications per scenario and model, 500 bootstrap resamples and 500 permutations each (the real analysis uses 2,000 and 1,000). A false contradiction is an account contradicted on a contrast whose planted r lies in a zone the account allows.
+
+Scenarios: no effect anywhere (noise); every primary contrast at r = +0.10 or −0.10 (inside the band; review 1's case of small but significant effects); and one planted fingerprint per account, each value well inside its predicted zones (for example H2: desire_keep, desire_check and mention_ignore 0.6, described 0.8, done 0 and cancelled 0.6, negated −0.5).
+
+| Scenario | False contradictions, any account (Qwen / Llama), each format alone and both formats | Content accounts not contradicted under the two-format rule (Qwen; Llama) |
+| --- | --- | --- |
+| noise | 0 of 40 / 0 of 40 | none in 40; none in 40 |
+| every contrast +0.10 | 0 / 0 | none in 35, H6_lexical in 4, H3 and H6_lexical in 1; none in 36, H6_lexical in 3, both in 1 |
+| every contrast −0.10 | 0 / 0 | none in 40; none in 40 |
+| H2 planted | 0 / 0 | H2 alone in 40; H2 alone in 40 |
+| H3 planted | 0 / 0 | H3 alone in 40; 40 |
+| H4 planted | 0 / 0 | H4 alone in 40; 40 |
+| H5 planted | 0 / 0 | H5 alone in 40; 40 |
+| H6_lexical planted | 0 / 0 | H6_lexical alone in 38, with H3 in 2; alone in 40 |
+| H3 content with a position shift of −0.5 at step 0 | 0 / 0 | H3 alone in 40; 40 (P6 NEG in 37 of 40 for each model, NEG_OR_TRIVIAL in 3) |
+
+No account was falsely contradicted in any of the 720 replications, in either format alone or under the two-format rule. In review 1's simulation of the first rules, small effects of ±0.10 were called POS_SMALL or NEG in up to 5 of 15 replications per contrast and counted against ≈0 predictions; with the band they are NULL, TRIVIAL, NEG_OR_TRIVIAL or TRIVIAL_OR_SMALL, which never contradict a ≈0 prediction. Each planted account was the only content account left uncontradicted in 398 of 400 planted-account replications; in the other 2, P4's interval straddled 0.25, leaving H3 undecided on it. Where nothing is planted and every contrast sits at +0.10, H6_lexical (and once H3) escaped contradiction in 4 or 5 of 40 replications because their positive predictions met intervals straddling 0.25, which leaves them undecided rather than contradicted. Limits of this check: the synthetic yes/no scores follow the same pattern as the two-candidate ones, so it does not test what happens when the formats truly disagree (that case is reported as format-dependent by rule); effects are additive and homogeneous across items; and mixtures were not planted, since by construction they can land anywhere between the accounts they mix.
+
+### 11.11 Tests, deliberate bugs, GPU estimate
+
+**Prompts.** `scripts/check_mech2_prompts.py` on every real item (2026-11-20): no problem; 20,731 two-candidate and 20,731 yes/no prompts per model (20,017 before, plus 714 negated prompts per format).
+
+**Tokenization gate on the real tokenizers.** Run on ICE (login node, CPU, the job's environment) with the pinned Qwen3-8B, Llama-3.1-8B and Mistral-7B-Instruct-v0.3 tokenizers through `wf/mech2.py`'s own gate and each model's template handling: both candidates of all 1,403 items and all 20,731 yes/no prompts per model, no problem for any model. "Yes" and "No" are single tokens (Qwen 9454 and 2753, Llama 9642 and 2822, Mistral 6360 and 2538), and every item's first tokens are "You" against "Nothing". Longest prompt in a sample of 300: 1,138 tokens (Qwen), 1,010 (Llama), 958 (Mistral). The gate runs again in every shard before any score.
+
+**Tests and deliberate bugs.** `tests/test_mech2.py` (57 tests) covers every amendment; the review's twenty mutants and fourteen new ones were added to `scripts/mutation_check.py`, and all 62 mech2 mutants are killed, each with its killing test logged in `notes/testing.md`.
+
+**GPU estimate.** Per model 20,731 two-candidate scores (two forward passes each) and 20,731 yes/no scores (one pass); over three models 186,579 passes. At 0.26 to 0.4 s a pass that is 13.5 to 20.7 GPU-hours, plus about 1.2 for 24 model loads (three per shard) and a few minutes of CPU per model and shard for the gate (about 2.5 minutes per model for all prompts of the battery on the ICE login node): about 15 to 22 GPU-hours in all, 1.9 to 2.7 hours per shard. `pace/mech2_score.sbatch` now asks for 4 hours per shard; scores resume with `WF_RESUME=1`. Mistral's share is a third of the total (5 to 7 GPU-hours). `mech2_score_smoke` (one game, all three models) is still run first and read for format, gate and timing only.
