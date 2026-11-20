@@ -7,7 +7,7 @@
 # Gemma 2 9B in bf16 is about 18.5 GB of weights; loading goes through CPU memory first.
 #SBATCH --mem=48G
 # A whole model in one shard is about 43,700 forward passes (4,666 primary items x 9 + 292 successes x 6). From the
-# RQ2 sizing (about 0.4 s a pass for an 8B model, prompts of 500-950 tokens), expect roughly 5 h for Mistral 7B, 6 h
+# RQ2 sizing (about 0.4 s a pass for an 8B model; prompts here are up to about 1,160 tokens), expect roughly 5 h for Mistral 7B, 6 h
 # for Gemma 2 9B (eager attention is slower than SDPA), 2 h for Llama 3.2 3B and 1 h for 1B. These are estimates,
 # not timings. 10 h by default; scores resume if cut off (WF_RESUME=1).
 #SBATCH --time=10:00:00
