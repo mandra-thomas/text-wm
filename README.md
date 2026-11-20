@@ -217,3 +217,7 @@ Logs are in `logs/`, named by job id.
 - **Steps are slow by design.** Every step replays the game from a reset, in every condition, which costs about 1.7 s before any model time.
 - **The real server leaks memory on every reset.** It reached about 20 GB after 4,281 resets over 30 games, or about 4.5 MB per reset, without getting slower. Jobs have 64 GB; the first Pilot A job (50 games plus scoring) peaked near that limit without failing, but the full RQ3 run, at roughly 100,000 resets, needs a fix or periodic restarts.
 - **Expert labels are unavailable on the real server.** `on_expert_path` stays null rather than being approximated.
+
+## Model families, wave A (in progress, 2026-11-20)
+
+Gemma 2 9B, Mistral 7B v0.3 and Llama 3.2 1B and 3B are scored with the size series' prompts, one run per model (`family_score_<tag>`, `pace/family_score.sbatch`), and `families_analysis` sets them beside Qwen3-8B and Llama-3.1-8B. A tokenization gate checks every item through the scorer's own encoding before any score, and a small exploratory run (`family_placement_mistral-7b-v0.3`, `pace/family_placement.sbatch`) checks whether Mistral's goal effect depends on where its template puts the system text. The yes/no format is the primary cross-family comparison, read through two scale-free metrics (the share of items moved toward Yes and the goal-to-evidence ratio) for models that pass a competence gate fixed before data. Design, gate results and the amendment made before any score was read: [notes/families_design.md](notes/families_design.md).
