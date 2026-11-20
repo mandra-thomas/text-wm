@@ -103,6 +103,10 @@ The code now pins these revisions (a `REVISIONS` map, added 2026-11-20), so a ch
 
 **Instance-number items.** Of the 788 items whose receptacle was seen without the object, 83 were seen holding another instance of the same type (`audit_metrics.json`, `seen_without_object`). The effect without them is 4.97 nats for Qwen and 2.90 for Llama; on the 83 alone, 0.46 [−1.35, 1.91] and 2.09. `docs/milestone_checkin.tex`, cited in two entries below, is a course document that is not in the public repository.
 
+### Interpretability pilot designed (branch `interp`, before any run)
+
+Exploratory, not preregistered. The design is `notes/interp_design.md`, committed before any activation, patching, probe or lens result existed: yes/no and first-token readouts at the answer position, logit and readout lenses, activation patching by layer and token group, state probes trained on neutral-task prompts of held-out games, a difference-of-means task direction with ablation, placebo and random-direction controls, predictions for each candidate account (no state tracking, belief change, relevance at answer time, wishful prediction, policy blending, prompt artefact) with fixed thresholds, and compute and storage estimates (about 40 A100 hours and at most about 20 GB of activations per model). Tooling is in `wf/interp/` with tests on tiny random models (`tests/test_interp.py`). Any later change to the design is logged here.
+
 ## Closed 2026-11-20: items open after the pilots
 
 Each item is kept as written, with what became of it first.
