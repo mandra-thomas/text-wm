@@ -1,0 +1,13 @@
+run_id: interp_pilot_ablate
+# Minimal pilot, direction ablation with two-fold cross-fitting (amendment 1, section M): directions estimated at
+# the answer position on one fold's games, applied at the answer position to the other fold's items, at layers
+# 4, 8, ..., 32 and 35. Per fold 75 failures and 50 successes (stratified, seeded), aligned, swapped and neutral
+# prompts. About 1.5 A100-hours; resumes per prompt.
+model: Qwen/Qwen3-8B
+model_tag: qwen3-8b-fewshot
+stage0: interp_pilot_stage0
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+split_seed: 0
+n_failures_per_fold: 75
+n_successes_per_fold: 50
+batch_size: 16

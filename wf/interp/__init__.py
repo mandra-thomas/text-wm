@@ -10,6 +10,9 @@ Plain PyTorch forward hooks on HF transformers decoder models (Qwen3, Llama); no
 - `probes`: fact labels from the history, logistic probes with held-out games, the standardised belief shift.
 - `directions`: difference-of-means task direction, random directions, AUC.
 - `run`: stages that save one record per item and resume.
+- `analysis`: CPU readouts of the saved records (reproduction gate, patching summaries per stratum, directions,
+  cross-fitted ablation shares, the success-versus-failure gap).
+- `pilot`: the minimal pilot's runs (design amendment 1, section M), wired in `wf.runs`.
 
 torch, transformers and scikit-learn are imported lazily, so the rest of `wf` never needs them.
 """

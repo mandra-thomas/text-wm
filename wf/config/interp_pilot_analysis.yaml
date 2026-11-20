@@ -1,0 +1,10 @@
+run_id: interp_pilot_analysis
+# Minimal pilot, CPU analysis (amendment 1, section M): the pre-registered readouts per stratum (step 0, later,
+# all) from the three GPU runs, and the hidden-state probe (descriptive). No GPU; numpy and scikit-learn.
+stage0: interp_pilot_stage0
+patch: interp_pilot_patch
+ablate: interp_pilot_ablate
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+split_seed: 0
+bootstrap: 2000
+hidden_probe: true

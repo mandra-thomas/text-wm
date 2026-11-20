@@ -1,0 +1,17 @@
+run_id: interp_pilot_stage0
+# Minimal interpretability pilot, stage 0 (notes/interp_design.md, amendment 1, section M). Qwen3-8B at its pinned
+# snapshot, bfloat16, thinking off, yes/no prompts only. Readouts (float32, from the final normed hidden state)
+# and answer-position residuals at every layer for RQ2's determined failures (aligned, swapped, neutral,
+# swapped plus a sentence naming the action's object) and the determined successes (aligned, swapped, neutral);
+# the batch noise; the reproduction gate against rq1v_score. About 1 A100-hour; resumes per prompt.
+model: Qwen/Qwen3-8B
+model_tag: qwen3-8b-fewshot
+logged_run: rq1v_score
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]
+batch_size: 16
+min_effect: 1.0
+min_free_gb: 5.0

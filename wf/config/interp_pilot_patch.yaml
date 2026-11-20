@@ -1,0 +1,15 @@
+run_id: interp_pilot_patch
+# Minimal pilot, residual-stream patching (amendment 1, section M): every layer by the pilot's groups
+# (wf.interp.prompts.PILOT_GROUPS), noising and denoising, yes/no readout, on 100 items with an effect of at least
+# 1 nat from the calibration fold's games (split seed 0, fold 0), stratified by failure reason and step 0, and 50
+# placebo pairs (swapped against a second non-goal object). About 3 A100-hours; resumes per item and direction.
+model: Qwen/Qwen3-8B
+model_tag: qwen3-8b-fewshot
+stage0: interp_pilot_stage0
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+split_seed: 0
+calibration_fold: 0
+n_items: 100
+n_placebo: 50
+min_effect: 1.0
+batch_size: 16

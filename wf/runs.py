@@ -1422,6 +1422,12 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "rq1v_analysis_v2": lambda cfg: _rq1v("run_rq1v_analysis")(cfg),
     "thinking_analysis_v2": lambda cfg: _thinking("run_thinking_analysis")(cfg),
     "size_analysis_v2": lambda cfg: _lazy("sizes", "run_size_analysis")(cfg),
+    # Minimal interpretability pilot (branch interp; notes/interp_design.md, amendment 1, section M). Qwen3-8B,
+    # yes/no format; the three GPU runs need torch, the analysis only numpy and scikit-learn.
+    "interp_pilot_stage0": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_stage0")(cfg),
+    "interp_pilot_patch": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_patch")(cfg),
+    "interp_pilot_ablate": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_ablate")(cfg),
+    "interp_pilot_analysis": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_analysis")(cfg),
 }
 
 
