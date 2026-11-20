@@ -160,6 +160,13 @@ def coherence_robust(scores: list[dict], main: list[dict]) -> dict[str, Any]:
     return effect(scores, [t for t in main if t["history_fit"] != "aligned"], "aligned", "swapped")
 
 
+def tie_couples(scores: list[dict], main: list[dict]) -> dict[str, Any]:
+    """ΔL on the whole couples whose history favours neither goal (history_fit tie): a companion to the
+    coherence-robust estimate that stays balanced on goal identity, since both members of a couple are kept
+    (design 13, correction after review 4). Lower power; descriptive."""
+    return effect(scores, couples_where(main, lambda t: t["history_fit"] == "tie"), "aligned", "swapped")
+
+
 def inventory_contrast(scores: list[dict], main: list[dict]) -> dict[str, Any]:
     """ΔL on items whose history shows an inventory reply minus ΔL on items whose history shows none, within each
     class x role x length bin cell, averaged with the cells' item counts as weights; items whose inventory is shown
@@ -549,6 +556,7 @@ def run_textcraft_analysis(cfg: dict) -> int:
                 for arm in ("neutral", "aligned")}
         per_model[m] = {"primary_delta_L": primary[m],
                         "coherence_robust_delta_L": descriptive(coherence_robust(mine, pops["main"])),
+                        "tie_couples_delta_L": descriptive(tie_couples(mine, pops["main"])),
                         "equivalence": equivalences(mine, pops["main"], m),
                         "named": named,
                         "counting_reading": counting_reading(named, comp["neutral"]),

@@ -340,3 +340,14 @@ def test_analysis_reads_scores_made_with_the_manifests_examples(mock_runs, tmp_p
     assert S.run_textcraft_score(cfg) == 0
     acfg = {"run_id": "textcraft_analysis", "source": "textcraft_score", "manifest": cfg["manifest"], "models": [S.CO_PRIMARY[0]]}
     assert A.run_textcraft_analysis(acfg) == 0
+
+
+def test_tie_couples_keep_whole_couples_whose_history_favours_neither_goal():
+    """The goal-balanced companion to the coherence-robust estimate (design 13, after review 4): only couples whose
+    two members both have history_fit tie, both members kept."""
+    items, scores, add, k = _readout_fixture()
+    r = A.tie_couples(scores, items)
+    assert r["n_items"] == 40 and r["estimate"] == pytest.approx((1.0 + 100.0) / 2)
+    # a tie member whose couple partner is not a tie is left out
+    add(k, "too_few", "goal", True, False, "tie", False, True, 50.0); add(k + 1, "too_few", "goal", True, False, "swapped", False, True, 0.0)
+    assert A.tie_couples(scores, items)["n_items"] == 40

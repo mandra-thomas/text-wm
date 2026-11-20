@@ -267,6 +267,8 @@ MUTANTS = [
     ("13 analysis stale check ignores the manifest's examples", T + "analysis.py", "    stale = stale_scores(scores, items, shots)", "    stale = stale_scores(scores, items)"),
     ("13 prompt drops the system override", T + "prompts.py", '"content": SYSTEM if system is None else system}', '"content": SYSTEM}'),
     ("13 tokcheck ignores the variant system text", T + "tokcheck.py", "        messages = P.messages(item, arm, shots, system)", "        messages = P.messages(item, arm, shots)"),
+    ("13 tie couples keep single tie members", T + "analysis.py", 'couples_where(main, lambda t: t["history_fit"] == "tie")', '[t for t in main if t["history_fit"] == "tie"]'),
+    ("13 tie couples read every couple", T + "analysis.py", 'couples_where(main, lambda t: t["history_fit"] == "tie")', 'couples_where(main, lambda t: True)'),
 ]
 
 
