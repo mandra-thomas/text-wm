@@ -451,3 +451,253 @@ def test_direction_helpers():
     assert np.allclose(np.linalg.norm(r, axis=1), 1.0) and np.array_equal(r, D.random_units(32, 5, 0))
     assert D.auc([3, 4], [1, 2]) == 1.0 and D.auc([1], [1]) == 0.5
     assert D.removed_share(4.0, 1.0) == pytest.approx(0.75)
+
+
+# ---------------- review 1 fixes (amendment 1, 2026-11-20) ----------------
+
+SUBWORD_SPLIT = r"\w+?(?=bottle\b)|bottle|\s+|\w+|[^\w\s]"
+
+
+def _bottle_item():
+    return _item(id="t_000003", goal_object="glassbottle", swapped_goal_object="winebottle",
+                 task_line="Your task is to: put some glassbottle on countertop.",
+                 swapped_task_line="Your task is to: put some winebottle on countertop.",
+                 history_text=_item()["history_text"].replace("put some mug on", "put some glassbottle on"))
+
+
+@pytest.fixture(scope="module")
+def subword_tok():
+    """Splits "...bottle" into a stem and "bottle", as BPE tokenizers do for glassbottle and winebottle."""
+    from tokenizers import Regex, Tokenizer, models, pre_tokenizers
+    from transformers import PreTrainedTokenizerFast
+
+    words = sorted(set(re.findall(SUBWORD_SPLIT, _corpus([_item(), _bottle_item()]) + " glassbottle winebottle")))
+    vocab = {w: i for i, w in enumerate(SPECIALS + words)}
+    core = Tokenizer(models.WordLevel(vocab, unk_token="<unk>"))
+    core.pre_tokenizer = pre_tokenizers.Split(Regex(SUBWORD_SPLIT), behavior="isolated")
+    tk = PreTrainedTokenizerFast(tokenizer_object=core, unk_token="<unk>", additional_special_tokens=SPECIALS[:2])
+    tk.chat_template = TEMPLATE
+    return tk
+
+
+def test_a_shared_word_ending_stays_in_the_span(subword_tok):
+    tok = subword_tok
+    pr = PR.build_pair(tok, _bottle_item(), "yn")
+    span_a = "".join(tok.decode([pr.a.ids[i]]) for i in range(*pr.span_a))
+    span_b = "".join(tok.decode([pr.b.ids[i]]) for i in range(*pr.span_b))
+    assert span_a.strip() == "glassbottle" and span_b.strip() == "winebottle"  # not "glass" / "wine"
+    rest = "".join(tok.decode([pr.a.ids[i]]) for i in pr.groups["task_rest"])
+    assert rest.startswith(" on countertop") and "bottle" not in rest
+    assert [pr.a.ids[i] for i in pr.groups["action"]] == [pr.b.ids[j] for j in pr.to_b(pr.groups["action"])]
+    assert PR.char_diff("put glassbottle on", "put winebottle on") == (4, 15, 14)
+
+
+def test_new_goals_build_and_name_their_objects(tok):
+    t = _item()
+    from wf import rq1
+
+    plus = PR.messages(t, "yn", "swapped_plus")
+    assert plus[-1]["content"].endswith("Answer:") and rq1.mention_sentence("mug") in plus[-1]["content"]
+    assert PR.task_object(t, "swapped_plus") == "plate" and PR.task_object(t, "cf_aligned") == "mug"
+    with pytest.raises(ValueError):
+        PR.messages(t, "yn", "cf_aligned")  # this item has no other destination in the room
+
+
+def test_matched_history_positions_are_history_and_same_size(tok):
+    pr = PR.build_pair(tok, _item(), "yn")
+    g = pr.groups
+    assert len(g["hist_obj_matched"]) == min(len(g["hist_obj"]), len(g["hist_other"] + g["hist_rec"]))
+    assert set(g["hist_obj_matched"]) <= set(g["hist_other"] + g["hist_rec"])
+    assert g["hist_obj_matched"] == PR.build_pair(tok, _item(), "yn").groups["hist_obj_matched"]  # seeded
+
+
+def test_fp32_readout_is_the_logit_difference_and_not_rounded(tok):
+    e = PR.encode(tok, PR.messages(_item(), "yn", "aligned"))
+    plus, minus = PR.readout_ids(tok, "yn")
+    q = parts(_qwen(len(tok)))
+    logits, h = H.forward_last(q, _ids(e))
+    assert float(q.readout(h, plus, minus)[0]) == pytest.approx(_d(logits, plus, minus), abs=1e-4)
+    qb = parts(_qwen(len(tok)).to(torch.bfloat16))
+    logits_b, hb = H.forward_last(qb, _ids(e))
+    d32 = float(qb.readout(hb, plus, minus)[0])
+    assert abs(d32 - _d(logits_b, plus, minus)) < 0.1  # same quantity, the logits only rounded to bfloat16
+    assert H.readout_rows(qb, torch.tensor([e.ids] * 3), plus, minus) == [d32] * 3
+
+
+def test_probe_positions_are_the_action_end_and_its_receptacle(p, tok, tmp_path):
+    """The stored "probe" array holds, in order, the action line's last token and its receptacle token."""
+    t = _item()
+    store = R.baseline(p, tok, [t], tmp_path / "acts", formats=("yn",), goals=("aligned",), min_free_gb=0)
+    _, probe = store.load("probe")
+    e = PR.encode(tok, PR.messages(t, "yn", "aligned"))
+    pos = PR.action_positions(e, t)
+    pl = R.probe_layers(p.n_layers)
+    _, acts = H.capture(p, _ids(e), [("resid", layer) for layer in pl], positions=[pos["action_end"], pos["action_rec"]])
+    for k, layer in enumerate(pl):
+        assert np.allclose(probe[0, k, 0], acts[("resid", layer)][0, 0].numpy(), rtol=2e-3, atol=1e-3)
+        assert np.allclose(probe[0, k, 1], acts[("resid", layer)][0, 1].numpy(), rtol=2e-3, atol=1e-3)
+        assert not np.allclose(probe[0, k, 0], probe[0, k, 1])
+
+
+def test_store_streams_selected_layers_in_key_order(p, tok, tmp_path):
+    items = [_item(), _unequal_item()]
+    store = R.baseline(p, tok, items, tmp_path / "acts", formats=("yn",), goals=("aligned", "swapped"), chunk=1,
+                       min_free_gb=0)
+    keys = ["t_000002|yn|swapped", "t_000001|yn|aligned"]
+    rows, full = store.load("last", keys)
+    _, one = store.load("last", keys, sel=2)
+    assert [r["key"] for r in rows] == keys and np.array_equal(one, full[:, 2]) and one.dtype == np.float16
+    _, rec = store.load("probe", keys, sel=(slice(None), 1))
+    assert rec.shape == (2, len(R.probe_layers(p.n_layers)), 64)
+    with pytest.raises(KeyError):
+        store.load("last", ["nope"])
+
+
+def test_edits_apply_only_at_the_answer_position(p, tok, tmp_path):
+    """An edit asked for at "last" must not touch earlier positions (the direction was estimated there only)."""
+    t = _item()
+    e = PR.encode(tok, PR.messages(t, "yn", "aligned"))
+    plus, minus = PR.readout_ids(tok, "yn")
+    u = torch.nn.functional.normalize(torch.randn(64, generator=torch.Generator().manual_seed(3)), dim=0)
+    edits = {"push": [(0, lambda pos: H.direction_edit(u, pos, add=40.0))]}
+    out = R.edit_items(p, tok, [t], tmp_path / "e.jsonl", edits, goals=("aligned",), batch_size=4)
+    got = R.read_jsonl(out)[0]["edits"]["push"]
+    want = H.readout_rows(p, _ids(e), plus, minus, edits=[("resid", 0, H.direction_edit(u, [len(e) - 1], add=40.0))])[0]
+    every = H.readout_rows(p, _ids(e), plus, minus, edits=[("resid", 0, H.direction_edit(u, None, add=40.0))])[0]
+    assert got == pytest.approx(want, abs=1e-4) and every != pytest.approx(want, abs=1e-2)
+    with pytest.raises(ValueError):
+        R.edit_items(p, tok, [t], tmp_path / "x.jsonl", edits, positions="middle")
+
+
+class _BatchDrift:
+    """Adds a different constant to the embedding output in every forward pass (as if each batch had its own
+    rounding), and records each forward pass's batch size."""
+
+    def __init__(self, q):
+        self.n, self.sizes = 0, []
+        self.h = q.embed.register_forward_hook(self.hook)
+
+    def hook(self, _m, _a, out):
+        self.n += 1
+        self.sizes.append(out.shape[0])
+        return out + 0.05 * self.n
+
+    def remove(self):
+        self.h.remove()
+
+
+def test_each_cell_is_paired_with_the_clean_row_of_its_own_batch(tok):
+    q = parts(_qwen(len(tok)))
+    pr = PR.build_pair(tok, _item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    cells = [Cell("resid", layer, g) for layer in range(q.n_layers) for g in ("action", "final", "query")]
+    drift = _BatchDrift(q)
+    try:
+        res = sweep(q, pr, cells, plus, minus, batch_size=4)
+    finally:
+        drift.remove()
+    assert set(drift.sizes) == {4}  # the source run and every batch, the last one padded, have 4 rows
+    assert len(res["clean"]) == 4 and len(set(res["clean"])) == 4  # 12 cells, 3 per batch; every batch differs
+    assert res["d_target"] == res["clean"][0]
+    for k, c in enumerate(cells):
+        assert res["cell_clean"][c.key()] == res["clean"][k // 3]
+    from wf.interp.patching import cell_values
+    assert cell_values(res, cells[-1].key())[0] == res["clean"][-1]
+
+
+def test_sweep_on_unequal_spans_reads_the_source_at_its_own_positions(p, tok):
+    """With spans of different length a source position is not the target's; the answer position at the last
+    layer must still reproduce the source readout (fails on values, not on an index error)."""
+    pr = PR.build_pair(tok, _unequal_item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    last = p.n_layers - 1
+    res = sweep(p, pr, [Cell("resid", last, "last"), Cell("resid", last, "action")], plus, minus, batch_size=3)
+    assert len(pr.b) > len(pr.a)
+    assert res["cells"][f"resid|{last}|last"] == pytest.approx(res["d_source"], abs=1e-4)
+
+
+def test_prefix_tolerance_comes_from_measured_noise(p, tok):
+    pr = PR.build_pair(tok, _item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    noise = R.batch_noise(p, pr.a.ids, plus, minus, batch_size=4)
+    assert noise < 1e-4 and R.prefix_tolerance(noise) == R.PREFIX_TOL_FLOOR and R.prefix_tolerance(1.0) == 5.0
+    assert abs(R.check_prefix_noop(p, pr, plus, minus, batch_size=4)) < 1e-4
+
+
+def test_belief_shift_leaves_a_missing_sign_out():
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((80, 6))
+    y = X[:, 0] > 0
+    m = P.fit_probe(X, y, [f"g{i % 8}" for i in range(80)])
+    s = P.belief_shifts(m, X[:3] + 1.0, X[:3], 1.0, [True, None, False])
+    assert s[1] != s[1] and s[0] != 0 and s[0] == pytest.approx(-s[2], abs=1e-9)  # a linear probe: same move
+
+
+def test_probe_direction_undoes_the_scaling():
+    """In raw coordinates the decision function changes along the probe direction only."""
+    rng = np.random.default_rng(2)
+    n, d = 400, 8
+    scales = np.array([0.1, 1, 10, 3, 0.5, 2, 7, 0.3])
+    y = rng.integers(0, 2, n).astype(bool)
+    X = (rng.standard_normal((n, d)) + 1.5 * np.outer(y, np.ones(d))) * scales
+    m = P.fit_probe(X, y, [f"g{i % 10}" for i in range(n)])
+    u = P.probe_direction(m)
+    x1, x2 = X[0], X[0] + rng.standard_normal(d)
+    ortho = x2 - x1 - ((x2 - x1) @ u) * u  # a move orthogonal to u leaves the logit unchanged
+    assert P.probe_logit(m, [x1 + ortho])[0] == pytest.approx(P.probe_logit(m, [x1])[0], abs=1e-6)
+
+
+def test_project_out_and_residual_shift():
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((50, 5))
+    a, b = rng.standard_normal(5), rng.standard_normal(5)
+    Y = P.project_out(X, [a, b])
+    assert np.allclose(Y @ a, 0, atol=1e-9) and np.allclose(Y @ b, 0, atol=1e-9)
+    z = 2.0 * np.arange(10.0) + 1
+    assert P.readout_slope(z, np.arange(10.0)) == pytest.approx(2.0)
+
+    class Lin:
+        def decision_function(self, X):
+            return np.asarray(X)[:, 0]
+
+    Xs = np.zeros((4, 2))
+    Xa = Xs.copy()
+    Xa[:, 0] = [2, 2, 2, 2]  # the probe moves by 2 ...
+    rs = P.residual_shifts(Lin(), Xa, Xs, [1.0] * 4, [0.0] * 4, 2.0, 1.0, [True, True, None, False])
+    assert rs[0] == pytest.approx(0.0) and rs[2] != rs[2]  # ... all of it predicted by a 1-nat readout change
+
+
+def test_hidden_label_object_at_receptacle():
+    assert P.hidden_labels(_item())["object_at_receptacle"] is True  # mug 1 is in cabinet 3 at reset
+    assert P.hidden_labels(_item(action="take mug 1 from shelf 1"))["object_at_receptacle"] is False
+    moved = _item(history_text=_item()["history_text"] + "\n> take mug 2 from shelf 1\nYou pick up the mug 2.")
+    assert P.hidden_labels(moved)["object_at_receptacle"] is None
+    assert P.hidden_labels(_item(scene_locations=None))["object_at_receptacle"] is None
+
+
+def test_each_edit_is_paired_with_the_clean_row_of_its_own_batch(tok, tmp_path):
+    q = parts(_qwen(len(tok)))
+    u = torch.nn.functional.normalize(torch.randn(64, generator=torch.Generator().manual_seed(5)), dim=0)
+    edits = {f"e{k:02d}": [(1, lambda pos, k=k: H.direction_edit(u, pos, add=float(k)))] for k in range(7)}
+    drift = _BatchDrift(q)
+    try:
+        out = R.edit_items(q, tok, [_item()], tmp_path / "e.jsonl", edits, goals=("aligned",), batch_size=4)
+    finally:
+        drift.remove()
+    r = R.read_jsonl(out)[0]
+    assert set(drift.sizes) == {4} and len(drift.sizes) == 3  # 7 edits, 3 per batch, the last batch padded
+    cleans = [r["edit_clean"][f"e{k:02d}"] for k in range(7)]
+    assert cleans[0] == cleans[2] != cleans[3] == cleans[5] != cleans[6] and r["d"] == cleans[0]
+
+
+def test_baseline_readout_is_float32_not_the_rounded_logits(tok, tmp_path):
+    qb = parts(_qwen(len(tok)).to(torch.bfloat16))
+    items = [_item(), _unequal_item()]
+    store = R.baseline(qb, tok, items, tmp_path / "acts", formats=("yn",), goals=("aligned", "swapped"), min_free_gb=0)
+    plus, minus = PR.readout_ids(tok, "yn")
+    for r in store.records():
+        t = items[0] if r["id"] == "t_000001" else items[1]
+        e = PR.encode(tok, PR.messages(t, "yn", r["goal"]))
+        _, h = H.forward_last(qb, _ids(e))
+        assert r["d"] == pytest.approx(float(qb.readout(h, plus, minus)[0]), abs=1e-6)
+    assert any(abs(r["d"] - r["d_logits"]) > 1e-4 for r in store.records())

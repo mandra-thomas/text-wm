@@ -8,22 +8,26 @@ from wf.interp.model import Parts
 
 def readout_vector(p: Parts, plus: int, minus: int) -> Any:
     """W_U[plus] - W_U[minus], float32."""
-    w = p.lm_head.weight
-    return (w[plus] - w[minus]).float()
+    return p.readout_vector(plus, minus)
+
+
+def lens_direction(p: Parts, plus: int, minus: int) -> Any:
+    """The readout direction in the residual stream, gamma * (W_U[plus] - W_U[minus]) (float32): the direction
+    along which a residual moves the logit-lens readout, up to the norm's per-vector scale. Cosines of the task
+    direction with it are reported (amendment 1, A3)."""
+    return p.norm.weight.detach().float() * p.readout_vector(plus, minus)
 
 
 def logit_lens(p: Parts, resid_last: Any, plus: int, minus: int) -> list[float]:
     """Readout of each layer's residual at the answer position, through the final norm and unembedding.
 
-    `resid_last` is (layers, width) for one prompt: the decoder layers' outputs at the last position. At the last
-    layer this equals the model's own readout (the model applies the same norm and unembedding).
+    `resid_last` is (layers, width) for one prompt: the decoder layers' outputs at the last position. Computed
+    in float32 (`Parts.readout`); at the last layer this is the model's own readout.
     """
     import torch
 
     with torch.no_grad():
-        h = resid_last.to(device=p.device, dtype=next(p.norm.parameters()).dtype)
-        normed = p.norm(h).float()
-        return (normed @ readout_vector(p, plus, minus).to(normed.device)).tolist()
+        return p.readout(resid_last.to(p.device), plus, minus).tolist()
 
 
 def fit_readout_lens(X_by_layer: Any, y: Any, groups: Any, alphas: tuple[float, ...] = (1.0, 10.0, 100.0, 1000.0, 1e4)) -> list:

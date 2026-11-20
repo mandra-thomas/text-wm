@@ -13,13 +13,31 @@ from typing import Any
 from wf.data.goals import make_swapped_task_line
 
 FORMATS = ("yn", "obs")
-GOALS = ("aligned", "swapped", "absent", "placebo")
+# aligned/swapped/absent: the scored arms. placebo: a second non-goal object. aligned_plus/swapped_plus: the goal
+# line followed by a sentence naming the other goal's object (rq1's mention arms). cf_aligned/cf_swapped: rq1v's
+# counterfactual task (the real task's destination replaced), so neither task of the pair is the real one.
+GOALS = ("aligned", "swapped", "absent", "placebo", "aligned_plus", "swapped_plus", "cf_aligned", "cf_swapped")
 READOUT = {"yn": ("Yes", "No"), "obs": ("You", "Nothing")}
-# Finest groups first; history subgroups are disjoint and "hist_all" is their union.
-GROUPS = ("span", "task_rest", "hist_obj", "hist_swap", "hist_rec", "hist_other", "hist_all", "action", "query",
-          "final", "last")
+# Finest groups first; history subgroups are disjoint and "hist_all" is their union. "hist_obj_matched" is a
+# control, not part of the partition: as many history tokens as "hist_obj" has, drawn (seeded) from the history's
+# tokens that name neither object, so it sits in the same region (amendment 1, A7).
+GROUPS = ("span", "task_rest", "hist_obj", "hist_swap", "hist_rec", "hist_other", "hist_all", "hist_obj_matched",
+          "action", "query", "final", "last")
 COARSE_GROUPS = ("span", "task_rest", "hist_all", "action", "query", "final", "last")
+# The minimal pilot's residual grid (amendment 1, section M): the coarse groups, the object-mention history tokens
+# reported separately from the rest of the history, and their position-matched control.
+PILOT_GROUPS = ("span", "task_rest", "hist_obj", "hist_obj_matched", "hist_all", "action", "query", "final", "last")
 HIST_SUB = ("hist_obj", "hist_swap", "hist_rec", "hist_other")
+
+
+def _to_yn(t: dict, msgs: list[dict[str, str]]) -> list[dict[str, str]]:
+    """The observation prompt turned into rq1v's yes/no prompt (the same rule as `rq1v.arm_messages`)."""
+    from wf import rq1v
+
+    last = msgs[-1]
+    if not last["content"].endswith("Next observation:"):
+        raise ValueError(f"{t['id']}: prompt does not end with 'Next observation:'")
+    return msgs[:-1] + [{**last, "content": last["content"][: -len("Next observation:")] + rq1v.YN_QUESTION}]
 
 
 def messages(t: dict, fmt: str, goal: str, placebo_object: str | None = None) -> list[dict[str, str]]:
@@ -29,23 +47,29 @@ def messages(t: dict, fmt: str, goal: str, placebo_object: str | None = None) ->
 
     if fmt not in FORMATS:
         raise ValueError(f"unknown format {fmt!r}")
+    if goal not in GOALS:
+        raise ValueError(f"unknown goal {goal!r}")
     if goal == "placebo":
         if not placebo_object:
             raise ValueError(f"{t['id']}: the placebo goal needs a placebo object")
         line = make_swapped_task_line(t["task_line"], t["goal_object"], placebo_object)
         msgs = build_messages(t, "aligned", task_line=line)
-        if fmt == "obs":
-            return msgs
-        last = msgs[-1]
-        return msgs[:-1] + [{**last, "content": last["content"][: -len("Next observation:")] + rq1v.YN_QUESTION}]
-    if goal not in GOALS:
-        raise ValueError(f"unknown goal {goal!r}")
-    return rq1v.arm_messages(t, f"yn_{goal}") if fmt == "yn" else rq1.arm_messages(t, goal)
+    elif goal in ("cf_aligned", "cf_swapped"):
+        msgs = rq1v.arm_messages(t, goal)
+        if msgs is None:
+            raise ValueError(f"{t['id']}: no counterfactual task can be built for this item")
+    elif goal in ("aligned", "swapped", "absent") and fmt == "yn":
+        return rq1v.arm_messages(t, f"yn_{goal}")  # the scored yes/no prompt itself
+    else:
+        msgs = rq1.arm_messages(t, goal)
+    return msgs if fmt == "obs" else _to_yn(t, msgs)
 
 
 def task_object(t: dict, goal: str, placebo_object: str | None = None) -> str | None:
-    return {"aligned": t.get("goal_object"), "swapped": t.get("swapped_goal_object"), "absent": None,
-            "placebo": placebo_object}[goal]
+    """The object the goal line is about (for a plus line, the goal's own object, not the one mentioned)."""
+    own = {"aligned": t.get("goal_object"), "swapped": t.get("swapped_goal_object"), "absent": None,
+           "placebo": placebo_object}
+    return own[goal.split("_")[-1] if goal.startswith("cf_") else goal.replace("_plus", "")]
 
 
 def readout_ids(tok: Any, fmt: str) -> tuple[int, int]:
@@ -133,7 +157,32 @@ class Pair:
         return q
 
 
+def char_diff(x: str, y: str) -> tuple[int, int, int]:
+    """(start, end in x, end in y) of the characters where two texts differ, widened to whole words.
+
+    Two object names can share an ending ("glassbottle" and "winebottle") or a start; matching only token ids
+    would put the shared sub-word tokens ("b", "ottle") outside the span and into the task line's rest. The
+    region is therefore widened to word boundaries, so the whole name belongs to the span.
+    """
+    n = min(len(x), len(y))
+    lo = 0
+    while lo < n and x[lo] == y[lo]:
+        lo += 1
+    s = 0
+    while s < n - lo and x[-1 - s] == y[-1 - s]:
+        s += 1
+    hx, hy = len(x) - s, len(y) - s
+    while lo > 0 and x[lo - 1].isalnum():  # x[:lo] == y[:lo], so the same holds in y
+        lo -= 1
+    while hx < len(x) and x[hx].isalnum():  # x[hx:] == y[hy:]
+        hx += 1
+        hy += 1
+    return lo, hx, hy
+
+
 def pair(a: Encoded, b: Encoded) -> Pair:
+    """The shared token prefix and suffix of two prompts, cut back so that no token of either prompt that
+    overlaps the differing characters (widened to whole words, `char_diff`) is counted as shared."""
     n = min(len(a), len(b))
     p = 0
     while p < n and a.ids[p] == b.ids[p]:
@@ -143,6 +192,13 @@ def pair(a: Encoded, b: Encoded) -> Pair:
         s += 1
     if p == len(a) == len(b):
         raise ValueError("the two prompts are identical")
+    lo, ha, hb = char_diff(a.text, b.text)
+    wide = lambda o: o[1] > o[0]  # noqa: E731  (tokens with no characters never overlap anything)
+    while p > 0 and any(wide(e.offsets[p - 1]) and e.offsets[p - 1][1] > lo for e in (a, b)):
+        p -= 1
+    while s > 0 and ((wide(a.offsets[len(a) - s]) and a.offsets[len(a) - s][0] < ha)
+                     or (wide(b.offsets[len(b) - s]) and b.offsets[len(b) - s][0] < hb)):
+        s -= 1
     return Pair(a=a, b=b, prefix=p, suffix=s)
 
 
@@ -222,8 +278,20 @@ def token_groups(pr: Pair, t: dict, other_object: str | None) -> dict[str, list[
         groups[g].append(i)
         prev = g
     groups["hist_all"] = sorted(groups["hist_obj"] + groups["hist_swap"] + groups["hist_rec"] + groups["hist_other"])
+    groups["hist_obj_matched"] = matched_positions(groups["hist_obj"], groups["hist_other"] + groups["hist_rec"],
+                                                   f"interp|matched|{t['id']}")
     groups["last"] = [len(e) - 1]
     return groups
+
+
+def matched_positions(target: list[int], pool: list[int], seed_text: str) -> list[int]:
+    """As many positions as `target` has, drawn without replacement from `pool` by a seeded draw (all of the pool
+    if it is smaller); sorted."""
+    import random
+
+    pool = sorted(set(pool) - set(target))
+    k = min(len(target), len(pool))
+    return sorted(random.Random(seed_text).sample(pool, k)) if k else []
 
 
 def action_positions(e: Encoded, t: dict) -> dict[str, int]:

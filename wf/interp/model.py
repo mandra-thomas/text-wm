@@ -34,6 +34,26 @@ class Parts:
     def device(self) -> Any:
         return next(self.model.parameters()).device
 
+    def norm_fp32(self, h: Any) -> Any:
+        """The final RMSNorm computed in float32 (the model computes it in float32 but returns its own dtype)."""
+        import torch
+
+        x = h.float()
+        eps = getattr(self.norm, "variance_epsilon", None) or getattr(self.norm, "eps", 1e-6)
+        x = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps)
+        return x * self.norm.weight.detach().float().to(x.device)
+
+    def readout_vector(self, plus: int, minus: int) -> Any:
+        """W_U[plus] - W_U[minus] in float32."""
+        w = self.lm_head.weight
+        return (w[plus] - w[minus]).detach().float()
+
+    def readout(self, h: Any, plus: int, minus: int) -> Any:
+        """z[plus] - z[minus] in float32 from pre-norm residuals `h` (..., width): the final norm and the two
+        unembedding rows, all in float32. Equals the model's logit difference up to its bfloat16 rounding."""
+        normed = self.norm_fp32(h)
+        return normed @ self.readout_vector(plus, minus).to(normed.device)
+
 
 def parts(model: Any) -> Parts:
     """Find the modules by the layout both Qwen3ForCausalLM and LlamaForCausalLM share in transformers 4.51."""

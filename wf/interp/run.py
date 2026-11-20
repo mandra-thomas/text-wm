@@ -13,7 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from wf.interp.hooks import capture, forward_last_logits, run_patched
+from wf.interp.hooks import capture
 from wf.interp.lens import logit_lens
 from wf.interp.model import Parts
 from wf.interp.patching import Cell, sweep
@@ -76,21 +76,43 @@ class ActStore:
         self.n_chunks += 1
         self._buf = []
 
-    def load(self, name: str, keys: list[str] | None = None) -> tuple[list[dict], Any]:
-        """(index rows, stacked array) for array `name`, in index order or in the order of `keys`."""
+    def load(self, name: str, keys: list[str] | None = None, sel: Any = None) -> tuple[list[dict], Any]:
+        """(index rows, stacked array) for array `name`, in index order or in the order of `keys`.
+
+        Streams: the output is allocated once (float16, as stored) and filled one chunk at a time, so memory
+        holds the result and a single chunk, never every chunk. `sel` indexes each record's array before it is
+        kept (for example `sel=5` keeps layer 5 of "last", `sel=(slice(None), 0)` the first probe position at
+        every probe layer), which is how an analysis reads one layer of a large store.
+        """
         import numpy as np
 
-        rows = read_jsonl(self.index)
+        rows = read_jsonl(self.index) if self.index.exists() else []
         if keys is not None:
             by = {r["key"]: r for r in rows}
+            missing = [k for k in keys if k not in by]
+            if missing:
+                raise KeyError(f"{len(missing)} key(s) not in the store, e.g. {missing[0]!r}")
             rows = [by[k] for k in keys]
-        cache: dict[int, Any] = {}
-        out = []
-        for r in rows:
-            if r["chunk"] not in cache:
-                cache[r["chunk"]] = np.load(self.d / f"chunk_{r['chunk']:05d}.npz")[name]
-            out.append(cache[r["chunk"]][r["row"]])
-        return rows, (np.stack(out) if out else np.zeros((0,)))
+        if not rows:
+            return rows, np.zeros((0,), dtype=np.float16)
+        by_chunk: dict[int, list[int]] = defaultdict(list)
+        for i, r in enumerate(rows):
+            by_chunk[r["chunk"]].append(i)
+        out = None
+        for chunk in sorted(by_chunk):
+            with np.load(self.d / f"chunk_{chunk:05d}.npz") as z:
+                arr = z[name]
+            for i in by_chunk[chunk]:
+                x = arr[rows[i]["row"]]
+                x = x if sel is None else x[sel]
+                if out is None:
+                    out = np.empty((len(rows),) + np.shape(x), dtype=arr.dtype)
+                out[i] = x
+            del arr
+        return rows, out
+
+    def records(self) -> list[dict]:
+        return read_jsonl(self.index) if self.index.exists() else []
 
 
 def _ids(p: Parts, e: Encoded) -> Any:
@@ -137,17 +159,25 @@ def baseline(p: Parts, tok: Any, items: list[dict], out: Path, formats: Iterable
                 key = f"{t['id']}|{fmt}|{goal}"
                 if key in done:
                     continue
-                e = encode(tok, messages(t, fmt, goal, po))
+                try:
+                    e = encode(tok, messages(t, fmt, goal, po))
+                except ValueError:
+                    if goal in ("cf_aligned", "cf_swapped", "aligned_plus", "swapped_plus"):
+                        continue  # not every item has a counterfactual task or a mention line
+                    raise
                 pos = action_positions(e, t)
-                logits, acts = capture(p, _ids(p, e), [("resid", layer) for layer in layers],
-                                       positions=[pos["answer"], pos["action_end"], pos["action_rec"]])
+                logits, acts, h = capture(p, _ids(p, e), [("resid", layer) for layer in layers],
+                                          positions=[pos["answer"], pos["action_end"], pos["action_rec"]],
+                                          with_hidden=True)
                 last = torch.stack([acts[("resid", layer)][0, 0] for layer in layers])
                 probe = torch.stack([acts[("resid", layer)][0, 1:3] for layer in pl])
                 lp = torch.log_softmax(logits[0], dim=-1)
                 rec = {"key": key, "id": t["id"], "game_id": t["game_id"], "fmt": fmt, "goal": goal,
-                       "d": float(logits[0, plus] - logits[0, minus]),
+                       "d": float(p.readout(h, plus, minus)[0]),  # float32, from the final normed hidden state
+                       "d_logits": float(logits[0, plus] - logits[0, minus]),  # the model's own (bf16) logits
                        "mass": float(lp[plus].exp() + lp[minus].exp()), "n_tokens": len(e),
-                       "lens": logit_lens(p, last, plus, minus), "probe_layers": pl}
+                       "lens": logit_lens(p, last, plus, minus), "probe_layers": pl,
+                       "history_len": t.get("history_len"), "determination_reason": t.get("determination_reason")}
                 store.add(rec, {"last": last.float().cpu().numpy(), "probe": probe.float().cpu().numpy()})
     store.flush()
     return store
@@ -188,22 +218,56 @@ def select_patch_items(items: list[dict], effect: dict[str, float], n: int, min_
 # ---------------- stage 2 and 3: patching ----------------
 
 
-def check_prefix_noop(p: Parts, pr: Any, plus: int, minus: int, tol: float = 1e-3) -> float:
-    """Patching prefix positions (identical in both prompts) must not change the readout. Returns the change."""
+def batch_noise(p: Parts, ids: list[int], plus: int, minus: int, batch_size: int = 16) -> float:
+    """The largest change in one prompt's readout across batch rows and batch sizes (1, 2 and `batch_size`).
+
+    On a CPU in float32 or bfloat16 this is usually exactly 0; on a GPU bfloat16 kernels can depend on the
+    batch's shape. It sets the tolerance of the identical-prefix check (`prefix_tolerance`).
+    """
     import torch
 
-    from wf.interp.hooks import Patch
+    from wf.interp.hooks import readout_rows
+
+    vals = []
+    for n in sorted({1, 2, batch_size}):
+        vals += readout_rows(p, torch.tensor([ids] * n, device=p.device), plus, minus)
+    return max(vals) - min(vals)
+
+
+PREFIX_TOL_FLOOR = 0.01  # nats; a patch at the wrong positions changes the readout by far more
+PREFIX_TOL_NOISE = 5.0  # times the measured batch noise
+
+
+def prefix_tolerance(noise: float) -> float:
+    return max(PREFIX_TOL_FLOOR, PREFIX_TOL_NOISE * noise)
+
+
+def check_prefix_noop(p: Parts, pr: Any, plus: int, minus: int, tol: float | None = None,
+                      batch_size: int = 16) -> float:
+    """Patching prefix positions (identical in both prompts) must not change the readout. Returns the change.
+
+    With `tol` None the tolerance is set from the batch noise measured on the target prompt here
+    (`prefix_tolerance(batch_noise(...))`), so a GPU's bfloat16 noise cannot fail a correct job and a real
+    mistake (positions off, the wrong row) is still far above it. The source activations come from a run of the
+    same batch size as the patched run, as in `sweep`.
+    """
+    import torch
+
+    from wf.interp.hooks import Patch, readout_rows
 
     if pr.prefix == 0:
         return 0.0
+    if tol is None:
+        tol = prefix_tolerance(batch_noise(p, pr.a.ids, plus, minus, batch_size))
     mid = p.n_layers // 2
     pos = list(range(pr.prefix))
-    _, src = capture(p, torch.tensor([pr.b.ids], device=p.device), [("resid", mid)])
+    _, src = capture(p, torch.tensor([pr.b.ids] * 2, device=p.device), [("resid", mid)], rows=1)
     ids = torch.tensor([pr.a.ids] * 2, device=p.device)
-    logits = run_patched(p, ids, [Patch("resid", mid, 1, torch.tensor(pos, device=p.device), src[("resid", mid)][0, pos])])
-    change = float((logits[1, plus] - logits[1, minus]) - (logits[0, plus] - logits[0, minus]))
+    d = readout_rows(p, ids, plus, minus,
+                     [Patch("resid", mid, 1, torch.tensor(pos, device=p.device), src[("resid", mid)][0, pos])])
+    change = d[1] - d[0]
     if abs(change) > tol:
-        raise RuntimeError(f"patching identical prefix positions changed the readout by {change}")
+        raise RuntimeError(f"patching identical prefix positions changed the readout by {change} (tolerance {tol})")
     return change
 
 
@@ -230,7 +294,7 @@ def patch_items(p: Parts, tok: Any, items: list[dict], out: Path, cells: list[Ce
             check_disk(out.parent)
             pr = pr or build_pair(tok, t, fmt, goal_a, source_goal, po)
             if not checked:
-                check_prefix_noop(p, pr, plus, minus)
+                check_prefix_noop(p, pr, plus, minus, batch_size=batch_size)
                 checked = True
             res = sweep(p, pr if direction == "noise" else pr.flipped(), cells, plus, minus, batch_size)
             append_jsonl(out, [{"id": t["id"], "game_id": t["game_id"], "fmt": fmt, "direction": direction,
@@ -253,15 +317,22 @@ def _row_edit(rows: dict[int, Callable]) -> Callable:
 
 def edit_items(p: Parts, tok: Any, items: list[dict], out: Path, edits: dict[str, list[tuple[int, Callable]]],
                fmt: str = "yn", goals: Iterable[str] = ("aligned", "swapped", "absent"),
-               positions: str = "final", batch_size: int = 16) -> Path:
-    """Readouts with each named edit applied, one batch row per edit plus an unedited row.
+               positions: str = "last", batch_size: int = 16) -> Path:
+    """Readouts with each named edit applied, one batch row per edit plus an unedited row in every batch.
 
     `edits[name]` is a list of (layer, fn_factory) where fn_factory(positions) returns an edit for the residual
-    after that layer (for example `lambda pos: direction_edit(u, pos, value=c)`); `positions` is "final" (the
-    template tail, design §7) or "all". One record per (item, goal), resumable.
+    after that layer (for example `lambda pos: direction_edit(u, pos, value=c)`). `positions` is where the edit
+    applies and must be where its direction was estimated (amendment 1, A11): "last" (the answer position, the
+    default; the task direction is estimated there), "final" (the template tail; only for directions estimated
+    per position) or "all". Batches are padded to `batch_size` rows and each edit's readout is paired with the
+    unedited row of its own batch (`edit_clean`). Readouts are float32. One record per (item, goal), resumable.
     """
     import torch
 
+    from wf.interp.hooks import readout_rows
+
+    if positions not in ("last", "final", "all"):
+        raise ValueError(f"unknown positions {positions!r}")
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     repair_jsonl(out)
@@ -274,25 +345,26 @@ def edit_items(p: Parts, tok: Any, items: list[dict], out: Path, edits: dict[str
                 continue
             check_disk(out.parent)
             e = encode(tok, messages(t, fmt, goal))
-            pos = final_positions(e) if positions == "final" else None
+            pos = {"last": [len(e) - 1], "final": final_positions(e), "all": None}[positions]
             result: dict[str, float] = {}
+            edit_clean: dict[str, float] = {}
             clean = []
-            for k in range(0, len(names), max(1, batch_size - 1)):
+            for k in range(0, max(1, len(names)), max(1, batch_size - 1)):
                 chunk = names[k:k + batch_size - 1]
                 by_layer: dict[int, dict[int, Callable]] = defaultdict(dict)
                 for r, name in enumerate(chunk, start=1):
                     for layer, factory in edits[name]:
                         by_layer[layer][r] = factory(pos)
                 hook_edits = [("resid", layer, _row_edit(rows)) for layer, rows in by_layer.items()]
-                ids = torch.tensor([e.ids] * (len(chunk) + 1), device=p.device)
-                logits = run_patched(p, ids, [], edits=hook_edits)
-                d = (logits[:, plus] - logits[:, minus]).tolist()
+                ids = torch.tensor([e.ids] * batch_size, device=p.device)
+                d = readout_rows(p, ids, plus, minus, edits=hook_edits)
                 clean.append(d[0])
                 result.update(dict(zip(chunk, d[1:])))
-            if not clean:
-                clean.append(float((lambda lg: lg[0, plus] - lg[0, minus])(forward_last_logits(p, _ids(p, e)))))
+                edit_clean.update({name: d[0] for name in chunk})
             append_jsonl(out, [{"id": t["id"], "game_id": t["game_id"], "fmt": fmt, "goal": goal, "d": clean[0],
-                                "clean_spread": max(clean) - min(clean), "edits": result}])
+                                "clean_spread": max(clean) - min(clean), "edits": result, "edit_clean": edit_clean,
+                                "positions": positions, "history_len": t.get("history_len"),
+                                "determination_reason": t.get("determination_reason")}])
     return out
 
 

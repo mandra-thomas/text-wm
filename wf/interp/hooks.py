@@ -86,27 +86,50 @@ def n_hooks(model: Any) -> int:
 
 def forward_last_logits(p: Parts, input_ids: Any) -> Any:
     """Logits at the last position only, float32, shape (batch, vocab)."""
+    return forward_last(p, input_ids)[0]
+
+
+def forward_last(p: Parts, input_ids: Any) -> tuple[Any, Any]:
+    """(logits, pre-norm residual) at the last position, both float32, shapes (batch, vocab) and (batch, width).
+
+    The residual is the input of the final norm (the last decoder layer's output) at the answer position, read
+    by a pre-hook, so a readout can be computed from it in float32 (`Parts.readout`) instead of from the
+    model's bfloat16 logits, whose spacing near |z| = 10 is about 0.06 nats.
+    """
     import torch
 
-    with torch.no_grad():
-        out = p.model(input_ids=input_ids.to(p.device), logits_to_keep=1, use_cache=False)
-    return out.logits[:, -1].float()
+    kept: dict = {}
+
+    def pre(_m, args):
+        kept["h"] = args[0][:, -1].detach().float()
+
+    handle = p.norm.register_forward_pre_hook(pre)
+    try:
+        with torch.no_grad():
+            out = p.model(input_ids=input_ids.to(p.device), logits_to_keep=1, use_cache=False)
+    finally:
+        handle.remove()
+    return out.logits[:, -1].float(), kept["h"]
 
 
-def capture(p: Parts, input_ids: Any, sites: list[tuple[str, int]], positions: Any = None) -> tuple[Any, dict]:
-    """(last-position logits, {(site, layer): activation}) for one forward pass.
+def capture(p: Parts, input_ids: Any, sites: list[tuple[str, int]], positions: Any = None,
+            rows: int | None = None, with_hidden: bool = False) -> tuple:
+    """(last-position logits, {(site, layer): activation}) for one forward pass; with `with_hidden`, also the
+    float32 pre-norm residual at the last position (see `forward_last`).
 
     Activations are detached copies, shape (batch, positions, width), on the model's device. `positions`
-    (a list or 1-d tensor) keeps only those positions, to bound memory.
+    (a list or 1-d tensor) keeps only those positions and `rows` only the first `rows` batch rows, to bound
+    memory (a source run padded to the patching batch size keeps one row).
     """
     acts: dict = {}
     with HookSet() as hs:
         for site, layer in sites:
             def sink(h, key=(site, layer)):
+                h = h if rows is None else h[:rows]
                 acts[key] = (h if positions is None else h[:, positions]).detach().clone()
             hs.read(p, site, layer, sink)
-        logits = forward_last_logits(p, input_ids)
-    return logits, acts
+        logits, hidden = forward_last(p, input_ids)
+    return (logits, acts, hidden) if with_hidden else (logits, acts)
 
 
 @dataclass
@@ -138,8 +161,10 @@ def _patch_fn(patches: list[Patch], head_dim: int) -> Callable[[Any], Any]:
     return fn
 
 
-def run_patched(p: Parts, input_ids: Any, patches: list[Patch], edits: list[tuple[str, int, Callable]] = ()) -> Any:
-    """Last-position logits with every patch applied (one hook per site and layer covers all rows).
+def run_patched(p: Parts, input_ids: Any, patches: list[Patch], edits: list[tuple[str, int, Callable]] = (),
+                hidden: bool = False) -> Any:
+    """Last-position logits with every patch applied (one hook per site and layer covers all rows); with
+    `hidden`, (logits, float32 pre-norm residual at the last position) instead.
 
     `edits` are extra (site, layer, fn) edits, applied after the patches at the same site.
     """
@@ -153,7 +178,15 @@ def run_patched(p: Parts, input_ids: Any, patches: list[Patch], edits: list[tupl
             hs.edit(p, site, layer, _patch_fn(group, p.head_dim))
         for site, layer, fn in edits:
             hs.edit(p, site, layer, fn)
-        return forward_last_logits(p, input_ids)
+        logits, h = forward_last(p, input_ids)
+        return (logits, h) if hidden else logits
+
+
+def readout_rows(p: Parts, input_ids: Any, plus: int, minus: int, patches: list[Patch] = (),
+                 edits: list[tuple[str, int, Callable]] = ()) -> list[float]:
+    """The float32 readout z[plus] - z[minus] of every batch row, from the final normed hidden state."""
+    _, h = run_patched(p, input_ids, list(patches), edits, hidden=True)
+    return p.readout(h, plus, minus).tolist()
 
 
 def direction_edit(u: Any, positions: Any = None, value: Any = None, add: float | None = None) -> Callable[[Any], Any]:

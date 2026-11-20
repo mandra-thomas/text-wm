@@ -111,10 +111,70 @@ def separation(model: Any, X: Any, y: Any) -> float:
     return float(z[y].mean() - z[~y].mean())
 
 
-def belief_shifts(model: Any, X_aligned: Any, X_swapped: Any, sep: float, toward_success: list[bool]) -> list[float]:
-    """Per item, the standardised shift of the probe logit, aligned minus swapped, signed toward success."""
+def belief_shifts(model: Any, X_aligned: Any, X_swapped: Any, sep: float,
+                  toward_success: list[bool | None]) -> list[float]:
+    """Per item, the standardised shift of the probe logit, aligned minus swapped, signed toward success.
+
+    An item whose fact has no success value (`success_value` is None, e.g. holding something for a heat) gets
+    nan, never a sign: treating a missing sign as "toward failure" would flip its shift.
+    """
     za, zs = probe_logit(model, X_aligned), probe_logit(model, X_swapped)
-    return [float((a - s) / sep * (1 if up else -1)) for a, s, up in zip(za, zs, toward_success)]
+    return [float("nan") if up is None else float((a - s) / sep * (1 if up else -1))
+            for a, s, up in zip(za, zs, toward_success)]
+
+
+def project_out(X: Any, directions: list[Any]) -> Any:
+    """X with its components along `directions` removed (the directions are orthonormalised first).
+
+    Used to probe the answer position after removing the readout and success directions (amendment 1, A1), so
+    a probe cannot read the answer itself as the fact.
+    """
+    import numpy as np
+
+    X = np.asarray(X, dtype=np.float64)
+    V = np.stack([np.asarray(d, dtype=np.float64) for d in directions], axis=1)
+    Q, _ = np.linalg.qr(V)
+    return X - (X @ Q) @ Q.T
+
+
+def readout_slope(z: Any, d: Any) -> float:
+    """Least-squares slope of a probe's logit `z` on the readout `d` across prompts (neutral, train games)."""
+    import numpy as np
+
+    z, d = np.asarray(z, dtype=np.float64), np.asarray(d, dtype=np.float64)
+    dc = d - d.mean()
+    den = float(dc @ dc)
+    return float("nan") if den == 0 else float(dc @ (z - z.mean()) / den)
+
+
+def residual_shifts(model: Any, X_aligned: Any, X_swapped: Any, d_aligned: Any, d_swapped: Any, slope: float,
+                    sep: float, toward_success: list[bool | None]) -> list[float]:
+    """`belief_shifts` after subtracting the part of each item's probe shift that the readout's own change
+    predicts (slope times the change in D, amendment 1, A1). A late belief change at the answer position can
+    otherwise hide in, or be faked by, the answer itself."""
+    import numpy as np
+
+    za, zs = probe_logit(model, X_aligned), probe_logit(model, X_swapped)
+    dd = np.asarray(d_aligned, dtype=np.float64) - np.asarray(d_swapped, dtype=np.float64)
+    return [float("nan") if up is None else float(((a - s) - slope * x) / sep * (1 if up else -1))
+            for a, s, x, up in zip(za, zs, dd, toward_success)]
+
+
+def hidden_labels(t: dict) -> dict[str, bool | None]:
+    """Facts from the hidden scene, not the history (amendment 1, A4): "object_at_receptacle", whether the
+    action's object instance was at the action's receptacle at reset (`scene_locations`). Unlabelled when the
+    action names no object and receptacle, when the scene was not recorded, or when the history acts on the
+    object (it may have moved since reset)."""
+    from wf.data.goals import interacted_objects
+
+    m = _ACT.match(t["action"])
+    locs = t.get("scene_locations")
+    if not m or not locs:
+        return {"object_at_receptacle": None}
+    obj, rec = m[2], m[3]
+    if re.sub(r" \d+$", "", obj) in interacted_objects(t.get("history_text") or ""):
+        return {"object_at_receptacle": None}
+    return {"object_at_receptacle": rec in (locs.get(obj) or [])}
 
 
 def probe_direction(model: Any) -> Any:
