@@ -239,3 +239,118 @@ That is about 20 GB for Qwen and 18 GB for Llama. Both fit in ICE scratch's roug
 2. H4 would be tested more directly by a base-versus-instruct comparison (Qwen3-8B-Base, Llama-3.1-8B), which needs two new pinned snapshots and about 1 GPU hour each for stage 0 and the lens. Worth adding?
 3. Attribution patching (a gradient approximation of every cell from one forward and backward pass) could replace most of stage 2's exhaustive grid. The exact grid is kept for the pilot because its numbers are exact; should it be screened first instead, if speed turns out to be the constraint?
 4. Whether nnsight is used at all: the tooling uses plain PyTorch forward hooks, which need no extra package on ICE.
+
+## Amendments after review 1, before any run (2026-11-20)
+
+Status: an outside review of the design and the tooling (its scripts ran the tooling against the real Qwen3-8B and Llama-3.1 tokenizers and put 20 bugs back into the code one at a time) found problems in both. Everything below was decided after that review and before any activation, patching, probe or lens result existed; no interpretability job has run. Where an amendment contradicts sections 1 to 12, the amendment holds. `deviations.md` records the change ("Interpretability pilot: amendments after review 1").
+
+### A1. A late belief change can hide at the answer position
+
+A probe read at the answer position sees the answer itself: if the aligned task moves the readout, any probe whose weights overlap the readout direction moves with it, and a genuine belief change made late, at the answer position, would look the same as the answer leaking into the probe. Section 6's rule ("a shift seen only at the answer position is the answer leaking") therefore throws away exactly the late belief change that H2 allows. Two corrections are made, and both are reported:
+
+- *Projected probes.* At the answer position, probes are trained and read after removing two directions from the residual: the readout direction $\gamma \odot (W_U[\text{Yes}] - W_U[\text{No}])$ (the direction along which the logit lens moves the readout) and the neutral success direction of A3. A probe that still separates the fact after this projection is not reading the answer.
+- *Residual shift.* For each item the part of the probe's shift that the readout's own change predicts is subtracted. With $\beta_f$ the least-squares slope of the probe logit $z_f$ on the readout $D$ across neutral prompts of the held-out games, the residual shift is
+
+$$
+\delta_f^{\text{res}} = \frac{\overline{\left(z_f(\text{aligned}) - z_f(\text{swapped})\right) - \beta_f \left(D(\text{aligned}) - D(\text{swapped})\right)}}{\overline{z_f \mid y=1} - \overline{z_f \mid y=0}} .
+$$
+
+A belief change is read from the action and receptacle positions as before, and from the answer position only through the projected probe and the residual shift.
+
+### A2. History share is not belief, and step 0 is its own stratum
+
+A large history share says that the history tokens' activations differ between the aligned and the swapped run and that the difference matters; it does not say that what differs is a belief about the state. The history tokens that name the action's object (`hist_obj`) are the place where a goal could plausibly change the represented state of that object, so they are reported separately from the rest of the history, next to a position-matched control (A7).
+
+At step 0 the agent has not acted, so no history token follows the task line: the history before the task line is a shared prefix, identical in both runs. The history share there is 0 by construction, not by measurement. Every verdict of section 9 is therefore applied per stratum, step 0 and later steps, and at step 0 the history-share row is undefined and the verdict rests on the other rows. Qwen's effect is about 11 nats at step 0 and about 5 later, so a pooled history share would mostly describe the step-0 items, where it cannot be anything but 0.
+
+### A3. The direction test
+
+The task direction $u_\ell$ of section 7 is the mean aligned-minus-swapped difference at the answer position. On its own it cannot separate "the goal adds a success signal" from "the goal adds something that happens to be read as success". Added:
+
+- *Cosines.* The cosine of $u_\ell$ with the readout direction above, and with the neutral success direction $s_\ell$, the unit mean residual of determined successes minus that of determined failures under the neutral task (train fold), are reported at every ablation layer, together with the cosine between the two folds' estimates of $u_\ell$ (stability).
+- *Ablation after projecting out success.* The task direction with its success component removed, $u_\ell^{\perp} = (u_\ell - (u_\ell^\top s_\ell) s_\ell) / \lVert \cdot \rVert$, is mean-ablated in the same way as $u_\ell$.
+- *Mention-contrast direction.* The same estimate from the swapped prompt with a sentence naming the action's object added (rq1's `swapped_plus`) against the swapped prompt: the direction of merely naming the object, not as the goal. It is a control: if it removes as much as the task direction, the task direction is about the name, not the goal role.
+- *Discrimination in nats.* The neutral-task AUC of determined successes against failures is 0.99 for Qwen, at its ceiling, so "the AUC falls by less than 0.02" cannot detect damage. Discrimination is instead the success-versus-failure gap of the readout under the neutral task,
+
+$$
+G = \overline{D \mid \text{success}} - \overline{D \mid \text{failure}},
+$$
+
+and it is *kept* when the ablated gap is at least 90% of the unablated one. This replaces the AUC criteria of sections 7 and 9; the AUC is still reported.
+
+### A4. Probe failure is not evidence for H1; a hidden-state belief probe
+
+A probe that does not reach an AUC of 0.75 shows that the fact is not linearly decodable at the positions and layers looked at. It could be represented nonlinearly, elsewhere, or only in combination; that is not evidence that the model does not track it. Section 6's paragraph "Probe failure as evidence for H1" and the corresponding cells of section 9 are withdrawn: unusable probes make the belief rows *inconclusive*, and H1 can be supported only by the behavioural evidence it already has against it, or by usable probes whose accuracy on the item's own deciding fact is near chance where the effect is large (the correlation row, kept).
+
+Added: a *hidden-state belief probe* for "the action's object is at the action's receptacle", labelled from the scene at reset (`scene_locations`, `wf.interp.probes.hidden_labels`; unlabelled where the history acts on the object, since it may have moved). This is the belief H2 names most directly ("with the aligned task it comes to believe that the object is at the receptacle"), and its label does not come from the history parser, so it does not share that parser's blind spots. It is trained on neutral prompts (balanced within true outcome) and read with the belief shift and the residual shift of A1.
+
+### A5. H4 restated and tested directly
+
+H4 is restated as: *the object match triggers a generic success feature*, the same feature that separates working from failing actions under the neutral task. Its predictions, in place of section 9's H4 cells that only repeated H3's:
+
+- the task direction has a cosine of at least 0.3 with the success direction (H3: below 0.1);
+- ablating $u_\ell^{\perp}$ removes less than half of what ablating $u_\ell$ removes (H3: at least 80% of it);
+- *steering*: adding to a swapped prompt, along $s_\ell$, the mean aligned-minus-swapped projection on $s_\ell$ raises its readout by at least half of the goal effect (H3: under 20%);
+- the direction moves determined successes as much as failures (kept from section 9).
+
+### A6. Thresholds
+
+- *Belief-shift bound as a share of the effect.* A shift in the probe's own units says nothing about whether it matters for the answer. It is restated as the share of the readout effect the shift could carry. With $G_f$ the neutral-prompt readout gap between items whose deciding fact has its success value and items where it does not (train fold), a standardised shift $\delta_f$ could move the readout by about $\delta_f G_f$, so the share it could carry is
+
+$$
+\kappa_f = \frac{\delta_f \, G_f}{\Delta D} .
+$$
+
+*No belief change*: the upper bound of $\kappa_f$ is below 0.2 at every usable layer and position for the deciding facts. *Belief change*: the lower bound of $\kappa_f$ is at least 0.5 at some middle-third layer at the action or receptacle position (or at the answer position through A1's projected probe or residual shift). Between: inconclusive. This replaces the ±0.15 and 0.25 bounds of section 6.
+- *Multiple testing.* Claims about single cells (a layer of a group, a layer and position of a probe) use intervals Bonferroni-corrected over the layers of that group (and over positions, for probes). Summary measures that are maxima over layers (the history share, the action share, the object-mention share) get a game-clustered bootstrap interval in which the maximising layer is re-chosen in every resample, so the interval includes the choice. The history share is *low* when that interval's upper bound is below 0.15 and *high* when its lower bound is at least 0.3. Section 11's "no correction across summary measures" stands for the summary measures themselves, which are few and fixed.
+- *Variances before thresholds.* The bands above (0.15 and 0.3 for the history share, 0.6 and 0.3 for removal, 0.2 and 0.5 for $\kappa$, 90% for the gap) were set without any estimate of the item-to-item variance of these quantities. They are provisional. The minimal pilot (section M) runs its patching on the games of one fold only (the calibration fold); from its variances the bands are fixed, in a second dated amendment, before any patching on the other fold's games and before the full pilot. The minimal pilot's own readouts are calibration results, read against the provisional bands and not reported as verdicts.
+
+### A7. Controls
+
+- *Random directions* pass by construction: in a 4,096-dimensional residual a random unit direction has an expected squared cosine of 1/4,096 with the task direction, so its ablation removes almost nothing whatever the mechanism. They are kept as a sanity check of the editing code (two per layer at two layers) and removed from every pass criterion of section 7.
+- *Placebo floor on the effect's scale.* The placebo pairs' per-cell change is in nats, the goal pairs' fractions are not, so the two were not comparable. Each cell's goal-pair removed effect in nats (clean minus patched, mean over items) is compared with the placebo pairs' mean absolute change in nats at the same cell; a cell carries the effect only if the lower bound of the former exceeds the upper bound of the latter (both Bonferroni over layers). Fractions are reported beside them.
+- *Position-matched sets from the same region.* A matched control drawn from all other suffix groups mixes regions at different distances from the answer. Each matched set is drawn from the group's own region: for `hist_obj`, as many history tokens naming neither object (`hist_obj_matched`, seeded by item).
+- *More pairs.* Besides aligned against swapped and the placebo pairs: aligned against neutral (the whole task line differs), the counterfactual-goal pairs of `rq1v` (the real task's destination replaced, so neither task in the pair is the episode's real one; `wf.interp.prompts` goals `cf_aligned`, `cf_swapped`) and the mention pairs (`swapped_plus` against `swapped`). In the full pilot each gets the residual map on 50 items; in the minimal pilot the mention pair gives the mention-contrast direction and stage 0 records the neutral prompts.
+
+### A8. What a "mechanism" claim would need, and what the pilot aims at
+
+A *localization* claim says where, in layers, positions and blocks, the goal's influence on the readout resides and is necessary or sufficient, and whether one direction at the answer position carries it. A *mechanism* claim would need, in addition: named components (heads, MLP blocks or features) shown necessary and sufficient through specific paths (path patching or an equivalent), not only in total; an account of what each computes, checked on inputs built to vary only that quantity; the same components doing the same job across models, prompt formats and described (object-free) goals; and at least one prediction derived from the account after the fact and confirmed on new items. The pilot aims at localization. Its write-up uses "mechanism" only for claims that meet the second standard, and none of the minimal pilot's outputs can.
+
+### A9. Open questions of section 12, decided
+
+1. Full two-candidate L: yes, a residual-stream map by the coarse groups on 50 items, teacher-forcing the success text (full pilot, not the minimal one).
+2. Qwen3-8B-Base: yes, stage 0 only, as a behavioural comparison (readouts on the same prompts, no patching). Caveat: the prompts go through the instruct model's chat template, which the base model was not trained on, so a difference can come from the template as well as from post-training. The snapshot is pinned in `wf.constants.REVISIONS` (`49e3418fbbbca6ecbdf9608b4d22e5a407081db4`, the `main` revision reported by the Hugging Face API on 2026-11-20).
+3. Attribution patching: only to screen heads; every head that is reported is confirmed by exact patching.
+4. Splits: two-fold cross-fitting over games with one seed (seed 0): everything estimated on one fold is applied to the other, and both folds' items are reported. The three 50/50 seeds of section 3 are dropped.
+5. nnsight: unchanged (plain hooks).
+
+### A10. Tooling corrections (no design change intended)
+
+- *Spans by character range.* The aligned/swapped token pairing matched token ids from both ends. Object names that share an ending (glassbottle and winebottle split as "glass"+"b"+"ottle" and "wine"+"b"+"ottle") had the shared sub-word tokens counted in the suffix and grouped with the rest of the task line; the review found 28 of 2,812 ALFWorld name pairs affected with the real tokenizers. The differing region is now found on characters and widened to whole words, and no token overlapping it is counted as shared (`prompts.char_diff`, `prompts.pair`); with the fix, 0 of 2,812.
+- *One clean baseline per batch.* Every patching and editing batch now has exactly the batch size (the last one is padded with unpatched rows), the source run is a batch of the same size, and each cell's patched readout is paired with the unpatched row of its own batch (`cell_clean`, `edit_clean`). Before, fractions used the first batch's clean row for every cell, so on a GPU, where bfloat16 results can depend on the batch's shape, a cell's fraction could mix two batches.
+- *Readouts in float32.* The readout is computed in float32 from the last layer's output through the final RMSNorm and the two unembedding rows (`Parts.readout`), not from the model's bfloat16 logits, whose spacing near a logit of 10 is about 0.06 nats. The logit lens uses the same computation.
+- *Noise-based prefix tolerance.* The identical-prefix check had a fixed tolerance of 0.001 nats, which a GPU's bfloat16 noise could exceed. Each job now measures the batch noise (the spread of one prompt's readout across batch rows and sizes 1, 2 and 16; `run.batch_noise`) and uses the larger of 0.01 nats and five times that noise. Stage 0 records the noise.
+- *Edits where the direction was estimated.* The task direction is estimated at the answer position, but the ablation was applied at every position of the template's tail. Edits now apply at the answer position only by default (`positions="last"`); the tail is allowed only for directions estimated per position.
+- *Reproduction gate per item.* The gate compared only means. It now also requires a median absolute per-prompt difference from the logged rq1v score of at most 0.35 nats, correlations with the logged scores of at least 0.95 (prompts) and 0.90 (item effects), and at least 99% of the logged items reproduced, besides the mean effect on the same items within 0.15 nats (`analysis.reproduction_gate`). The per-item bounds allow for a GPU-type change, which moves one item's effect with an SD of 0.55 nats for Qwen.
+- *Missing sign.* The belief shift treated a fact with no success value (holding something, for an action other than take) as "toward failure"; such items are now left out.
+- *Streaming loads.* `ActStore.load` held every chunk in memory; it now fills a preallocated array one chunk at a time and can keep a selection (one layer, or the probe layers), so a 9 GB store is read in one pass.
+- *Tests.* Tests now kill the four mutants that survived the review (probe positions shifted, edits at every position, the baseline from the wrong batch, the probe direction left in standardised units) and make the source-position mutant fail on values rather than on an index error. The review's 20 mutants and 12 mutants of the fixes are in `scripts/mutation_check.py`.
+
+### M. The minimal pilot
+
+The full pilot of sections 2 to 10 needs about 40 A100-hours. Before it, a minimal pilot on one model and one format calibrates the thresholds (A6), checks the tooling against the real model, and gives a first localization. It is wired as four runs (`wf/runs.py`, configs in `wf/config/interp_pilot_*.yaml`, `wf/interp/pilot.py`; job script `pace/interp_pilot.sbatch`, one A100 or L40S, one model).
+
+| Run | What it does | Forward rows (Qwen3-8B) | A100 hours |
+|---|---|---|---|
+| `interp_pilot_stage0` | Yes/no readouts and the answer-position residual at every layer (plus the probe positions at the probe layers) for RQ2's 4,666 determined failures under the aligned, swapped, neutral and swapped-plus-mention tasks and the 292 determined successes under the first three; batch noise; the reproduction gate. Nothing else runs unless the gate passes. | about 19,500 | about 1 |
+| `interp_pilot_patch` | Residual stream at every layer by the pilot's groups (span, task rest, object-mention history tokens and their matched control, whole history, action, query, final, last), noising and denoising, on 100 items with an effect of at least 1 nat drawn from the calibration fold's games (stratified by failure reason and step 0), and on 50 placebo pairs among them. | about 110,000 | about 3 |
+| `interp_pilot_ablate` | Directions estimated at the answer position on one fold's games, applied at the answer position to the other fold's items (two-fold cross-fitting), at layers 4, 8, …, 32 and 35: the task direction, the task direction without its success component, the mention-contrast direction, the task direction from that layer on, steering along the success direction, and two random directions at two layers. 75 failures and 50 successes per fold, aligned, swapped and neutral prompts. | about 48,000 | about 1.5 |
+| `interp_pilot_analysis` | CPU: the readouts below per stratum (step 0, later, all), and the hidden-state probe (descriptive). | none | none |
+
+At the design's assumed 0.1 s per forward row on an A100 (about 0.15 s on an L40S), that is about 5.5 A100-hours, or about 8 L40S-hours; the job script asks for 8 hours and every run resumes per item. Stage 0 stores about 9 GB of float16 activations. A 10-item timing run of `interp_pilot_patch` comes first, and the estimate is redone from it.
+
+**Readouts, per stratum.** From patching (noising and denoising): the history share with its bootstrap interval for the maximum over layers (undefined at step 0); the object-mention share against its matched control; the action share; the arrival layer of the final group; the early-span share on equal-length items; every group's per-layer map against the placebo floor in nats. From ablation, with the layer for each fold's items chosen on the other fold: the share of the goal effect removed by the task direction, by the task direction without its success component, by the mention direction, and by the task direction from the chosen layer on; the neutral success-versus-failure gap with and without the ablation; the collateral shift on neutral prompts; the share removed on determined successes; the steering gain along the success direction; the cosines of A3.
+
+**What the minimal pilot can conclude.** Whether the tooling reproduces the scored effect item by item on the real model; how much of the yes/no effect the residual stream at the answer position, the final template tokens, the action line, the task line and (after step 0) the history carry at each depth, separately at step 0 and later; whether a single answer-position direction removes the effect without collapsing the neutral success-versus-failure gap; whether that direction is mostly the model's own success direction (the restated H4) or orthogonal to it (H3), and whether it is about the goal role or merely the name (mention control); and the variances needed to fix the thresholds of A6.
+
+**What it cannot conclude.** Whether the represented state changes (H1, H2): the history-fact probes need the neutral prompts of all collected items (stage 1), which it does not run, so its hidden-state probe is descriptive only; anything about heads or which blocks write the effect (attention and MLP grids, stage 3); the policy-blending account (H5, no policy-prompt direction); transfer to described goals or across formats; the first-token or full-reply readouts; anything about Llama or about the base model; and any verdict at all, since its thresholds are provisional and its patching sample is the calibration fold's clear-effect items. It is one model, one prompt format, one GPU type and one split, and it localizes; it does not establish a mechanism (A8).

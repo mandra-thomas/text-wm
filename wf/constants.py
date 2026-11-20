@@ -61,6 +61,9 @@ REVISIONS = {
     "Qwen/Qwen3-4B": "1cfa9a7208912126459214e8b04321603b3df60c",
     "Qwen/Qwen3-14B": "40c069824f4251a91eefaf281ebe4c544efd3e18",
     "Qwen/Qwen3-32B": "9216db5781bf21249d130ec9da846c4624c16137",
+    # Interpretability pilot, base-versus-instruct stage 0 (notes/interp_design.md, amendment 1, A9): the `main`
+    # revision reported by the Hugging Face API on 2026-11-20, before any download.
+    "Qwen/Qwen3-8B-Base": "49e3418fbbbca6ecbdf9608b4d22e5a407081db4",
 }
 
 
