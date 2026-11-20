@@ -6,8 +6,8 @@ build_run: tau_build
 verify_run: tau_verify
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
 per_kind: 50
-# sha256 of the local build at the amendments of 2026-11-20 (an ICE rebuild must reproduce them; scoring refuses others)
+# sha256 of the local build at f389f97 (amendments after review 2; an ICE rebuild must reproduce them; scoring refuses others)
 expected_outputs_sha256:
-  items.jsonl: 972084939bbdd831d54a3fc2c15a47afb3535d67b9729194699981f172ea46b4
-  natural_items.jsonl: 6748606e8e6e98904845ab070a9038b2b072fe406c4905e47e107bb37bac2194
-  fewshot.json: 53feb550fd909213f370e7b55ed6b4751450d102097a9b6f9d9b724ce7700c7a
+  items.jsonl: 2c8ffeac7dedd4635df5974be955d6ceff84d3f8184f88a73eca579282a578b6
+  natural_items.jsonl: 9bd6c3f7fda464f7cc32307e9a570da564b1bed7d4e3ab0d75dbfd00f6b83502
+  fewshot.json: 231607f79c92580375ada0ce4267fb954e7e0bc0a743ccb9b75813610eb13119

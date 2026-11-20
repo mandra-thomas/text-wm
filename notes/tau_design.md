@@ -915,7 +915,7 @@ All run at commit f669ac6, which holds the amendments above and their code, befo
 - **Blind checker** (regenerated stripped file: id, source, history and action only): FAIL with the identical class
   and error text on 3,391 of 3,391 items. Run also on the 1,402 witness calls, it gives the same verdict as ours on
   every one (PASS on 736, UNKNOWN on the 666 `status` witnesses).
-- **Mutation testing** (`scripts/tau_mutation_check.py`): 86 mutants, 86 killed: the original 29, review 1's 27
+- **Mutation testing** (`scripts/tau_mutation_check.py`; this claim is corrected in B11: one of these mutants survives, and no kill was traced to a test): 86 mutants, 86 killed: the original 29, review 1's 27
   (all killed, including the 17 that survived review 1 and the three it marked as possibly equivalent), and 30 for
   the amended code. One of the new ones (flip shares counted the wrong way) first survived, because the test's
   data had as many flips each way; the test was made asymmetric and it is killed.
@@ -1175,3 +1175,45 @@ for each of the 500 matched-arm items (the same items): about 48,000 passes per 
 - `status` items have no discrimination evidence (B4); any `status` effect is a goal effect, not shown to override
   evidence the model uses.
 - The contamination contrast is confounded by tokenization (B9).
+
+### B13. Rebuild and checks after these amendments
+
+All run at commit f389f97, which holds the amendments B1–B12 and their code, before any GPU run.
+
+- **Rebuild.** The same items as at f669ac6 (3,363 generated from 303 users; main population 1,385 from 295 users;
+  primary 856 from 175 users; natural 28). The only differences from the previous build are the two mention lines
+  of each item (2,276 generated and all 28 natural items now name a product in them, B8) and the `task_own` field of
+  each few-shot example (B1); every history, action, failure reply, twin and witness is byte-identical. A second
+  rebuild at the commit is byte-identical. New pins in `tau_score`, `tau_score_smoke` and `tau_contamination`: items
+  `2c8ffeac…`, natural `9bd6c3f7…`, few-shot `231607f7…`; the gate (B10) passes for all three configs.
+- **Verification** (`tau_verify`): PASS, 0 of 3,391 items with a problem, with the new checks (the mention lines
+  with the product, the few-shot `task_own` lines, every prompt variant of the three arms differing only in the task
+  line, the few-shot order reversed for 50.6% of all 3,391 items, 52.0% of the 1,413 scored items and 51.3% of the 856
+  primary items) and the 100-item fresh-process sample (all generated).
+- **Upstream equivalence** (tau2 at c06b07d): PASS. 10,000 seeded random calls with identical outputs and databases;
+  every history output, failure reply and twin of the 3,363 generated and 28 natural items identical (the status put
+  back on 560 items, as before); all 1,402 witnesses identical.
+- **Blind checker** (rerun on a regenerated stripped file with id, source, history and action only, and on a
+  stripped file of the 1,402 witnesses as actions): FAIL with the identical class and error text on 3,391 of 3,391
+  items; the same verdict as ours on 1,402 of 1,402 witnesses (PASS 736, UNKNOWN 666). Compared by us item by item.
+- **Tokenizers.** The local tokenizer files are sha256-identical to the ICE cache's (Qwen3-8B snapshot b968826,
+  Llama-3.1-8B-Instruct snapshot 0e9e39f).
+- **Token check (not completed in this round).** The full check of every scored prompt in the three arms, for both
+  tokenizers, was started and stopped before it finished. It renders and tokenises about 127,000 prompts per
+  tokenizer, about 5 hours on one core. Only a 20-item Qwen3 sample ran to the end: PASS, with no first-token,
+  boundary or task-line problem, and a longest prompt of 13,084 tokens. The full check (`python -m
+  wf.tau.token_check`, which now also reports the longest prompt over every variant) must pass for both tokenizers
+  before any GPU run.
+- **Smoke set.** The 20 hash-chosen main items plus the longest generated main item (tau-g-4f7fe83e22da) and the
+  longest natural item (tau-n-bc2f0e115848, also the longest prompt in review 2's token count).
+- **Size of the full run.** 39,744 scored jobs and 48,175 forward passes per model; the exploratory arms' 500 items
+  (status 240, unavailable 235, wrong_return_pm 21, gc_balance 4) have an effective cluster size of 3.67, the primary
+  population 5.62.
+- **Mutation testing** (`scripts/tau_mutation_check.py`, 4 deterministic shards, mutants serial within a shard, the
+  unmutated copy passing first in every shard): 133 mutants. 132 were killed on the first run, each with its killing
+  test logged; N44 (the sensitivity analysis leaving nothing out) survived, because the small test build has no
+  primary item of the two classes, and was killed by a new test on constructed scores
+  (`test_sensitivity_population_leaves_out_exactly_the_fewshot_tool_classes`) when rerun alone. All 12 of review 2's
+  survivors and review 1's Holm mutant are now killed, each by a test aimed at it (listed in the fix-round report).
+- **Tests.** The full suite passes (752 passed, 1 skipped, before the N44 test was added; the four τ test files
+  pass with it, 184 tests).

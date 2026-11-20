@@ -686,3 +686,18 @@ def test_sensitivity_verdict_compares_categories_under_holm():
     both = P.sensitivity_verdicts({m: {**GOOD, "perm_p": 0.006} for m in P.CO_PRIMARY}, prim)
     assert both["llama3.1-8b-fewshot"]["verdict"] == "inconclusive"  # Holm within the sensitivity analysis
     assert P.sensitivity_verdicts(prim, prim)["llama3.1-8b-fewshot"]["same_category"] is True
+
+
+def test_sensitivity_population_leaves_out_exactly_the_fewshot_tool_classes():
+    """Constructed scores: the classes that share a few-shot example's tool carry a large opposite effect, so the
+    sensitivity estimate differs from the primary one only if they are left out (review 2's B6)."""
+    items, by = _control_scores(12)
+    cls = ["status", "unavailable", "wrong_return_pm", "gc_balance"]
+    items = [{**t, "cls": cls[k % 4], "target_product_id": None} for k, t in enumerate(items)]
+    for t in items:
+        if t["cls"] in ("wrong_return_pm", "gc_balance"):
+            by[(t["id"], "main", "fail", "first", "aligned")] = {**by[(t["id"], "main", "fail", "first", "aligned")], "L": -10.0}
+    blk = P.population_block(by, items)
+    sens = blk["first_without_fewshot_tool_classes"]["aligned_minus_swapped"]
+    assert sens["n_items"] == 6 and blk["first"]["aligned_minus_swapped"]["n_items"] == 12
+    assert sens["estimate"] == pytest.approx(2.0) and blk["first"]["aligned_minus_swapped"]["estimate"] < 0
