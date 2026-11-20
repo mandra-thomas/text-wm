@@ -85,6 +85,47 @@ These were planned on 2026-11-17 and were all in use before any confirmatory ite
 
 The gate's tests use a stand-in tokenizer and template: the laptop has no transformers, so the gate meets the real Qwen3 and Llama 3.1 templates first in `mech2_score_smoke` on ICE.
 
+**Review 1 (2026-11-20, before any score).** The review's twenty mutants (R1 to R20; ten had survived: R2, R5, R6, R7, R10, R12, R13, R15, R16, R17) and fourteen mutants of the amendment were added to `scripts/mutation_check.py`; five of the review's mutants were rewritten where the amended code moved their text (R1 now removes the rule that a non-trivial interval needs Holm's p below 0.05; R11 reads any overlap of zones as consistent; R14, R15 match the gate's prompt transform; R20 drops P6 from the seven-contrast family). The existing 28 were updated where their text moved (null band, large threshold, the ratio, P5's population). New tests: P6 reads the step-0 items only and counts only for the position account (a trivial position effect contradicts it); the yes/no family reads yes/no scores with its own denominator; σ through the sigmoid; the permutation flips whole games; the dropped-draw rule; size zones and the TRIVIAL label; a trivial effect never contradicts a ≈0 prediction; verdicts (consistent, contradicted, untested) and the two-format rule; the mixture summary; the largest-remainder allocation; P5's and P7's items; the negated arm's template and claim status; the gate on a resume left with yes/no prompts only; the resume guard on item hashes; Mistral's registry pin and template handling, in the runner too. Run on 2026-11-20 (`MUTANTS_MATCHING=mech2`, four shards): all 62 mech2 mutants killed, none timed out or failed to apply. `tests/test_mech2.py`: 57 tests pass.
+
+| Mutant | Killed by (`tests/test_mech2.py::`) |
+| --- | --- |
+| R1 non-trivial zones read without significance | `test_categories_follow_the_zones` |
+| R2 P6 on the sample | `test_position_counts_only_for_the_position_account` |
+| R3 desire participle always taken | `test_templates_read_as_written` |
+| R4 move preposition from | `test_templates_read_as_written` |
+| R5 yes/no family read on cand | `test_yes_no_family_reads_yes_no_scores_with_its_own_denominator` |
+| R6 r denominator always cand | `test_yes_no_family_reads_yes_no_scores_with_its_own_denominator` |
+| R7 sigma read as L | `test_sigma_is_read_through_the_sigmoid` |
+| R8 knowledge: either answer right | `test_knowledge_split_reads_mech_state_questions` |
+| R9 done contradicted with one target seen | `test_done_contradicted_only_when_every_target_was_seen_without_the_object` |
+| R10 smallest remainder gets the extra seat | `test_largest_remainders_get_the_extra_seats` |
+| R11 any overlap read as consistent | `test_a_trivial_effect_never_contradicts_a_null_prediction` |
+| R12 permutation flips items, not games | `test_permutation_flips_whole_games` |
+| R13 later includes step 0 | `test_later_holds_no_step0_item` |
+| R14 gate checks only the first item | `test_gate_passes_a_clean_template` |
+| R15 gate skips yes/no prompts | `test_gate_checks_every_yes_no_prompt_it_is_given` |
+| R16 resume ignores item hashes | `test_resume_refuses_records_of_other_items` |
+| R17 ratio accepts negative denominators | `test_ratio_needs_a_positive_reference_and_few_dropped_draws` |
+| R18 mention_ignore on neutral line | `test_templates_read_as_written` |
+| R19 cancelled same as done | `test_templates_read_as_written` |
+| R20 Holm over six (P6 dropped) | `test_holm_is_applied_within_the_family` |
+| trivial band read as a contradiction of 0 | `test_each_planted_fingerprint_is_read_as_its_own_account[H3_salience]` |
+| dropped draws ignored | `test_ratio_needs_a_positive_reference_and_few_dropped_draws` |
+| P6 counts for evidence | `test_each_planted_fingerprint_is_read_as_its_own_account[H2_evidence]` |
+| untested read as consistent | `test_readout_verdicts_and_the_joint_rule` |
+| one format decides | `test_readout_verdicts_and_the_joint_rule` |
+| mixture never named | `test_joint_summary_names_a_mixture_when_every_content_account_is_contradicted` |
+| P5 keeps takes from a target-type receptacle | `test_p5_leaves_out_takes_from_a_target_type_receptacle_and_contradicted_items` |
+| P5 keeps contradicted items | `test_p5_leaves_out_takes_from_a_target_type_receptacle_and_contradicted_items` |
+| P7 keeps contradicted claims | `test_negated_claim_status_and_p7_items` |
+| negated built for every verb | `test_every_arm_builds_for_every_task_type_and_verb` |
+| negated drops the user | `test_templates_read_as_written` |
+| Mistral without its template settings | `test_mistral_is_scored_with_the_families_handling` |
+| folding model not folded | `test_a_folding_model_gets_the_system_text_in_its_first_turn` |
+| scoring skips the template handling | `test_the_runner_scores_through_the_model_template_handling` |
+
+The real tokenizers (pinned Qwen3-8B, Llama-3.1-8B and Mistral-7B-Instruct-v0.3, ICE login node, CPU) passed the battery's gate on every prompt: both candidates of all 1,403 items and all 20,731 yes/no prompts per model, no problem; "Yes" and "No" single tokens for each; every item's first tokens "You" against "Nothing".
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:

@@ -1,8 +1,8 @@
 run_id: mech2_score_smoke
-# Format, gate and throughput check for mech2_score on real items: one shard of 125 (about one game), both models.
+# Format, gate and throughput check for mech2_score on real items: one shard of 125 (about one game), all three models.
 # Read for format only (prompts, tokenization gate, timing), never for results.
 sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
-models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot, mistral-7b-v0.3]
 sample_n: 1000
 n_shards: 125
 accept_commits:

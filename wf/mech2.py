@@ -1,20 +1,24 @@
-"""Exploratory mechanism battery (decided 2026-11-20, before any of its scores; notes/mechanism2_design.md).
+"""Exploratory mechanism battery (decided 2026-11-20, before any of its scores; notes/mechanism2_design.md, amended
+after review 1, still before any score).
 
-Why does naming the action's object in the task push the world model toward success on determined failures? Six
-candidate accounts, not exclusive (H1 no state tracking, H2 task as evidence, H3 salience, H4 wishful prediction,
-H5 policy blending, H6 prompt artefacts) predict different signs for a set of task lines. Every arm differs from the
-others only in the task line, or, for the position arms, only in where the task line sits in the history. Each arm is
-scored in two formats: the two-candidate log-odds of the success text against "Nothing happens." (`cand`) and the
-yes/no question of rq1v (`yn`, condition name prefixed "yn_").
+Why does naming the action's object in the task push the world model toward success on determined failures? Candidate
+accounts, not exclusive (H1 no state tracking, H2 task as evidence, H3 referent salience, H4 wishful prediction, H5
+policy blending, H6 prompt artefacts, split into H6_lexical, i.e. name salience or word overlap, and H6_position),
+predict different size zones for a set of task lines. Every arm differs from the others only in the task line, or, for
+the position arms, only in where the task line sits in the history. Each arm is scored in two formats: the
+two-candidate log-odds of the success text against "Nothing happens." (`cand`) and the yes/no question of rq1v (`yn`,
+condition name prefixed "yn_").
 
 Items: a seeded sample of RQ2's primary items stratified by game and failure reason (SAMPLE_N), plus every step-0
-item, so the position test covers all of them. Every arm is scored on every item of that union; the primary
-contrasts read the stratified sample (P1-P5) or the step-0 items (P6), as notes/mechanism2_design.md fixes.
+item, so the position test covers all of them. Every arm is scored on every item of that union (the negated arm on take
+items only); the primary contrasts read the sample, a restriction of it (P5, P7) or the step-0 items (P6).
 
-`mech2_analysis` reports the six named primary contrasts per model (Holm within model, two-candidate format), their
-yes/no replication, every arm against the swapped, neutral and aligned tasks, each contrast's category and the
-prediction table's readout, plus two analysis-only checks on earlier runs: few-shot task overlap (rq1_score) and the
-knowledge split (mech_score).
+Models: Qwen3-8B and Llama-3.1-8B (primary) and Mistral-7B-Instruct-v0.3 (secondary, descriptive), at pinned revisions.
+
+`mech2_analysis` reports the seven primary contrasts per model and format (Holm within each), each contrast's size
+zones and category, the readout per format and under the two-format rule, every arm against the swapped, neutral and
+aligned tasks, plus two analysis-only checks on earlier runs: few-shot task overlap (rq1_score) and the knowledge
+split (mech_score).
 """
 from __future__ import annotations
 
@@ -27,7 +31,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from wf import constants as C
-from wf import rq1, rq1v, rq1x
+from wf import families, rq1, rq1v, rq1x
 from wf.analysis.report import write_run_report
 from wf.analysis.stats import cluster_bootstrap, holm, pair_permutation
 from wf.data.goals import parse_task_line
@@ -45,7 +49,7 @@ SAMPLE_N = 1000
 SAMPLE_SEED = "20261120|mech2"
 FORMATS = ("cand", "yn")
 CONTENT_ARMS = ("aligned", "swapped", "neutral", "desire_keep", "desire_check", "mention_ignore", "mention_exists",
-                "described", "swapped_described", "done", "cancelled")
+                "described", "swapped_described", "done", "cancelled", "negated")
 POSITION_ARMS = ("aligned_start", "swapped_start", "aligned_end", "swapped_end")
 ARMS = CONTENT_ARMS + POSITION_ARMS
 TASK_PREFIX = "Your task is to: "
@@ -59,6 +63,11 @@ DESIRE_CHECK = "Your task is to: find out whether {a} {obj} can be {pp} {prep} t
 MENTION_IGNORE = "{swapped} Ignore the {obj}."
 DONE = "Your task was to: {task} It is already done; nothing is left to do."
 CANCELLED = "Your task was to: {task} The user has cancelled it; nothing is left to do."
+# Amendment after review 1 (2026-11-20, before any score): the negated-existence arm, built for take actions only (the
+# one verb whose success needs the object in the receptacle the action names). The claim is the user's report, not the
+# narrator's: on many items an instance of {obj} is in {rec}, so a bare "There is no ..." would state a falsehood.
+# "in" for every receptacle type, as ALFWorld's own task lines write it ("put a mug in countertop.").
+NEGATED = "{swapped} The user says there is no {obj} in the {rec}."
 _ACTION = re.compile(r"^(take|move|heat|cool|clean) ([a-z]+) (\d+) (?:from|to|with) ([a-z]+ \d+)$")
 
 # Task types, for template coverage and the placement-task population of P5.
@@ -118,6 +127,11 @@ def task_line(t: dict, arm: str) -> str | None:
         return DESIRE_CHECK.format(a=rq1._article(obj), obj=obj, pp=PARTICIPLE[verb], prep=PREPOSITION[verb], rec=rec)
     if base == "mention_ignore":
         return MENTION_IGNORE.format(swapped=t["swapped_task_line"], obj=obj)
+    if base == "negated":
+        p = parse_action(t["action"])
+        if not p or p[0] != "take" or p[1] != obj:
+            return None
+        return NEGATED.format(swapped=t["swapped_task_line"], obj=obj, rec=p[2])
     if base == "mention_exists":
         return rq1.goal_line(t, "swapped_plus")
     if base in ("described", "swapped_described"):
@@ -256,74 +270,106 @@ def done_contradicted(t: dict) -> bool:
     return not any(re.sub(r"\s+\d+$", "", o) == obj for r in targets for o in facts.contents[r])
 
 
-# ---------------- tokenization gate (as wf/families.py on branch `families`, audit C9) ----------------
+def takes_from_target_type(t: dict) -> bool:
+    """Does a placement item's action take the object from a receptacle of the task's target type? There "done" (the
+    object sits at a target receptacle) makes the take MORE likely to work under H2, not less, so these items are left
+    out of P5 and read on their own (amendment after review 1)."""
+    p = parse_action(t["action"])
+    if not p or p[0] != "take" or task_type(t["task_line"]) not in PLACEMENT_TYPES:
+        return False
+    return re.sub(r"\s+\d+$", "", p[2]) == parse_task_line(t["task_line"]).receptacle
 
 
-class TokenizationMismatch(RuntimeError):
-    pass
+def p5_eligible(t: dict) -> bool:
+    """P5's items: placement tasks whose action does not take from a target-type receptacle and whose history does not
+    contradict "done", the items on which every reading of H2 predicts done below cancelled."""
+    return (task_type(t["task_line"]) in PLACEMENT_TYPES and not takes_from_target_type(t)
+            and not done_contradicted(t))
 
 
-def _ids(x: Any) -> list[int]:
-    if hasattr(x, "input_ids"):
-        x = x.input_ids
-    if hasattr(x, "tolist"):
-        x = x.tolist()
-    if x and isinstance(x[0], list):
-        x = x[0]
-    return list(x)
+def is_take(t: dict) -> bool:
+    """Does the item's action take the goal object (the items the negated arm is built for)?"""
+    p = parse_action(t["action"])
+    return bool(p and p[0] == "take" and p[1] == t.get("goal_object"))
 
 
-def _render(scorer: LogoddsScorer, messages: list[dict], generation_prompt: bool = True) -> list[int]:
-    """The chat template's ids with the settings LogoddsScorer._encode uses (thinking off)."""
-    return _ids(scorer._tok.apply_chat_template(messages, tokenize=True, add_generation_prompt=generation_prompt,
-                                                enable_thinking=False))
+def negated_status(t: dict) -> tuple[str, str]:
+    """For a take item, the user's claim "there is no {obj} in the {rec}": is it true of the scene at the start of the
+    game, and what does the history show of the receptacle ("contents not shown", "shown, without it" or "shown, holds
+    it", the last contradicting the claim)?"""
+    _, obj, rec = parse_action(t["action"])
+    at_start = any(re.sub(r"\s+\d+$", "", o) == obj and rec in locs for o, locs in (t.get("scene_locations") or {}).items())
+    facts = history_facts(t["history_text"])
+    if rec not in facts.contents:
+        seen = "contents not shown"
+    else:
+        seen = "shown, holds it" if any(re.sub(r"\s+\d+$", "", o) == obj for o in facts.contents[rec]) else "shown, without it"
+    return ("false at start" if at_start else "true at start"), seen
 
 
-def _special_ids(tok: Any) -> set[int]:
-    ids = set(getattr(tok, "all_special_ids", []) or [])
-    for i, t in (getattr(tok, "added_tokens_decoder", None) or {}).items():
-        if getattr(t, "special", True):
-            ids.add(int(i))
-    return ids
+def p7_eligible(t: dict) -> bool:
+    """P7's items: take items whose history does not show the object in the receptacle (where it does, the user's claim
+    is contradicted and H2 predicts no shift)."""
+    return is_take(t) and negated_status(t)[1] != "shown, holds it"
 
 
-def template_reply(scorer: LogoddsScorer, messages: list[dict], reply: str) -> list[int]:
-    """The ids the chat template gives `reply` as the assistant's turn after `messages`, up to its first special token.
-    System messages are left out of this check (where the prompt ends does not depend on them)."""
-    convo = [m for m in messages if m["role"] != "system"]
-    prompt = _render(scorer, convo)
-    full = _render(scorer, convo + [{"role": "assistant", "content": reply}], generation_prompt=False)
-    if full[:len(prompt)] != prompt:
-        raise TokenizationMismatch("the conversation with the reply does not begin with the prompt before it")
-    tail = full[len(prompt):]
-    special = _special_ids(scorer._tok)
-    end = next((i for i, x in enumerate(tail) if x in special), len(tail))
-    return tail[:end]
+# ---------------- models (amendment after review 1: Mistral-7B-Instruct-v0.3 as a secondary model) ----------------
+
+# Primary: the two few-shot models, Holm within model and format. Secondary: Mistral-7B-Instruct-v0.3 (the largest
+# practical effect in the families' wave A), reported descriptively, at the families registry's pin and with its
+# chat-template handling (wf/families.py: system text where its own template puts it, as in its family run).
+PRIMARY_MODELS = tuple(rq1.FEWSHOT)
+SECONDARY_MODELS = ("mistral-7b-v0.3",)
+
+
+def model_entry(tag: str) -> tuple[str, dict[str, Any], Callable[[list[dict]], list[dict]]]:
+    """(Hugging Face id, LogoddsScorer keyword arguments, prompt transform) of a model the battery scores."""
+    for name, t, _ft in rq1.MODELS:
+        if t == tag and tag in PRIMARY_MODELS:
+            return name, {}, lambda msgs: msgs
+    if tag in SECONDARY_MODELS:
+        spec = families.MODELS[tag]
+        kw = {"attn_implementation": spec.attn_implementation, "template_kwargs": dict(spec.template_kwargs)}
+        return spec.hf_id, kw, (families.fold_system if spec.system == "fold" else (lambda msgs: msgs))
+    raise SystemExit(f"unknown model {tag!r}; the battery scores {PRIMARY_MODELS + SECONDARY_MODELS}")
+
+
+def model_messages(tag: str, t: dict, arm: str, fmt: str = "cand") -> list[dict[str, str]] | None:
+    """The prompt a model is scored on: `arm_messages`, through the model's template handling."""
+    msgs = arm_messages(t, arm, fmt)
+    return None if msgs is None else model_entry(tag)[2](msgs)
+
+
+# ---------------- tokenization gate (as wf/families.py, audit C9) ----------------
+
+TokenizationMismatch = families.TokenizationMismatch
+_ids = families._ids
+# The ids the chat template gives a reply after the prompt, rendered by the scorer's own encoding (`_encode` with its
+# template settings), so the gate sees every prompt exactly as scoring does.
+template_reply = families.template_reply
 
 
 def _alone(scorer: LogoddsScorer, text: str) -> list[int]:
-    """A candidate's ids as the scorer reads them: tokenized alone, no special tokens."""
-    return _ids(scorer._tok(text, add_special_tokens=False))
+    """A candidate's ids as the scorer reads them (`_encode_candidate`: tokenized alone, no special tokens)."""
+    return _ids(scorer._encode_candidate(text))
 
 
-def tokenization_checks(scorer: LogoddsScorer, todo: list[tuple[dict, str, str]]) -> dict[str, Any]:
-    """The gate, through the scorer's own tokenizer and template, before any score (on a resume too):
+def tokenization_checks(scorer: LogoddsScorer, todo: list[tuple[dict, str, str]],
+                        prompt: Callable[[list[dict]], list[dict]] = lambda msgs: msgs) -> dict[str, Any]:
+    """The gate, through the scorer's own tokenizer, template and template settings, before any score (on a resume too):
 
-    - the gate renders prompts exactly as scoring does (`_render` equals `scorer._encode` on a prompt);
     - each item's two candidates, tokenized alone, equal the template's tokens for them as the reply after the item's
       aligned prompt, and their first tokens differ;
     - "Yes" and "No" are one token each, different, and equal the template's reply after every yes/no prompt to score.
+
+    `prompt` is the model's template handling (`model_entry`), applied as scoring applies it.
     """
     problems: list[str] = []
     items = {t["id"]: t for t, _, _ in todo}
     first_pairs: Counter = Counter()
     n_cand = 0
-    if items:
-        probe = arm_messages(next(iter(items.values())), "aligned")
-        if _render(scorer, probe) != _ids(scorer._encode(probe)):
-            problems.append("the gate's rendering differs from the scorer's (_encode)")
     for t in items.values():
-        msgs = arm_messages(t, "aligned")
+        msgs = prompt(arm_messages(t, "aligned"))
         ids = {}
         for name in ("o_plus", "o_minus"):
             try:
@@ -350,7 +396,7 @@ def tokenization_checks(scorer: LogoddsScorer, todo: list[tuple[dict, str, str]]
     for t, arm, fmt in todo:
         if fmt != "yn":
             continue
-        msgs = arm_messages(t, arm, "yn")
+        msgs = prompt(arm_messages(t, arm, "yn"))
         n_yn += 1
         for w in ("Yes", "No"):
             try:
@@ -361,11 +407,14 @@ def tokenization_checks(scorer: LogoddsScorer, todo: list[tuple[dict, str, str]]
             if reply != words[w]:
                 problems.append(f"{t['id']} {arm}: {w!r} alone {words[w]} vs template {reply}")
     return {"ok": not problems and (n_cand > 0 or not items), "n_candidates_checked": n_cand,
-            "n_yes_no_prompts_checked": n_yn, "yes_no_ids": words, "n_problems": len(problems),
-            "problems": problems[:50], "first_token_pairs": {f"{a!r} vs {b!r}": c for (a, b), c in first_pairs.most_common(5)}}
+            "n_yes_no_prompts_checked": n_yn, "n_yes_no_jobs": sum(f == "yn" for _, _, f in todo),
+            "yes_no_ids": words, "n_problems": len(problems), "problems": problems[:50],
+            "template_settings": scorer.template_settings(),
+            "first_token_pairs": {f"{a!r} vs {b!r}": c for (a, b), c in first_pairs.most_common(5)}}
 
 
-def gate(d: Path, scorer: LogoddsScorer, todo: list[tuple[dict, str, str]], model_name: str) -> None:
+def gate(d: Path, scorer: LogoddsScorer, todo: list[tuple[dict, str, str]], model_name: str,
+         prompt: Callable[[list[dict]], list[dict]] = lambda msgs: msgs) -> None:
     """Stop before any score when the model is not at its pinned revision or the tokenization gate fails."""
     name = f"tokenization_checks_{scorer.model_tag}.json"
     if scorer.mock:
@@ -373,7 +422,7 @@ def gate(d: Path, scorer: LogoddsScorer, todo: list[tuple[dict, str, str]], mode
         return
     if not scorer.revision or scorer.revision != C.REVISIONS.get(model_name):
         raise SystemExit(f"{model_name}: loaded revision {scorer.revision!r} is not the pinned {C.REVISIONS.get(model_name)!r}")
-    rec = tokenization_checks(scorer, todo)
+    rec = tokenization_checks(scorer, todo, prompt)
     rec["revision"] = scorer.revision
     write_json(d / name, rec)
     if not rec["ok"]:
@@ -396,8 +445,11 @@ def run_mech2_score(cfg: dict, open_scorer: Callable[[str, str], LogoddsScorer] 
         write_status(run_id, f"collection not finished or not verified: {problems + unverified}", ok=False)
         return 1
     run_id = f"{run_id}/shard_{i:02d}_of_{n:02d}"
+    tags = list(cfg.get("models", PRIMARY_MODELS))
+    entries = {tag: model_entry(tag) for tag in tags}
     cfg = {**cfg, "run_id": run_id, "shard": i, "n_shards": n,
-           "revisions": {m[0]: C.REVISIONS.get(m[0]) for m in rq1.MODELS if m[1] in cfg.get("models", rq1.FEWSHOT)}}
+           "revisions": {e[0]: C.REVISIONS.get(e[0]) for e in entries.values()},
+           "scorer_settings": {tag: e[1] for tag, e in entries.items()}}
     d = _init_run(run_id, cfg, inputs=())
     primary = rq1.rq1_sets(load_items(sources))["primary"]
     sets = battery_items(primary, int(cfg.get("sample_n", SAMPLE_N)))
@@ -407,19 +459,19 @@ def run_mech2_score(cfg: dict, open_scorer: Callable[[str, str], LogoddsScorer] 
     if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):
         raise SystemExit(f"{run_id}: saved records belong to different items; rerun without --resume.")
     done = {(s["model"], s["transition_id"], s["condition"]) for s in saved}
-    opener = open_scorer or (lambda name, tag: LogoddsScorer(name, model_tag=tag))
-    for model_name, tag, _ft in [m for m in rq1.MODELS if m[1] in cfg.get("models", rq1.FEWSHOT)]:
+    for tag in tags:
+        model_name, kw, prompt = entries[tag]
         todo = [(t, a, f) for t, a, f in work if (tag, t["id"], condition(a, f)) not in done]
         if not todo:
             continue
-        scorer = opener(model_name, tag)
+        scorer = open_scorer(model_name, tag) if open_scorer else LogoddsScorer(model_name, model_tag=tag, **kw)
         try:
-            gate(d, scorer, todo, model_name)
+            gate(d, scorer, todo, model_name, prompt)
         except BaseException as e:
             write_status(run_id, f"stopped before scoring {tag}: {e}", ok=False)
             raise
         for t, arm, fmt in todo:
-            msgs = arm_messages(t, arm, fmt)
+            msgs = prompt(arm_messages(t, arm, fmt))
             cond = condition(arm, fmt)
             if fmt == "yn":
                 sc = scorer.score_one_token_pair(transition_id=t["id"], condition=cond, messages=msgs, o_plus="Yes", o_minus="No")
@@ -436,42 +488,72 @@ def run_mech2_score(cfg: dict, open_scorer: Callable[[str, str], LogoddsScorer] 
 
 # ---------------- analysis ----------------
 
-# Primary contrasts (fixed before any score): a weighted sum of arms, its population and its reference effect (the
-# aligned-minus-swapped effect on the same items, the denominator of the size ratio r).
+# Primary contrasts (amended after review 1, 2026-11-20, before any score): a weighted sum of arms, its population
+# and its reference effect (the aligned-minus-swapped effect on the same items and in the same format, the denominator
+# of the size ratio r). Seven per model and format, Holm within each.
+_REF = ((1, "aligned"), (-1, "swapped"))
 PRIMARY: dict[str, dict[str, Any]] = {
-    "P1_desire_keep": {"terms": ((1, "desire_keep"), (-1, "swapped")), "population": "sample",
-                       "reference": ((1, "aligned"), (-1, "swapped"))},
-    "P2_desire_check": {"terms": ((1, "desire_check"), (-1, "swapped")), "population": "sample",
-                        "reference": ((1, "aligned"), (-1, "swapped"))},
-    "P3_mention_without_need": {"terms": ((1, "mention_ignore"), (-1, "swapped")), "population": "sample",
-                                "reference": ((1, "aligned"), (-1, "swapped"))},
-    "P4_need_without_name": {"terms": ((1, "described"), (-1, "swapped")), "population": "sample",
-                             "reference": ((1, "aligned"), (-1, "swapped"))},
-    "P5_done_vs_cancelled": {"terms": ((1, "done"), (-1, "cancelled")), "population": "sample_placement",
-                             "reference": ((1, "aligned"), (-1, "swapped"))},
+    # same presupposed object ("the {obj}") in both lines; only the desire differs: salience against wishful
+    "P1_keep_vs_ignore": {"terms": ((1, "desire_keep"), (-1, "mention_ignore")), "population": "sample", "reference": _REF},
+    "P2_desire_check": {"terms": ((1, "desire_check"), (-1, "swapped")), "population": "sample", "reference": _REF},
+    "P3_mention_without_need": {"terms": ((1, "mention_ignore"), (-1, "swapped")), "population": "sample", "reference": _REF},
+    "P4_need_without_name": {"terms": ((1, "described"), (-1, "swapped")), "population": "sample", "reference": _REF},
+    # placement items, without those taking from a target-type receptacle and those whose history contradicts "done"
+    "P5_done_vs_cancelled": {"terms": ((1, "done"), (-1, "cancelled")), "population": "p5", "reference": _REF},
     "P6_position_step0": {"terms": ((1, "aligned_start"), (-1, "swapped_start"), (-1, "aligned"), (1, "swapped")),
-                          "population": "step0", "reference": ((1, "aligned"), (-1, "swapped"))},
+                          "population": "step0", "reference": _REF},
+    # the object named and its presence in the action's receptacle denied, take items only: mention against evidence
+    "P7_negated_existence": {"terms": ((1, "negated"), (-1, "swapped")), "population": "sample_take", "reference": _REF},
 }
 ALPHA = 0.05
-NULL_BAND = 0.25  # "null": the 95% CI of r lies inside ±NULL_BAND
-LARGE = 0.5  # "large": the 95% CI of r lies at or above LARGE; "small": at or below it
+DROPPED_DRAWS_MAX = 0.02  # r is not estimable when more than 2% of its bootstrap draws are undefined (as in families)
 
-# Predicted category of each primary contrast under each account (the design note's prediction table). H1 and the
-# lexical part of H6 make no prediction of their own on P1-P5 (see the note); H1 is read from the knowledge split.
-PREDICTIONS: dict[str, dict[str, set[str]]] = {
-    "H2_evidence": {"P1_desire_keep": {"POS_LARGE", "POS_SMALL"}, "P2_desire_check": {"POS_SMALL", "NULL"},
-                    "P3_mention_without_need": {"POS_SMALL", "NULL"}, "P4_need_without_name": {"POS_LARGE"},
-                    "P5_done_vs_cancelled": {"NEG"}, "P6_position_step0": {"NULL"}},
-    "H3_salience": {"P1_desire_keep": {"POS_LARGE", "POS_SMALL"}, "P2_desire_check": {"POS_LARGE", "POS_SMALL"},
-                    "P3_mention_without_need": {"POS_LARGE", "POS_SMALL"}, "P4_need_without_name": {"NULL", "POS_SMALL"},
-                    "P5_done_vs_cancelled": {"NULL"}, "P6_position_step0": {"NULL", "NEG"}},
-    "H4_wishful": {"P1_desire_keep": {"NEG"}, "P2_desire_check": {"NEG"}, "P3_mention_without_need": {"NULL"},
-                   "P4_need_without_name": {"POS_LARGE"}, "P5_done_vs_cancelled": {"NULL"}, "P6_position_step0": {"NULL"}},
-    "H5_policy_blend": {"P1_desire_keep": {"NULL", "NEG"}, "P2_desire_check": {"POS_LARGE", "POS_SMALL"},
-                        "P3_mention_without_need": {"NULL", "NEG"}, "P4_need_without_name": {"POS_LARGE"},
-                        "P5_done_vs_cancelled": {"NULL"}, "P6_position_step0": {"NULL"}},
-    "H6_artefact": {"P6_position_step0": {"NEG", "POS_SMALL", "POS_LARGE"}},
+# Size zones of r (amendment after review 1). Every prediction is a set of zones; an observed r is the run of zones its
+# 95% interval touches. "≈0" is the band Z, whatever the p-value: an effect whose interval lies inside ±0.25 counts as
+# ≈0 even when it is significant (TRIVIAL), so it never contradicts a ≈0 prediction.
+TRIVIAL_BAND = 0.25
+LARGE = 0.5
+ZONES = ("N", "Z", "S", "L")  # N: r < -0.25; Z: |r| <= 0.25; S: 0.25 < r < 0.5; L: r >= 0.5
+POSITIVE = frozenset({"S", "L"})
+
+
+def zone(x: float) -> str:
+    if x < -TRIVIAL_BAND:
+        return "N"
+    if x <= TRIVIAL_BAND:
+        return "Z"
+    return "S" if x < LARGE else "L"
+
+
+def zones_of(lo: float, hi: float) -> tuple[str, ...]:
+    """The zones an interval [lo, hi] touches, in order."""
+    a, b = ZONES.index(zone(lo)), ZONES.index(zone(hi))
+    return ZONES[min(a, b):max(a, b) + 1]
+
+
+# Predicted zones of each primary contrast under each account (the design note's prediction table, as amended after
+# review 1). H1 makes no prediction here (it is read from the knowledge split only). H3 is referent salience (the
+# object made salient, by name or description); name salience is the lexical part of H6 (H6_lexical), which this
+# battery cannot tell from word overlap. P6 counts only for H6_position, whose reading needs |r| beyond the band.
+_P = POSITIVE
+PREDICTIONS: dict[str, dict[str, frozenset[str]]] = {
+    "H2_evidence": {"P1_keep_vs_ignore": frozenset({"Z", "S"}), "P2_desire_check": _P, "P3_mention_without_need": _P,
+                    "P4_need_without_name": frozenset({"L"}), "P5_done_vs_cancelled": frozenset({"N"}),
+                    "P7_negated_existence": frozenset({"N"})},
+    "H3_salience": {"P1_keep_vs_ignore": frozenset({"Z", "S"}), "P2_desire_check": _P, "P3_mention_without_need": _P,
+                    "P4_need_without_name": _P, "P5_done_vs_cancelled": frozenset({"Z"}), "P7_negated_existence": _P},
+    "H4_wishful": {"P1_keep_vs_ignore": frozenset({"N"}), "P2_desire_check": frozenset({"N"}),
+                   "P3_mention_without_need": frozenset({"Z"}), "P4_need_without_name": frozenset({"L"}),
+                   "P5_done_vs_cancelled": frozenset({"Z"}), "P7_negated_existence": frozenset({"Z"})},
+    "H5_policy_blend": {"P1_keep_vs_ignore": frozenset({"N", "Z"}), "P2_desire_check": _P,
+                        "P3_mention_without_need": frozenset({"N", "Z"}), "P4_need_without_name": frozenset({"L"}),
+                        "P5_done_vs_cancelled": frozenset({"Z"}), "P7_negated_existence": frozenset({"Z"})},
+    "H6_lexical": {"P1_keep_vs_ignore": frozenset({"Z", "S"}), "P2_desire_check": _P, "P3_mention_without_need": _P,
+                   "P4_need_without_name": frozenset({"Z"}), "P5_done_vs_cancelled": frozenset({"Z"}),
+                   "P7_negated_existence": _P},
+    "H6_position": {"P6_position_step0": frozenset({"N", "S", "L"})},
 }
+CONTENT_ACCOUNTS = ("H2_evidence", "H3_salience", "H4_wishful", "H5_policy_blend", "H6_lexical")
 
 
 def _lookup(scores: list[dict]) -> dict[tuple[str, str], dict]:
@@ -501,10 +583,17 @@ def _mean(xs: list[float]) -> float:
     return sum(xs) / len(xs) if xs else float("nan")
 
 
+def _ratio(xs: list[tuple[float, float]]) -> float:
+    """Mean contrast over mean reference effect; undefined unless the reference effect is above zero."""
+    den = _mean([r for _, r in xs])
+    return _mean([d for d, _ in xs]) / den if den > 0 else float("nan")
+
+
 def contrast(by: dict, items: list[dict], terms, fmt: str = "cand", field: str = "L", reference=None,
              B: int = C.BOOTSTRAP_RESAMPLES, perms: int = C.PERMUTATIONS) -> dict[str, Any]:
     """Mean of a within-item contrast with a game-clustered 95% CI and sign-flip permutation p; with `reference`,
-    the size ratio r = mean contrast / mean reference effect on the same items, its interval from the same resamples."""
+    the size ratio r = mean contrast / mean reference effect on the same items (the reference read in the same format),
+    its interval from the same resamples, and how many resamples left r undefined (reference mean at or below 0)."""
     rows = []
     for t in items:
         d = _combo(by, t, terms, fmt, field)
@@ -519,12 +608,11 @@ def contrast(by: dict, items: list[dict], terms, fmt: str = "cand", field: str =
            "ci": [boot["ci_low"], boot["ci_high"]],
            "p": pair_permutation([d for _, d, _ in rows], n=perms, seed=C.RNG_SEED, cluster_ids=games)}
     if reference:
-        def ratio(xs):
-            den = _mean([r for _, r in xs])
-            return _mean([d for d, _ in xs]) / den if den > 0 else float("nan")
-        rb = cluster_bootstrap(ratio, [(d, r) for _, d, r in rows], games, B=B, seed=C.RNG_SEED)
+        rb = cluster_bootstrap(_ratio, [(d, r) for _, d, r in rows], games, B=B, seed=C.RNG_SEED)
+        dropped = rb.get("n_dropped", 0)
         out["reference_effect"] = _mean([r for _, _, r in rows])
-        out["ratio"] = {"estimate": rb["estimate"], "ci": [rb["ci_low"], rb["ci_high"]]}
+        out["ratio"] = {"estimate": rb["estimate"], "ci": [rb["ci_low"], rb["ci_high"]], "n_resamples": B,
+                        "n_dropped": dropped, "estimable": bool(out["reference_effect"] > 0 and dropped <= DROPPED_DRAWS_MAX * B)}
     return out
 
 
@@ -542,60 +630,118 @@ def item_share(by: dict, items: list[dict], a: str, b: str, fmt: str = "yn", B: 
             "p": pair_permutation(signs, n=perms, seed=C.RNG_SEED, cluster_ids=games)}
 
 
-def categorize(res: dict[str, Any], holm_p: float) -> str:
-    """NEG, NULL, POS_SMALL, POS_LARGE, POS (size unresolved) or INCONCLUSIVE, by the rules in the design note."""
+_LABELS = {("N",): "NEG", ("N", "Z"): "NEG_OR_TRIVIAL", ("Z", "S"): "TRIVIAL_OR_SMALL", ("S",): "POS_SMALL",
+           ("S", "L"): "POS", ("L",): "POS_LARGE"}
+
+
+def categorize(res: dict[str, Any], holm_p: float) -> tuple[str, tuple[str, ...] | None]:
+    """(label, zones) of a contrast, by the rules in the design note (amendment after review 1).
+
+    The zones are the run of size zones r's 95% interval touches. They are not read (INCONCLUSIVE, zones None) when
+    the estimate or r's interval is undefined, when r is not estimable (more than 2% of draws undefined), or when the
+    interval lies wholly outside the band (a claim of a non-trivial effect) but Holm's p is at least 0.05. An interval
+    inside the band is NULL when Holm's p is at least 0.05 and TRIVIAL when it is below: both count as ≈0."""
     est, r = res.get("estimate", float("nan")), res.get("ratio") or {}
     lo, hi = (r.get("ci") or [float("nan")] * 2)
-    if est != est:
-        return "INCONCLUSIVE"
-    if holm_p == holm_p and holm_p < ALPHA:
-        if est < 0:
-            return "NEG"
-        if lo == lo and lo >= LARGE:
-            return "POS_LARGE"
-        if hi == hi and hi <= LARGE:
-            return "POS_SMALL"
-        return "POS"
-    if lo == lo and hi == hi and -NULL_BAND <= lo and hi <= NULL_BAND:
-        return "NULL"
-    return "INCONCLUSIVE"
+    if est != est or lo != lo or hi != hi or not r.get("estimable", False):
+        return "INCONCLUSIVE", None
+    zs = zones_of(lo, hi)
+    significant = holm_p == holm_p and holm_p < ALPHA
+    if "Z" not in zs and not significant:
+        return "INCONCLUSIVE", None
+    if zs == ("Z",):
+        return ("TRIVIAL" if significant else "NULL"), zs
+    return _LABELS.get(zs, "WIDE"), zs
 
 
-def readout(categories: dict[str, str]) -> dict[str, Any]:
-    """For each account, each primary contrast as consistent, contradicted or undecided against the prediction table."""
+def reading(predicted: frozenset[str], zs: tuple[str, ...] | None) -> str:
+    """consistent (the interval's zones all predicted), contradicted (none predicted) or undecided."""
+    if zs is None:
+        return "undecided"
+    if set(zs) <= predicted:
+        return "consistent"
+    if not set(zs) & predicted:
+        return "contradicted"
+    return "undecided"
+
+
+def _verdict(rows: dict[str, str]) -> str:
+    """contradicted (any contrast contradicted), consistent (none contradicted, at least one consistent), or
+    untested (every decided contrast missing: no contradicted and no consistent contrast)."""
+    vals = list(rows.values())
+    if "contradicted" in vals:
+        return "contradicted"
+    return "consistent" if "consistent" in vals else "untested"
+
+
+def readout(observed: dict[str, tuple[str, ...] | None]) -> dict[str, Any]:
+    """For each account, each contrast it predicts as consistent, contradicted or undecided against the prediction
+    table (one format), and the account's verdict."""
     out = {}
     for h, preds in PREDICTIONS.items():
-        rows = {}
-        for c, allowed in preds.items():
-            got = categories.get(c, "INCONCLUSIVE")
-            if got == "INCONCLUSIVE":
-                rows[c] = "undecided"
-            elif got == "POS":
-                rows[c] = "consistent" if allowed & {"POS_SMALL", "POS_LARGE"} else "contradicted"
-            else:
-                rows[c] = "consistent" if got in allowed else "contradicted"
+        rows = {c: reading(allowed, observed.get(c)) for c, allowed in preds.items()}
         vals = list(rows.values())
         out[h] = {"per_contrast": rows, "n_consistent": vals.count("consistent"),
-                  "n_contradicted": vals.count("contradicted"), "n_undecided": vals.count("undecided")}
+                  "n_contradicted": vals.count("contradicted"), "n_undecided": vals.count("undecided"),
+                  "verdict": _verdict(rows)}
+    return out
+
+
+def joint_readout(cand: dict[str, Any], yn: dict[str, Any]) -> dict[str, Any]:
+    """The decision rule across formats (amendment after review 1): a contrast is decided for an account only when the
+    two formats agree (both consistent, or both contradicted). One consistent and one contradicted is
+    `format_dependent`; anything else is undecided. Both count as undecided in the verdict, and the format-dependent
+    contrasts are listed by name. When every content account (H2-H5, H6_lexical) is contradicted, the summary says
+    no single account fits (a mixture, or an account not on the list); it never picks the least contradicted one."""
+    out: dict[str, Any] = {}
+    for h in PREDICTIONS:
+        rows = {}
+        for c in PREDICTIONS[h]:
+            a, b = cand[h]["per_contrast"][c], yn[h]["per_contrast"][c]
+            if a == b and a in ("consistent", "contradicted"):
+                rows[c] = a
+            elif {a, b} == {"consistent", "contradicted"}:
+                rows[c] = "format_dependent"
+            else:
+                rows[c] = "undecided"
+        vals = list(rows.values())
+        out[h] = {"per_contrast": rows, "n_consistent": vals.count("consistent"),
+                  "n_contradicted": vals.count("contradicted"),
+                  "format_dependent": [c for c, v in rows.items() if v == "format_dependent"],
+                  "verdict": _verdict(rows)}
+    fitting = [h for h in CONTENT_ACCOUNTS if out[h]["verdict"] != "contradicted"]
+    out["summary"] = {
+        "content_accounts_not_contradicted": fitting,
+        "content_accounts_consistent": [h for h in CONTENT_ACCOUNTS if out[h]["verdict"] == "consistent"],
+        "reading": ("no single account; mixture or an account not on the list" if not fitting else
+                    "accounts not contradicted: " + ", ".join(fitting)),
+        "position": out["H6_position"]["verdict"],
+    }
     return out
 
 
 def populations(union: list[dict], sample: set[str], step0: set[str]) -> dict[str, list[dict]]:
     s = [t for t in union if t["id"] in sample]
     return {"sample": s, "sample_placement": [t for t in s if task_type(t["task_line"]) in PLACEMENT_TYPES],
+            "p5": [t for t in s if p5_eligible(t)], "sample_take": [t for t in s if p7_eligible(t)],
             "step0": [t for t in union if t["id"] in step0],
             "later": [t for t in s if t.get("history_len", 0) > 0]}
 
 
 def primary_family(by: dict, pops: dict[str, list[dict]], fmt: str = "cand", B: int = C.BOOTSTRAP_RESAMPLES,
                    perms: int = C.PERMUTATIONS) -> dict[str, Any]:
+    """The seven primary contrasts in one format, Holm within the family, each categorised, and the one-format
+    readout."""
     res = {name: contrast(by, pops[spec["population"]], spec["terms"], fmt, reference=spec["reference"], B=B, perms=perms)
            for name, spec in PRIMARY.items()}
-    adj = holm({name: r["p"] for name, r in res.items()})
+    # a fixed family of seven: a missing or undefined p enters as 1, so the family never shrinks
+    adj = holm({name: (r["p"] if r["p"] == r["p"] else 1.0) for name, r in res.items()})
     for name, r in res.items():
         r["holm_p"] = adj[name]
-        r["category"] = categorize(r, adj[name])
-    return {"contrasts": res, "readout": readout({name: r["category"] for name, r in res.items()})}
+        r["category"], zs = categorize(r, adj[name])
+        r["zones"] = list(zs) if zs else None
+    return {"contrasts": res, "readout": readout({name: (tuple(r["zones"]) if r["zones"] else None)
+                                                  for name, r in res.items()})}
 
 
 def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: set[str],
@@ -606,6 +752,7 @@ def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: 
     ref = ((1, "aligned"), (-1, "swapped"))
     block: dict[str, Any] = {"primary": primary_family(by, pops, "cand", **kw),
                              "primary_yes_no": primary_family(by, pops, "yn", **kw)}
+    block["readout_both_formats"] = joint_readout(block["primary"]["readout"], block["primary_yes_no"]["readout"])
     arms = {}
     for arm in CONTENT_ARMS:
         if arm == "swapped":
@@ -623,14 +770,30 @@ def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: 
                         for k in ("step0", "later")},
         }
     block["arms_on_sample"] = arms
+    placement_rest = [t for t in pops["sample_placement"] if not p5_eligible(t)]
     block["secondary"] = {
+        "desire_keep_vs_swapped": arms["desire_keep"]["vs_swapped_L"],
+        "desire_keep_vs_swapped_yes_no": arms["desire_keep"]["yn_vs_swapped_L"],
+        "negated_vs_exists_sentence_take": contrast(by, pops["sample_take"], ((1, "negated"), (-1, "mention_exists")), "cand", reference=ref, **kw),
+        # P7 by what the history shows of the receptacle (the claim established, not shown, or contradicted)
+        "negated_by_history": {k: contrast(by, [t for t in pops["sample"] if is_take(t) and negated_status(t)[1] == k],
+                                           ((1, "negated"), (-1, "swapped")), "cand", reference=ref, **kw)
+                               for k in ("shown, without it", "contents not shown", "shown, holds it")},
         "cancelled_vs_swapped": arms["cancelled"]["vs_swapped_L"],
         "done_vs_swapped": arms["done"]["vs_swapped_L"],
         "ignore_vs_exists_sentence": contrast(by, pops["sample"], ((1, "mention_ignore"), (-1, "mention_exists")), "cand", **kw),
         "described_vs_swapped_described": contrast(by, pops["sample"], ((1, "described"), (-1, "swapped_described")), "cand", reference=ref, **kw),
         "desire_check_vs_keep": contrast(by, pops["sample"], ((1, "desire_check"), (-1, "desire_keep")), "cand", **kw),
-        "done_vs_cancelled_not_contradicted": contrast(
-            by, [t for t in pops["sample_placement"] if not done_contradicted(t)], ((1, "done"), (-1, "cancelled")), "cand", reference=ref, **kw),
+        # P5 on the placement items it leaves out: taking from a target-type receptacle (H2 predicts done ABOVE
+        # cancelled there) and items whose history contradicts "done"; and on every placement item, as first designed
+        "done_vs_cancelled_take_from_target_type": contrast(
+            by, [t for t in pops["sample_placement"] if takes_from_target_type(t)], ((1, "done"), (-1, "cancelled")), "cand", reference=ref, **kw),
+        "done_vs_cancelled_contradicted": contrast(
+            by, [t for t in pops["sample_placement"] if done_contradicted(t)], ((1, "done"), (-1, "cancelled")), "cand", reference=ref, **kw),
+        "done_vs_cancelled_all_placement": contrast(by, pops["sample_placement"], ((1, "done"), (-1, "cancelled")), "cand", reference=ref, **kw),
+        "n_p5_left_out": {"take_from_target_type": sum(takes_from_target_type(t) for t in placement_rest),
+                          "done_contradicted": sum(done_contradicted(t) for t in placement_rest),
+                          "both": sum(takes_from_target_type(t) and done_contradicted(t) for t in placement_rest)},
         "n_done_contradicted_in_sample": sum(done_contradicted(t) for t in pops["sample"]),
         "position": {
             "step0_start_vs_usual_yes_no": contrast(by, pops["step0"], PRIMARY["P6_position_step0"]["terms"], "yn", reference=ref, **kw),
@@ -643,7 +806,7 @@ def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: 
     content = {name: spec for name, spec in PRIMARY.items() if spec["population"] != "step0"}
 
     def split(subsets: dict[str, list[dict]]) -> dict[str, Any]:
-        """The content contrasts (P1-P5) on subsets of items, each restricted as its population is."""
+        """The content contrasts (all but P6) on subsets of items, each restricted as its population is."""
         return {k: {name: contrast(by, _restrict(spec, ts), spec["terms"], "cand", reference=spec["reference"], **kw)
                     for name, spec in content.items()} for k, ts in subsets.items()}
 
@@ -659,9 +822,11 @@ def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: 
 
 
 def _restrict(spec: dict[str, Any], items: list[dict]) -> list[dict]:
-    """Items of a subset that belong to a contrast's population type (P5: placement tasks only)."""
-    if spec["population"] == "sample_placement":
-        return [t for t in items if task_type(t["task_line"]) in PLACEMENT_TYPES]
+    """Items of a subset that belong to a contrast's population type (P5: its eligible placement items; P7: take items)."""
+    if spec["population"] == "p5":
+        return [t for t in items if p5_eligible(t)]
+    if spec["population"] == "sample_take":
+        return [t for t in items if p7_eligible(t)]
     return items
 
 
@@ -769,13 +934,17 @@ def run_mech2_analysis(cfg: dict) -> int:
     pops = populations(sets["union"], sets["sample"], sets["step0"])
     report: dict[str, Any] = {"items": {"n_primary": len(primary), "n_sample": len(sets["sample"]), "n_step0": len(sets["step0"]),
                                         "n_union": len(sets["union"]), "n_sample_placement": len(pops["sample_placement"]),
+                                        "n_p5": len(pops["p5"]), "n_sample_take": len(pops["sample_take"]),
                                         "n_games_sample": len({t["game_id"] for t in pops["sample"]}),
                                         "task_types_sample": dict(Counter(task_type(t["task_line"]) for t in pops["sample"]))}}
     others: dict[str, list[Path]] = {}
     waiting: dict[str, list[str]] = {}
-    for tag in cfg.get("models", rq1.FEWSHOT):
+    tags = list(cfg.get("models", PRIMARY_MODELS + SECONDARY_MODELS))
+    for tag in tags:
         s = [x for x in scores if x["model"] == tag]
-        block = model_block(s, sets["union"], sets["sample"], sets["step0"], B=B, perms=perms)
+        block = {"role": ("primary" if tag in PRIMARY_MODELS else
+                          "secondary: reported descriptively, not part of any primary family or conclusion"),
+                 **model_block(s, sets["union"], sets["sample"], sets["step0"], B=B, perms=perms)}
         ov, ov_folders, ov_problems = _scores_of(cfg.get("overlap_source"), tag)
         if ov_problems:
             waiting[cfg["overlap_source"]] = ov_problems
@@ -789,7 +958,6 @@ def run_mech2_analysis(cfg: dict) -> int:
             others[cfg["mech_source"]] = m_folders
             block["knowledge_split"] = knowledge_split(s, ms, pops["sample"], B=B)
         report[tag] = block
-    tags = list(cfg.get("models", rq1.FEWSHOT))
     report["cross_model_item_share"] = {arm: {tag: report[tag]["arms_on_sample"][arm]["yn_item_share_toward_yes_vs_swapped"]["estimate"]
                                               for tag in tags} for arm in CONTENT_ARMS if arm != "swapped"}
     report["waiting_for_analysis_only_sources"] = waiting
@@ -799,6 +967,7 @@ def run_mech2_analysis(cfg: dict) -> int:
     lines = []
     for tag in tags:
         prim = report[tag]["primary"]["contrasts"]
-        lines.append(f"{tag}: " + ", ".join(f"{k.split('_')[0]} {v['estimate']:.2f} ({v['category']})" for k, v in prim.items()))
+        lines.append(f"{tag}: " + ", ".join(f"{k.split('_')[0]} {v['estimate']:.2f} ({v['category']})" for k, v in prim.items())
+                     + f"; both formats: {report[tag]['readout_both_formats']['summary']['reading']}")
     write_status(run_id, "\n".join(lines), ok=False, reported="mechanism battery report" if not waiting else "partial report")
     return 0

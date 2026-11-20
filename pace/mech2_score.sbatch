@@ -5,11 +5,12 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-# One shard of eight is about 2,500 two-candidate and 2,500 yes/no prompts per model, both models in turn: about
-# 15,000 forward passes. At 0.26 to 0.4 s a pass (rq2_score's rate and the families' sizing) that is 1.1 to 1.7 hours,
-# plus two model loads and the tokenization gate (CPU, minutes). Estimates, not timings; the smoke run measures them.
-# 3 hours by default; scores resume if cut off (WF_RESUME=1).
-#SBATCH --time=3:00:00
+# One shard of eight is about 2,600 two-candidate and 2,600 yes/no prompts per model, three models in turn (Qwen3-8B,
+# Llama-3.1-8B, Mistral-7B-Instruct-v0.3 as a secondary model, amendment after review 1): about 23,300 forward passes.
+# At 0.26 to 0.4 s a pass (rq2_score's rate and the families' sizing) that is 1.7 to 2.6 hours, plus three model loads
+# and the tokenization gate (CPU, minutes). Estimates, not timings; the smoke run measures them.
+# 4 hours by default; scores resume if cut off (WF_RESUME=1).
+#SBATCH --time=4:00:00
 #SBATCH --gres=gpu:1
 # Any free L40S, A40 or A100; brackets because ICE appends &cuda13 to the constraint.
 #SBATCH --constraint=(gpu-l40s|gpu-a40|gpu-a100)

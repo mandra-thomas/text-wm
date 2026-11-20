@@ -10,7 +10,7 @@ Checks, for every (item, arm, format) the run would score:
 - the yes/no prompt equals the two-candidate prompt up to the final question;
 - the item's real task line appears in the query turn only for the aligned, done and cancelled arms;
 - task-line form: one sentence-final period, no doubled spaces or periods, articles agree, no object or receptacle
-  instance except the action's receptacle in desire_check.
+  instance except the action's receptacle in desire_check and negated; negated only on take items.
 Prints counts by task type and action verb, the share of items whose "done" claim the history contradicts, and,
 with --examples, one task line per arm and task type.
 """
@@ -37,7 +37,7 @@ def query(msgs):
 def own_text(line: str, arm: str, t: dict) -> str:
     """The part of a task line this battery writes; the rest is inherited unchanged from earlier runs (RQ2's swapped
     line, rq1x's descriptions, the real task), whose wording, ALFWorld's "a apple" included, is kept for comparability."""
-    if arm in ("mention_ignore", "mention_exists"):
+    if arm in ("mention_ignore", "mention_exists", "negated"):
         return line[len(t["swapped_task_line"]):].strip()
     if arm in ("done", "cancelled"):
         return line.split(mech2._task_text(t["task_line"]), 1)[1].strip()
@@ -57,7 +57,7 @@ def form(line: str, arm: str, t: dict) -> list[str]:
         if (m[1] == "an") != (m[2][0] in "aeiou"):
             out.append(f"article: {m[0]}")
     inst = set(re.findall(r"\b[a-z]+ \d+\b", line))
-    allowed = {mech2.parse_action(t["action"])[2]} if arm == "desire_check" else set()
+    allowed = {mech2.parse_action(t["action"])[2]} if arm in ("desire_check", "negated") else set()
     if inst - allowed:
         out.append(f"instance named: {sorted(inst - allowed)}")
     return out
@@ -118,6 +118,20 @@ print(f"done contradicted by the history: {len(contra)} of {len(sample)} sample 
       f"{sum(mech2.done_contradicted(t) for t in union)} of {len(union)} in the union")
 print("sample by reason:", dict(Counter(t["determination_reason"] for t in sample)))
 print("sample by task type:", dict(Counter(mech2.task_type(t["task_line"]) for t in sample)))
+placement = [t for t in sample if mech2.task_type(t["task_line"]) in mech2.PLACEMENT_TYPES]
+ftt = [t for t in placement if mech2.takes_from_target_type(t)]
+print(f"P5: placement items {len(placement)}; take from a target-type receptacle {len(ftt)}; done contradicted "
+      f"{sum(mech2.done_contradicted(t) for t in placement)}; both {sum(mech2.done_contradicted(t) for t in ftt)}; "
+      f"P5 items {sum(mech2.p5_eligible(t) for t in sample)}")
+take = [t for t in sample if mech2.is_take(t)]
+neg_built = sum(mech2.task_line(t, "negated") is not None for t in union)
+if neg_built != sum(mech2.is_take(t) for t in union):
+    problems["negated: built on an item that is not a take of the goal object, or missing on one that is"] += 1
+
+
+print(f"P7 (negated, take items): {len(take)} sample items; claim status (scene at start, history):",
+      dict(Counter(mech2.negated_status(t) for t in take)))
+print("P7 take items by reason:", dict(Counter(t["determination_reason"] for t in take)), "; P7 items (history does not show the object there):", sum(mech2.p7_eligible(t) for t in sample))
 print("sample step-0 items:", sum(t.get("history_len", 0) == 0 for t in sample), "games in sample:", len({t["game_id"] for t in sample}))
 if "--examples" in sys.argv:
     for (arm, ttype), line in sorted(examples.items()):
