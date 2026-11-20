@@ -91,7 +91,12 @@ class LogoddsScorer:
         model_tag: str | None = None,
         device: str | None = None,
         dtype: str = "bfloat16",
+        attn_implementation: str | None = None,
+        template_kwargs: dict[str, Any] | None = None,
     ):
+        """`attn_implementation` is passed to from_pretrained when set (Gemma 2 needs "eager"; wf/families.py);
+        `template_kwargs` go to every apply_chat_template call (Llama 3.2's fixed date_string). The defaults leave
+        every earlier run's loading and prompts unchanged."""
         self.model_name = model_name
         self.model_tag = model_tag or model_name.split("/")[-1].lower()
         self.mock = os.environ.get("WF_MOCK_SCORE", "0") == "1"
@@ -102,6 +107,8 @@ class LogoddsScorer:
         self._tok = None
         self.device = device
         self.dtype = dtype
+        self.attn_implementation = attn_implementation
+        self.template_kwargs = dict(template_kwargs or {})
         if not self.mock:
             self._load()
 
@@ -113,14 +120,19 @@ class LogoddsScorer:
         # template that is, so a later push to the Hub cannot change them.
         self._tok = AutoTokenizer.from_pretrained(self.model_name, revision=self.revision, trust_remote_code=True)
         torch_dtype = getattr(torch, self.dtype, torch.bfloat16)
+        extra = {"attn_implementation": self.attn_implementation} if self.attn_implementation else {}
         self._model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             revision=self.revision,
             torch_dtype=torch_dtype,
             device_map="auto",
             trust_remote_code=True,
+            **extra,
         )
         self._model.eval()
+        loaded = getattr(self._model.config, "_attn_implementation", None)
+        if self.attn_implementation and loaded != self.attn_implementation:
+            raise RuntimeError(f"{self.model_name}: asked for {self.attn_implementation} attention, loaded {loaded}")
 
     def close(self) -> None:
         """Free the GPU before the next model loads; one A100 holds one 8B model at a time."""
@@ -147,6 +159,7 @@ class LogoddsScorer:
             add_generation_prompt=True,
             return_tensors="pt",
             enable_thinking=False,
+            **self.template_kwargs,
         )
 
     def _teacher_force_logprob(self, messages: list[dict[str, str]], candidate: str) -> tuple[float, int, float, str]:

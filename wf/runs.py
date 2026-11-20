@@ -1422,6 +1422,10 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "rq1v_analysis_v2": lambda cfg: _rq1v("run_rq1v_analysis")(cfg),
     "thinking_analysis_v2": lambda cfg: _thinking("run_thinking_analysis")(cfg),
     "size_analysis_v2": lambda cfg: _lazy("sizes", "run_size_analysis")(cfg),
+    # 2026-11-20, model families wave A (wf/families.py, notes/families_design.md): one scoring run per model.
+    **{f"family_score_{tag}": (lambda cfg: _lazy("families", "run_family_score")(cfg))
+       for tag in ("gemma2-9b-it", "mistral-7b-v0.3", "llama3.2-1b", "llama3.2-3b")},
+    "families_analysis": lambda cfg: _lazy("families", "run_families_analysis")(cfg),
 }
 
 

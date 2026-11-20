@@ -1,0 +1,17 @@
+run_id: families_analysis
+# Model families, wave A (wf/families.py; notes/families_design.md). CPU only. Reads every family_score_<tag> run,
+# and for comparison Qwen3-8B and Llama-3.1-8B from the runs that hold the same prompts. A run is named under this
+# checkout's runs/ (a symlink to another checkout's run folder is fine) or by absolute path.
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+models: [gemma2-9b-it, mistral-7b-v0.3, llama3.2-1b, llama3.2-3b]
+reference:
+  qwen3-8b:
+    model: qwen3-8b
+    runs:
+      size_score_qwen3-8b: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+  llama3.1-8b:
+    model: llama3.1-8b-fewshot
+    runs:
+      rq1_score: [aligned, swapped, absent]
+      rq1x_score: [aligned, swapped, absent]
+      rq1v_score: [yn_aligned, yn_swapped, yn_absent]
