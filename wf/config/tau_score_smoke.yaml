@@ -1,12 +1,21 @@
 run_id: tau_score_smoke
-# Format and timing check for tau_score: 20 main-population items (by hash), both models, every readout.
-# Read for format only (token checks, first-token mass, timing), never for results.
+# Format and timing check for tau_score: 20 main-population items (by hash), both models, every job type (the
+# rules-only arm on the primary items among them). Read for format only (token checks, two-way masses of the
+# first-token, yes/no and manipulation readouts, seconds per job), never for results.
 build_run: tau_build
 verify_run: tau_verify
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
 readouts: [first, yn, full]
+witness: true
+mention: true
+target_check: true
+rules_arm_items: 20
 score_natural: false
 score_unachievable: false
 limit_items: 20
 n_shards: 1
-expected_items_sha256: b6337c43ae503be5bf9ae990502a5cc83eb901972609638d5247d6d3b12a6a10  # local build at a1a60ea; an ICE rebuild must reproduce it
+# sha256 of the local build at the amendments of 2026-11-20 (an ICE rebuild must reproduce them; scoring refuses others)
+expected_outputs_sha256:
+  items.jsonl: 972084939bbdd831d54a3fc2c15a47afb3535d67b9729194699981f172ea46b4
+  natural_items.jsonl: 6748606e8e6e98904845ab070a9038b2b072fe406c4905e47e107bb37bac2194
+  fewshot.json: 53feb550fd909213f370e7b55ed6b4751450d102097a9b6f9d9b724ce7700c7a

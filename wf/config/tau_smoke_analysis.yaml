@@ -1,5 +1,7 @@
 run_id: tau_smoke_analysis
-# Analysis of the 20-item smoke (tau_score_smoke), for format only.
+# Analysis of the 20-item smoke (tau_score_smoke), for format and timing only: P('{"')+P('Error'), P(Yes)+P(No) for
+# the yes/no and manipulation questions, seconds per job, and the projected GPU hours per tau_score shard.
 source: tau_score_smoke
 build_run: tau_build
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+project_to: tau_score

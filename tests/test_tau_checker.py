@@ -174,3 +174,45 @@ def test_error_class_names_every_known_error():
         "Error: Order not found": "order_not_found", "Error: something else": "other",
     }
     assert {k: error_class(k) for k in cases} == cases
+
+
+# ---------------- arithmetic and check order, against the port and upstream's golden cases ----------------
+
+from tests.test_tau_retail import GOLDEN, patched_env  # noqa: E402
+
+
+@pytest.mark.parametrize("name,want", [("exchange_gift_card_at_rounded_difference", "PASS"),
+                                       ("modify_items_gift_card_at_rounded_difference", "FAIL")])
+def test_gift_card_against_rounded_and_unrounded_difference(name, want):
+    """Exchange compares the balance with the difference rounded to cents, modify with the unrounded sum: a balance
+    equal to the rounded difference passes the one and fails the other (upstream golden cases)."""
+    case = next(c for c in GOLDEN["cases"] if c["name"] == name)
+    write = case["calls"][0]
+    env = patched_env(case["patches"])
+    o = env.state.orders[write["arguments"]["order_id"]]
+    item = next(i for i in o["items"] if i["item_id"] == write["arguments"]["item_ids"][0])
+    hist = _hist(env, [("get_user_details", {"user_id": o["user_id"]}), ("get_order_details", {"order_id": o["order_id"]}),
+                       ("get_product_details", {"product_id": item["product_id"]})])
+    v = check(hist, {"name": write["name"], "arguments": write["arguments"]})
+    out = env.call(write["name"], write["arguments"])
+    assert out == write["output"]
+    assert v.verdict == want
+    if want == "FAIL":
+        assert (v.cls, v.error) == ("gc_balance", out)
+    else:
+        assert not out.startswith("Error")
+
+
+def test_return_checks_the_payment_method_before_the_items():
+    db = base_db()
+    o = _order(lambda o: o["status"] == "delivered" and any(
+        m["source"] != "gift_card" and p != o["payment_history"][0]["payment_method_id"] for p, m in db["users"][o["user_id"]]["payment_methods"].items()))
+    wrong = next(p for p, m in db["users"][o["user_id"]]["payment_methods"].items()
+                 if m["source"] != "gift_card" and p != o["payment_history"][0]["payment_method_id"])
+    env = fresh_env()
+    hist = _reads(env, o)
+    for pm, cls in ((wrong, "wrong_return_pm"), ("credit_card_0000000", "pm_not_found"),
+                    (o["payment_history"][0]["payment_method_id"], "item_not_in_order")):
+        act = {"name": "return_delivered_order_items", "arguments": {"order_id": o["order_id"], "item_ids": ["0000000000"], "payment_method_id": pm}}
+        v = check(hist, act)
+        assert (v.verdict, v.cls, v.error) == ("FAIL", cls, env.call(act["name"], act["arguments"]))

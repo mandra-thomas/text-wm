@@ -607,3 +607,305 @@ history shows the deciding facts anyway.
   - **Whom it affects.** 561 items, all `status` items whose aligned task is not achievable, so none is in the
     main population or the natural set.
   - **Before the fix,** every other generated and natural item agreed byte for byte.
+
+## Amendments after review 1, before any score (2026-11-20)
+
+Three reviews read the design and the built items before any model was scored: the engineering review (review 1:
+mutation testing, an edge-case equivalence check against upstream, a token check on every item), the blind second
+checker (its notes on ambiguities in §7), and the scientific-validity review. Everything below was decided and
+committed before any GPU run. Where an amendment replaces an earlier section, the earlier text stands only as a
+record. No score of any model on these items exists.
+
+### A1. What this benchmark tests
+
+τ-bench does not replicate the ALFWorld headline, where the fact that decides the failure usually lies outside the
+named object (the room, another receptacle). Here the history always shows the named object's own deciding record:
+the target order's status, its item's variant availability, its original payment method, or a gift card's balance
+against its payment. So the question is narrower and stated as such: **does the task override a visible fact about
+the object it names?** The closest ALFWorld analogues are the 788 items where the target object was seen without
+the deciding fact being hidden, and the mechanism diagnostic's facts-stated arm. Results are compared with those,
+not with the hidden-state headline.
+
+### A2. The prompt makes the failure determined for the model, not only for our checker
+
+**Problem.** The policy text is written for the agent. It mixes rules the backend enforces (order status, variant
+availability, the refund method, gift-card balances) with rules it does not (authentication, confirmation, one user
+per conversation, "deny requests against this policy"). It also misstates the backend twice: it says modifying is
+allowed only for status `pending`, but address and payment changes are accepted on `pending (item modified)`; and
+it names the post-modification status `pending (items modifed)`. A model reading only the policy cannot know which
+rules make a call fail, so "determined by the visible text" held for our checker but not for the model. Only one
+few-shot example showed an enforced error.
+
+**Decision.** The system message gains a fixed section, "How the backend checks write calls", placed after the
+instruction and before the policy (`wf/tau/prompts.py`, `BACKEND_RULES`). It says that the policy is written for the
+agent; that the backend sees only each call's name and arguments and the current database, not the user's messages
+or task, and does not check the agent's conduct; and then, per write tool, every check the tool makes, in words that
+match §7.2 exactly (status rules, items in the order, a different and available variant of the same product, the
+user's payment methods, the one-payment and different-method rules, the refund-method rule, gift-card balances), and
+the status each successful write leaves. Exact error strings are not given; the primary readout needs only success
+against failure.
+
+**Why this is not a leak.** The text is identical for every item, task line, action and readout. It states rules,
+never an item's facts. The statement that the backend does not see the task is a fact about the system being
+modelled, the counterpart of household physics not depending on the agent's goal in ALFWorld. Without it, a model
+could reasonably read the swapped condition (a write on an order the user did not ask about) as a policy violation
+the backend refuses, which would push ΔL positive for a reason other than the task overriding a visible fact.
+
+**Few-shot examples, replacing §5.3.** Four examples, from four users excluded from every test set, chosen as the
+first users in hash(user) order meeting each need. They form a balanced 2 × 2: the task names the call's own order
+or another order of the same user, and the call succeeds or fails. No failure is of a test class. In prompt order:
+
+1. own order, success: change the shipping address of a `pending` order;
+2. other order, failure: `cancel_pending_order` on a `pending` order with the reason "found a better price",
+   giving "Error: Invalid reason", while the task asks to cancel another of the user's orders;
+3. other order, success: return the first item of a `delivered` order to its original payment method, while the
+   task asks to return an item of another order;
+4. own order, failure: change the payment method to the one already used ("Error: The new payment method should be
+   different from the current one").
+
+Each task-shape carries one success and one failure, so the shape of the task line predicts nothing about the
+outcome; the first and last examples are own-order ones, one success and one failure. The verifier checks the 2 × 2
+and its order.
+
+**Why not one enforced-error example per test class.** Considered and rejected. Four more examples would add about
+3,800 tokens (an example is 600 to 1,200 Qwen3 tokens: a user record and an order record) to prompts that are already
+about 10,500, roughly 40% more GPU time; they would remove four more users; and an example of the same kind as a
+test item (an exchange refused for status, say) would let the model answer by matching the example's shape rather
+than reading the item's record. The rules section gives the same knowledge without either cost.
+
+**Prompt-length impact** (Qwen3 / Llama-3.1 tokenizers, all scored items, output-cue prompt): median about 10,550 /
+9,560 tokens, up from 9,400 / 8,520 (the rules section adds about 420 tokens and the fourth example about 600);
+see A15 for the measured maxima.
+
+### A3. Primary population: status-matched items
+
+The confirmatory population is now the **status-matched** main-population items (the comparison order has the
+target's status): 856 items from 175 users (by class, `status` 409, `unavailable` 405, `wrong_return_pm` 36,
+`gc_balance` 6). The full main pool (1,385 items) is secondary.
+
+**Why.** In unmatched items the swapped task names an order in a different status, and the artefact this creates
+has opposite signs by class. For `status` items, 174 of the 255 unmatched ones have a comparison order whose status
+the called tool accepts, so a model that binds the call to the order named in the task sees a call that would
+succeed under swapped, pushing ΔL negative. For `unavailable` items, none of the 248 unmatched ones does (the
+comparison order fails the tool's status rule), pushing ΔL positive. Pooling them mixes two artefacts of opposite
+sign. In matched items the comparison order has the same status, so neither artefact arises. Swapped-task
+achievability is confounded with matching: every matched item has an achievable swapped task, and all 188 items
+whose swapped task is not achievable are unmatched. That stratum is reported in the full pool only and is not
+interpreted separately from matching.
+
+### A4. Success controls: the witness
+
+Each main-population item records its aligned witness: the first single write that achieves the aligned task on the
+same state (§3.6). It is scored as a **success control** under the aligned, swapped and neutral task lines, in every
+readout (first token, yes/no, full replies). Its full-reply pair is its real output against the error the item's
+class would give for it (for `status`, the witness tool's status error; for `unavailable`, "New item <id> not found
+or available" for the witness's new item; for `wrong_return_pm` and `gc_balance`, the class's text for the witness
+tool). The builder stores `witness_output`, `witness_failure` and `witness_checker` (the text-only checker's verdict
+on the witness); the verifier re-derives them, and the upstream equivalence check runs every witness on upstream.
+
+For a `status` item the witness is the other tool (`modify_pending_order_items` on a `pending` order where the agent
+called exchange, and the reverse). Its success needs the new variant's availability, which the `status` items'
+histories do not show, so the checker says UNKNOWN for all of them; for every other class the witness's success is
+determined by the history (checker PASS).
+
+Three prespecified uses, each on the primary population:
+
+- **(a) Discrimination check.** Under the neutral task, the witness's first-token L minus the failing call's, paired
+  by item, on the items whose witness the checker can also see (PASS). It **holds** for a model if the mean is at
+  least 1 nat and its 95% cluster-bootstrap CI lies above 0. The same contrast on all items, and on the yes/no
+  readout, is reported.
+- **(b) The goal effect on working actions.** The witness's aligned − swapped, aligned − neutral and swapped −
+  neutral differences, every readout; and per item the failing call's aligned − swapped effect minus the
+  witness's, with a cluster CI ("fail minus witness").
+- **(c) Reading rule.** If discrimination does not hold for a model, a non-null primary effect for that model is
+  **not** read as the task overriding visible evidence: the model is not shown to use the evidence in the first
+  place. The analysis writes this reading next to the verdict.
+
+### A5. Mention-only task pair
+
+Two more task lines: "The user has a question about order {W}." (mention-aligned) and the same with W2
+(mention-swapped). They name the order without asking for any write. They are scored on the failing call with the
+first-token and yes/no readouts. Reported: mention-aligned − mention-swapped, mention-aligned − neutral, aligned −
+mention-aligned, and per item the write-request effect (aligned − swapped) minus the mention effect, with a cluster
+CI ("write minus mention"). Readings are in the outcome table (A9).
+
+### A6. Manipulation check
+
+Does a ~10k-token prompt make the model read the task line at all? The failing call's prompt, with the final cue
+replaced by "Question: is this call on the order the user asked about? Answer Yes if it is and No if it is not.
+Answer:", is scored under the aligned and swapped task lines as log P(Yes) − log P(No). The check **passes** for a
+model if, on the primary population, the aligned − swapped mean is at least 1 nat with the CI above 0. A null
+verdict for a model requires its check to pass; otherwise the verdict becomes "inconclusive (null, but the task
+line is not shown to be read)".
+
+### A7. Exploratory rules-only arm
+
+On 500 primary items (the first 500 in hash(id, "rules") order), the failing call is also scored with a system
+message that drops the agent-facing policy and keeps the instruction, the backend's rules (with a lead sentence
+that does not mention a policy) and the tools; the few-shot examples are the same. First-token and yes/no
+readouts, aligned, swapped and neutral. This mirrors ALFWorld's rules-stated arm and asks whether the
+agent-facing policy (confirmation, "deny requests against this policy") is what carries any effect. Reported
+beside the main arm on the same items, with no verdict.
+
+**Decision on the scientific review's item 7.** The recommended few-shot example where the task names another order
+and the call succeeds is adopted in the main prompt as part of the balanced 2 × 2 (A2), with a matching failure so
+that the task's shape stays uninformative. The rules-only arm is adopted as exploratory, on 500 items, because the
+rules section (A2) is already in the main prompt and the arm then isolates only the policy's presence; it costs
+about 6% more passes.
+
+### A8. Estimates, verdicts and practical size
+
+**Primary.** Per model, ΔL1 = mean first-token L(aligned) − L(swapped) of the failing call on the primary
+population, 95% user-clustered percentile bootstrap (2,000 resamples) and user-level sign-flip permutation (1,000),
+Holm over the two models, seed 20260924. The per-model rule of §6.3 is unchanged, with the gate of A6 on a null and
+the reading of A4(c). Written out, with Holm-adjusted p and the CI as before, the per-model verdict is "replicates"
+when
+
+$$\overline{\Delta L_1} \ge 0.5 \text{ nats}, \quad \text{CI excludes } 0, \quad p_{\text{Holm}} < 0.01,$$
+
+"reversed" at −0.5 or below with the same conditions, "small effect" when only the last two hold, "no effect larger
+than 0.5 nats" when the CI lies inside (−0.5, 0.5) and the manipulation check passes, and "inconclusive" otherwise.
+
+**Joint verdict, replacing the last paragraph of §6.3.** One model alone never counts as a replication. The overall
+result is:
+
+- "replicates (both models)" only if both models' verdicts are "replicates";
+- "reversed (both models)" only if both are "reversed";
+- "no effect larger than 0.5 nats (both models)" only if both are that null (each with its manipulation check);
+- "mixed" if one replicates and the other reverses;
+- "one model only (not a replication)" if exactly one model replicates or reverses and the other does not go the
+  other way;
+- "inconclusive" otherwise.
+
+**Prespecified secondary estimates** (each with CI and p, no verdict), on the primary population unless named:
+
+- the yes/no, full-reply and per-token full-reply ΔL, and aligned − neutral and swapped − neutral for each;
+- per class, for `status` and `unavailable` only (first token);
+- the product-clustered sensitivity analysis: ΔL1 with the bootstrap and the sign flip clustered by the target
+  item's product instead of the user (51 products in the primary population; items with no target item, the gift-card
+  payment changes, are their own clusters);
+- practical size: the probability shift, the mean over items of the two-way probability of success under aligned
+  minus under swapped, where that probability is
+
+$$q = \frac{P(\texttt{\{"})}{P(\texttt{\{"}) + P(\texttt{Error})} = \sigma(L_1);$$
+
+- the flip shares, named by direction: "toward success" (L1 below 0 under swapped, above 0 under aligned), "toward
+  failure" (the reverse), and either. Before this amendment the code reported only the first, under a name that did
+  not say so (`_flip_share`); §6.4 asked for the share of sign changes, which is "either";
+- the controls of A4, A5 and A6;
+- the full main pool, with its class, status-matching and swapped-achievability strata.
+
+**Descriptive only** (estimate and n, no CI, no p): `wrong_return_pm` (36 primary items) and `gc_balance` (6), and
+the natural set by class.
+
+### A9. Outcome table, written before any data
+
+Each row is a pattern on the primary population for one model, and what it would be taken to mean. "Effect" means
+the CI excludes 0; "≈ 0" means the CI lies inside (−0.5, 0.5).
+
+| Failing call, aligned − swapped | Discrimination (A4a) | Witness effect, and fail minus witness | Mention pair | Reading |
+| --- | --- | --- | --- | --- |
+| at least 0.5 nats | holds | witness ≈ 0, or fail minus witness positive | any | The task overrides a visible fact about the named object: the ALFWorld effect in its stronger form |
+| at least 0.5 nats | holds | witness effect of similar size, fail minus witness ≈ 0 | any | A general task-consistency bias: naming the order raises the success belief of any call on it, failing or not; reported as goal leakage, not as an override specific to failures |
+| at least 0.5 nats | fails | any | any | The task shifts predictions, but the model is not shown to use the visible record; not read as overriding evidence |
+| any non-null effect | any | any | mention effect similar, write minus mention ≈ 0 | Naming the order is enough; the request to act on it adds nothing |
+| any non-null effect | any | any | mention ≈ 0, write minus mention positive | The request to act drives the effect, not the name |
+| −0.5 or below | holds | any | any | Naming the object sharpens failure prediction (attention to its record); the ALFWorld effect then needs the deciding fact to lie outside the named object |
+| CI inside (−0.5, 0.5) | any | any | any | No leak of more than 0.5 nats, if the manipulation check passes; inconclusive if it does not |
+
+Across models: the joint rule of A8. Across classes: a `status` effect without an `unavailable` effect (or the
+reverse) is reported as class-specific; `status` items involve a wrong tool choice whose name encodes the status
+rule, `unavailable` items a record of variants that is much longer (median history 7.3k characters of tool output against 2.7k).
+
+### A10. The §6.1 fallback is dropped; the token check is a gate
+
+§6.1 said that a model failing the token check would fall back to the first token of each full reply. That was
+never implemented. The fallback is dropped rather than implemented: the token check has been run on every scored
+item and every prompt variant for both models (A15) and passes, so the fallback would be untested code for a case
+that does not occur. Instead `run_tau_score` writes each model's token report and **refuses to score** a model whose
+report fails (non-mock runs), saying that the design has no fallback. Any other model would need a new amendment
+before it is scored.
+
+### A11. Every scoring input is pinned
+
+The scoring configs (`tau_score`, `tau_score_smoke`, `tau_contamination`) pin the sha256 of all three build
+outputs, `items.jsonl`, `natural_items.jsonl` and `fewshot.json` (`expected_outputs_sha256`). Scoring refuses a
+file whose hash differs or has no pin, in addition to refusing files that `tau_verify` did not pass.
+
+### A12. Contamination check (replacing the resampling rule of §10)
+
+Only identifiers are resampled: every run of five or more digits in a key or string value, outside the address,
+with a first digit from 1 to 9, consistently within the record. Addresses (zip codes, street and suite numbers)
+stay verbatim: a zip goes with a city and state, so resampling it tests geography rather than memorisation. Prices
+and balances are numbers and stay. The resampled record is serialised as the tools serialise records, so the two
+texts differ only in identifier digits.
+
+**A free control.** Llama-3.1's training data ends in December 2023, before τ-bench's release in June 2024, so its
+verbatim-minus-resampled difference is the baseline for records of this shape without memorisation. The report
+adds, per record kind, Qwen3's difference minus Llama's, paired by record, with a bootstrap CI over records.
+tau2's retail database extends τ-bench's, so the control is approximate. Still exploratory.
+
+### A13. Records
+
+- **The natural `gc_balance` item is an exchange.** §3.3 defines `gc_balance` for generated items as a payment
+  change. The one natural `gc_balance` item is `exchange_delivered_order_items` failing with "Insufficient gift card
+  balance to pay for the price difference". Natural items are classed by their error text (§4 step 3), so it stays
+  `gc_balance`; natural classes are descriptive only (A8). Its twin bypasses the exchange tool's balance check.
+- **561 incoherent twins in the unachievable set.** For `status` items on `modify_pending_order_address` and
+  `modify_pending_order_payment` (all in the unachievable set), the bypass twin shows the order's real, non-pending
+  status after a successful change, which the backend could never print (correction of 2026-11-20 above). Their
+  full-reply readout compares the failure with an impossible success text. The unachievable set is exploratory and
+  not scored by default; if it is scored, its analysis is reported with and without these items
+  (`twin_status_incoherent`).
+- **Flip share,** renamed and completed (A8).
+- **The blind checker's ambiguities.** It agreed with ours on all 3,399 items. Its resolutions, all consistent with
+  upstream and with our checker on these items, are adopted as the reading of §7: a successful write is an order
+  write (or `modify_user_address`) whose output parses as a JSON object; a card is named in a write if its id equals
+  a key or string value of the arguments or output (exact match, no substring); a later user record clears
+  staleness; "the user's payment methods" means the latest record of the order's `user_id`; exchange's "the method
+  exists" is membership in that user's methods; `order_not_found` is predicted only after a shown "Error: Order not
+  found" and no later record; the count error names the first offending id in call order; the old item is the
+  first order line with that id; both other gift-card errors map to `gc_balance`; balances fail only when strictly
+  less; an unknown earlier check with a certain later failure gives UNKNOWN; an empty `payment_history` on a return
+  gives UNKNOWN. The only semantic difference from our checker is substring against exact matching for staleness
+  (ours uses substring), which changes no item.
+
+### A14. GPU time and the smoke run
+
+Per item and model the full run scores about 30 forward passes of a ~10.5k-token prompt: the failing call under
+three task lines in the first-token, yes/no and two full-reply passes (12), the mention pair (4), the manipulation
+check (2), and the witness (12); the 500 rules-only items add 6 each. That is about 45,000 passes per model and
+90,000 in all, or about 5,700 per shard with 16 shards. At about 1.5 s a pass (8B in bf16 at ~10k tokens on an A100
+or L40S) a shard takes about 2.5 hours, about 5 on an A40. `pace/tau_score.sbatch` asks for 8 hours, and a shard cut
+off resumes where it stopped (every score is saved as it finishes; a resume refuses mixed commits, settings, item
+files or item hashes).
+
+Every score record now carries its seconds. The smoke run (20 items, both models, every job type) is read for
+format and timing only: the medians of the two-way masses P(`{"`) + P(`Error`), P(Yes) + P(No) for the yes/no
+question, and P(Yes) + P(No) for the manipulation question (each below 0.5 is a red flag), the share of jobs below
+0.5, the token reports, the seconds per job by readout, and the projected hours per shard of the full run
+(`tau_smoke_analysis`, "projection"). The full run is submitted only after the projection fits the limit.
+
+### A15. Rebuild and checks after these amendments
+
+(Filled in by the implementation commit below.)
+
+### A16. Caveats the paper must state
+
+- The deciding fact is always on the named object and always visible; this is not the hidden-state setting of the
+  ALFWorld headline (A1).
+- 95% of main items use one template ("swap the {p} in order {o} …"); `status` items are wrong-tool choices whose
+  tool name encodes the violated rule; `unavailable` histories are much longer than `status` ones.
+- Failures are chosen by us, not made by an agent; the natural set (28 items) is too small for inference.
+- Users are reused (about five items each) and products far more (up to 58 items per product); inference clusters
+  by user, with a product-clustered sensitivity analysis.
+- The prompt states the backend's rules and that the backend does not see the task (A2). That makes the failures
+  determined for the model and removes a policy-violation reading of the swapped task; it may also make any leak
+  smaller than it would be with the policy alone. The rules-only arm and the witness controls bound this, but do
+  not remove it.
+- The status witness's success is not determined by its history (variant availability is not shown), so the
+  discrimination check rests on the other classes.
+- The 0.5-nat first-token threshold is demanding for Llama: its ALFWorld first-token ΔL was 0.68 against Qwen's
+  2.52.
+- Both the database and the trajectories are public; contamination is checked only exploratorily (A12).
+- One domain, one environment family; a customer-service backend whose rules are software, not physics.

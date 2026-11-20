@@ -30,6 +30,8 @@ KIND = {"cancel_pending_order": "cancel", "modify_pending_order_address": "addre
         "modify_pending_order_payment": "payment", "modify_pending_order_items": "swap",
         "exchange_delivered_order_items": "swap", "return_delivered_order_items": "return"}
 NEUTRAL = "The user wants help with their account."
+# Mention-only pair (amendment of 2026-11-20 after review 1): names an order without asking for any write.
+MENTION = "The user has a question about order {o}."
 REASONS = ("no longer needed", "ordered by mistake")
 ADDRESS_ARGS = ("address1", "address2", "city", "state", "country", "zip")
 NATURAL_MAX_CALLS = 30
@@ -118,7 +120,10 @@ def achievable(db: dict, env: RetailEnv, kind: str, order_id: str, item_id: str 
 
 
 def fewshot_examples(db: dict) -> list[dict]:
-    """Three examples from three distinct users, the first in hash order meeting each need (design §5.3)."""
+    """Four examples from four distinct users, the first in hash order meeting each need (design §5.3, as amended
+    2026-11-20). Balanced 2x2: the task names the call's own order or another order of the same user, and the call
+    succeeds or fails. No failure is of a test class. Prompt order: own-order success, other-order failure,
+    other-order success, own-order failure."""
     users = sorted(db["users"], key=lambda u: h(u, "fewshot"))
     used: set[str] = set()
 
@@ -128,34 +133,103 @@ def fewshot_examples(db: dict) -> list[dict]:
                 continue
             for oid in db["users"][uid]["orders"]:
                 o = db["orders"].get(oid)
-                if o is not None and need(o):
+                others = [x for x in db["users"][uid]["orders"] if x != oid and x in db["orders"]]
+                if o is not None and need(o, others):
                     used.add(uid)
-                    return uid, oid
+                    return uid, oid, (sorted(others, key=lambda x: h(oid, x, "fewshot"))[0] if others else None)
         raise ValueError("no user for a few-shot example")
 
-    out = []
-    uid, oid = first(lambda o: o["status"] == "pending")
+    def one_payment(o):
+        return len(o["payment_history"]) == 1 and o["payment_history"][0]["transaction_type"] == "payment"
+
+    specs = []
+    # 1. own order, success: change the shipping address of a pending order
+    uid, oid, _ = first(lambda o, others: o["status"] == "pending")
     addr = db["users"][uid]["address"]
-    out.append(("change the shipping address", uid, oid, "modify_pending_order_address",
-                {"order_id": oid, **{k: addr[k] for k in ADDRESS_ARGS}}, None))
-    uid, oid = first(lambda o: o["status"] == "pending" and len(o["payment_history"]) == 1
-                     and o["payment_history"][0]["transaction_type"] == "payment")
-    out.append(("change the payment method", uid, oid, "modify_pending_order_payment",
-                {"order_id": oid, "payment_method_id": db["orders"][oid]["payment_history"][0]["payment_method_id"]}, None))
-    uid, oid = first(lambda o: o["status"] == "delivered")
+    specs.append(("own", "success", uid, oid, "modify_pending_order_address",
+                  {"order_id": oid, **{k: addr[k] for k in ADDRESS_ARGS}}, task_line("modify_pending_order_address", oid, None)))
+    # 2. other order, failure: cancel a pending order with a reason the tool does not accept
+    uid, oid, w2 = first(lambda o, others: o["status"] == "pending" and bool(others))
+    specs.append(("other", "failure", uid, oid, "cancel_pending_order", {"order_id": oid, "reason": "found a better price"},
+                  task_line("cancel_pending_order", w2, None)))
+    # 3. other order, success: return the first item of a delivered order to its original payment method
+    uid, oid, w2 = first(lambda o, others: o["status"] == "delivered" and bool(others))
     o = db["orders"][oid]
-    out.append(("return", uid, oid, "return_delivered_order_items",
-                {"order_id": oid, "item_ids": [o["items"][0]["item_id"]],
-                 "payment_method_id": o["payment_history"][0]["payment_method_id"]}, o["items"][0]["name"]))
+    specs.append(("other", "success", uid, oid, "return_delivered_order_items",
+                  {"order_id": oid, "item_ids": [o["items"][0]["item_id"]],
+                   "payment_method_id": o["payment_history"][0]["payment_method_id"]},
+                  task_line("return_delivered_order_items", w2, db["orders"][w2]["items"][0]["name"])))
+    # 4. own order, failure: change the payment method of a pending order to the method it already uses
+    uid, oid, _ = first(lambda o, others: o["status"] == "pending" and one_payment(o))
+    specs.append(("own", "failure", uid, oid, "modify_pending_order_payment",
+                  {"order_id": oid, "payment_method_id": db["orders"][oid]["payment_history"][0]["payment_method_id"]},
+                  task_line("modify_pending_order_payment", oid, None)))
     examples = []
-    for _, uid, oid, tool, args, product in out:
+    for names, outcome, uid, oid, tool, args, task in specs:
         env = fresh_env()
         calls = [{"name": "get_user_details", "arguments": {"user_id": uid}},
                  {"name": "get_order_details", "arguments": {"order_id": oid}}]
         history = [{**c, "output": o} for c, o in zip(calls, env.replay(calls))]
-        examples.append({"user_id": uid, "order_id": oid, "task": task_line(tool, oid, product), "history": history,
-                         "action": {"name": tool, "arguments": args}, "output": env.call(tool, args)})
+        examples.append({"user_id": uid, "order_id": oid, "task": task, "names": names, "outcome": outcome,
+                         "history": history, "action": {"name": tool, "arguments": args}, "output": env.call(tool, args)})
     return examples
+
+
+# ---------------- success controls (witnesses) ----------------
+
+_STATUS_ERRORS = {"cancel_pending_order": "Non-pending order cannot be cancelled",
+                  "modify_pending_order_address": "Non-pending order cannot be modified",
+                  "modify_pending_order_payment": "Non-pending order cannot be modified",
+                  "modify_pending_order_items": "Non-pending order cannot be modified",
+                  "exchange_delivered_order_items": "Non-delivered order cannot be exchanged",
+                  "return_delivered_order_items": "Non-delivered order cannot be returned"}
+_GC_ERRORS = {"modify_pending_order_payment": "Insufficient gift card balance to pay for the order",
+              "modify_pending_order_items": "Insufficient gift card balance to pay for the new item",
+              "exchange_delivered_order_items": "Insufficient gift card balance to pay for the price difference"}
+
+
+def witness_failure_text(cls: str, witness: dict) -> str:
+    """The error the item's class would give for the witness call: the failure candidate of the witness's
+    full-reply readout, mirroring the item's own (twin, failure) pair."""
+    tool, args = witness["name"], witness["arguments"]
+    if cls == "status":
+        return "Error: " + _STATUS_ERRORS[tool]
+    if cls == "unavailable":
+        return f"Error: New item {args['new_item_ids'][0]} not found or available"
+    if cls == "wrong_return_pm":
+        return "Error: Payment method should be the original payment method"
+    if cls == "gc_balance":
+        return "Error: " + _GC_ERRORS[tool]
+    raise ValueError(cls)
+
+
+def witness_fields(history: list[dict], witness: dict | None, cls: str) -> dict:
+    """The witness's real output on the history's state, its class-matched failure text, and what the text-only
+    checker can say about it from the history (PASS when the success is determined by what is shown)."""
+    if witness is None:
+        return {"witness_output": None, "witness_failure": None, "witness_checker": None}
+    env = fresh_env()
+    env.replay(history)
+    out = env.call(witness["name"], witness["arguments"])
+    if out.startswith("Error"):
+        raise RuntimeError(f"recorded witness fails: {witness}")
+    return {"witness_output": out, "witness_failure": witness_failure_text(cls, witness),
+            "witness_checker": check(history, witness).verdict}
+
+
+def target_product_id(history: list[dict], order_id: str, item_id: str | None) -> str | None:
+    """The product of the target item, read from the latest shown record of the target order."""
+    if item_id is None:
+        return None
+    pid = None
+    for x in history:
+        try:
+            rec = json.loads(x["output"])
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and rec.get("order_id") == order_id and "items" in rec:
+            pid = next((it["product_id"] for it in rec["items"] if it["item_id"] == item_id), pid)
+    return pid
 
 
 # ---------------- generated items ----------------
@@ -332,6 +406,9 @@ def build_generated(db: dict, exclude_users: set[str], max_users: int | None = N
                     "aligned_achievable": w_al is not None, "aligned_witness": w_al,
                     "swapped_achievable": w_sw is not None, "swapped_witness": w_sw,
                     "main_pool": w_al is not None, "key": key,
+                    "task_mention_aligned": MENTION.format(o=oid), "task_mention_swapped": MENTION.format(o=w2),
+                    "target_product_id": item["product_id"] if item else None,
+                    **witness_fields(history, w_al, cls),
                 })
                 log[f"kept {cls}"] += 1
     return items, log
@@ -476,6 +553,9 @@ def _natural_item(db: dict, f: dict, log: Counter) -> dict | None:
         "aligned_achievable": w_al is not None, "aligned_witness": w_al,
         "swapped_achievable": (w_sw is not None) if w2 else None, "swapped_witness": w_sw,
         "main_pool": w_al is not None, "key": f["key"],
+        "task_mention_aligned": MENTION.format(o=oid), "task_mention_swapped": MENTION.format(o=w2) if w2 else None,
+        "target_product_id": target_product_id(f["history"], oid, item_id),
+        **witness_fields(f["history"], w_al, cls),
         "provenance": {"file": tr["file"], "simulation_id": tr["simulation_id"], "task_id": tr["task_id"],
                        "trial": tr["trial"], "agent": tr["agent"], "step": f["k"]},
     }

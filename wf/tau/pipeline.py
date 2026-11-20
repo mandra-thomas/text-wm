@@ -14,6 +14,7 @@ import os
 import random
 import re
 import statistics
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,7 @@ from wf.analysis.stats import cluster_bootstrap, holm, pair_permutation
 from wf.runs import _finished, _init_run, load_config
 from wf.scoring.logodds import LogoddsScorer
 from wf.tau import items as I
-from wf.tau.prompts import CONDITIONS, build_messages
+from wf.tau.prompts import CONDITIONS, MENTION_CONDITIONS, build_messages
 from wf.tau.retail import check_vendor, pristine_sha256, vendor_manifest
 from wf.tau.verify import fresh_process_sample, sample_ids, verify_sets
 from wf.util import append_jsonl, file_sha, read_jsonl, require_filed, runs_root, write_json, write_status
@@ -32,7 +33,7 @@ from wf.util import append_jsonl, file_sha, read_jsonl, require_filed, runs_root
 MODELS = {"qwen3-8b-fewshot": C.WM_FEWSHOT_MODEL, "llama3.1-8b-fewshot": C.WM_FEWSHOT_LLAMA}
 CO_PRIMARY = ("qwen3-8b-fewshot", "llama3.1-8b-fewshot")
 FIRST_PLUS, FIRST_MINUS = '{"', "Error"
-READOUTS = ("first", "yn", "full")
+READOUTS = ("first", "yn", "full")  # "target" (the manipulation check) is scheduled by jobs_for
 OUTPUT_FILES = ("items.jsonl", "natural_items.jsonl", "fewshot.json")
 SUPPORT = C.DELTA_L_SUPPORT_NATS  # 0.5 nats, the ALFWorld threshold
 P_MAX = C.PERMUTATION_P_MAX
@@ -159,17 +160,24 @@ def run_tau_verify(cfg: dict) -> int:
 
 
 def verified(cfg: dict) -> tuple[bool, str]:
-    """Has tau_verify passed on exactly the files scoring would read, and do they match the pinned sha256?"""
+    """Has tau_verify passed on exactly the files scoring would read, and does every one of them match the sha256
+    pinned in the scoring config (items, natural items and few-shot examples)?"""
     vrun = cfg.get("verify_run", "tau_verify")
     if not _finished(vrun, tuple(cfg.get("accept_commits", {}).get(vrun, ()))):
         return False, f"{vrun} has not passed"
     rep = json.loads((runs_root() / vrun / "verify.json").read_text(encoding="utf-8"))
     now = _sha_of_outputs(_build_dir(cfg))
-    if not rep.get("passed") or rep.get("files") != now:
+    if not rep.get("passed"):
+        return False, "verify.json does not say passed"
+    if rep.get("files") != now:
         return False, "verify.json does not cover the current item files"
-    pinned = cfg.get("expected_items_sha256")
-    if pinned and now.get("items.jsonl") != pinned:
-        return False, f"items.jsonl sha256 {now.get('items.jsonl')} differs from the pinned {pinned}"
+    pins = cfg.get("expected_outputs_sha256")
+    if pins is not None:
+        for name in OUTPUT_FILES:
+            if pins.get(name) is None:
+                return False, f"no pinned sha256 for {name}"
+            if now.get(name) != pins[name]:
+                return False, f"{name} sha256 {now.get(name)} differs from the pinned {pins[name]}"
     return True, ""
 
 
@@ -188,6 +196,17 @@ def scoring_sets(cfg: dict) -> list[dict]:
     return out
 
 
+def is_primary(t: dict) -> bool:
+    """The confirmatory population (amendment of 2026-11-20): generated main-population items whose comparison
+    order has the target's status."""
+    return t["source"] == "generated" and t["main_pool"] and t["status_matched"]
+
+
+def rules_arm_ids(items: list[dict], n: int) -> set[str]:
+    """The exploratory rules-only arm: the first n primary items of the scoring set in hash order."""
+    return set(sorted((t["id"] for t in items if is_primary(t)), key=lambda i: I.h(i, "rules"))[: max(0, int(n))])
+
+
 def shard_by_user(items: list[dict], i: int, n: int) -> list[dict]:
     keep = set(sorted({t["user_id"] for t in items})[i::n])
     return [t for t in items if t["user_id"] in keep]
@@ -195,29 +214,57 @@ def shard_by_user(items: list[dict], i: int, n: int) -> list[dict]:
 
 def item_hash(t: dict) -> str:
     fields = {k: t.get(k) for k in ("history", "action", "failure_reply", "success_twin", "task_aligned",
-                                     "task_swapped", "task_neutral")}
+                                     "task_swapped", "task_neutral", "task_mention_aligned", "task_mention_swapped",
+                                     "aligned_witness", "witness_output", "witness_failure")}
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def jobs_for(t: dict, readouts: tuple[str, ...]) -> list[tuple[str, str]]:
+def jobs_for(t: dict, cfg: dict, rules_ids: set[str] = frozenset()) -> list[tuple[str, str, str, str]]:
+    """Every scored (arm, action, readout, condition) of one item (design §6.0, amended 2026-11-20)."""
+    readouts = tuple(cfg.get("readouts", READOUTS))
     conds = [c for c in CONDITIONS if c != "swapped" or t.get("task_swapped")]
-    return [(r, c) for r in readouts for c in conds]
+    single = [r for r in readouts if r in ("first", "yn")]
+    jobs = [("main", "fail", r, c) for r in readouts for c in conds]
+    if cfg.get("mention", True):
+        jobs += [("main", "fail", r, c) for r in single for c in MENTION_CONDITIONS if t.get(f"task_{c}")]
+    if cfg.get("target_check", True):
+        jobs += [("main", "fail", "target", c) for c in conds if c != "neutral"]
+    if cfg.get("witness", True) and t.get("aligned_witness"):
+        jobs += [("main", "witness", r, c) for r in readouts for c in conds]
+    if t["id"] in rules_ids:
+        jobs += [("rules_only", "fail", r, c) for r in single for c in conds]
+    return jobs
 
 
 def token_report(scorer: LogoddsScorer, sample: dict) -> dict[str, Any]:
-    """Are '{"' and 'Error' single tokens that open the tokenised replies (design §6.1)? Mock: trivially yes."""
+    """Are '{"', 'Error', 'Yes' and 'No' single tokens, and do '{"' and 'Error' open the tokenised replies (twin,
+    failure, witness output) with a generation prompt ending in a newline (design §6.1)? Mock: trivially yes."""
     if scorer.mock:
         return {"mock": True, "first_token_ok": True}
     tok = scorer._tok
     enc = lambda s: tok(s, add_special_tokens=False).input_ids
     rep = {v: enc(v) for v in (FIRST_PLUS, FIRST_MINUS, " " + FIRST_PLUS, " " + FIRST_MINUS, "Yes", "No")}
     twin, fail = enc(sample["success_twin"]), enc(sample["failure_reply"])
+    wit = enc(sample["witness_output"]) if sample.get("witness_output") else rep[FIRST_PLUS]
     gen_prompt = tok.apply_chat_template([{"role": "user", "content": "x"}], tokenize=False, add_generation_prompt=True,
                                          enable_thinking=False)
-    ok = (len(rep[FIRST_PLUS]) == 1 and len(rep[FIRST_MINUS]) == 1 and twin[:1] == rep[FIRST_PLUS]
-          and fail[:1] == rep[FIRST_MINUS] and gen_prompt.endswith("\n"))
+    ok = (all(len(rep[k]) == 1 for k in (FIRST_PLUS, FIRST_MINUS, "Yes", "No")) and twin[:1] == rep[FIRST_PLUS]
+          and wit[:1] == rep[FIRST_PLUS] and fail[:1] == rep[FIRST_MINUS] and gen_prompt.endswith("\n"))
     return {"ids": {k: v for k, v in rep.items()}, "twin_first": twin[:3], "failure_first": fail[:3],
-            "generation_prompt_tail": gen_prompt[-30:], "first_token_ok": ok}
+            "witness_first": wit[:3], "generation_prompt_tail": gen_prompt[-30:], "first_token_ok": ok}
+
+
+def _score_job(scorer: LogoddsScorer, t: dict, fewshot: list[dict], job: tuple[str, str, str, str]):
+    arm, action, readout, cond = job
+    if readout == "first":
+        return scorer.score_one_token_pair(t["id"], cond, build_messages(t, cond, fewshot, action=action, arm=arm), FIRST_PLUS, FIRST_MINUS)
+    if readout in ("yn", "target"):
+        cue = "yn" if readout == "yn" else "target"
+        return scorer.score_one_token_pair(t["id"], cond, build_messages(t, cond, fewshot, cue=cue, action=action, arm=arm), "Yes", "No")
+    if readout == "full":
+        plus, minus = ((t["success_twin"], t["failure_reply"]) if action == "fail" else (t["witness_output"], t["witness_failure"]))
+        return scorer.score_pair(t["id"], cond, build_messages(t, cond, fewshot, action=action, arm=arm), plus, minus)
+    raise ValueError(readout)
 
 
 def run_tau_score(cfg: dict) -> int:
@@ -233,71 +280,118 @@ def run_tau_score(cfg: dict) -> int:
     cfg = {**cfg, "run_id": run_id, "shard": i, "n_shards": n}
     d = _init_run(run_id, cfg, inputs=tuple(_build_dir(cfg) / name for name in OUTPUT_FILES if (_build_dir(cfg) / name).exists()))
     _, _, fewshot = load_built(cfg)
-    items = shard_by_user(scoring_sets(cfg), i, n)
-    readouts = tuple(cfg.get("readouts", READOUTS))
+    every = scoring_sets(cfg)
+    rules_ids = rules_arm_ids(every, cfg.get("rules_arm_items", 0))
+    items = shard_by_user(every, i, n)
     hashes = {t["id"]: item_hash(t) for t in items}
     saved = read_jsonl(d / "scoring.jsonl") if cfg.get("resume") else []
     if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):
         raise SystemExit(f"{run_id}: saved records belong to different items; rerun without --resume.")
-    done = {(s["model"], s["transition_id"], s["readout"], s["condition"]) for s in saved}
+    done = {score_key(s) for s in saved}
     for tag in cfg.get("models", CO_PRIMARY):
-        todo = [(t, r, c) for t in items for r, c in jobs_for(t, readouts) if (tag, t["id"], r, c) not in done]
+        todo = [(t, job) for t in items for job in jobs_for(t, cfg, rules_ids) if (tag, t["id"], *job) not in done]
         if not todo:
             continue
         scorer = LogoddsScorer(MODELS[tag], model_tag=tag)
         tokens_path = d / f"tokens_{tag}.json"
-        if items and not tokens_path.exists():
-            write_json(tokens_path, token_report(scorer, items[0]))
-        for t, r, c in todo:
-            if r == "first":
-                sc = scorer.score_one_token_pair(t["id"], c, build_messages(t, c, fewshot), FIRST_PLUS, FIRST_MINUS)
-            elif r == "yn":
-                sc = scorer.score_one_token_pair(t["id"], c, build_messages(t, c, fewshot, yes_no=True), "Yes", "No")
-            else:
-                sc = scorer.score_pair(t["id"], c, build_messages(t, c, fewshot), t["success_twin"], t["failure_reply"])
-            append_jsonl(d / "scoring.jsonl", [{**sc.to_dict(), "readout": r, "user_id": t["user_id"],
-                                                "item_hash": hashes[t["id"]]}])
+        report = token_report(scorer, next((t for t in items if t.get("witness_output")), items[0]))
+        write_json(tokens_path, report)
+        if not report.get("first_token_ok"):
+            scorer.close()
+            write_status(run_id, f"{tag}: the token check fails ({tokens_path.name}); the first-token readout is not "
+                                 "valid for this model, and the design has no fallback (amendment of 2026-11-20)", ok=False)
+            return 1
+        for t, job in todo:
+            t0 = time.perf_counter()
+            sc = _score_job(scorer, t, fewshot, job)
+            arm, action, readout, _ = job
+            append_jsonl(d / "scoring.jsonl", [{**sc.to_dict(), "arm": arm, "action": action, "readout": readout,
+                                                "user_id": t["user_id"], "item_hash": hashes[t["id"]],
+                                                "seconds": round(time.perf_counter() - t0, 4)}])
         scorer.close()
     write_status(run_id, f"shard {i} of {n}: {len(items)} items, {len({t['user_id'] for t in items})} users",
                  ok=False, reported="shard complete")
     return 0
 
 
+def score_key(s: dict) -> tuple[str, str, str, str, str, str]:
+    return (s["model"], s["transition_id"], s.get("arm", "main"), s.get("action", "fail"), s["readout"], s["condition"])
+
+
 # ---------------- analysis ----------------
 
 
-def value(rec: dict, readout: str) -> float:
+def value(rec: dict, readout: str, scale: str = "logit") -> float:
     if readout == "full_norm":
         return rec["logp_plus"] / rec["n_tokens_plus"] - rec["logp_minus"] / rec["n_tokens_minus"]
+    if scale == "prob":
+        return 1.0 / (1.0 + math.exp(-rec["L"]))
     return rec["L"]
 
 
-def paired(by: dict, items: list[dict], readout: str, a: str, b: str) -> dict[str, Any]:
-    """Mean of value(a) - value(b) over items, with a user-clustered CI and a user-level sign-flip p."""
+def cluster_of(t: dict, by: str) -> str:
+    """Users (the design's cluster), or the target item's product for the product-clustered sensitivity analysis;
+    an item without a target item (gift-card payment changes) is its own product cluster."""
+    if by == "user":
+        return t["user_id"]
+    if by == "product":
+        return t.get("target_product_id") or f"no-product:{t['id']}"
+    raise ValueError(by)
+
+
+def paired(by: dict, items: list[dict], readout: str, a: str, b: str, *, action: str = "fail", action_b: str | None = None,
+           arm: str = "main", cluster: str = "user", scale: str = "logit", inference: bool = True) -> dict[str, Any]:
+    """Mean of value(a) - value(b) over items, with a clustered CI and a clustered sign-flip p. `a` and `b` are
+    conditions; `action_b` (default `action`) lets the discrimination check compare the witness with the failing call."""
     base = "full" if readout.startswith("full") else readout
-    diffs, users = [], []
+    diffs, clusters = [], []
     for t in items:
-        x, y = by.get((t["id"], base, a)), by.get((t["id"], base, b))
+        x, y = by.get((t["id"], arm, action, base, a)), by.get((t["id"], arm, action_b or action, base, b))
         if x is None or y is None:
             continue
-        v = value(x, readout) - value(y, readout)
+        v = value(x, readout, scale) - value(y, readout, scale)
+        if v == v:
+            diffs.append(v)
+            clusters.append(cluster_of(t, cluster))
+    mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
+    users = {t["user_id"] for t in items if (t["id"], arm, action, base, a) in by and (t["id"], arm, action_b or action, base, b) in by}
+    out = {"estimate": mean(diffs), "n_items": len(diffs), "n_users": len(users), "n_clusters": len(set(clusters)),
+           "cluster": cluster, "share_positive": mean([1.0 if v > 0 else 0.0 for v in diffs])}
+    if inference:
+        boot = cluster_bootstrap(mean, diffs, clusters, seed=C.RNG_SEED)
+        out.update({"ci": [boot["ci_low"], boot["ci_high"]], "perm_p": pair_permutation(diffs, seed=C.RNG_SEED, cluster_ids=clusters)})
+    return out
+
+
+def contrast_of_effects(by: dict, items: list[dict], readout: str, first: tuple[str, str, str], second: tuple[str, str, str]) -> dict[str, Any]:
+    """Per item, (aligned - swapped effect of `first`) minus (that of `second`), each given as (action, condition a,
+    condition b); user-clustered CI and sign-flip p. Used for failing call against witness, and write request
+    against mention."""
+    diffs, users = [], []
+    for t in items:
+        keys = [(t["id"], "main", act, readout, c) for act, a, b in (first, second) for c in (a, b)]
+        if not all(k in by for k in keys):
+            continue
+        L = [by[k]["L"] for k in keys]
+        v = (L[0] - L[1]) - (L[2] - L[3])
         if v == v:
             diffs.append(v)
             users.append(t["user_id"])
     mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
     boot = cluster_bootstrap(mean, diffs, users, seed=C.RNG_SEED)
-    return {"estimate": mean(diffs), "ci": [boot["ci_low"], boot["ci_high"]], "n_items": len(diffs),
-            "n_users": len(set(users)), "perm_p": pair_permutation(diffs, seed=C.RNG_SEED, cluster_ids=users)}
+    return {"estimate": mean(diffs), "ci": [boot["ci_low"], boot["ci_high"]], "n_items": len(diffs), "n_users": len(set(users)),
+            "perm_p": pair_permutation(diffs, seed=C.RNG_SEED, cluster_ids=users)}
 
 
-def effects(by: dict, items: list[dict], readout: str) -> dict[str, Any]:
-    return {"aligned_minus_swapped": paired(by, items, readout, "aligned", "swapped"),
-            "aligned_minus_neutral": paired(by, items, readout, "aligned", "neutral"),
-            "swapped_minus_neutral": paired(by, items, readout, "swapped", "neutral")}
+def effects(by: dict, items: list[dict], readout: str, *, action: str = "fail", arm: str = "main", inference: bool = True) -> dict[str, Any]:
+    kw = {"action": action, "arm": arm, "inference": inference}
+    return {"aligned_minus_swapped": paired(by, items, readout, "aligned", "swapped", **kw),
+            "aligned_minus_neutral": paired(by, items, readout, "aligned", "neutral", **kw),
+            "swapped_minus_neutral": paired(by, items, readout, "swapped", "neutral", **kw)}
 
 
 def tau_verdict(est: float, ci: list[float], holm_p: float) -> str:
-    """The design's decision rule (notes/tau_design.md §6.3), two-sided."""
+    """The design's decision rule for one model (notes/tau_design.md §6.3), two-sided."""
     if any(v != v for v in (est, ci[0], ci[1], holm_p)):
         return "not computable"
     excludes_zero = ci[0] > 0 or ci[1] < 0
@@ -312,20 +406,71 @@ def tau_verdict(est: float, ci: list[float], holm_p: float) -> str:
     return "inconclusive"
 
 
-def verdicts(primary: dict[str, dict]) -> dict[str, Any]:
+CHECK_MIN_NATS = 1.0  # manipulation and discrimination checks: mean at least 1 nat and the CI above 0
+
+
+def check_passes(block: dict | None) -> bool:
+    if not block or block.get("n_items", 0) == 0:
+        return False
+    est, ci = block["estimate"], block.get("ci", [float("nan")] * 2)
+    return est == est and ci[0] == ci[0] and est >= CHECK_MIN_NATS and ci[0] > 0
+
+
+def joint_verdict(per_model: dict[str, str]) -> str:
+    """Both co-primary models must agree for a joint claim (amendment of 2026-11-20)."""
+    v = list(per_model.values())
+    rep = sum(x.startswith("replicates") for x in v)
+    rev = sum(x.startswith("reversed") for x in v)
+    null = sum(x.startswith("no effect") for x in v)
+    if rep and rev:
+        return "mixed (the models disagree in direction)"
+    if rep == len(v):
+        return "replicates (both models)"
+    if rev == len(v):
+        return "reversed (both models)"
+    if null == len(v):
+        return "no effect larger than 0.5 nats (both models)"
+    if rep or rev:
+        return "one model only (not a replication)"
+    return "inconclusive"
+
+
+def verdicts(primary: dict[str, dict], checks: dict[str, dict] | None = None) -> dict[str, Any]:
+    """Per-model verdicts on the primary contrast, Holm over the two models, gated by the manipulation check (a
+    null needs the task line to be read) and read through the discrimination check (an effect without
+    discrimination is not read as the task overriding visible evidence)."""
+    checks = checks or {}
     adjusted = holm({m: primary[m]["perm_p"] if m in primary else 1.0 for m in CO_PRIMARY})
-    per = {m: {"verdict": tau_verdict(primary[m]["estimate"], primary[m]["ci"], adjusted[m]) if m in primary else "not scored",
-               "holm_p": adjusted[m]} for m in CO_PRIMARY}
-    rep = [m for m, v in per.items() if v["verdict"].startswith("replicates")]
-    rev = [m for m, v in per.items() if v["verdict"].startswith("reversed")]
-    overall = "replicates" if rep and not rev else "reversed" if rev and not rep else "mixed" if rep and rev else "does not replicate"
-    return {"per_model": per, "overall": overall}
+    per = {}
+    for m in CO_PRIMARY:
+        if m not in primary:
+            per[m] = {"verdict": "not scored", "holm_p": adjusted[m]}
+            continue
+        v = tau_verdict(primary[m]["estimate"], primary[m]["ci"], adjusted[m])
+        c = checks.get(m, {})
+        manip, disc = c.get("manipulation_check_passed"), c.get("discrimination_holds")
+        if v.startswith("no effect") and not manip:
+            v = "inconclusive (null, but the task line is not shown to be read)"
+        if v.startswith(("replicates", "reversed", "small effect")):
+            reading = ("the task shifts predictions about a call whose failure the model can see" if disc else
+                       "the task shifts predictions, but the model does not discriminate failing from working calls: "
+                       "not read as the task overriding visible evidence")
+        else:
+            reading = None
+        per[m] = {"verdict": v, "holm_p": adjusted[m], "manipulation_check_passed": manip, "discrimination_holds": disc,
+                  "reading": reading}
+    return {"per_model": per, "overall": joint_verdict({m: x["verdict"] for m, x in per.items()})}
 
 
-def _flip_share(by: dict, items: list[dict]) -> float:
-    pairs = [(by[(t["id"], "first", "aligned")]["L"], by[(t["id"], "first", "swapped")]["L"]) for t in items
-             if (t["id"], "first", "aligned") in by and (t["id"], "first", "swapped") in by]
-    return sum(1 for a, s in pairs if a > 0 > s) / len(pairs) if pairs else float("nan")
+def flip_shares(by: dict, items: list[dict]) -> dict[str, float]:
+    """Shares of items whose first-token L changes sign between the swapped and the aligned task, each way."""
+    pairs = [(by[(t["id"], "main", "fail", "first", "aligned")]["L"], by[(t["id"], "main", "fail", "first", "swapped")]["L"])
+             for t in items if (t["id"], "main", "fail", "first", "aligned") in by and (t["id"], "main", "fail", "first", "swapped") in by]
+    if not pairs:
+        return {"n": 0, "toward_success": float("nan"), "toward_failure": float("nan"), "either": float("nan")}
+    up = sum(1 for a, s in pairs if a > 0 > s) / len(pairs)
+    down = sum(1 for a, s in pairs if s > 0 > a) / len(pairs)
+    return {"n": len(pairs), "toward_success": up, "toward_failure": down, "either": up + down}
 
 
 def _agreement(by: dict, items: list[dict]) -> dict[str, Any]:
@@ -333,7 +478,7 @@ def _agreement(by: dict, items: list[dict]) -> dict[str, Any]:
     gaps = []
     for t in items:
         for c in CONDITIONS:
-            f, g = by.get((t["id"], "first", c)), by.get((t["id"], "full", c))
+            f, g = by.get((t["id"], "main", "fail", "first", c)), by.get((t["id"], "main", "fail", "full", c))
             if f and g:
                 gaps.append(max(abs(f["logp_plus"] - g["logp_first_plus"]), abs(f["logp_minus"] - g["logp_first_minus"])))
     within = sum(1 for x in gaps if x <= 0.05)
@@ -341,20 +486,90 @@ def _agreement(by: dict, items: list[dict]) -> dict[str, Any]:
             "max_gap": max(gaps) if gaps else float("nan"), "ok": bool(gaps) and within / len(gaps) >= 0.99}
 
 
-def model_block(by: dict, main: list[dict], natural: list[dict], unach: list[dict]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
+PRESPECIFIED_CLASSES = ("status", "unavailable")
+DESCRIPTIVE_CLASSES = ("wrong_return_pm", "gc_balance")
+KEEPS_STATUS = ("modify_pending_order_address", "modify_pending_order_payment")
+
+
+def twin_status_incoherent(t: dict) -> bool:
+    """Status items on the two tools that keep the status: the twin shows a non-pending status after a successful
+    change, which the backend could never print (561 unachievable-set items; documented 2026-11-20)."""
+    return t["cls"] == "status" and t["action"]["name"] in KEEPS_STATUS
+
+
+def population_block(by: dict, pop: list[dict]) -> dict[str, Any]:
+    """Every readout on one population: the failing call's effects, and its practical size."""
+    out: dict[str, Any] = {"n_items": len(pop), "n_users": len({t["user_id"] for t in pop})}
     for r in ("first", "yn", "full", "full_norm"):
-        out[r] = {"main": effects(by, main, r),
-                  "by_class": {k: effects(by, v, r) for k, v in sorted(_group(main, lambda t: t["cls"]).items())},
-                  "by_swapped_achievable": {str(k): effects(by, v, r) for k, v in sorted(_group(main, lambda t: str(t["swapped_achievable"])).items())},
-                  "by_status_matched": {str(k): effects(by, v, r) for k, v in sorted(_group(main, lambda t: str(t["status_matched"])).items())},
-                  "natural": effects(by, natural, r) if natural else None,
-                  "natural_aligned_achievable": effects(by, [t for t in natural if t["main_pool"]], r) if natural else None,
-                  "natural_by_class": {k: effects(by, v, r) for k, v in sorted(_group(natural, lambda t: t["cls"]).items())} if natural else None,
-                  "unachievable": effects(by, unach, r) if unach else None}
-    masses = [math.exp(x["logp_plus"]) + math.exp(x["logp_minus"]) for (iid, r, c), x in by.items() if r == "first"]
-    out["first_mass_median"] = statistics.median(masses) if masses else float("nan")
-    out["flip_to_success_share"] = _flip_share(by, main)
+        out[r] = effects(by, pop, r)
+    out["first_probability_shift"] = paired(by, pop, "first", "aligned", "swapped", scale="prob")
+    out["first_product_clustered"] = paired(by, pop, "first", "aligned", "swapped", cluster="product")
+    out["first_flips"] = flip_shares(by, pop)
+    out["by_class"] = {k: effects(by, v, "first") for k, v in sorted(_group(pop, lambda t: t["cls"]).items())
+                       if k in PRESPECIFIED_CLASSES}
+    out["by_class_descriptive"] = {k: effects(by, v, "first", inference=False) for k, v in sorted(_group(pop, lambda t: t["cls"]).items())
+                                   if k in DESCRIPTIVE_CLASSES}
+    return out
+
+
+def controls_block(by: dict, pop: list[dict]) -> dict[str, Any]:
+    """Success controls, the mention-only pair and the manipulation check, on one population."""
+    out: dict[str, Any] = {}
+    out["witness"] = {r: effects(by, pop, r, action="witness") for r in ("first", "yn", "full", "full_norm")}
+    # discrimination: the witness's score minus the failing call's, both under the neutral task. The check is read on
+    # the items whose witness success the text-only checker can also see (PASS; every class but status, whose
+    # witness needs a variant's availability that the status items' histories do not show); all items are reported.
+    determined = [t for t in pop if t.get("witness_checker") == "PASS"]
+    out["discrimination"] = {r: paired(by, determined, r, "neutral", "neutral", action="witness", action_b="fail") for r in ("first", "yn")}
+    out["discrimination_all_witnesses"] = {r: paired(by, pop, r, "neutral", "neutral", action="witness", action_b="fail")
+                                           for r in ("first", "yn")}
+    out["mention"] = {r: {"mention_aligned_minus_mention_swapped": paired(by, pop, r, "mention_aligned", "mention_swapped"),
+                          "mention_aligned_minus_neutral": paired(by, pop, r, "mention_aligned", "neutral"),
+                          "aligned_minus_mention_aligned": paired(by, pop, r, "aligned", "mention_aligned")}
+                      for r in ("first", "yn")}
+    out["manipulation"] = paired(by, pop, "target", "aligned", "swapped")
+    # is the goal effect specific to failing calls, and does it need the write request or only the order's name?
+    out["fail_minus_witness_effect"] = {r: contrast_of_effects(by, pop, r, ("fail", "aligned", "swapped"), ("witness", "aligned", "swapped"))
+                                        for r in ("first", "yn")}
+    out["write_minus_mention_effect"] = {r: contrast_of_effects(by, pop, r, ("fail", "aligned", "swapped"),
+                                                                ("fail", "mention_aligned", "mention_swapped")) for r in ("first", "yn")}
+    return out
+
+
+def format_block(by: dict) -> dict[str, Any]:
+    """Format checks (design §6.4 and the smoke run): two-way probability mass of each single-token readout, and
+    the seconds per scored job by readout."""
+    out: dict[str, Any] = {}
+    for r in ("first", "yn", "target"):
+        masses = [math.exp(x["logp_plus"]) + math.exp(x["logp_minus"]) for k, x in by.items() if k[3] == r]
+        out[f"{r}_mass_median"] = statistics.median(masses) if masses else float("nan")
+        out[f"{r}_mass_below_0.5_share"] = sum(m < 0.5 for m in masses) / len(masses) if masses else float("nan")
+    secs: dict[str, list[float]] = defaultdict(list)
+    for k, x in by.items():
+        if x.get("seconds") is not None:
+            secs[k[3]].append(x["seconds"])
+    out["seconds_median_by_readout"] = {r: statistics.median(v) for r, v in sorted(secs.items())}
+    out["seconds_total"] = sum(sum(v) for v in secs.values())
+    return out
+
+
+def model_block(by: dict, primary: list[dict], main: list[dict], natural: list[dict], unach: list[dict],
+                rules: list[dict]) -> dict[str, Any]:
+    out: dict[str, Any] = {"primary": population_block(by, primary), "primary_controls": controls_block(by, primary),
+                           "main_pool": population_block(by, main), "main_pool_controls": controls_block(by, main)}
+    out["main_pool"]["by_swapped_achievable"] = {str(k): effects(by, v, "first") for k, v in
+                                                 sorted(_group(main, lambda t: str(t["swapped_achievable"])).items())}
+    out["main_pool"]["by_status_matched"] = {str(k): effects(by, v, "first") for k, v in
+                                             sorted(_group(main, lambda t: str(t["status_matched"])).items())}
+    out["natural"] = {r: effects(by, natural, r) for r in ("first", "yn")} if natural else None
+    out["natural_by_class"] = ({k: effects(by, v, "first", inference=False) for k, v in sorted(_group(natural, lambda t: t["cls"]).items())}
+                               if natural else None)
+    out["unachievable"] = ({"all": effects(by, unach, "first"),
+                            "without_incoherent_twins": effects(by, [t for t in unach if not twin_status_incoherent(t)], "first")}
+                           if unach else None)
+    out["rules_only_arm"] = ({r: {"rules_only": effects(by, rules, r, arm="rules_only"), "main_same_items": effects(by, rules, r)}
+                              for r in ("first", "yn")} if rules else None)
+    out["format"] = format_block(by)
     out["first_vs_full_agreement"] = _agreement(by, main)
     return out
 
@@ -371,32 +586,42 @@ def run_tau_analysis(cfg: dict) -> int:
         return 1
     scfg = {**load_config(cfg["source"]), "build_run": cfg.get("build_run", "tau_build")}
     items = scoring_sets(scfg)  # exactly the scoring run's item set
+    rules_ids = rules_arm_ids(items, scfg.get("rules_arm_items", 0))
+    primary_items = [t for t in items if is_primary(t)]
     main = [t for t in items if t["source"] == "generated" and t["main_pool"]]
     natural = [t for t in items if t["source"] == "natural"]
     unach = [t for t in items if t["source"] == "generated" and not t["main_pool"]]
+    rules = [t for t in items if t["id"] in rules_ids]
     scores = [x for p in folders for x in read_jsonl(p / "scoring.jsonl")]
     hashes = {t["id"]: item_hash(t) for t in items}
     stale = sum(1 for s in scores if hashes.get(s["transition_id"]) != s.get("item_hash"))
     models = tuple(cfg.get("models", CO_PRIMARY))
-    wanted = {(m, t["id"], "first", c) for m in models for t in main for c in ("aligned", "swapped")}
-    got = {(s["model"], s["transition_id"], s["readout"], s["condition"]) for s in scores}
+    wanted = {(m, t["id"], *job) for m in models for t in items for job in jobs_for(t, scfg, rules_ids)}
+    got = {score_key(s) for s in scores}
     missing = len(wanted - got)
-    report: dict[str, Any] = {"items": {"main": len(main), "main_users": len({t["user_id"] for t in main}),
-                                        "natural": len(natural), "unachievable": len(unach)},
-                              "missing_primary_scores": missing, "stale_scores": stale, "models": {}}
+    report: dict[str, Any] = {"items": {"primary": len(primary_items), "primary_users": len({t["user_id"] for t in primary_items}),
+                                        "main": len(main), "main_users": len({t["user_id"] for t in main}),
+                                        "natural": len(natural), "unachievable": len(unach), "rules_only_arm": len(rules)},
+                              "missing_scores": missing, "stale_scores": stale, "models": {}}
     tokens = {}
     for p in folders:
         for f in p.glob("tokens_*.json"):
             tokens.setdefault(f.stem[len("tokens_"):], json.loads(f.read_text(encoding="utf-8")))
     report["token_checks"] = tokens
-    primary = {}
+    primary, checks = {}, {}
     for m in models:
-        by = {(s["transition_id"], s["readout"], s["condition"]): s for s in scores if s["model"] == m}
-        report["models"][m] = model_block(by, main, natural, unach)
-        primary[m] = report["models"][m]["first"]["main"]["aligned_minus_swapped"]
-    report["verdicts"] = verdicts(primary)
+        by = {(s["transition_id"], s.get("arm", "main"), s.get("action", "fail"), s["readout"], s["condition"]): s
+              for s in scores if s["model"] == m}
+        blk = model_block(by, primary_items, main, natural, unach, rules)
+        report["models"][m] = blk
+        primary[m] = blk["primary"]["first"]["aligned_minus_swapped"]
+        checks[m] = {"manipulation_check_passed": check_passes(blk["primary_controls"]["manipulation"]),
+                     "discrimination_holds": check_passes(blk["primary_controls"]["discrimination"]["first"])}
+    report["verdicts"] = verdicts(primary, checks)
+    if cfg.get("project_to"):
+        report["projection"] = projection(cfg["project_to"], report, scfg)
     write_json(d / "metrics.json", report)
-    write_run_report(run_id, "τ-bench retail: goal effect on determined tool failures", report)
+    write_run_report(run_id, "τ-bench retail: does the task override a visible fact about the named object?", report)
     lines = [f"{m}: ΔL1 {primary[m]['estimate']:.3f} CI {primary[m]['ci']} -> {report['verdicts']['per_model'][m]['verdict']}"
              for m in models]
     ok = missing == 0 and stale == 0
@@ -406,14 +631,49 @@ def run_tau_analysis(cfg: dict) -> int:
     return 0 if ok else 1
 
 
+def projection(target_run: str, report: dict, smoke_cfg: dict) -> dict[str, Any]:
+    """From a smoke run's seconds per job, the GPU hours per shard of the full scoring run (one model after the
+    other, as run_tau_score does), so the sbatch time limit can be checked before the full run."""
+    full = {**load_config(target_run), "build_run": smoke_cfg.get("build_run", "tau_build")}
+    items = scoring_sets(full)
+    rules_ids = rules_arm_ids(items, full.get("rules_arm_items", 0))
+    n = int(full.get("n_shards", 1))
+    shards = [shard_by_user(items, i, n) for i in range(n)]
+    out: dict[str, Any] = {"run": target_run, "n_shards": n, "models": {}}
+    for m, blk in report["models"].items():
+        sec = blk["format"]["seconds_median_by_readout"]
+        hours = []
+        for sh in shards:
+            jobs = [j for t in sh for j in jobs_for(t, full, rules_ids)]
+            hours.append(sum(sec.get(j[2], float("nan")) for j in jobs) / 3600)
+        out["models"][m] = {"hours_max_shard": max(hours), "hours_all_shards": sum(hours)}
+    out["hours_max_shard_both_models"] = sum(v["hours_max_shard"] for v in out["models"].values())
+    return out
+
+
 # ---------------- contamination (exploratory) ----------------
 
 CONTAM_SYSTEM = "You are a helpful assistant."
 CONTAM_PROMPT = "Here is one record from the tau-bench retail database, as JSON."
 
 
+ID_DIGITS = re.compile(r"\d{5,}")
+KEEP_SUBTREES = ("address",)  # zips and street numbers are tied to the city and state: kept verbatim
+
+
 def resample_ids(text: str, salt: str) -> str:
-    """Every run of 5+ digits replaced, consistently within the text, by seeded random digits of equal length."""
+    """The record with every identifier's digits resampled (amendment of 2026-11-20 after review 1).
+
+    The record is parsed as JSON. Every run of 5 or more digits in a key or a string value is replaced by seeded
+    random digits of the same length whose first digit is 1-9, the same run getting the same new digits
+    everywhere in the record. Addresses (zip, street and suite numbers) are kept verbatim, because a zip goes
+    with a city and state and resampling it would test geography, not memorisation. Numbers (prices, balances)
+    are not identifiers and are untouched. The result is serialised as the tools serialise records, so the two
+    texts differ only in identifier digits.
+    """
+    obj = json.loads(text)
+    if json.dumps(obj) != text:
+        raise ValueError("record is not in the tools' JSON serialisation")
     mapping: dict[str, str] = {}
     rng = random.Random(f"{I.SEED}|resample|{salt}")
 
@@ -421,10 +681,19 @@ def resample_ids(text: str, salt: str) -> str:
         s = m.group(0)
         if s not in mapping:
             new = str(rng.randint(1, 9)) + "".join(str(rng.randint(0, 9)) for _ in range(len(s) - 1))
-            mapping[s] = new if new != s else str((int(s[0]) % 9) + 1) + new[1:]
+            mapping[s] = new if new != s else str((int(new[0]) % 9) + 1) + new[1:]
         return mapping[s]
 
-    return re.sub(r"\d{5,}", sub, text)
+    def walk(x: Any) -> Any:
+        if isinstance(x, dict):
+            return {ID_DIGITS.sub(sub, k): (v if k in KEEP_SUBTREES else walk(v)) for k, v in x.items()}
+        if isinstance(x, list):
+            return [walk(v) for v in x]
+        if isinstance(x, str):
+            return ID_DIGITS.sub(sub, x)
+        return x
+
+    return json.dumps(walk(obj))
 
 
 def contamination_records(items: list[dict], per_kind: int = 50) -> list[dict]:
@@ -439,6 +708,42 @@ def contamination_records(items: list[dict], per_kind: int = 50) -> list[dict]:
         for key in sorted(by, key=lambda k: I.h(kind, k, "contam"))[:per_kind]:
             out.append({"id": f"{kind}:{key}", "kind": kind, "verbatim": by[key], "resampled": resample_ids(by[key], key)})
     return out
+
+
+LLAMA_PREDATES = "llama3.1-8b-fewshot"  # training cutoff December 2023; tau-bench was released in June 2024
+
+
+def contamination_report(scores: list[dict], recs: list[dict], models: tuple[str, ...]) -> dict[str, Any]:
+    """Per model and record kind, the mean log P(verbatim) - log P(resampled); then each other model minus
+    Llama-3.1, paired by record: Llama's cutoff predates tau-bench, so its difference is the no-memorisation
+    baseline for records of this shape (amendment of 2026-11-20)."""
+    report: dict[str, Any] = {"n_records": len(recs), "models": {}, "minus_llama": {}}
+    mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
+    kinds = ("all", "user", "order", "product")
+    by_model = {tag: {x["transition_id"]: x for x in scores if x["model"] == tag} for tag in models}
+    for tag in models:
+        s = list(by_model[tag].values())
+        block = {}
+        for kind in kinds:
+            xs = [x for x in s if kind == "all" or x["kind"] == kind]
+            diffs = [x["L"] for x in xs]
+            boot = cluster_bootstrap(mean, diffs, [x["transition_id"] for x in xs], seed=C.RNG_SEED)
+            block[kind] = {"n": len(xs), "mean_logp_verbatim_minus_resampled": mean(diffs), "ci": [boot["ci_low"], boot["ci_high"]],
+                           "share_verbatim_higher": mean([1.0 if v > 0 else 0.0 for v in diffs])}
+        report["models"][tag] = block
+    if LLAMA_PREDATES in by_model:
+        base = by_model[LLAMA_PREDATES]
+        for tag in models:
+            if tag == LLAMA_PREDATES:
+                continue
+            block = {}
+            for kind in kinds:
+                ids = [i for i, x in by_model[tag].items() if i in base and (kind == "all" or x["kind"] == kind)]
+                diffs = [by_model[tag][i]["L"] - base[i]["L"] for i in ids]
+                boot = cluster_bootstrap(mean, diffs, ids, seed=C.RNG_SEED)
+                block[kind] = {"n": len(ids), "mean": mean(diffs), "ci": [boot["ci_low"], boot["ci_high"]]}
+            report["minus_llama"][tag] = block
+    return report
 
 
 def run_tau_contamination(cfg: dict) -> int:
@@ -464,18 +769,7 @@ def run_tau_contamination(cfg: dict) -> int:
             append_jsonl(d / "scoring.jsonl", [{**sc.to_dict(), "kind": r["kind"]}])
         scorer.close()
     scores = read_jsonl(d / "scoring.jsonl")
-    report: dict[str, Any] = {"n_records": len(recs), "models": {}}
-    mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
-    for tag in cfg.get("models", CO_PRIMARY):
-        s = [x for x in scores if x["model"] == tag]
-        block = {}
-        for kind in ("all", "user", "order", "product"):
-            xs = [x for x in s if kind == "all" or x["kind"] == kind]
-            diffs = [x["L"] for x in xs]
-            boot = cluster_bootstrap(mean, diffs, [x["transition_id"] for x in xs], seed=C.RNG_SEED)
-            block[kind] = {"n": len(xs), "mean_logp_verbatim_minus_resampled": mean(diffs), "ci": [boot["ci_low"], boot["ci_high"]],
-                           "share_verbatim_higher": mean([1.0 if v > 0 else 0.0 for v in diffs])}
-        report["models"][tag] = block
+    report = contamination_report(scores, recs, tuple(cfg.get("models", CO_PRIMARY)))
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "τ-bench contamination check (exploratory)", report)
     write_status(run_id, json.dumps({m: b["all"] for m, b in report["models"].items()}), ok=False,

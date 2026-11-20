@@ -13,6 +13,8 @@ Checks:
    and upstream's twin, made by patching the database copy (design §3.4, second route), equals the item's
    twin, which the port made by bypassing the check. modify_pending_order_address and _payment keep the
    order's status on success, so for them the patched status is put back to the true one before comparing.
+3. Each item's success witness (the recorded aligned witness), run on the history's state without any patch,
+   gives exactly the item's witness output.
 Exit status 0 only if every comparison is identical.
 """
 from __future__ import annotations
@@ -148,7 +150,7 @@ def _patch(env, GiftCard, item: dict):
 
 def check_items(Up, GiftCard, path: Path) -> dict:
     out = {"file": str(path), "items": 0, "history_mismatches": 0, "failure_mismatches": 0, "twin_mismatches": 0,
-           "status_restored": 0, "examples": []}
+           "witnesses": 0, "witness_mismatches": 0, "status_restored": 0, "examples": []}
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -171,6 +173,15 @@ def check_items(Up, GiftCard, path: Path) -> dict:
             rec["status"] = true_status
             twin = json.dumps(rec)
             out["status_restored"] += 1
+        if it.get("aligned_witness"):
+            # the success control: the recorded witness on the same state, unpatched
+            w_env = Up()
+            for h in it["history"]:
+                w_env.call(h["name"], h["arguments"])
+            out["witnesses"] += 1
+            w = it["aligned_witness"]
+            if w_env.call(w["name"], w["arguments"]) != it["witness_output"]:
+                out["witness_mismatches"] += 1
         if twin != it["success_twin"]:
             out["twin_mismatches"] += 1
             if len(out["examples"]) < 5:
@@ -197,7 +208,8 @@ def main() -> int:
     f = report["fuzz"]
     ok = (report["upstream_db_sha256"] == report["port_db_sha256"] and f["output_mismatches"] == 0
           and f["db_mismatches"] == 0
-          and all(r["history_mismatches"] == r["failure_mismatches"] == r["twin_mismatches"] == 0 for r in report["items"]))
+          and all(r["history_mismatches"] == r["failure_mismatches"] == r["twin_mismatches"] == r["witness_mismatches"] == 0
+                  for r in report["items"]))
     report["passed"] = ok
     text = json.dumps(report, indent=1)
     if args.out:

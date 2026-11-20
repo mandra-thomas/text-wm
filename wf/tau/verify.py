@@ -9,7 +9,12 @@ Per item:
   identical error text;
 - the achievability flags are re-derived from the witness search, and each recorded witness succeeds;
 - the task lines are the templates' (aligned, swapped, neutral), and none asserts a false fact;
-- the three prompts differ only in the task line;
+- every prompt variant (failing call or witness; output cue, yes/no or manipulation question; main or rules-only
+  arm) differs across the task lines only in the task line;
+- the success witness's output regenerates and succeeds, its failure text is the class's, and the checker's verdict
+  on it is recorded correctly (never FAIL);
+- generated histories show the products in the same counterbalanced order as the orders, and the comparison item
+  has a product name different from the target's whenever the comparison order has such an item;
 - generated histories contain only the design's reads, with both orders shown;
 - the item id and key are its (history, action) hash, and no two items share them;
 - no item comes from a few-shot user.
@@ -27,7 +32,7 @@ from typing import Any
 
 from wf.tau import items as I
 from wf.tau.checker import check, error_class
-from wf.tau.prompts import CONDITIONS, build_messages
+from wf.tau.prompts import ALL_CONDITIONS, ARMS, CUES, N_FEWSHOT, build_messages
 from wf.tau.retail import base_db, fresh_env, pristine_sha256
 
 REPO = Path(__file__).resolve().parents[2]
@@ -88,17 +93,38 @@ def item_problems(it: dict, db: dict, fewshot: list[dict], fewshot_users: set[st
     for order, product in ((it["order_id"], it.get("product")), (it.get("comparison_order_id"), it.get("comparison_product"))):
         if order and I.claim_problems(db, it["user_id"], tool, order, product):
             out.append(f"task line for {order} asserts a false fact: {I.claim_problems(db, it['user_id'], tool, order, product)}")
-    # prompts differ only in the task line
-    conds = [c for c in CONDITIONS if c != "swapped" or it.get("task_swapped")]
-    for yn in (False, True):
-        ms = {c: build_messages(it, c, fewshot, yes_no=yn) for c in conds}
-        base = ms["aligned"]
-        for c in conds[1:]:
-            other = ms[c]
-            line = it[f"task_{c}"]
-            if (other[:-1] != base[:-1] or other[-1]["content"].replace(f"Task: {line}\n", f"Task: {it['task_aligned']}\n", 1)
-                    != base[-1]["content"]):
-                out.append(f"{c} prompt differs from aligned outside the task line")
+    if it.get("task_mention_aligned") != I.MENTION.format(o=it["order_id"]) or (
+            it.get("comparison_order_id") and it.get("task_mention_swapped") != I.MENTION.format(o=it["comparison_order_id"])):
+        out.append("mention task lines are not the template")
+    # success witness (the recorded aligned witness, scored as a success control)
+    w = it.get("aligned_witness")
+    if w:
+        try:
+            want = I.witness_fields(it["history"], w, it["cls"])
+        except RuntimeError as e:
+            want = {"error": str(e)}
+        got = {k: it.get(k) for k in ("witness_output", "witness_failure", "witness_checker")}
+        if want != got:
+            out.append("witness fields do not re-derive")
+        if got.get("witness_checker") == "FAIL" or not str(got.get("witness_output")).startswith('{"'):
+            out.append("witness is not a success")
+    elif any(it.get(k) is not None for k in ("witness_output", "witness_failure", "witness_checker")):
+        out.append("witness fields without a witness")
+    if it.get("target_product_id") != I.target_product_id(it["history"], it["order_id"], it.get("item_id")):
+        out.append("target_product_id does not match the history")
+    # prompts differ only in the task line, for every scored variant
+    conds = [c for c in ALL_CONDITIONS if it.get(f"task_{c}")]
+    actions = ["fail"] + (["witness"] if w else [])
+    for arm in ARMS:
+        for action in actions:
+            for cue in CUES:
+                ms = {c: build_messages(it, c, fewshot, cue=cue, action=action, arm=arm) for c in conds}
+                base = ms["aligned"]
+                for c in conds[1:]:
+                    other, line = ms[c], it[f"task_{c}"]
+                    if (other[:-1] != base[:-1] or other[-1]["content"].replace(f"Task: {line}\n", f"Task: {it['task_aligned']}\n", 1)
+                            != base[-1]["content"]):
+                        out.append(f"{c} prompt ({arm}, {action}, {cue}) differs from aligned outside the task line")
     # generated histories: exactly the design's reads
     if it["source"] == "generated":
         names = [x["name"] for x in it["history"]]
@@ -110,6 +136,17 @@ def item_problems(it: dict, db: dict, fewshot: list[dict], fewshot_users: set[st
             out.append("product details shown for the wrong class")
         if (orders[0] == it["order_id"]) != it["target_first"]:
             out.append("target_first does not match the history")
+        shown_products = [x["arguments"]["product_id"] for x in it["history"] if x["name"] == "get_product_details"]
+        if it["cls"] == "unavailable":
+            pair = [_product_of(it, it["order_id"], it["item_id"]), _product_of(it, it["comparison_order_id"], it["comparison_item_id"])]
+            pair = pair if it["target_first"] else pair[::-1]
+            if shown_products != list(dict.fromkeys(pair)):
+                out.append("product reads are not in the orders' counterbalanced order")
+    if it.get("comparison_product") is not None and it["comparison_product"] == it.get("product"):
+        other_names = {x["name"] for x in _shown_order(it, it["comparison_order_id"])["items"]
+                       if I.KIND[tool] != "swap" or len(db["products"][x["product_id"]]["variants"]) >= 2}
+        if other_names - {it["product"]}:
+            out.append("comparison item has the target's product name although another product was available")
     if it["key"] != I.item_key(it["history"], it["action"]) or not it["id"].endswith(it["key"][:12]):
         out.append("id or key is not the (history, action) hash")
     if it["user_id"] in fewshot_users:
@@ -117,10 +154,41 @@ def item_problems(it: dict, db: dict, fewshot: list[dict], fewshot_users: set[st
     return out
 
 
+def _shown_order(it: dict, order_id: str) -> dict:
+    """The latest record of the order shown in the history (a read or a successful write)."""
+    rec = None
+    for x in it["history"]:
+        try:
+            obj = json.loads(x["output"])
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and obj.get("order_id") == order_id and "items" in obj:
+            rec = obj
+    return rec
+
+
+def _product_of(it: dict, order_id: str, item_id: str) -> str:
+    return next(x["product_id"] for x in _shown_order(it, order_id)["items"] if x["item_id"] == item_id)
+
+
 def fewshot_problems(fewshot: list[dict]) -> list[str]:
     out = []
-    if len(fewshot) != 3 or len({ex["user_id"] for ex in fewshot}) != 3:
-        out.append("few-shot examples must be three, from three users")
+    if len(fewshot) != N_FEWSHOT or len({ex["user_id"] for ex in fewshot}) != N_FEWSHOT:
+        out.append(f"few-shot examples must be {N_FEWSHOT}, from {N_FEWSHOT} users")
+    cells = [(ex.get("names"), ex.get("outcome")) for ex in fewshot]
+    if cells != [("own", "success"), ("other", "failure"), ("other", "success"), ("own", "failure")]:
+        out.append(f"few-shot examples are not the balanced 2x2 in the design's order: {cells}")
+    db = base_db()
+    for ex in fewshot:
+        if (ex["output"].startswith("Error")) != (ex.get("outcome") == "failure"):
+            out.append(f"few-shot outcome label of {ex['user_id']} is wrong")
+        if ex["output"].startswith("Error") and error_class(ex["output"]) in I.TEST_CLASSES:
+            out.append(f"few-shot failure of {ex['user_id']} is of a test class")
+        named = ex["task"].split("order ")[1].split(" ")[0].rstrip(".")
+        if (named == ex["action"]["arguments"]["order_id"]) != (ex.get("names") == "own"):
+            out.append(f"few-shot task of {ex['user_id']} names the wrong order")
+        if named not in db["users"][ex["user_id"]]["orders"]:
+            out.append(f"few-shot task of {ex['user_id']} names another user's order")
     for ex in fewshot:
         env = fresh_env()
         if env.replay(ex["history"]) != [x["output"] for x in ex["history"]]:

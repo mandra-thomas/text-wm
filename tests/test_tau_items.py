@@ -9,9 +9,10 @@ import pytest
 
 from wf.tau import items as I
 from wf.tau.checker import check, error_class
-from wf.tau.prompts import CONDITIONS, YN_QUESTION, build_messages, system_message
+from wf.tau.prompts import (ALL_CONDITIONS, BACKEND_RULES, CONDITIONS, TARGET_QUESTION, YN_QUESTION, build_messages,
+                             system_message)
 from wf.tau.retail import base_db, fresh_env
-from wf.tau.verify import item_problems
+from wf.tau.verify import fewshot_problems, item_problems
 
 
 @pytest.fixture(scope="module")
@@ -130,7 +131,7 @@ def test_no_duplicates_no_fewshot_users_and_ids_are_hashes(built):
     keys = [t["key"] for t in built["generated"]]
     assert len(keys) == len(set(keys))
     users = {ex["user_id"] for ex in built["fewshot"]}
-    assert len(users) == 3 and not users & {t["user_id"] for t in built["generated"]}
+    assert len(users) == 4 and not users & {t["user_id"] for t in built["generated"]}
     for t in built["generated"]:
         assert t["key"] == I.item_key(t["history"], t["action"]) and t["id"] == f"tau-g-{t['key'][:12]}"
 
@@ -142,14 +143,23 @@ def test_build_is_deterministic(built):
     assert again["fewshot"] == built["fewshot"]
 
 
-def test_fewshot_examples_are_real_outputs(built):
+def test_fewshot_examples_are_real_outputs_balanced_two_by_two(built):
     few = built["fewshot"]
-    assert [ex["output"].startswith("Error") for ex in few] == [False, True, False]
-    assert few[1]["output"] == "Error: The new payment method should be different from the current one"
+    assert [(ex["names"], ex["outcome"]) for ex in few] == [("own", "success"), ("other", "failure"), ("other", "success"), ("own", "failure")]
+    assert [ex["output"].startswith("Error") for ex in few] == [False, True, False, True]
+    assert few[1]["output"] == "Error: Invalid reason"
+    assert few[3]["output"] == "Error: The new payment method should be different from the current one"
+    db = base_db()
     for ex in few:
         env = fresh_env()
         assert env.replay(ex["history"]) == [h["output"] for h in ex["history"]]
         assert env.call(ex["action"]["name"], ex["action"]["arguments"]) == ex["output"]
+        named = ex["task"].split("order ")[1].split(" ")[0].rstrip(".")
+        assert (named == ex["action"]["arguments"]["order_id"]) == (ex["names"] == "own")
+        assert named in db["users"][ex["user_id"]]["orders"]
+    assert fewshot_problems(few) == []
+    assert fewshot_problems([few[0], few[2], few[1], few[3]])  # order matters
+    assert fewshot_problems([{**few[1], "task": few[1]["task"].replace(few[1]["task"].split("order ")[1].rstrip("."), few[1]["order_id"])}] + few[1:])
 
 
 def test_verifier_passes_a_sample_and_catches_planted_errors(built):
@@ -178,22 +188,34 @@ def test_verifier_passes_a_sample_and_catches_planted_errors(built):
 def test_prompts_differ_only_in_the_task_line(built):
     few = built["fewshot"]
     for it in built["generated"][::200]:
-        for yn in (False, True):
-            ms = {c: build_messages(it, c, few, yes_no=yn) for c in CONDITIONS}
-            for c in ("swapped", "neutral"):
-                assert ms[c][:-1] == ms["aligned"][:-1]
-                assert ms[c][-1]["content"].replace(it[f"task_{c}"], it["task_aligned"], 1) == ms["aligned"][-1]["content"]
-                assert it[f"task_{c}"] in ms[c][-1]["content"] and it["task_aligned"] not in ms[c][-1]["content"]
-            assert ms["aligned"][-1]["content"].endswith(YN_QUESTION if yn else "Tool output:")
+        for arm in ("main", "rules_only"):
+            for action in ("fail", "witness") if it["aligned_witness"] else ("fail",):
+                for cue in ("output", "yn", "target"):
+                    ms = {c: build_messages(it, c, few, cue=cue, action=action, arm=arm) for c in ALL_CONDITIONS}
+                    for c in ALL_CONDITIONS[1:]:
+                        assert ms[c][:-1] == ms["aligned"][:-1]
+                        assert ms[c][-1]["content"].replace(it[f"task_{c}"], it["task_aligned"], 1) == ms["aligned"][-1]["content"]
+                        assert it[f"task_{c}"] in ms[c][-1]["content"] and it["task_aligned"] not in ms[c][-1]["content"]
+                    end = {"output": "Tool output:", "yn": YN_QUESTION, "target": TARGET_QUESTION}[cue]
+                    assert ms["aligned"][-1]["content"].endswith(end)
+                    call = it["action"] if action == "fail" else it["aligned_witness"]
+                    assert f"Next call: {json.dumps({'name': call['name'], 'arguments': call['arguments']})}\n" in ms["aligned"][-1]["content"]
+        assert build_messages(it, "aligned", few, yes_no=True) == build_messages(it, "aligned", few, cue="yn")
 
 
 def test_prompt_layout(built):
     it, few = built["generated"][0], built["fewshot"]
     ms = build_messages(it, "aligned", few)
-    assert [m["role"] for m in ms] == ["system", "user", "assistant", "user", "assistant", "user", "assistant", "user"]
+    assert [m["role"] for m in ms] == ["system"] + ["user", "assistant"] * 4 + ["user"]
     sysm = system_message()
     assert "predict the exact output of the tool call" in sysm and "# Retail agent policy" in sysm
     assert sysm.count('{"type": "function"') == 16
+    # the backend's rules come before the policy, identically in both arms; the rules-only arm drops the policy
+    assert sysm.index(BACKEND_RULES) < sysm.index("# Retail agent policy")
+    rules = system_message("rules_only")
+    assert BACKEND_RULES in rules and "# Retail agent policy" not in rules and "Before taking any action" not in rules
+    assert rules.count('{"type": "function"') == 16 and "it does not see the user's messages or task" in rules
+    assert build_messages(it, "aligned", few, arm="rules_only")[1:] == ms[1:]
     q = ms[-1]["content"]
     assert q.startswith(f"Task: {it['task_aligned']}\n\nTool calls so far:\nCall: ")
     assert f"Next call: {json.dumps({'name': it['action']['name'], 'arguments': it['action']['arguments']})}\nTool output:" in q
@@ -203,7 +225,11 @@ def test_prompt_layout(built):
     with pytest.raises(ValueError):
         build_messages({**it, "task_swapped": None}, "swapped", few)
     with pytest.raises(ValueError):
-        build_messages(it, "aligned", few[:2])
+        build_messages(it, "aligned", few[:3])
+    with pytest.raises(ValueError):
+        build_messages({**it, "aligned_witness": None}, "aligned", few, action="witness")
+    with pytest.raises(ValueError):
+        build_messages({**it, "task_mention_swapped": None}, "mention_swapped", few)
 
 
 # ---------------- natural items ----------------
@@ -259,3 +285,105 @@ def test_natural_dedupe_keeps_the_shortest_history():
     items, log = I.build_natural(db, [_traj(longer + [bad], "long"), _traj(reads + [bad], "short")], set())
     assert [t["provenance"]["simulation_id"] for t in items] == ["short"]
     assert log["dropped: same order, tool and error as a kept item"] == 1
+
+
+# ---------------- review 1: product reads, comparison item, claims, candidates, witnesses ----------------
+
+
+def _shown_products(it):
+    return [x["arguments"]["product_id"] for x in it["history"] if x["name"] == "get_product_details"]
+
+
+def _order_rec(it, oid):
+    return next(json.loads(x["output"]) for x in it["history"] if x["arguments"].get("order_id") == oid)
+
+
+def test_product_reads_follow_the_orders_counterbalanced_order(built):
+    db = base_db()
+    few, users = built["fewshot"], {ex["user_id"] for ex in built["fewshot"]}
+    counts = Counter()
+    for it in built["generated"]:
+        if it["cls"] != "unavailable":
+            continue
+        tp = next(i["product_id"] for i in _order_rec(it, it["order_id"])["items"] if i["item_id"] == it["item_id"])
+        cp = next(i["product_id"] for i in _order_rec(it, it["comparison_order_id"])["items"] if i["item_id"] == it["comparison_item_id"])
+        want = [tp, cp] if it["target_first"] else [cp, tp]
+        assert _shown_products(it) == list(dict.fromkeys(want))
+        if tp != cp:
+            counts[_shown_products(it)[0] == tp] += 1
+    assert 0.4 < counts[True] / sum(counts.values()) < 0.6
+    it = next(t for t in built["generated"] if t["cls"] == "unavailable" and len(_shown_products(t)) == 2)
+    h = it["history"]
+    swapped_reads = {**it, "history": h[:3] + [h[4], h[3]]}
+    assert any("counterbalanced" in p for p in item_problems(swapped_reads, db, few, users))
+
+
+def test_comparison_item_avoids_the_target_product_name(built):
+    db = base_db()
+    few, users = built["fewshot"], {ex["user_id"] for ex in built["fewshot"]}
+    for it in built["generated"]:
+        if it["comparison_product"] is None:
+            continue
+        tool = it["action"]["name"]
+        names = {i["name"] for i in _order_rec(it, it["comparison_order_id"])["items"]
+                 if I.KIND[tool] != "swap" or len(db["products"][i["product_id"]]["variants"]) >= 2}
+        if names - {it["product"]}:
+            assert it["comparison_product"] != it["product"]
+    it = next(t for t in built["generated"] if t["comparison_product"] and t["comparison_product"] != t["product"])
+    planted = {**it, "comparison_product": it["product"]}
+    assert any("comparison item" in p for p in item_problems(planted, db, few, users))
+
+
+def test_claim_check_refuses_a_swap_of_a_one_option_product():
+    db = {"users": {"u": {"orders": ["#W1"]}}, "orders": {"#W1": {"items": [{"name": "Lamp", "product_id": "p1", "item_id": "i1"}]}},
+          "products": {"p1": {"variants": {"i1": {}}}}}
+    assert I.claim_problems(db, "u", "modify_pending_order_items", "#W1", "Lamp") == ["product has one option"]
+    assert I.claim_problems(db, "u", "return_delivered_order_items", "#W1", "Lamp") == []
+    db["products"]["p1"]["variants"]["i2"] = {}
+    assert I.claim_problems(db, "u", "exchange_delivered_order_items", "#W1", "Lamp") == []
+
+
+def test_every_generated_candidate_fails_as_its_class_predicts(built):
+    """The generator proposes only actions that fail with their class; no candidate is rejected for succeeding or
+    failing otherwise (only twins that fail a second check are rejected)."""
+    log = built["log"]["generated"]
+    assert not [k for k in log if "action gave" in k]
+    db = base_db()
+    for it in built["generated"]:
+        if it["cls"] == "wrong_return_pm":
+            pm = it["action"]["arguments"]["payment_method_id"]
+            assert db["users"][it["user_id"]]["payment_methods"][pm]["source"] != "gift_card"
+
+
+def test_witnesses_are_real_successes_with_class_failure_texts(built):
+    db = base_db()
+    few, users = built["fewshot"], {ex["user_id"] for ex in built["fewshot"]}
+    seen = Counter()
+    for it in built["generated"]:
+        if not it["main_pool"]:
+            assert it["witness_output"] is None and it["witness_failure"] is None
+            continue
+        w = it["aligned_witness"]
+        env = fresh_env()
+        env.replay(it["history"])
+        assert env.call(w["name"], w["arguments"]) == it["witness_output"] and it["witness_output"].startswith('{"order_id"')
+        assert it["witness_failure"].startswith("Error: ") and error_class(it["witness_failure"]) == it["cls"]
+        assert it["witness_checker"] == check(it["history"], w).verdict != "FAIL"
+        seen[(it["cls"], it["witness_checker"])] += 1
+        assert it["task_mention_aligned"] == f"The user has a question about order {it['order_id']}."
+        assert it["task_mention_swapped"] == f"The user has a question about order {it['comparison_order_id']}."
+    # a status item's witness changes the tool, and its success needs a variant's availability that is not shown
+    assert seen[("status", "UNKNOWN")] > 0 and seen[("unavailable", "PASS")] > 0
+    assert not [k for k in seen if k[0] != "status" and k[1] != "PASS"]
+    it = next(t for t in built["generated"] if t["main_pool"])
+    for planted in ({**it, "witness_output": it["witness_output"].replace("1", "2", 1)}, {**it, "witness_failure": "Error: x"},
+                    {**it, "task_mention_swapped": it["task_mention_aligned"]}, {**it, "target_product_id": "0"}):
+        assert item_problems(planted, db, few, users)
+    texts = {"modify_pending_order_items": "Error: Non-pending order cannot be modified",
+             "exchange_delivered_order_items": "Error: Non-delivered order cannot be exchanged"}
+    status = [t for t in built["generated"] if t["main_pool"] and t["cls"] == "status"]
+    assert {t["aligned_witness"]["name"] for t in status} == set(texts)
+    assert all(t["witness_failure"] == texts[t["aligned_witness"]["name"]] for t in status)
+    for t in built["generated"]:
+        if t["main_pool"] and t["cls"] == "unavailable":
+            assert t["witness_failure"] == f"Error: New item {t['aligned_witness']['arguments']['new_item_ids'][0]} not found or available"

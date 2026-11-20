@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -226,3 +227,31 @@ def test_bypass_skips_only_the_named_check():
     assert base_db()["orders"][o["order_id"]]["status"] == "processed"
     with pytest.raises(ValueError):
         RetailEnv(State(retail.load_db_from_disk()).fork(), frozenset({"everything"}))
+
+
+# ---------------- upstream golden outputs of every write tool (scripts/tau_upstream_golden.py) ----------------
+
+GOLDEN = json.loads((Path(__file__).parent / "data" / "tau_upstream_golden.json").read_text(encoding="utf-8"))
+
+
+def patched_env(patches):
+    """A fresh port environment with the case's gift-card balances set, as the golden script set them upstream."""
+    env = fresh_env()
+    for p in patches:
+        env.state.own_user(p["user_id"])
+        env.state.users[p["user_id"]]["payment_methods"][p["pm"]]["balance"] = float(p["balance"])
+    return env
+
+
+def test_golden_file_is_from_the_pinned_commit_and_covers_every_write_tool():
+    assert GOLDEN["pinned_commit"] == retail.PINNED_COMMIT
+    tools = {c["name"] for case in GOLDEN["cases"] for c in case["calls"]}
+    assert set(retail.WRITE_TOOLS) | {"calculate"} <= tools
+    assert any(c["output"].startswith("Error") for case in GOLDEN["cases"] for c in case["calls"])
+
+
+@pytest.mark.parametrize("case", GOLDEN["cases"], ids=[c["name"] for c in GOLDEN["cases"]])
+def test_writes_match_upstream_byte_for_byte(case):
+    env = patched_env(case["patches"])
+    for c in case["calls"]:
+        assert env.call(c["name"], c["arguments"]) == c["output"], (case["name"], c["name"])

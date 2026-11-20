@@ -1,11 +1,22 @@
 run_id: tau_score
-# τ-bench retail scoring (notes/tau_design.md §6): main population and natural set, aligned/swapped/neutral,
-# first token, yes/no and full replies, both co-primary models. Sharded by user: WF_SHARD / WF_N_SHARDS.
+# τ-bench retail scoring (notes/tau_design.md §6, amended 2026-11-20 after review 1): main population and natural set,
+# both co-primary models. Per item: the failing call under the aligned, swapped and neutral task lines (first token,
+# yes/no, full replies), the mention-only pair (first token, yes/no), the manipulation check (aligned, swapped), the
+# success witness (all readouts), and for the rules-only arm's 500 items the failing call without the agent policy.
+# Sharded by user: WF_SHARD / WF_N_SHARDS. Time per shard: pace/tau_score.sbatch.
 build_run: tau_build
 verify_run: tau_verify
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
 readouts: [first, yn, full]
+witness: true
+mention: true
+target_check: true
+rules_arm_items: 500
 score_natural: true
 score_unachievable: false
-n_shards: 8
-expected_items_sha256: b6337c43ae503be5bf9ae990502a5cc83eb901972609638d5247d6d3b12a6a10  # local build at a1a60ea; an ICE rebuild must reproduce it
+n_shards: 16
+# sha256 of the local build at the amendments of 2026-11-20 (an ICE rebuild must reproduce them; scoring refuses others)
+expected_outputs_sha256:
+  items.jsonl: 972084939bbdd831d54a3fc2c15a47afb3535d67b9729194699981f172ea46b4
+  natural_items.jsonl: 6748606e8e6e98904845ab070a9038b2b072fe406c4905e47e107bb37bac2194
+  fewshot.json: 53feb550fd909213f370e7b55ed6b4751450d102097a9b6f9d9b724ce7700c7a

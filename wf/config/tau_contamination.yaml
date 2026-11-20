@@ -1,8 +1,13 @@
 run_id: tau_contamination
-# Exploratory pretraining-contamination check (notes/tau_design.md §10): 50 user, 50 order and 50 product records,
-# verbatim against identifier-digit-resampled. One job, both models.
+# Exploratory pretraining-contamination check (notes/tau_design.md §10, amended 2026-11-20): 50 user, 50 order and 50
+# product records, verbatim against identifier-digit-resampled (addresses kept verbatim). One job, both models;
+# Llama-3.1 (cutoff Dec 2023, before tau-bench) is the no-memorisation baseline.
 build_run: tau_build
 verify_run: tau_verify
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
 per_kind: 50
-expected_items_sha256: b6337c43ae503be5bf9ae990502a5cc83eb901972609638d5247d6d3b12a6a10  # local build at a1a60ea; an ICE rebuild must reproduce it
+# sha256 of the local build at the amendments of 2026-11-20 (an ICE rebuild must reproduce them; scoring refuses others)
+expected_outputs_sha256:
+  items.jsonl: 972084939bbdd831d54a3fc2c15a47afb3535d67b9729194699981f172ea46b4
+  natural_items.jsonl: 6748606e8e6e98904845ab070a9038b2b072fe406c4905e47e107bb37bac2194
+  fewshot.json: 53feb550fd909213f370e7b55ed6b4751450d102097a9b6f9d9b724ce7700c7a

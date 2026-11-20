@@ -1,8 +1,10 @@
-"""World-model prompts for the τ-bench retail items (notes/tau_design.md §5).
+"""World-model prompts for the τ-bench retail items (notes/tau_design.md §5, as amended 2026-11-20 after review 1).
 
-System message: instruction, the retail policy and the tool schemas. Each user turn: the task line, the tool
-calls so far with their outputs, the next call and "Tool output:". Three few-shot examples precede the query.
-The aligned, swapped and neutral prompts differ only in the query's task line.
+System message (main arm): instruction, how the backend checks write calls, the retail policy and the tool schemas.
+The rules-only arm (exploratory) drops the agent-facing policy and keeps the backend's rules. Each user turn: the
+task line, the tool calls so far with their outputs, the next call and a cue. Four few-shot examples precede the
+query. Every condition of one item differs from the others only in the query's task line; the action (the failing
+call or its success witness) and the question (output cue, yes/no, or the manipulation check) are fixed per job.
 """
 from __future__ import annotations
 
@@ -17,18 +19,51 @@ INSTRUCTION = (
     "agent's next tool call, predict the exact output of the tool call. Successful calls return JSON; failed "
     "calls return a single line starting with \"Error: \". Output only the tool output."
 )
+
+# The backend's enforced preconditions, exactly as the tools check them (design §7.2). Identical in every condition.
+_BACKEND_LEAD = {
+    "main": ("The policy below is written for the agent. The backend sees only each call's name and arguments and the "
+             "current database: it does not see the user's messages or task, and it does not check the agent's conduct "
+             "(authentication, confirmation with the user). It does check the following, and a write call that breaks "
+             "any of them returns an error and changes nothing."),
+    "rules_only": ("The backend sees only each call's name and arguments and the current database: it does not see the "
+                   "user's messages or task. It checks the following, and a write call that breaks any of them returns "
+                   "an error and changes nothing."),
+}
+BACKEND_RULES = """- cancel_pending_order: the order's status is exactly "pending", and the reason is "no longer needed" or "ordered by mistake".
+- modify_pending_order_address: the order's status contains "pending" (so "pending (item modified)" is accepted).
+- modify_pending_order_payment: the order's status contains "pending"; the payment method is one of the user's; the order has exactly one payment; the new method differs from that payment's method; a gift card's balance is at least that payment's amount.
+- modify_pending_order_items: the order's status is exactly "pending"; every old item is in the order; each new item is a different variant of the same product and is available; the payment method is one of the user's; a gift card's balance is at least the total price difference.
+- exchange_delivered_order_items: the order's status is exactly "delivered"; every old item is in the order; each new item is a variant of the same product and is available; the payment method is one of the user's; a gift card's balance is at least the price difference.
+- return_delivered_order_items: the order's status is exactly "delivered"; the refund method is one of the user's and is either the order's original payment method (the first entry of its payment_history) or a gift card; every item is in the order.
+
+A successful order write returns the updated order as JSON. Afterwards its status is "cancelled" (cancel), "pending (item modified)" (modify items), "exchange requested" (exchange) or "return requested" (return); address and payment changes keep the status."""
+
 YN_QUESTION = ("Question: will this tool call succeed, or will it return an error? Answer Yes if it succeeds and No "
                "if it returns an error.\nAnswer:")
+# Manipulation check (amendment of 2026-11-20): is the task line read at all in a ~9k-token prompt?
+TARGET_QUESTION = ("Question: is this call on the order the user asked about? Answer Yes if it is and No if it is not."
+                   "\nAnswer:")
 OUTPUT_CUE = "Tool output:"
 CONDITIONS = ("aligned", "swapped", "neutral")
+MENTION_CONDITIONS = ("mention_aligned", "mention_swapped")
+ALL_CONDITIONS = CONDITIONS + MENTION_CONDITIONS
+ARMS = ("main", "rules_only")
+CUES = {"output": OUTPUT_CUE, "yn": YN_QUESTION, "target": TARGET_QUESTION}
+N_FEWSHOT = 4
 
 
-@lru_cache(maxsize=1)
-def system_message() -> str:
-    policy = (VENDOR / "policy.md").read_text(encoding="utf-8").strip()
+@lru_cache(maxsize=2)
+def system_message(arm: str = "main") -> str:
+    if arm not in ARMS:
+        raise ValueError(f"unknown arm {arm!r}")
     tools = json.loads((VENDOR / "tools_openai.json").read_text(encoding="utf-8"))
     tool_lines = "\n".join(json.dumps(t, ensure_ascii=False) for t in tools)
-    return f"{INSTRUCTION}\n\n{policy}\n\n# Tools\n\n{tool_lines}"
+    backend = f"# How the backend checks write calls\n\n{_BACKEND_LEAD[arm]}\n\n{BACKEND_RULES}"
+    if arm == "rules_only":
+        return f"{INSTRUCTION}\n\n{backend}\n\n# Tools\n\n{tool_lines}"
+    policy = (VENDOR / "policy.md").read_text(encoding="utf-8").strip()
+    return f"{INSTRUCTION}\n\n{backend}\n\n{policy}\n\n# Tools\n\n{tool_lines}"
 
 
 def render_call(name: str, arguments: dict) -> str:
@@ -41,25 +76,40 @@ def render_history(history: list[dict]) -> str:
     return "\n\n".join(f"Call: {render_call(h['name'], h['arguments'])}\nOutput: {h['output']}" for h in history)
 
 
-def user_turn(task: str, history: list[dict], action: dict, yes_no: bool = False) -> str:
-    end = YN_QUESTION if yes_no else OUTPUT_CUE
+def user_turn(task: str, history: list[dict], action: dict, yes_no: bool = False, cue: str | None = None) -> str:
+    end = CUES[cue] if cue else (YN_QUESTION if yes_no else OUTPUT_CUE)
     return (f"Task: {task}\n\nTool calls so far:\n{render_history(history)}\n\n"
             f"Next call: {render_call(action['name'], action['arguments'])}\n{end}")
 
 
 def task_for(item: dict, condition: str) -> str:
-    line = {"aligned": item["task_aligned"], "swapped": item.get("task_swapped"), "neutral": item["task_neutral"]}[condition]
+    lines = {"aligned": item["task_aligned"], "swapped": item.get("task_swapped"), "neutral": item["task_neutral"],
+             "mention_aligned": item.get("task_mention_aligned"), "mention_swapped": item.get("task_mention_swapped")}
+    line = lines[condition]
     if not line:
         raise ValueError(f"{item['id']}: no {condition} task line")  # never quietly score another condition
     return line
 
 
-def build_messages(item: dict, condition: str, fewshot: list[dict], yes_no: bool = False) -> list[dict[str, str]]:
-    if len(fewshot) != 3:
-        raise ValueError("the design fixes three few-shot examples")
-    messages = [{"role": "system", "content": system_message()}]
+def action_for(item: dict, action: str) -> dict:
+    """The scored call: the item's failing write, or its recorded success witness on the same state."""
+    if action == "fail":
+        return item["action"]
+    if action == "witness":
+        if not item.get("aligned_witness"):
+            raise ValueError(f"{item['id']}: no witness")
+        return item["aligned_witness"]
+    raise ValueError(action)
+
+
+def build_messages(item: dict, condition: str, fewshot: list[dict], yes_no: bool = False, *, cue: str | None = None,
+                   action: str = "fail", arm: str = "main") -> list[dict[str, str]]:
+    if len(fewshot) != N_FEWSHOT:
+        raise ValueError(f"the design fixes {N_FEWSHOT} few-shot examples")
+    messages = [{"role": "system", "content": system_message(arm)}]
     for ex in fewshot:
         messages.append({"role": "user", "content": user_turn(ex["task"], ex["history"], ex["action"])})
         messages.append({"role": "assistant", "content": ex["output"]})
-    messages.append({"role": "user", "content": user_turn(task_for(item, condition), item["history"], item["action"], yes_no)})
+    messages.append({"role": "user", "content": user_turn(task_for(item, condition), item["history"],
+                                                          action_for(item, action), yes_no, cue)})
     return messages
