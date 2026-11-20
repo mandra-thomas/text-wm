@@ -1,0 +1,14 @@
+run_id: family_placement_mistral-7b-v0.3
+# Model families, wave A, exploratory placement check (logged 2026-11-20 before any wave A score was read;
+# notes/families_design.md): Mistral 7B Instruct v0.3 at its pinned revision with the system text folded into the
+# FIRST user turn (as for Gemma 2) instead of the template's last-turn placement, on 300 seeded primary items under
+# the aligned and swapped tasks, two-candidate and yes/no. Scores are saved under the tag mistral-7b-v0.3-firstturn;
+# families_analysis compares them with family_score_mistral-7b-v0.3 on the same items.
+model: mistral-7b-v0.3
+n_items: 300
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_shards: 1
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

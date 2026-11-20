@@ -1,0 +1,11 @@
+run_id: family_score_mistral-7b-v0.3
+# Model families, wave A (decided 2026-11-20; notes/families_design.md): Mistral 7B Instruct v0.3 (mistralai/Mistral-7B-Instruct-v0.3), pinned in
+# wf.constants.REVISIONS, scored with the size series' prompts and arms (wf/families.py). One shard by default;
+# WF_N_SHARDS / WF_SHARD split it by game.
+model: mistral-7b-v0.3
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_shards: 1
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

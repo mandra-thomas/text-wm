@@ -91,7 +91,13 @@ class LogoddsScorer:
         model_tag: str | None = None,
         device: str | None = None,
         dtype: str = "bfloat16",
+        attn_implementation: str | None = None,
+        template_kwargs: dict[str, Any] | None = None,
+        load: bool = True,
     ):
+        """`attn_implementation` is passed to from_pretrained when set (Gemma 2 needs "eager"; wf/families.py);
+        `template_kwargs` go to every apply_chat_template call (Llama 3.2's fixed date_string). The defaults leave
+        every earlier run's loading and prompts unchanged. `load=False` loads nothing (for_tokenizer)."""
         self.model_name = model_name
         self.model_tag = model_tag or model_name.split("/")[-1].lower()
         self.mock = os.environ.get("WF_MOCK_SCORE", "0") == "1"
@@ -102,8 +108,19 @@ class LogoddsScorer:
         self._tok = None
         self.device = device
         self.dtype = dtype
-        if not self.mock:
+        self.attn_implementation = attn_implementation
+        self.template_kwargs = dict(template_kwargs or {})
+        if not self.mock and load:
             self._load()
+
+    @classmethod
+    def for_tokenizer(cls, model_name: str, tokenizer: Any, **kw: Any) -> "LogoddsScorer":
+        """A scorer that holds a tokenizer and no model. It encodes prompts and candidates exactly as scoring does
+        (`_encode`, `_encode_candidate`), for checks that need no GPU: the families gate's tests and its check on
+        CPU (wf/families.py)."""
+        scorer = cls(model_name, load=False, **kw)
+        scorer._tok = tokenizer
+        return scorer
 
     def _load(self) -> None:
         import torch
@@ -113,14 +130,19 @@ class LogoddsScorer:
         # template that is, so a later push to the Hub cannot change them.
         self._tok = AutoTokenizer.from_pretrained(self.model_name, revision=self.revision, trust_remote_code=True)
         torch_dtype = getattr(torch, self.dtype, torch.bfloat16)
+        extra = {"attn_implementation": self.attn_implementation} if self.attn_implementation else {}
         self._model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             revision=self.revision,
             torch_dtype=torch_dtype,
             device_map="auto",
             trust_remote_code=True,
+            **extra,
         )
         self._model.eval()
+        loaded = getattr(self._model.config, "_attn_implementation", None)
+        if self.attn_implementation and loaded != self.attn_implementation:
+            raise RuntimeError(f"{self.model_name}: asked for {self.attn_implementation} attention, loaded {loaded}")
 
     def close(self) -> None:
         """Free the GPU before the next model loads; one A100 holds one 8B model at a time."""
@@ -140,14 +162,26 @@ class LogoddsScorer:
         h = hashlib.sha256(repr(prompt_messages_or_text).encode()).hexdigest()
         return int(h[:2], 16) % 2 == 0
 
-    def _encode(self, messages: list[dict[str, str]]) -> Any:
+    def template_settings(self) -> dict[str, Any]:
+        """Every setting the chat template renders with: thinking off (read only by templates that have the switch,
+        Qwen3's), plus the model's own (Llama 3.2's fixed date)."""
+        return {"enable_thinking": False, **self.template_kwargs}
+
+    def _encode(self, messages: list[dict[str, str]], add_generation_prompt: bool = True) -> Any:
+        """The ids (1 x n) of `messages` as the chat template renders them. With the generation prompt, the default,
+        this is the prompt every score is read after. Without it, the tokenization gate renders a conversation
+        that ends in the assistant's reply (wf/families.py)."""
         return self._tok.apply_chat_template(
             messages,
             tokenize=True,
-            add_generation_prompt=True,
+            add_generation_prompt=add_generation_prompt,
             return_tensors="pt",
-            enable_thinking=False,
+            **self.template_settings(),
         )
+
+    def _encode_candidate(self, text: str) -> Any:
+        """A candidate's ids (1 x n), tokenized alone with no special tokens: the tokens a score is read for."""
+        return self._tok(text, return_tensors="pt", add_special_tokens=False).input_ids
 
     def _teacher_force_logprob(self, messages: list[dict[str, str]], candidate: str) -> tuple[float, int, float, str]:
         """(log p of the whole candidate, its token count, log p of its first token, that token decoded)."""
@@ -168,7 +202,7 @@ class LogoddsScorer:
 
         assert self._model is not None and self._tok is not None
         prompt_ids = self._encode(messages)
-        cand_ids = self._tok(candidate, return_tensors="pt", add_special_tokens=False).input_ids
+        cand_ids = self._encode_candidate(candidate)
         input_ids = torch.cat([prompt_ids, cand_ids], dim=1)
         device = next(self._model.parameters()).device
         input_ids = input_ids.to(device)
@@ -243,7 +277,7 @@ class LogoddsScorer:
         import torch
 
         assert self._model is not None and self._tok is not None
-        ids = [self._tok(c, return_tensors="pt", add_special_tokens=False).input_ids[0].tolist() for c in (o_plus, o_minus)]
+        ids = [self._encode_candidate(c)[0].tolist() for c in (o_plus, o_minus)]
         if any(len(i) != 1 for i in ids):
             raise ValueError(f"not single tokens: {o_plus!r} -> {ids[0]}, {o_minus!r} -> {ids[1]}")
         prompt_ids = self._encode(messages).to(next(self._model.parameters()).device)
