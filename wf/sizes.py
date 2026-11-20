@@ -11,13 +11,14 @@ import math
 import os
 import random
 from collections import defaultdict
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 from wf import constants as C
 from wf import rq1, rq1v, rq1x
 from wf.analysis.report import write_run_report
 from wf.analysis.stats import decision_flip_share
-from wf.rq2 import SOURCES, complete_shards, load_items, shard_items
+from wf.rq2 import SOURCES, analysis_provenance, complete_shards, load_items, shard_items
 from wf.runs import _effect, _finished, _init_run, _item_hash
 from wf.scoring.logodds import LogoddsScorer
 from wf.tools.verify_items import verified
@@ -51,9 +52,25 @@ def size_jobs(primary: list[dict], successes: list[dict]) -> list[tuple[dict, st
 
 
 def run_size_score(cfg: dict) -> int:
-    run_id, tag = cfg["run_id"], cfg["model"]
+    tag = cfg["model"]
     if tag not in SIZES:
         raise SystemExit(f"unknown model {tag!r}; known: {sorted(SIZES)}")
+    return score_shard(cfg, tag, lambda: LogoddsScorer(SIZES[tag][0], model_tag=tag), arm_messages)
+
+
+def score_shard(cfg: dict, tag: str, open_scorer: Callable[[], LogoddsScorer],
+                messages: Callable[[dict, str], list[dict[str, str]] | None],
+                gate: Callable[[Path, LogoddsScorer, list[dict], list[dict]], None] | None = None,
+                select: Callable[[list[dict], list[dict]], tuple[list[dict], list[dict]]] | None = None,
+                arms: tuple[str, ...] | None = None) -> int:
+    """One shard of one model's scoring, shared by size_score_<tag> and family_score_<tag> (wf/families.py).
+
+    `messages(item, arm)` builds each prompt; `gate(folder, scorer, primary, successes)` runs once the model is
+    loaded and before any score, on every item of the shard (on a resume too), and stops the job by raising.
+    `select(primary, successes)` narrows the items before sharding and `arms` the conditions (the families
+    placement check); left out, every item and arm is scored, as before. Every score is saved as it finishes.
+    """
+    run_id = cfg["run_id"]
     require_filed(run_id)
     i = int(os.environ.get("WF_SHARD") or cfg.get("shard", 0))
     n = int(os.environ.get("WF_N_SHARDS") or cfg.get("n_shards", 1))
@@ -67,7 +84,9 @@ def run_size_score(cfg: dict) -> int:
     cfg = {**cfg, "run_id": run_id, "shard": i, "n_shards": n}
     d = _init_run(run_id, cfg, inputs=())
     sets = rq1x.rq1x_sets(load_items(sources))
-    jobs = size_jobs(shard_items(sets["primary"], i, n), shard_items(sets["successes"], i, n))
+    primary, successes = (select or (lambda p, s: (p, s)))(sets["primary"], sets["successes"])
+    primary, successes = shard_items(primary, i, n), shard_items(successes, i, n)
+    jobs = [(t, a) for t, a in size_jobs(primary, successes) if arms is None or a in arms]
     hashes = {t["id"]: _item_hash(t) for t, _ in jobs}
     saved = read_jsonl(d / "scoring.jsonl") if cfg.get("resume") else []
     if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):
@@ -75,13 +94,19 @@ def run_size_score(cfg: dict) -> int:
     done = {(s["transition_id"], s["condition"]) for s in saved}
     todo = [(t, a) for t, a in jobs if (t["id"], a) not in done]
     if todo:
-        scorer = LogoddsScorer(SIZES[tag][0], model_tag=tag)
+        scorer = open_scorer()
+        if gate is not None:
+            try:
+                gate(d, scorer, primary, successes)
+            except Exception as e:
+                write_status(run_id, f"stopped before scoring: {e}", ok=False)
+                raise
         for t, arm in todo:
             if arm in YN_ARMS:
-                sc = scorer.score_one_token_pair(transition_id=t["id"], condition=arm, messages=arm_messages(t, arm),
+                sc = scorer.score_one_token_pair(transition_id=t["id"], condition=arm, messages=messages(t, arm),
                                                  o_plus="Yes", o_minus="No")
             else:
-                sc = scorer.score_pair(transition_id=t["id"], condition=arm, messages=arm_messages(t, arm),
+                sc = scorer.score_pair(transition_id=t["id"], condition=arm, messages=messages(t, arm),
                                        o_plus=t["candidates"]["o_plus"], o_minus=t["candidates"]["o_minus"])
             append_jsonl(d / "scoring.jsonl", [{**sc.to_dict(), "game_id": t["game_id"], "item_hash": hashes[t["id"]]}])
         scorer.close()
@@ -96,7 +121,12 @@ def _mean_s(s: list[dict], items: list[dict], arm: str) -> float:
 
 
 def _flips(s: list[dict], items: list[dict], a: str = "aligned", b: str = "swapped") -> float:
-    by = {(x["transition_id"], x["condition"]): x["L"] for x in s}
+    """Share of items whose full L is above zero under `a` and below zero under `b` (one direction).
+
+    NaN scores are left out of the count and the denominator alike (before 2026-11-20 a NaN pair counted as a
+    non-flip, audit B4).
+    """
+    by = {(x["transition_id"], x["condition"]): x["L"] for x in s if x["L"] == x["L"]}
     pairs = [(by[(t["id"], a)], by[(t["id"], b)]) for t in items if (t["id"], a) in by and (t["id"], b) in by]
     return sum(1 for x, y in pairs if x > 0 > y) / len(pairs) if pairs else float("nan")
 
@@ -159,9 +189,13 @@ def size_slope(per_model: dict[str, dict[str, list[float]]], B: int = 1000) -> d
     games = sorted({g for m in tags for g in per_model[m]})
     est = slope(games)
     rng = random.Random(C.RNG_SEED)
-    boots = sorted(slope([rng.choice(games) for _ in games]) for _ in range(B))
-    return {"estimate": est, "ci": [boots[int(0.025 * B)], boots[int(0.975 * B) - 1]], "models": tags,
-            "log_params": xs}
+    # A resample in which some size has no item gives a NaN slope; it is dropped, not sorted in (NaN does not
+    # order, so it would scramble the percentiles; audit B4). The count dropped is reported.
+    draws = [slope([rng.choice(games) for _ in games]) for _ in range(B)]
+    boots = sorted(b for b in draws if b == b)
+    k = len(boots)
+    ci = [boots[int(0.025 * k)], boots[int(0.975 * k) - 1]] if k else [float("nan"), float("nan")]  # as before
+    return {"estimate": est, "ci": ci, "models": tags, "log_params": xs, "n_resamples_dropped_nan": B - k}
 
 
 def run_size_analysis(cfg: dict) -> int:
@@ -172,11 +206,13 @@ def run_size_analysis(cfg: dict) -> int:
     report: dict[str, Any] = {"items": {"n_primary": len(sets["primary"]), "n_successes": len(sets["successes"])},
                               "models": {}, "waiting": {}}
     per_model: dict[str, dict] = {}
+    read: dict[str, list] = {}
     for tag in cfg["models"]:
         folders, problems = complete_shards(f"size_score_{tag}")
         if problems:
             report["waiting"][tag] = problems
             continue
+        read[f"size_score_{tag}"] = folders
         s = [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag]
         report["models"][tag] = {"params_b": SIZES[tag][1], **model_block(s, sets["primary"], sets["successes"])}
         per_model[tag] = {arms: _diffs_by_game(s, sets["primary"], *arms)
@@ -184,6 +220,7 @@ def run_size_analysis(cfg: dict) -> int:
     if len(per_model) >= 3:
         report["slope_vs_log_params"] = {arms[0]: size_slope({m: v[arms] for m, v in per_model.items()})
                                          for arms in (("aligned", "swapped"), ("yn_aligned", "yn_swapped"))}
+    report["provenance"] = analysis_provenance(None, [], cfg.get("sources", SOURCES), others=read)
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Model-size series, Qwen3 dense (exploratory)", report)
     lines = [f"{tag} ({m['params_b']}B): dL {m['goal_effect']['delta_L_nats']:.2f}, flips {m['flips_to_success']:.3f}, "

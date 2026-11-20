@@ -1,0 +1,3522 @@
+{
+  "exclusion_flow": {
+    "collector_exclusion_counts": {
+      "no_success_twin": 2132,
+      "no_swap_object": 658,
+      "not_context_determined": 41,
+      "shared_location": 1,
+      "twin_contradicts_state": 508
+    },
+    "flow": [
+      {
+        "games": 134,
+        "remaining": 12987,
+        "stage": "collected"
+      },
+      {
+        "dropped": 3120,
+        "dropped_by_recorded_reason": {
+          "-": 2875,
+          "no_swap_object": 243,
+          "shared_location": 2
+        },
+        "games": 134,
+        "remaining": 9867,
+        "stage": "true failure (reply was \"Nothing happens.\")"
+      },
+      {
+        "dropped": 0,
+        "dropped_by_recorded_reason": {},
+        "games": 134,
+        "remaining": 9867,
+        "stage": "environment reply parseable"
+      },
+      {
+        "dropped": 41,
+        "dropped_by_recorded_reason": {
+          "-": 8,
+          "no_success_twin": 20,
+          "shared_location": 13
+        },
+        "games": 134,
+        "remaining": 9826,
+        "stage": "failure determined by the history"
+      },
+      {
+        "dropped": 2640,
+        "dropped_by_recorded_reason": {
+          "no_success_twin": 2132,
+          "twin_contradicts_state": 508
+        },
+        "games": 134,
+        "remaining": 7186,
+        "stage": "success twin attached"
+      },
+      {
+        "dropped": 658,
+        "dropped_by_recorded_reason": {
+          "no_swap_object": 658
+        },
+        "games": 125,
+        "remaining": 6528,
+        "stage": "swapped goal available"
+      },
+      {
+        "dropped": 1,
+        "dropped_by_recorded_reason": {
+          "shared_location": 1
+        },
+        "games": 125,
+        "remaining": 6527,
+        "stage": "not at a shared spot"
+      },
+      {
+        "dropped": 861,
+        "dropped_by_recorded_reason": {
+          "-": 861
+        },
+        "games": 125,
+        "remaining": 5666,
+        "stage": "action names the goal object"
+      },
+      {
+        "dropped": 1000,
+        "dropped_by_recorded_reason": {
+          "-": 1000
+        },
+        "games": 125,
+        "remaining": 4666,
+        "stage": "history does not act on either goal object"
+      }
+    ],
+    "flow_matches_primary_set": true,
+    "games_with_no_swap_object_at_all": [
+      "valid_unseen/100",
+      "valid_unseen/101",
+      "valid_unseen/102",
+      "valid_unseen/135",
+      "valid_unseen/136",
+      "valid_unseen/137",
+      "valid_unseen/165",
+      "valid_unseen/166",
+      "valid_unseen/167"
+    ],
+    "primary_set_size": 4666,
+    "rq1_items": {
+      "determined_failures_not_shared": 6527,
+      "determined_successes_all": 309,
+      "determined_successes_not_shared": 307
+    },
+    "true_successes_collected": 3120
+  },
+  "first_token": {
+    "by_source": {
+      "rq1_score": {
+        "llama3.1-8b-fewshot": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.7341082804683247,
+              "median": 0.7629601881420145,
+              "p05": 0.4582624107235403,
+              "p25": 0.6456502176659953,
+              "share_below_0.5": 0.0833690527218174,
+              "share_below_0.9": 0.8947706815259323
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.8338996792838251,
+              "median": 0.8487474161218047,
+              "p05": 0.628753535341075,
+              "p25": 0.7662310579016633,
+              "share_below_0.5": 0.007501071581654522,
+              "share_below_0.9": 0.6843120445777968
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_full": {
+            "first_mass": {
+              "mean": 0.8030772946781479,
+              "median": 0.8196616008420338,
+              "p05": 0.5854056598787483,
+              "p25": 0.7273783511303811,
+              "share_below_0.5": 0.017573939134162022,
+              "share_below_0.9": 0.7687526789541363
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_ignore": {
+            "first_mass": {
+              "mean": 0.8745651364557153,
+              "median": 0.9012181702022439,
+              "p05": 0.6751643727826804,
+              "p25": 0.8209738270214464,
+              "share_below_0.5": 0.009429918559794257,
+              "share_below_0.9": 0.49357051007286756
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_plus": {
+            "first_mass": {
+              "mean": 0.8103540593511065,
+              "median": 0.82546728511171,
+              "p05": 0.5810909506040786,
+              "p25": 0.7343829795431331,
+              "share_below_0.5": 0.017145306472353194,
+              "share_below_0.9": 0.7301757393913416
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_set2": {
+            "first_mass": {
+              "mean": 0.870972963879252,
+              "median": 0.891277380370744,
+              "p05": 0.6839348441849531,
+              "p25": 0.8069500629532714,
+              "share_below_0.5": 0.0012858979854264896,
+              "share_below_0.9": 0.534076296613802
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_set3": {
+            "first_mass": {
+              "mean": 0.8300583452707796,
+              "median": 0.8520653136142528,
+              "p05": 0.5965380275511873,
+              "p25": 0.7694047943075486,
+              "share_below_0.5": 0.025075010715816547,
+              "share_below_0.9": 0.6819545649378482
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.7657188447013215,
+              "median": 0.8014690068475742,
+              "p05": 0.4538729434973046,
+              "p25": 0.684571838423058,
+              "share_below_0.5": 0.07286755250750107,
+              "share_below_0.9": 0.807329618516931
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_full": {
+            "first_mass": {
+              "mean": 0.7966200268673129,
+              "median": 0.8070322642375289,
+              "p05": 0.5964664192960119,
+              "p25": 0.7224413899937886,
+              "share_below_0.5": 0.009215602228889841,
+              "share_below_0.9": 0.8021860265752251
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_ignore": {
+            "first_mass": {
+              "mean": 0.8078428382904145,
+              "median": 0.8628489576294467,
+              "p05": 0.4152433619538841,
+              "p25": 0.7494225063372113,
+              "share_below_0.5": 0.07672524646378054,
+              "share_below_0.9": 0.6363051864552078
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_plus": {
+            "first_mass": {
+              "mean": 0.7783033385454872,
+              "median": 0.7913023907502499,
+              "p05": 0.554411464493064,
+              "p25": 0.702685326054653,
+              "share_below_0.5": 0.02700385769395628,
+              "share_below_0.9": 0.817188169738534
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_set2": {
+            "first_mass": {
+              "mean": 0.8441535369198648,
+              "median": 0.8656832962506374,
+              "p05": 0.6317621225385793,
+              "p25": 0.7812650463220041,
+              "share_below_0.5": 0.012430347192456065,
+              "share_below_0.9": 0.6086583797685383
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_set3": {
+            "first_mass": {
+              "mean": 0.820112476349059,
+              "median": 0.8416479974366768,
+              "p05": 0.5925997171470401,
+              "p25": 0.7564631061285598,
+              "share_below_0.5": 0.018002571795970854,
+              "share_below_0.9": 0.715387912558937
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          }
+        },
+        "qwen3-8b-fewshot": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.983823339458593,
+              "median": 0.9999952441394802,
+              "p05": 0.9315398296742528,
+              "p25": 0.9998348009911345,
+              "share_below_0.5": 0.007715387912558937,
+              "share_below_0.9": 0.03857693956279468
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9899742184663827,
+              "median": 0.9999933458899016,
+              "p05": 0.9637263425270208,
+              "p25": 0.9997368719547766,
+              "share_below_0.5": 0.0032147449635662236,
+              "share_below_0.9": 0.026360908701243035
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_full": {
+            "first_mass": {
+              "mean": 0.9935814176697808,
+              "median": 0.9999974137361163,
+              "p05": 0.9814965881854103,
+              "p25": 0.9999036343208986,
+              "share_below_0.5": 0.0030004286326618087,
+              "share_below_0.9": 0.016502357479639948
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_ignore": {
+            "first_mass": {
+              "mean": 0.9909955893781356,
+              "median": 0.9999985771744853,
+              "p05": 0.9617139868991849,
+              "p25": 0.9999250904767358,
+              "share_below_0.5": 0.0032147449635662236,
+              "share_below_0.9": 0.022288898414059153
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_plus": {
+            "first_mass": {
+              "mean": 0.9876571865336211,
+              "median": 0.9999915758011718,
+              "p05": 0.9433809910116138,
+              "p25": 0.9996275832614616,
+              "share_below_0.5": 0.0032147449635662236,
+              "share_below_0.9": 0.034076296613801974
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_set2": {
+            "first_mass": {
+              "mean": 0.9890798520638789,
+              "median": 0.9999989524063839,
+              "p05": 0.9833000254000468,
+              "p25": 0.9999127748883135,
+              "share_below_0.5": 0.008786969567081011,
+              "share_below_0.9": 0.020360051435919416
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "aligned_set3": {
+            "first_mass": {
+              "mean": 0.981105571001932,
+              "median": 0.9999993260937675,
+              "p05": 0.9442075927453041,
+              "p25": 0.9999281264968961,
+              "share_below_0.5": 0.014144877839691384,
+              "share_below_0.9": 0.036433776253750536
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9906889762059685,
+              "median": 0.9999978196936281,
+              "p05": 0.9605313060663669,
+              "p25": 0.9999160864829522,
+              "share_below_0.5": 0.002571795970852979,
+              "share_below_0.9": 0.026360908701243035
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_full": {
+            "first_mass": {
+              "mean": 0.9967857803239797,
+              "median": 0.9999990583270384,
+              "p05": 0.9936649073299284,
+              "p25": 0.9999857253998702,
+              "share_below_0.5": 0.0002143163309044149,
+              "share_below_0.9": 0.0100728675525075
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_ignore": {
+            "first_mass": {
+              "mean": 0.9916192282760836,
+              "median": 0.9999987924273722,
+              "p05": 0.979789880745125,
+              "p25": 0.9999640548543152,
+              "share_below_0.5": 0.0032147449635662236,
+              "share_below_0.9": 0.0186455207886841
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_plus": {
+            "first_mass": {
+              "mean": 0.9896872707443161,
+              "median": 0.9999894201581765,
+              "p05": 0.9579489762306701,
+              "p25": 0.9995696342910142,
+              "share_below_0.5": 0.0038576939562794685,
+              "share_below_0.9": 0.02657522503214745
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_set2": {
+            "first_mass": {
+              "mean": 0.993315815040431,
+              "median": 0.9999993510746217,
+              "p05": 0.9980556810202232,
+              "p25": 0.9999975429789194,
+              "share_below_0.5": 0.005572224603514788,
+              "share_below_0.9": 0.011573081868838405
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped_set3": {
+            "first_mass": {
+              "mean": 0.9915490928162806,
+              "median": 0.9999995389869855,
+              "p05": 0.9933082337768607,
+              "p25": 0.9999983053191258,
+              "share_below_0.5": 0.006000857265323617,
+              "share_below_0.9": 0.016502357479639948
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          }
+        },
+        "w2w-llama3.1-8b": {
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9998790230446091,
+              "median": 0.9999581209542991,
+              "p05": 0.9998645815779997,
+              "p25": 0.9999284573135072,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0002143163309044149
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9998469889269652,
+              "median": 0.9999571092775603,
+              "p05": 0.9998578033895893,
+              "p25": 0.9999275480985466,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          }
+        },
+        "w2w-qwen2.5-7b": {
+          "aligned": {
+            "first_mass": {
+              "mean": 1.0000154610801641,
+              "median": 0.9999991908244799,
+              "p05": 0.9999663970014612,
+              "p25": 0.9999978864791699,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9999822182336232,
+              "median": 0.9999992648476055,
+              "p05": 0.9999694312050177,
+              "p25": 0.9999980184062018,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          }
+        }
+      },
+      "rq1v_score": {
+        "llama3.1-8b-fewshot": {
+          "aligned": {
+            "first_mass": {
+              "mean": 0.8333505047588815,
+              "median": 0.8489487370573776,
+              "p05": 0.6260676876194236,
+              "p25": 0.7662236631401367,
+              "share_below_0.5": 0.007286755250750107,
+              "share_below_0.9": 0.6894556365195028
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "cf_aligned": {
+            "first_mass": {
+              "mean": 0.8426368733458174,
+              "median": 0.8656962694142778,
+              "p05": 0.6210311610710469,
+              "p25": 0.7718216233769947,
+              "share_below_0.5": 0.0121049092131809,
+              "share_below_0.9": 0.6042367182246133
+            },
+            "first_token_minus": {
+              "Nothing": 2974
+            },
+            "first_token_plus": {
+              "You": 2974
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 2974
+          },
+          "cf_aligned_plus": {
+            "first_mass": {
+              "mean": 0.8199797445250362,
+              "median": 0.841153632664408,
+              "p05": 0.5661662884054974,
+              "p25": 0.7375653770962819,
+              "share_below_0.5": 0.021856086079354405,
+              "share_below_0.9": 0.6519838601210491
+            },
+            "first_token_minus": {
+              "Nothing": 2974
+            },
+            "first_token_plus": {
+              "You": 2974
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 2974
+          },
+          "cf_swapped": {
+            "first_mass": {
+              "mean": 0.7613642195008589,
+              "median": 0.795469777163717,
+              "p05": 0.4417905391207223,
+              "p25": 0.6617773835298362,
+              "share_below_0.5": 0.08271687962340282,
+              "share_below_0.9": 0.7619367854741089
+            },
+            "first_token_minus": {
+              "Nothing": 2974
+            },
+            "first_token_plus": {
+              "You": 2974
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 2974
+          },
+          "cf_swapped_plus": {
+            "first_mass": {
+              "mean": 0.7705407442944817,
+              "median": 0.7847504113528674,
+              "p05": 0.5134086919292891,
+              "p25": 0.6736722165131751,
+              "share_below_0.5": 0.04135843981170141,
+              "share_below_0.9": 0.7747141896435776
+            },
+            "first_token_minus": {
+              "Nothing": 2974
+            },
+            "first_token_plus": {
+              "You": 2974
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 2974
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.7651744351972474,
+              "median": 0.8015871361322965,
+              "p05": 0.4525141515940846,
+              "p25": 0.6848714440007199,
+              "share_below_0.5": 0.0732961851693099,
+              "share_below_0.9": 0.8060437205315045
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "yn_absent": {
+            "first_mass": {
+              "mean": 0.9941729415102357,
+              "median": 0.9972019016788733,
+              "p05": 0.9796379096262114,
+              "p25": 0.9928835194329066,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0004033884630899556
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_aligned": {
+            "first_mass": {
+              "mean": 0.9926120197114642,
+              "median": 0.9955195313701184,
+              "p05": 0.9765836055563684,
+              "p25": 0.9909357760896563,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0002016942315449778
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_swapped": {
+            "first_mass": {
+              "mean": 0.9943501770928429,
+              "median": 0.9970968482868581,
+              "p05": 0.9792899610723252,
+              "p25": 0.9930432551797007,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          }
+        },
+        "qwen3-8b-fewshot": {
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9896189100428525,
+              "median": 0.9999930853461627,
+              "p05": 0.9597212969408939,
+              "p25": 0.9997376810160163,
+              "share_below_0.5": 0.0034290612944706386,
+              "share_below_0.9": 0.02743249035576511
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "cf_aligned": {
+            "first_mass": {
+              "mean": 0.9870702088348862,
+              "median": 0.9999889315115146,
+              "p05": 0.9431284689550544,
+              "p25": 0.9990890053489628,
+              "share_below_0.5": 0.004371217215870881,
+              "share_below_0.9": 0.03429724277067922
+            },
+            "first_token_minus": {
+              "Nothing": 2974
+            },
+            "first_token_plus": {
+              "You": 2974
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 2974
+          },
+          "cf_aligned_plus": {
+            "first_mass": {
+              "mean": 0.9847716484814826,
+              "median": 0.9999866118934536,
+              "p05": 0.9195768237524842,
+              "p25": 0.9986410740343219,
+              "share_below_0.5": 0.004707464694014795,
+              "share_below_0.9": 0.04169468728984533
+            },
+            "first_token_minus": {
+              "Nothing": 2974
+            },
+            "first_token_plus": {
+              "You": 2974
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 2974
+          },
+          "cf_swapped": {
+            "first_mass": {
+              "mean": 0.9862960408021935,
+              "median": 0.9999956109922112,
+              "p05": 0.933177954478757,
+              "p25": 0.999215764089247,
+              "share_below_0.5": 0.004371217215870881,
+              "share_below_0.9": 0.03799596503026227
+            },
+            "first_token_minus": {
+              "Nothing": 2974
+            },
+            "first_token_plus": {
+              "You": 2974
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 2974
+          },
+          "cf_swapped_plus": {
+            "first_mass": {
+              "mean": 0.9893132696251934,
+              "median": 0.9999730054249809,
+              "p05": 0.95529434215913,
+              "p25": 0.9990913187105483,
+              "share_below_0.5": 0.0033624747814391394,
+              "share_below_0.9": 0.027908540685944856
+            },
+            "first_token_minus": {
+              "Nothing": 2974
+            },
+            "first_token_plus": {
+              "You": 2974
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 2974
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9905621120290938,
+              "median": 0.9999977642217556,
+              "p05": 0.9583834080015294,
+              "p25": 0.9999203603991612,
+              "share_below_0.5": 0.002357479639948564,
+              "share_below_0.9": 0.026789541363051863
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "yn_absent": {
+            "first_mass": {
+              "mean": 0.9999999990375996,
+              "median": 1.0000000000024134,
+              "p05": 1.0000000000000344,
+              "p25": 1.0000000000005385,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_aligned": {
+            "first_mass": {
+              "mean": 0.9999999814535624,
+              "median": 1.0000000000178324,
+              "p05": 1.0000000000000728,
+              "p25": 1.000000000003979,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_swapped": {
+            "first_mass": {
+              "mean": 0.9999999995701417,
+              "median": 1.0000000000024134,
+              "p05": 1.0000000000000238,
+              "p25": 1.0000000000003266,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          }
+        }
+      },
+      "rq1x_score": {
+        "llama3.1-8b-fewshot": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.8368243205331417,
+              "median": 0.9874645201041163,
+              "p05": 0.005790893094858475,
+              "p25": 0.8308992847572456,
+              "share_below_0.5": 0.1232876712328767,
+              "share_below_0.9": 0.3150684931506849
+            },
+            "first_token_minus": {
+              "Nothing": 292
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 236
+            },
+            "first_token_plus_starts_with_You": 0.8082191780821918,
+            "n": 292
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.8161894115962685,
+              "median": 0.9690399270090109,
+              "p05": 0.006752971394987594,
+              "p25": 0.7716785748927808,
+              "share_below_0.5": 0.13356164383561644,
+              "share_below_0.9": 0.3253424657534247
+            },
+            "first_token_minus": {
+              "Nothing": 292
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 236
+            },
+            "first_token_plus_starts_with_You": 0.8082191780821918,
+            "n": 292
+          },
+          "aligned_desc": {
+            "first_mass": {
+              "mean": 0.8433004252939439,
+              "median": 0.8591360008248204,
+              "p05": 0.6386439829805952,
+              "p25": 0.7753555934746859,
+              "share_below_0.5": 0.005786540934419202,
+              "share_below_0.9": 0.6427346763823404
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.8196353557178493,
+              "median": 0.9654042765681137,
+              "p05": 0.03357285845440962,
+              "p25": 0.7805369420055699,
+              "share_below_0.5": 0.13356164383561644,
+              "share_below_0.9": 0.3321917808219178
+            },
+            "first_token_minus": {
+              "Nothing": 292
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 236
+            },
+            "first_token_plus_starts_with_You": 0.8082191780821918,
+            "n": 292
+          },
+          "swapped_desc": {
+            "first_mass": {
+              "mean": 0.7894271600229446,
+              "median": 0.818165574787636,
+              "p05": 0.5189974832711547,
+              "p25": 0.7108502187112822,
+              "share_below_0.5": 0.04050578654093442,
+              "share_below_0.9": 0.7713244749249892
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          }
+        },
+        "qwen3-8b-fewshot": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.868208433780303,
+              "median": 1.0000000000001281,
+              "p05": 2.775090103956237e-08,
+              "p25": 0.9999546425556322,
+              "share_below_0.5": 0.11986301369863013,
+              "share_below_0.9": 0.17123287671232876
+            },
+            "first_token_minus": {
+              "Nothing": 292
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 236
+            },
+            "first_token_plus_starts_with_You": 0.8082191780821918,
+            "n": 292
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.8757962075418083,
+              "median": 1.0000000000000009,
+              "p05": 8.111373027489073e-09,
+              "p25": 0.9999549727093311,
+              "share_below_0.5": 0.1232876712328767,
+              "share_below_0.9": 0.14383561643835616
+            },
+            "first_token_minus": {
+              "Nothing": 292
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 236
+            },
+            "first_token_plus_starts_with_You": 0.8082191780821918,
+            "n": 292
+          },
+          "aligned_desc": {
+            "first_mass": {
+              "mean": 0.9876927626595312,
+              "median": 0.9999975495452074,
+              "p05": 0.9524403799348571,
+              "p25": 0.9999304467919512,
+              "share_below_0.5": 0.006000857265323617,
+              "share_below_0.9": 0.031075867981140162
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.8820036222628617,
+              "median": 1.0,
+              "p05": 1.998578576088419e-08,
+              "p25": 0.9999817807166608,
+              "share_below_0.5": 0.11301369863013698,
+              "share_below_0.9": 0.14383561643835616
+            },
+            "first_token_minus": {
+              "Nothing": 292
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 236
+            },
+            "first_token_plus_starts_with_You": 0.8082191780821918,
+            "n": 292
+          },
+          "swapped_desc": {
+            "first_mass": {
+              "mean": 0.9910751494417656,
+              "median": 0.9999977763334441,
+              "p05": 0.9677331762198513,
+              "p25": 0.999935337611887,
+              "share_below_0.5": 0.0032147449635662236,
+              "share_below_0.9": 0.022288898414059153
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          }
+        }
+      },
+      "rq2_score": {
+        "llama3.1-8b-fewshot": {
+          "aligned": {
+            "first_mass": {
+              "mean": 0.8337204948269624,
+              "median": 0.8495697047393302,
+              "p05": 0.6275576541494297,
+              "p25": 0.765893004023103,
+              "share_below_0.5": 0.007715387912558937,
+              "share_below_0.9": 0.6855979425632234
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "fourth": {
+            "first_mass": {
+              "mean": 0.7171337399661926,
+              "median": 0.7493439963980877,
+              "p05": 0.3854300548409627,
+              "p25": 0.6295460303549518,
+              "share_below_0.5": 0.1050185873605948,
+              "share_below_0.9": 0.9237918215613383
+            },
+            "first_token_minus": {
+              "Nothing": 1076
+            },
+            "first_token_plus": {
+              "You": 1076
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 1076
+          },
+          "mention": {
+            "first_mass": {
+              "mean": 0.7894166864324706,
+              "median": 0.8076117076771376,
+              "p05": 0.5989551693533978,
+              "p25": 0.7125803029782253,
+              "share_below_0.5": 0.004646840148698885,
+              "share_below_0.9": 0.8410780669144982
+            },
+            "first_token_minus": {
+              "Nothing": 1076
+            },
+            "first_token_plus": {
+              "You": 1076
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 1076
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.7659079521110642,
+              "median": 0.8005786548279679,
+              "p05": 0.4583757273752267,
+              "p25": 0.6853471497455789,
+              "share_below_0.5": 0.07158165452207459,
+              "share_below_0.9": 0.8017573939134162
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          }
+        },
+        "qwen3-8b-fewshot": {
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9893108276451288,
+              "median": 0.9999927522560905,
+              "p05": 0.9547011537558865,
+              "p25": 0.9996659533713369,
+              "share_below_0.5": 0.0036433776253750536,
+              "share_below_0.9": 0.02957565366480926
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "fourth": {
+            "first_mass": {
+              "mean": 0.9804981212671217,
+              "median": 0.9999970282858147,
+              "p05": 0.8966010647924021,
+              "p25": 0.9990426161145414,
+              "share_below_0.5": 0.00929368029739777,
+              "share_below_0.9": 0.05204460966542751
+            },
+            "first_token_minus": {
+              "Nothing": 1076
+            },
+            "first_token_plus": {
+              "You": 1076
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 1076
+          },
+          "mention": {
+            "first_mass": {
+              "mean": 0.9703277403683291,
+              "median": 0.9999899188672159,
+              "p05": 0.8212801493851639,
+              "p25": 0.9980757470569742,
+              "share_below_0.5": 0.011152416356877323,
+              "share_below_0.9": 0.09200743494423792
+            },
+            "first_token_minus": {
+              "Nothing": 1076
+            },
+            "first_token_plus": {
+              "You": 1076
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 1076
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9903891557749028,
+              "median": 0.9999977659272156,
+              "p05": 0.9536041243496799,
+              "p25": 0.9999033770440489,
+              "share_below_0.5": 0.002357479639948564,
+              "share_below_0.9": 0.026789541363051863
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          }
+        }
+      },
+      "size_score_qwen3-0.6b": {
+        "qwen3-0.6b": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.9849183057722936,
+              "median": 0.993171312268589,
+              "p05": 0.9582250955641696,
+              "p25": 0.9871364069192516,
+              "share_below_0.5": 0.0030254134731746672,
+              "share_below_0.9": 0.01371520774505849
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9843218987398469,
+              "median": 0.9946732173024947,
+              "p05": 0.9415652386834769,
+              "p25": 0.9878669954959576,
+              "share_below_0.5": 0.0016135538523598225,
+              "share_below_0.9": 0.02319483662767245
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9928842153970432,
+              "median": 0.9961843827166371,
+              "p05": 0.9758542083668189,
+              "p25": 0.9924724366041052,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.002571795970852979
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "yn_absent": {
+            "first_mass": {
+              "mean": 0.9659866471114983,
+              "median": 0.9769537568516223,
+              "p05": 0.8918003787732264,
+              "p25": 0.9625375161189136,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.055465913674868896
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_aligned": {
+            "first_mass": {
+              "mean": 0.962368201419599,
+              "median": 0.9732993645436858,
+              "p05": 0.9021290332451367,
+              "p25": 0.9525099549162661,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.04800322710770472
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_swapped": {
+            "first_mass": {
+              "mean": 0.9588176051818136,
+              "median": 0.970595897007023,
+              "p05": 0.880531261498449,
+              "p25": 0.9517943002208815,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.06858122588941278
+            },
+            "first_token_minus": {
+              "No": 4666
+            },
+            "first_token_plus": {
+              "Yes": 4666
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4666
+          }
+        }
+      },
+      "size_score_qwen3-1.7b": {
+        "qwen3-1.7b": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.9740554066583936,
+              "median": 0.9999892846778711,
+              "p05": 0.9206536021328593,
+              "p25": 0.9997919651752346,
+              "share_below_0.5": 0.02400161355385236,
+              "share_below_0.9": 0.045784590560709965
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9691187014051618,
+              "median": 0.9999921688394154,
+              "p05": 0.8756349705314126,
+              "p25": 0.9997242040968849,
+              "share_below_0.5": 0.026220250100847116,
+              "share_below_0.9": 0.05486083098023396
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9816993849841221,
+              "median": 0.999989975856479,
+              "p05": 0.942024685118121,
+              "p25": 0.9998175330789553,
+              "share_below_0.5": 0.01478782683240463,
+              "share_below_0.9": 0.04072010287183883
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "yn_absent": {
+            "first_mass": {
+              "mean": 0.9995468974412116,
+              "median": 0.9999999998184445,
+              "p05": 0.9999999308299883,
+              "p25": 0.9999999684332068,
+              "share_below_0.5": 0.0004033884630899556,
+              "share_below_0.9": 0.0008067769261799112
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_aligned": {
+            "first_mass": {
+              "mean": 0.9991393251661466,
+              "median": 1.0000000020611537,
+              "p05": 0.9999999323393458,
+              "p25": 0.9999999722068016,
+              "share_below_0.5": 0.0008067769261799112,
+              "share_below_0.9": 0.0014118596208148447
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_swapped": {
+            "first_mass": {
+              "mean": 0.9993656712590812,
+              "median": 0.9999999998184445,
+              "p05": 0.9999998341136402,
+              "p25": 0.9999999714487824,
+              "share_below_0.5": 0.0004286326618088298,
+              "share_below_0.9": 0.0015002143163309043
+            },
+            "first_token_minus": {
+              "No": 4666
+            },
+            "first_token_plus": {
+              "Yes": 4666
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4666
+          }
+        }
+      },
+      "size_score_qwen3-14b": {
+        "qwen3-14b": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.9938394531407091,
+              "median": 0.9999929353852216,
+              "p05": 0.9967964019237686,
+              "p25": 0.9999728465027888,
+              "share_below_0.5": 0.004840661557079467,
+              "share_below_0.9": 0.008672851956434045
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9950643099437501,
+              "median": 0.9999970415728086,
+              "p05": 0.9991908233680324,
+              "p25": 0.9999920653140968,
+              "share_below_0.5": 0.004840661557079467,
+              "share_below_0.9": 0.007664380798709157
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 1.0000745539415024,
+              "median": 0.9999949850006921,
+              "p05": 0.9995587020232639,
+              "p25": 0.9999870277006072,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0006429489927132448
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "yn_absent": {
+            "first_mass": {
+              "mean": 0.9908978115022964,
+              "median": 0.9999645961013972,
+              "p05": 0.9859360465382744,
+              "p25": 0.9996646575690109,
+              "share_below_0.5": 0.005445744251714401,
+              "share_below_0.9": 0.017950786607503027
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_aligned": {
+            "first_mass": {
+              "mean": 0.991784156809735,
+              "median": 0.9999898673130043,
+              "p05": 0.9890129954561693,
+              "p25": 0.9998415959458766,
+              "share_below_0.5": 0.005849132714804356,
+              "share_below_0.9": 0.014521984671238403
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_swapped": {
+            "first_mass": {
+              "mean": 0.9878845286490893,
+              "median": 0.9999417100554951,
+              "p05": 0.9706874358652385,
+              "p25": 0.9992903743964621,
+              "share_below_0.5": 0.007715387912558937,
+              "share_below_0.9": 0.02271753107586798
+            },
+            "first_token_minus": {
+              "No": 4666
+            },
+            "first_token_plus": {
+              "Yes": 4666
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4666
+          }
+        }
+      },
+      "size_score_qwen3-32b": {
+        "qwen3-32b": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.9503254969248882,
+              "median": 0.9943287306094624,
+              "p05": 0.739641545315197,
+              "p25": 0.9607754715243402,
+              "share_below_0.5": 0.019160951996772892,
+              "share_below_0.9": 0.12706736587333603
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9407188168243247,
+              "median": 0.9934637007653699,
+              "p05": 0.6822892344298879,
+              "p25": 0.9506509733491282,
+              "share_below_0.5": 0.022589753933037516,
+              "share_below_0.9": 0.16498588140379186
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9378388335353198,
+              "median": 0.9929924074381915,
+              "p05": 0.6310281422299089,
+              "p25": 0.952079417148847,
+              "share_below_0.5": 0.02614659237033862,
+              "share_below_0.9": 0.17273896270895842
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "yn_absent": {
+            "first_mass": {
+              "mean": 0.9941067468774336,
+              "median": 0.9973977954977251,
+              "p05": 0.9771152380335696,
+              "p25": 0.9930709508505229,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0006050826946349334
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_aligned": {
+            "first_mass": {
+              "mean": 0.9918298002424564,
+              "median": 0.9962619432841566,
+              "p05": 0.9689877254844055,
+              "p25": 0.9898307090356371,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0014118596208148447
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_swapped": {
+            "first_mass": {
+              "mean": 0.9954746507097335,
+              "median": 0.99819410791287,
+              "p05": 0.9831406415496312,
+              "p25": 0.9947535846456289,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0006429489927132448
+            },
+            "first_token_minus": {
+              "No": 4666
+            },
+            "first_token_plus": {
+              "Yes": 4666
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4666
+          }
+        }
+      },
+      "size_score_qwen3-4b": {
+        "qwen3-4b": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.9656717127976466,
+              "median": 0.9999865298743592,
+              "p05": 0.8517562671444853,
+              "p25": 0.9999692608937262,
+              "share_below_0.5": 0.03146430012101654,
+              "share_below_0.9": 0.05667607906413877
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9744470469101401,
+              "median": 0.9999844634274442,
+              "p05": 0.9432665437329997,
+              "p25": 0.9999543126456383,
+              "share_below_0.5": 0.022388059701492536,
+              "share_below_0.9": 0.040943929003630496
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9851696587966172,
+              "median": 0.9999888358512234,
+              "p05": 0.9888670498833476,
+              "p25": 0.9999778586550445,
+              "share_below_0.5": 0.013716245177882554,
+              "share_below_0.9": 0.02486069438491213
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "yn_absent": {
+            "first_mass": {
+              "mean": 0.9995249999925041,
+              "median": 0.9999997617731949,
+              "p05": 0.999925082729652,
+              "p25": 0.9999985697695181,
+              "share_below_0.5": 0.0002016942315449778,
+              "share_below_0.9": 0.001008471157724889
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_aligned": {
+            "first_mass": {
+              "mean": 0.9982683371168075,
+              "median": 0.9999997623902142,
+              "p05": 0.9988740604696724,
+              "p25": 0.99999713899267,
+              "share_below_0.5": 0.0002016942315449778,
+              "share_below_0.9": 0.003630496167809601
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_swapped": {
+            "first_mass": {
+              "mean": 0.9996145296728821,
+              "median": 0.9999997620413833,
+              "p05": 0.9999021396087167,
+              "p25": 0.999998450473404,
+              "share_below_0.5": 0.0002143163309044149,
+              "share_below_0.9": 0.0006429489927132448
+            },
+            "first_token_minus": {
+              "No": 4666
+            },
+            "first_token_plus": {
+              "Yes": 4666
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4666
+          }
+        }
+      },
+      "size_score_qwen3-8b": {
+        "qwen3-8b": {
+          "absent": {
+            "first_mass": {
+              "mean": 0.9769119816903,
+              "median": 0.999995484693068,
+              "p05": 0.9078204261924127,
+              "p25": 0.9998397968353768,
+              "share_below_0.5": 0.014521984671238403,
+              "share_below_0.9": 0.0463896732553449
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "aligned": {
+            "first_mass": {
+              "mean": 0.9829086846922044,
+              "median": 0.9999943780986189,
+              "p05": 0.950314156499513,
+              "p25": 0.9997380015757141,
+              "share_below_0.5": 0.010286405808793869,
+              "share_below_0.9": 0.03408632513110125
+            },
+            "first_token_minus": {
+              "Nothing": 4958
+            },
+            "first_token_plus": {
+              "The": 25,
+              "There": 27,
+              "This": 4,
+              "You": 4902
+            },
+            "first_token_plus_starts_with_You": 0.9887051230334812,
+            "n": 4958
+          },
+          "swapped": {
+            "first_mass": {
+              "mean": 0.9905807817345548,
+              "median": 0.9999977875650652,
+              "p05": 0.9583834080015294,
+              "p25": 0.9999206078602276,
+              "share_below_0.5": 0.002571795970852979,
+              "share_below_0.9": 0.02657522503214745
+            },
+            "first_token_minus": {
+              "Nothing": 4666
+            },
+            "first_token_plus": {
+              "You": 4666
+            },
+            "first_token_plus_starts_with_You": 1.0,
+            "n": 4666
+          },
+          "yn_absent": {
+            "first_mass": {
+              "mean": 0.9999999989768271,
+              "median": 1.0000000000024134,
+              "p05": 1.0000000000000344,
+              "p25": 1.0000000000005385,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_aligned": {
+            "first_mass": {
+              "mean": 0.9999999822832023,
+              "median": 1.0000000000178324,
+              "p05": 1.0000000000000728,
+              "p25": 1.000000000003979,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "No": 4958
+            },
+            "first_token_plus": {
+              "Yes": 4958
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4958
+          },
+          "yn_swapped": {
+            "first_mass": {
+              "mean": 1.0000000000307065,
+              "median": 1.0000000000018796,
+              "p05": 1.0000000000000344,
+              "p25": 1.0000000000003266,
+              "share_below_0.5": 0.0,
+              "share_below_0.9": 0.0
+            },
+            "first_token_minus": {
+              "No": 4666
+            },
+            "first_token_plus": {
+              "Yes": 4666
+            },
+            "first_token_plus_starts_with_You": 0.0,
+            "n": 4666
+          }
+        }
+      }
+    },
+    "top_candidate_ties": {
+      "rq1v_score": {
+        "llama3.1-8b-fewshot": {
+          "yn_absent": {
+            "n_states": 181,
+            "tie_between_working_and_failing": 0,
+            "top_score_tied": 0
+          },
+          "yn_aligned": {
+            "n_states": 181,
+            "tie_between_working_and_failing": 0,
+            "top_score_tied": 0
+          }
+        },
+        "qwen3-8b-fewshot": {
+          "yn_absent": {
+            "n_states": 181,
+            "tie_between_working_and_failing": 0,
+            "top_score_tied": 0
+          },
+          "yn_aligned": {
+            "n_states": 181,
+            "tie_between_working_and_failing": 0,
+            "top_score_tied": 1
+          }
+        }
+      },
+      "rq1x_score": {
+        "llama3.1-8b-fewshot": {
+          "absent": {
+            "n_states": 181,
+            "tie_between_working_and_failing": 0,
+            "top_score_tied": 0
+          },
+          "aligned": {
+            "n_states": 181,
+            "tie_between_working_and_failing": 0,
+            "top_score_tied": 0
+          }
+        },
+        "qwen3-8b-fewshot": {
+          "absent": {
+            "n_states": 181,
+            "tie_between_working_and_failing": 0,
+            "top_score_tied": 1
+          },
+          "aligned": {
+            "n_states": 181,
+            "tie_between_working_and_failing": 0,
+            "top_score_tied": 1
+          }
+        }
+      }
+    }
+  },
+  "items_per_game": {
+    "exact_duplicates": 0,
+    "items_per_game": {
+      "max": 90,
+      "mean": 37.328,
+      "median": 38,
+      "min": 4
+    },
+    "largest_games": {
+      "valid_unseen/108": 85,
+      "valid_unseen/113": 78,
+      "valid_unseen/143": 90,
+      "valid_unseen/147": 77,
+      "valid_unseen/190": 77
+    },
+    "n_games": 125,
+    "n_items": 4666,
+    "near_duplicates": {
+      "definition": "same game, action and swapped goal, and the same facts read from the history (location, held object, open and closed receptacles, last-seen contents); typically the agent repeating a step that changed nothing",
+      "extra_items": 304,
+      "groups": 238,
+      "items_in_groups": 542
+    },
+    "same_game_and_action": {
+      "extra_items": 2876,
+      "groups": 1013
+    },
+    "share_of_items_in_top_10pct_of_games": 0.18881268752678954
+  },
+  "not_computed": {},
+  "provenance": {
+    "analysis_checkout_dirty": false,
+    "analysis_commit": "28b4d3002544d6dea20fdd8f8e45753c245326bd",
+    "analysis_job": {
+      "git_sha": "28b4d3002544d6dea20fdd8f8e45753c245326bd",
+      "gpu": null,
+      "host": "atl1-1-01-005-2-1.pace.gatech.edu",
+      "slurm_job_id": "7194815",
+      "time": "2026-11-20T09:13:00-0500"
+    },
+    "input_sha256": {
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s0/transitions.jsonl": "f0f6a243e52ba6d3e2fa65f0ea516cb6fad67bf33bada6d0e21fe962a6749de3",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s1/transitions.jsonl": "d296975bf990881c3c3837bcf654a9b4c29f0814e7695f10aa2796a324240c4e",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s2/transitions.jsonl": "7246ee1986ecf71ea32007d6836a24190a707f24e93d5b8366dbba70eda5334d",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_00_of_08/generations.jsonl": "f94aee3e1167c9a9a9d9fa5427a023669e27bb15ac3413c9e420f8af53d9a0f5",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_00_of_08/scoring.jsonl": "e29cf4315185da05222839f6a3bdf3312a8c46d0445aed1553817dfb0beb1a33",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_01_of_08/generations.jsonl": "0b3fabb98dec18bcb06a5360b003ade8080476443b32964286f5e5e32395887d",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_01_of_08/scoring.jsonl": "72e4851fb23a53c2d8822a321467d27290d3e40767fa3c4520554fbac9ada363",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_02_of_08/generations.jsonl": "fa6b1e76c374fbfb2fa610e5b74d72d2ce1b9339cdc2a2bc0bd5f54ba484ae0c",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_02_of_08/scoring.jsonl": "ea5e3b33b5b274b57dc4d0f96e0f6f0226bd8bcc78f24cadaf84cae592c04ba2",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_03_of_08/generations.jsonl": "201b1c4d0bc235cd06a5e3023526f8ad4e79aa894a705eed76d09c2d578e37e2",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_03_of_08/scoring.jsonl": "129d3ef46ea4411763c52dfecccd3d9319d28f8943dd3801a54669e6830d7408",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_04_of_08/generations.jsonl": "488022141b5c8d430f3690399a7f7964035a9c0b2d175d42bffe5424d9cd309b",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_04_of_08/scoring.jsonl": "733b5e06415d84aee3986eaf97a4f5fb966a11ae03e053e884ef6d06d4b94f1b",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_05_of_08/generations.jsonl": "4786065fc94cdb2ebaba8a743c0dd94fa5cabf4b55d93d096a458d544cb8ba05",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_05_of_08/scoring.jsonl": "1646e72c32a6c18da922cae1c2458d922a8a210628cc43aee2cd1df60ab57169",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_06_of_08/generations.jsonl": "7a0c644ba466a47338b026291de44d37fab979fdf9e427224330547ad011b4b8",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_06_of_08/scoring.jsonl": "a65e41c9902302aae35d057f4dde4c995ed7eaccb0253097c4a4c0c6fe198fd3",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_07_of_08/generations.jsonl": "a44e6d5231df88d7a974c85ab5fe828482c3fd4363cf7452224e36ba9e4cbfdc",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_07_of_08/scoring.jsonl": "6c058d534459ec0ae92c80c88f09ae653d5ec3ae157c3781381e0a2d2ada2d53",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_00_of_08/scoring.jsonl": "625243bdce9124d7ed64f88a83d73d07db97056482ea66c5593d3d1e3e7626d6",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_01_of_08/scoring.jsonl": "c9c3f806b406fdf44d7ca921c27b7eef761e67aca058e11b08448530b2c6bc33",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_02_of_08/scoring.jsonl": "482cc95c5b2b368205be8f0e55b02e9365861892de3a6a0a41b8d6bcd565ea08",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_03_of_08/scoring.jsonl": "e1dbde4ea2d7e8cfc1ae065092acf6bd170042dfd544581f6d3b50a4507e56bc",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_04_of_08/scoring.jsonl": "6a2e3fa3e4c53c70e9082c79ceb35831e33790db74316706392af278e259aea5",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_05_of_08/scoring.jsonl": "d7ef9bd8fc9e09c78d2f127fef1988a068362b6489e6f1d66eca0039f60e2826",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_06_of_08/scoring.jsonl": "032a28dc9680ba27add0962415748a9cd6dc68f72936920a9285c4edae7ee008",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_07_of_08/scoring.jsonl": "0676b4354bb57546a97923448f504e6bc882e9ee4fb37df429251781a058bb2a",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_00_of_08/checks.jsonl": "9913d8ad49c45af02f82a8af7359645b9681a949a0f99b1e8a4b2669485ee57e",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_00_of_08/scoring.jsonl": "7ec68d9c6156d273a85cf148c87d3ddd44488cffe7c88b560c5024fd0eafc625",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_01_of_08/scoring.jsonl": "fc47b768a4452904d7a9b1fb032513e0eec4870ceef68f4d9b5e587c0d3030df",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_02_of_08/scoring.jsonl": "a2bdaa032a70e3fcdbfe5dbdeca81f7923f5bd750c08891afb9e643cea5bf0fa",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_03_of_08/scoring.jsonl": "7a27fb2fdc5cbab9b8ebacde69f860844a40b046cf86af634de038225d541945",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_04_of_08/scoring.jsonl": "8693eb430c1af9a2fdc0b635a8ae0ce45b83025710d7c182254e21e98d7e292d",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_05_of_08/scoring.jsonl": "57edd1e49a09f7ec30de56cee2060a5ff80ecf59e8f2d8860b3b1be077f2e5ee",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_06_of_08/scoring.jsonl": "ff212a896be1b85f888e3d8edbd462bd43e2ee42f844973988e7d618c5202dff",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_07_of_08/scoring.jsonl": "1b833324bd7305665e708a2d6706d9977728621eec736257c598182393641ab1",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_00_of_04/generations.jsonl": "7ba14b07579ea34cba9a264e129196dfacd25015c2ab50c21c13414f82bfb9eb",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_00_of_04/scoring.jsonl": "9ae7626afb2f2418258ff7799f6d0c74db596abaf8f520f772051e8ddca837d9",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_01_of_04/generations.jsonl": "de37f8ca29d23f31d8e2801bb856676ec27fca106aa31ca8a32cf1f010012448",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_01_of_04/scoring.jsonl": "f26db1847d27b5d05be834f8bc4970e0aa5f24b05398461a68c1ca58a7226efc",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_02_of_04/generations.jsonl": "627dfce239e7ce6c687c8d3cf2dd035c2396f3a66f24ac01b0ba7917c7df98ee",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_02_of_04/scoring.jsonl": "4b417d9fde79c8371288796bdfa57cf29f2475aa7d6f904403169b3baf10826b",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_03_of_04/generations.jsonl": "e04090fa88f7b5b77b9bfc695ecdeadada8c851e5728897fde974dfa42b6eaf8",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_03_of_04/scoring.jsonl": "ad828ce84d8c3238432ffa364f444f4fce2a9915453e9075765ef33120042dee",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-0.6b/shard_00_of_01/scoring.jsonl": "199867f93fd082d7fbaaddced2a8430d829377802b0d3aa0072aa88a60c8a91c",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-1.7b/shard_00_of_01/scoring.jsonl": "79231fbe8180f2520000b0f99afe00102597e020a35a6c8d139d1a1f03b438ce",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-14b/shard_00_of_02/scoring.jsonl": "143597c962163541cc39b360c66fb4b2d1b8b23e1ac81609427617795bf92d7e",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-14b/shard_01_of_02/scoring.jsonl": "c46b657e2dd586bdc481454c8d7ce415215d9f481db96604d0696999fdfc4090",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-32b/shard_00_of_02/scoring.jsonl": "af8f9e7cf4d0dec44b21971632f61d9a4f04915666c7f611e9e3a763893cca2b",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-32b/shard_01_of_02/scoring.jsonl": "1af7d524edfe730f18df73cea3a3d6a4c891459193e775572056852e84006101",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-4b/shard_00_of_01/scoring.jsonl": "0f68e3085bc6c981068fc7e1004022a297d8a252fc7cc93043c4dc60ebc71786",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-8b/shard_00_of_02/scoring.jsonl": "10cc5bd0f1159cc7fb3b39a4c60a5cce6b4ce9467abbc255cb52e195328b5c7a",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-8b/shard_01_of_02/scoring.jsonl": "38bf49ba010ff32fbb3105124a393a4f63ef1eb153c46be8214c662dbf05b322",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/thinking_probe/thinking.jsonl": "6d1fbd9ab79c0e35dc471a7769922d2ac76d764a2170e8ae47ddea5f25207f7c"
+    },
+    "runs_read": {
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s0": {
+        "commit": "f8d20c1469075e16212dd37a3973243eded0cf08",
+        "gpu": "not recorded",
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s0",
+        "slurm_job_ids": null,
+        "status": "# STATUS \u2014 rq12_transitions_s0 \u2014 PASS"
+      },
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s1": {
+        "commit": "f8d20c1469075e16212dd37a3973243eded0cf08",
+        "gpu": "not recorded",
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s1",
+        "slurm_job_ids": null,
+        "status": "# STATUS \u2014 rq12_transitions_s1 \u2014 PASS"
+      },
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s2": {
+        "commit": "f8d20c1469075e16212dd37a3973243eded0cf08",
+        "gpu": "not recorded",
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s2",
+        "slurm_job_ids": null,
+        "status": "# STATUS \u2014 rq12_transitions_s2 \u2014 PASS"
+      },
+      "rq1_score": {
+        "commits": [
+          "de407952f8efb0275202f807d9f387369fa6bd06"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score",
+        "shards": {
+          "shard_00_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_00_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_00_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_01_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_01_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_01_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_02_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_02_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_02_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_03_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_03_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_03_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_04_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_04_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_04_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_05_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_05_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_05_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_06_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_06_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_06_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_07_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_07_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_07_of_08 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "rq1v_score": {
+        "commits": [
+          "2155b8d3c279f4f66326eec75913c0f0745eb95b"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score",
+        "shards": {
+          "shard_00_of_08": {
+            "commit": "2155b8d3c279f4f66326eec75913c0f0745eb95b",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_00_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1v_score/shard_00_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_01_of_08": {
+            "commit": "2155b8d3c279f4f66326eec75913c0f0745eb95b",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_01_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1v_score/shard_01_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_02_of_08": {
+            "commit": "2155b8d3c279f4f66326eec75913c0f0745eb95b",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_02_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1v_score/shard_02_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_03_of_08": {
+            "commit": "2155b8d3c279f4f66326eec75913c0f0745eb95b",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_03_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1v_score/shard_03_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_04_of_08": {
+            "commit": "2155b8d3c279f4f66326eec75913c0f0745eb95b",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_04_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1v_score/shard_04_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_05_of_08": {
+            "commit": "2155b8d3c279f4f66326eec75913c0f0745eb95b",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_05_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1v_score/shard_05_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_06_of_08": {
+            "commit": "2155b8d3c279f4f66326eec75913c0f0745eb95b",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_06_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1v_score/shard_06_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_07_of_08": {
+            "commit": "2155b8d3c279f4f66326eec75913c0f0745eb95b",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1v_score/shard_07_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1v_score/shard_07_of_08 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "rq1x_score": {
+        "commits": [
+          "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score",
+        "shards": {
+          "shard_00_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_00_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_00_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_01_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_01_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_01_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_02_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_02_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_02_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_03_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_03_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_03_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_04_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_04_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_04_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_05_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_05_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_05_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_06_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_06_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_06_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_07_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_07_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_07_of_08 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "rq2_score": {
+        "commits": [
+          "ddeabc2072d2db26c6dd0504873294b7f5826b49"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score",
+        "shards": {
+          "shard_00_of_04": {
+            "commit": "ddeabc2072d2db26c6dd0504873294b7f5826b49",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_00_of_04",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq2_score/shard_00_of_04 \u2014 REPORTED (shard complete)"
+          },
+          "shard_01_of_04": {
+            "commit": "ddeabc2072d2db26c6dd0504873294b7f5826b49",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_01_of_04",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq2_score/shard_01_of_04 \u2014 REPORTED (shard complete)"
+          },
+          "shard_02_of_04": {
+            "commit": "ddeabc2072d2db26c6dd0504873294b7f5826b49",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_02_of_04",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq2_score/shard_02_of_04 \u2014 REPORTED (shard complete)"
+          },
+          "shard_03_of_04": {
+            "commit": "ddeabc2072d2db26c6dd0504873294b7f5826b49",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq2_score/shard_03_of_04",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq2_score/shard_03_of_04 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "size_score_qwen3-0.6b": {
+        "commits": [
+          "8bfd84c56667655371b45d8239d72e3dbfb9546c"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-0.6b",
+        "shards": {
+          "shard_00_of_01": {
+            "commit": "8bfd84c56667655371b45d8239d72e3dbfb9546c",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-0.6b/shard_00_of_01",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 size_score_qwen3-0.6b/shard_00_of_01 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "size_score_qwen3-1.7b": {
+        "commits": [
+          "8bfd84c56667655371b45d8239d72e3dbfb9546c"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-1.7b",
+        "shards": {
+          "shard_00_of_01": {
+            "commit": "8bfd84c56667655371b45d8239d72e3dbfb9546c",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-1.7b/shard_00_of_01",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 size_score_qwen3-1.7b/shard_00_of_01 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "size_score_qwen3-14b": {
+        "commits": [
+          "8bfd84c56667655371b45d8239d72e3dbfb9546c"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-14b",
+        "shards": {
+          "shard_00_of_02": {
+            "commit": "8bfd84c56667655371b45d8239d72e3dbfb9546c",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-14b/shard_00_of_02",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 size_score_qwen3-14b/shard_00_of_02 \u2014 REPORTED (shard complete)"
+          },
+          "shard_01_of_02": {
+            "commit": "8bfd84c56667655371b45d8239d72e3dbfb9546c",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-14b/shard_01_of_02",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 size_score_qwen3-14b/shard_01_of_02 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "size_score_qwen3-32b": {
+        "commits": [
+          "8bfd84c56667655371b45d8239d72e3dbfb9546c"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-32b",
+        "shards": {
+          "shard_00_of_02": {
+            "commit": "8bfd84c56667655371b45d8239d72e3dbfb9546c",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-32b/shard_00_of_02",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 size_score_qwen3-32b/shard_00_of_02 \u2014 REPORTED (shard complete)"
+          },
+          "shard_01_of_02": {
+            "commit": "8bfd84c56667655371b45d8239d72e3dbfb9546c",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-32b/shard_01_of_02",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 size_score_qwen3-32b/shard_01_of_02 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "size_score_qwen3-4b": {
+        "commits": [
+          "8bfd84c56667655371b45d8239d72e3dbfb9546c"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-4b",
+        "shards": {
+          "shard_00_of_01": {
+            "commit": "8bfd84c56667655371b45d8239d72e3dbfb9546c",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-4b/shard_00_of_01",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 size_score_qwen3-4b/shard_00_of_01 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "size_score_qwen3-8b": {
+        "commits": [
+          "8bfd84c56667655371b45d8239d72e3dbfb9546c"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-8b",
+        "shards": {
+          "shard_00_of_02": {
+            "commit": "8bfd84c56667655371b45d8239d72e3dbfb9546c",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-8b/shard_00_of_02",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 size_score_qwen3-8b/shard_00_of_02 \u2014 REPORTED (shard complete)"
+          },
+          "shard_01_of_02": {
+            "commit": "8bfd84c56667655371b45d8239d72e3dbfb9546c",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/size_score_qwen3-8b/shard_01_of_02",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 size_score_qwen3-8b/shard_01_of_02 \u2014 REPORTED (shard complete)"
+          }
+        }
+      }
+    }
+  },
+  "ratios": {
+    "llama3.1-8b-fewshot": {
+      "full_layout_share_removed": {
+        "ci": [
+          0.6434278412021835,
+          0.7797440026035853
+        ],
+        "denominator_mean": 1.6437160697057838,
+        "estimate": 0.7126042857105044,
+        "n": 4666,
+        "numerator_mean": 0.4723969539422161,
+        "reads": "share of the plain effect removed, 1 - ratio"
+      },
+      "ignore_note_share_removed": {
+        "ci": [
+          -0.06160661911496734,
+          0.008251804909038207
+        ],
+        "denominator_mean": 1.6437160697057838,
+        "estimate": -0.026111680812964222,
+        "n": 4666,
+        "numerator_mean": 1.6866362590650812,
+        "reads": "share of the plain effect removed, 1 - ratio"
+      },
+      "object_free_kept": {
+        "ci": [
+          0.8347287188427039,
+          1.0252655626015674
+        ],
+        "denominator_mean": 1.6437160697057838,
+        "estimate": 0.9207966234581062,
+        "n": 4666,
+        "numerator_mean": 1.5135282069089149
+      },
+      "object_free_kept_check_passed": {
+        "ci": [
+          0.7582039037381813,
+          0.9459767292326228
+        ],
+        "denominator_mean": 1.8005663901288678,
+        "estimate": 0.8452812370068015,
+        "n": 3026,
+        "numerator_mean": 1.5219849855610004
+      }
+    },
+    "qwen3-8b-fewshot": {
+      "full_layout_share_removed": {
+        "ci": [
+          0.5935299516272781,
+          0.7305417130640207
+        ],
+        "denominator_mean": 6.101841772870916,
+        "estimate": 0.659983723884187,
+        "n": 4666,
+        "numerator_mean": 2.0747255170594796,
+        "reads": "share of the plain effect removed, 1 - ratio"
+      },
+      "ignore_note_share_removed": {
+        "ci": [
+          0.06783455279707185,
+          0.11556881307635813
+        ],
+        "denominator_mean": 6.101841772870916,
+        "estimate": 0.09125082052460143,
+        "n": 4666,
+        "numerator_mean": 5.545043704385156,
+        "reads": "share of the plain effect removed, 1 - ratio"
+      },
+      "object_free_kept": {
+        "ci": [
+          0.5412921336328308,
+          0.6818251937534107
+        ],
+        "denominator_mean": 6.101841772870916,
+        "estimate": 0.6077975482491121,
+        "n": 4666,
+        "numerator_mean": 3.7086844693549583
+      },
+      "object_free_kept_check_passed": {
+        "ci": [
+          0.5444035769144824,
+          0.6788701881938815
+        ],
+        "denominator_mean": 7.19445050562555,
+        "estimate": 0.6100727243417257,
+        "n": 2153,
+        "numerator_mean": 4.3891380201086845
+      }
+    },
+    "thinking_qwen3-8b": {
+      "note": "paired on items with an L after reasoning (finished answers); the 4.01 and 6.06 in the notes are each averaged over their own items",
+      "ratio_with_to_without_reasoning": {
+        "ci": [
+          0.4839279701487427,
+          0.8413356516339644
+        ],
+        "denominator_mean": 6.055656591119262,
+        "estimate": 0.6613651919613994,
+        "n": 1000,
+        "numerator_mean": 4.005000483837905
+      },
+      "share_removed": {
+        "ci": [
+          0.1586643483660356,
+          0.5160720298512573
+        ],
+        "denominator_mean": 6.055656591119262,
+        "estimate": 0.3386348080386006,
+        "n": 1000,
+        "numerator_mean": 4.005000483837905,
+        "reads": "share of the plain effect removed, 1 - ratio"
+      }
+    }
+  },
+  "seen_without_object": {
+    "definition": "a take whose receptacle the history last showed without that instance; 'instance number only' means another instance of the same object type was visible there",
+    "examples": [
+      {
+        "action": "take tomato 1 from fridge 1",
+        "visible_instances": [
+          "tomato 2"
+        ]
+      },
+      {
+        "action": "take cup 1 from sinkbasin 1",
+        "visible_instances": [
+          "cup 3"
+        ]
+      },
+      {
+        "action": "take cup 2 from sinkbasin 1",
+        "visible_instances": [
+          "cup 3"
+        ]
+      },
+      {
+        "action": "take mug 1 from countertop 1",
+        "visible_instances": [
+          "mug 3"
+        ]
+      },
+      {
+        "action": "take mug 2 from countertop 1",
+        "visible_instances": [
+          "mug 3"
+        ]
+      },
+      {
+        "action": "take peppershaker 1 from cabinet 1",
+        "visible_instances": [
+          "peppershaker 2"
+        ]
+      },
+      {
+        "action": "take peppershaker 3 from cabinet 1",
+        "visible_instances": [
+          "peppershaker 2"
+        ]
+      },
+      {
+        "action": "take peppershaker 4 from cabinet 1",
+        "visible_instances": [
+          "peppershaker 2"
+        ]
+      },
+      {
+        "action": "take mug 1 from shelf 1",
+        "visible_instances": [
+          "mug 2"
+        ]
+      },
+      {
+        "action": "take vase 1 from shelf 6",
+        "visible_instances": [
+          "vase 2"
+        ]
+      }
+    ],
+    "llama3.1-8b-fewshot": {
+      "all": {
+        "delta_L_ci": [
+          2.459611309184491,
+          3.13612357182421
+        ],
+        "delta_L_first_ci": [
+          0.49168874969695014,
+          0.8168862852085572
+        ],
+        "delta_L_first_nats": 0.6603077221803632,
+        "delta_L_nats": 2.8122624637752027,
+        "delta_p_ci": [
+          27.74613664746934,
+          36.612862155294756
+        ],
+        "delta_p_pp": 32.545883059541076,
+        "n_games": 108,
+        "n_items": 788
+      },
+      "instance_number_only": {
+        "delta_L_ci": [
+          1.6434742187901026,
+          2.6144933264601025
+        ],
+        "delta_L_first_ci": [
+          -0.0971172601353414,
+          0.36169863054528834
+        ],
+        "delta_L_first_nats": 0.12399297326533909,
+        "delta_L_nats": 2.0897929089171368,
+        "delta_p_ci": [
+          12.752456319607449,
+          24.62692814148192
+        ],
+        "delta_p_pp": 18.277931954457856,
+        "n_games": 39,
+        "n_items": 83
+      },
+      "without_instance_number_items": {
+        "delta_L_ci": [
+          2.4880687548784226,
+          3.26035029781464
+        ],
+        "delta_L_first_ci": [
+          0.5490376545491614,
+          0.9008028808151481
+        ],
+        "delta_L_first_nats": 0.723448323825678,
+        "delta_L_nats": 2.8973191631414705,
+        "delta_p_ci": [
+          28.808289757816297,
+          38.930289962150766
+        ],
+        "delta_p_pp": 34.2256560265225,
+        "n_games": 86,
+        "n_items": 705
+      }
+    },
+    "n_instance_number_only": 83,
+    "n_seen_without_object": 788,
+    "n_without_them": 705,
+    "qwen3-8b-fewshot": {
+      "all": {
+        "delta_L_ci": [
+          3.59767944145906,
+          5.449137514609959
+        ],
+        "delta_L_first_ci": [
+          0.7036925958351158,
+          1.3623741058197691
+        ],
+        "delta_L_first_nats": 1.037115383643409,
+        "delta_L_nats": 4.493555892526767,
+        "delta_p_ci": [
+          0.003596975415984148,
+          0.4001193781522861
+        ],
+        "delta_p_pp": 0.13242797612097387,
+        "n_games": 108,
+        "n_items": 788
+      },
+      "instance_number_only": {
+        "delta_L_ci": [
+          -1.352754653646109,
+          1.9141877474744236
+        ],
+        "delta_L_first_ci": [
+          0.34278114043343416,
+          1.1284845636639693
+        ],
+        "delta_L_first_nats": 0.6987400728624041,
+        "delta_L_nats": 0.4621115922334083,
+        "delta_p_ci": [
+          -0.000549312472406557,
+          0.0759353604978936
+        ],
+        "delta_p_pp": 0.027532038141622552,
+        "n_games": 39,
+        "n_items": 83
+      },
+      "without_instance_number_items": {
+        "delta_L_ci": [
+          4.044706034483691,
+          5.9651706843926044
+        ],
+        "delta_L_first_ci": [
+          0.7077793125372417,
+          1.4403550742520452
+        ],
+        "delta_L_first_nats": 1.0769524769693997,
+        "delta_L_nats": 4.968179831426554,
+        "delta_p_ci": [
+          0.002709367424332573,
+          0.44634550077360136
+        ],
+        "delta_p_pp": 0.14477742697528057,
+        "n_games": 86,
+        "n_items": 705
+      }
+    }
+  },
+  "size_yes_share": {
+    "qwen3-0.6b": {
+      "failures": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.9988035399539164,
+              0.9989669885937791
+            ],
+            "estimate": 0.9988869622825957,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.9985267679226151,
+              0.9987420060706961
+            ],
+            "estimate": 0.9986330860331359,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_swapped": {
+          "mean_s": {
+            "ci": [
+              0.998204153138239,
+              0.9985071773623689
+            ],
+            "estimate": 0.9983577590352001,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "n": 4666,
+            "n_games": 125
+          }
+        }
+      },
+      "successes": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.9990300708315332,
+              0.999150170594037
+            ],
+            "estimate": 0.9990912834702267,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "n": 292,
+            "n_games": 111
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.9984912490960467,
+              0.9987599914864724
+            ],
+            "estimate": 0.9986311781425697,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "n": 292,
+            "n_games": 111
+          }
+        }
+      }
+    },
+    "qwen3-1.7b": {
+      "failures": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.9972090998185917,
+              0.9994428043906033
+            ],
+            "estimate": 0.9985430876840085,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.9975861312266843,
+              0.9997945768282662
+            ],
+            "estimate": 0.998928418345478,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.9994822584054641,
+              0.9999304370658476
+            ],
+            "estimate": 0.9997343447073251,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_swapped": {
+          "mean_s": {
+            "ci": [
+              0.9980461946525198,
+              0.9997002279207737
+            ],
+            "estimate": 0.9990230340727326,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.9972746331236897,
+              1.0
+            ],
+            "estimate": 0.998928418345478,
+            "n": 4666,
+            "n_games": 125
+          }
+        }
+      },
+      "successes": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.9999994363921977,
+              0.9999999275210207
+            ],
+            "estimate": 0.9999997087906201,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "n": 292,
+            "n_games": 111
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.9999971089319836,
+              0.9999992375326247
+            ],
+            "estimate": 0.9999983665155338,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              1.0,
+              1.0
+            ],
+            "estimate": 1.0,
+            "n": 292,
+            "n_games": 111
+          }
+        }
+      }
+    },
+    "qwen3-14b": {
+      "failures": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.0031795425802151143,
+              0.0090438009151772
+            ],
+            "estimate": 0.005772776136910242,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.0031570639305445935,
+              0.009013068949977467
+            ],
+            "estimate": 0.005786540934419202,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.03968590171648655,
+              0.055687795898646156
+            ],
+            "estimate": 0.04741119969855129,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.038685847589424574,
+              0.05467174546269325
+            ],
+            "estimate": 0.04629232747535362,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_swapped": {
+          "mean_s": {
+            "ci": [
+              0.0007911816900957984,
+              0.0029490079860651206
+            ],
+            "estimate": 0.00177877163907742,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.0004483299708585519,
+              0.0027039206849932404
+            ],
+            "estimate": 0.0015002143163309043,
+            "n": 4666,
+            "n_games": 125
+          }
+        }
+      },
+      "successes": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.8186304082921543,
+              0.914357932687537
+            ],
+            "estimate": 0.8707940618851242,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              0.8181818181818182,
+              0.9154929577464789
+            ],
+            "estimate": 0.8698630136986302,
+            "n": 292,
+            "n_games": 111
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.7509546897326886,
+              0.8533618669969713
+            ],
+            "estimate": 0.804702429661212,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              0.7457627118644068,
+              0.8515901060070671
+            ],
+            "estimate": 0.8013698630136986,
+            "n": 292,
+            "n_games": 111
+          }
+        }
+      }
+    },
+    "qwen3-32b": {
+      "failures": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.03845004834101034,
+              0.055434935233515246
+            ],
+            "estimate": 0.04667557173690492,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.016976556184316895,
+              0.03144508670520231
+            ],
+            "estimate": 0.02400342906129447,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.13357404023375916,
+              0.16699412167318667
+            ],
+            "estimate": 0.14958858333087016,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.10116731517509728,
+              0.13130841121495326
+            ],
+            "estimate": 0.11551650235747964,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_swapped": {
+          "mean_s": {
+            "ci": [
+              0.04808490929617575,
+              0.06877940300359488
+            ],
+            "estimate": 0.05778314699420817,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.02893825147748115,
+              0.04728950403690888
+            ],
+            "estimate": 0.03750535790827261,
+            "n": 4666,
+            "n_games": 125
+          }
+        }
+      },
+      "successes": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.8334883331321589,
+              0.9169631210663617
+            ],
+            "estimate": 0.8790125491490197,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              0.842948717948718,
+              0.932806324110672
+            ],
+            "estimate": 0.8904109589041096,
+            "n": 292,
+            "n_games": 111
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.8463248612497256,
+              0.926209288149663
+            ],
+            "estimate": 0.8895470734510972,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              0.8414239482200647,
+              0.9260700389105059
+            ],
+            "estimate": 0.886986301369863,
+            "n": 292,
+            "n_games": 111
+          }
+        }
+      }
+    },
+    "qwen3-4b": {
+      "failures": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.015707543847628937,
+              0.030730200448098894
+            ],
+            "estimate": 0.022743705661489266,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.015420363329108577,
+              0.030303030303030304
+            ],
+            "estimate": 0.022288898414059153,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.07962689549626754,
+              0.11314312760669336
+            ],
+            "estimate": 0.09484104492239769,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.0798841059602649,
+              0.11372997711670481
+            ],
+            "estimate": 0.09537076725246464,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_swapped": {
+          "mean_s": {
+            "ci": [
+              0.030460886444241192,
+              0.05216334012661001
+            ],
+            "estimate": 0.04026606815406029,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.030441400304414,
+              0.05193951347797501
+            ],
+            "estimate": 0.04007715387912559,
+            "n": 4666,
+            "n_games": 125
+          }
+        }
+      },
+      "successes": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.6395570021583796,
+              0.7560047316842275
+            ],
+            "estimate": 0.6970267134957243,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              0.64,
+              0.7587412587412588
+            ],
+            "estimate": 0.6986301369863014,
+            "n": 292,
+            "n_games": 111
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.686699279974428,
+              0.7955232795068146
+            ],
+            "estimate": 0.7427855891568828,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              0.6917808219178082,
+              0.7986348122866894
+            ],
+            "estimate": 0.7465753424657534,
+            "n": 292,
+            "n_games": 111
+          }
+        }
+      }
+    },
+    "qwen3-8b": {
+      "failures": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.0004620748018164657,
+              0.002962920351551498
+            ],
+            "estimate": 0.001563375386372096,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.00042517006802721087,
+              0.002886323268206039
+            ],
+            "estimate": 0.0015002143163309043,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.0009156947639184525,
+              0.003367357339505616
+            ],
+            "estimate": 0.0020018979717480205,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.0008888888888888889,
+              0.0036567003656700365
+            ],
+            "estimate": 0.0021431633090441492,
+            "n": 4666,
+            "n_games": 125
+          }
+        },
+        "yn_swapped": {
+          "mean_s": {
+            "ci": [
+              1.2616135985204377e-06,
+              0.0009472676930134722
+            ],
+            "estimate": 0.00033932282774824904,
+            "n": 4666,
+            "n_games": 125
+          },
+          "share_yes": {
+            "ci": [
+              0.0,
+              0.0011340440009072353
+            ],
+            "estimate": 0.0004286326618088298,
+            "n": 4666,
+            "n_games": 125
+          }
+        }
+      },
+      "successes": {
+        "yn_absent": {
+          "mean_s": {
+            "ci": [
+              0.5331110412482061,
+              0.6606404497128918
+            ],
+            "estimate": 0.5968157893153425,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              0.5245901639344263,
+              0.6550522648083623
+            ],
+            "estimate": 0.589041095890411,
+            "n": 292,
+            "n_games": 111
+          }
+        },
+        "yn_aligned": {
+          "mean_s": {
+            "ci": [
+              0.42129840436108273,
+              0.5461670385494599
+            ],
+            "estimate": 0.4829628913702333,
+            "n": 292,
+            "n_games": 111
+          },
+          "share_yes": {
+            "ci": [
+              0.4230769230769231,
+              0.5501730103806228
+            ],
+            "estimate": 0.4863013698630137,
+            "n": 292,
+            "n_games": 111
+          }
+        }
+      }
+    }
+  },
+  "twin_plan_wins": {
+    "by_determination_reason": {
+      "away_from_receptacle": 21,
+      "away_from_receptacle_never_moved": 8,
+      "contents_or_open_state": 78,
+      "hands_full": 20
+    },
+    "caveat": "counted from recorded fields (task, action, scene, exclusion reason); the collector did not record that the replay ended the game, so this is the number of no-twin items with exactly that signature, not a replayed confirmation",
+    "games": 22,
+    "n_failures_without_twin": 2152,
+    "n_take_goal_from_target_plan_wins": 164,
+    "n_that_would_otherwise_be_primary": 127
+  }
+}

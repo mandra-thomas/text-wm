@@ -196,18 +196,28 @@ start_vllm() {
   local model="${VLLM_MODEL:-Qwen/Qwen3-8B}"
   local log="${PROJECT_ROOT}/logs/vllm_${SLURM_JOB_ID:-local}.log"
   activate_serve
+  # The pinned snapshot from wf.constants.REVISIONS (2026-11-20); an unpinned model stops the job here unless
+  # WF_ALLOW_UNPINNED=1, and VLLM_REVISION overrides the map.
+  local revision="${VLLM_REVISION:-}"
+  if [[ -z "${revision}" ]]; then
+    revision="$(python -c 'import sys; from wf.constants import revision_for; print(revision_for(sys.argv[1]) or "")' "${model}")" \
+      || { echo "ERROR: no pinned revision for ${model} (wf.constants.REVISIONS)" >&2; return 1; }
+  fi
+  local revision_args=()
+  [[ -n "${revision}" ]] && revision_args=(--revision "${revision}" --tokenizer-revision "${revision}")
   VLLM_PORT=$(_pick_port 8000 1000) || { echo "ERROR: no free vLLM port" >&2; return 1; }
   export VLLM_PORT
   export VLLM_BASE_URL="http://127.0.0.1:${VLLM_PORT}/v1"
   python -m vllm.entrypoints.openai.api_server \
     --host 127.0.0.1 \
     --model "${model}" \
+    ${revision_args[@]+"${revision_args[@]}"} \
     --max-model-len "${VLLM_MAX_MODEL_LEN:-8192}" \
     --no-enable-prefix-caching \
     --port "${VLLM_PORT}" \
     >"${log}" 2>&1 &
   echo $! >"${VLLM_PID_FILE}"
-  echo "vLLM starting model=${model} port=${VLLM_PORT} (log=${log})"
+  echo "vLLM starting model=${model} revision=${revision:-unpinned} port=${VLLM_PORT} (log=${log})"
   # Wait until healthy or timeout
   for _ in $(seq 1 120); do
     # Fail fast if process died; an answer on this port could come from another job's server.

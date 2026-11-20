@@ -24,6 +24,8 @@ The goal effect **ΔL** is the mean of L(aligned) − L(swapped), in nats. A cor
 
 ## Results recorded in this repository
 
+**Audit and reruns (2026-11-20).** A documentation and rigor audit led to seven CPU analysis reruns at 28b4d30. No verdict changed. The RQ2 result is the same with the shared-spot items (none was excluded by that rule alone), the RQ1 numbers are now at the final parser, and the headline ratios have intervals. Every changed number, old and new, is listed in [notes/deviations.md](notes/deviations.md), "Changes from the 2026-11-20 audit".
+
 **RQ2, confirmatory.** Details are in [notes/rq2_results.md](notes/rq2_results.md). The test used 4,666 replay-verified failing actions from 125 of the 134 unseen games. Both models pass the preregistered test, whose threshold was 0.5 nats:
 
 | Model | ΔL | 95% CI | Holm p | Verdict |
@@ -42,10 +44,10 @@ The two models differ in where the effect lands:
 - **H1.** H1b holds. H1a holds for Llama and is reversed for Qwen.
 - **The goal effect under other conditions:**
   - it holds with each of three few-shot example sets;
-  - an instruction to ignore the goal removes 9% of Qwen's effect and none of Llama's;
-  - showing the hidden state cuts it by about 70% without removing it;
+  - an instruction to ignore the goal removes 9% of Qwen's effect (95% CI 7% to 12%) and none of Llama's;
+  - showing the hidden state cuts it by about 70% without removing it (66% for Qwen, 71% for Llama);
   - the fine-tuned Word2World Qwen model shows none, and the fine-tuned Llama model a small reversed effect (−0.28 nats, CI −0.42 to −0.15).
-- **Caveat.** The written-prediction numbers are provisional, because the prediction parser has not met its prespecified audit rule. The decision log records audits three to six.
+- **Caveat.** The written-prediction numbers rest on a parser that never met its prespecified audit rule. The audits ended after six rounds with 95–97% agreement on hard cases, but with some replies read in the opposite direction. The note uses the final parser version, which reads 110 of the 68,340 predictions differently from the first analysis; no verdict changes. See the note's "Parser status".
 - **Superseded reading.** The note's reading that "most of the RQ2 effect comes from the action's object being named" was overturned by the exploratory runs below: with object-free task descriptions, 61% (Qwen) and 92% (Llama) of the effect remains.
 
 **RQ3, confirmatory.** Details are in [notes/rq3_results.md](notes/rq3_results.md). H3 is not supported: the interaction is +0.94 steps (95% CI −0.20 to 2.14), opposite in sign to the prediction. The experiment could not test the question well:
@@ -56,20 +58,20 @@ The two models differ in where the effect lands:
 
 **Exploratory follow-ups.** Details are in [notes/exploratory_results.md](notes/exploratory_results.md). None was preregistered; each design was logged before its data.
 
-- **Not only the object's name.** Most of the effect survives task descriptions that never name the object (61% for Qwen, 92% for Llama). But for Qwen, merely stating that the object is somewhere in the room reproduces nearly all of it.
+- **Not only the object's name.** Most of the effect survives task descriptions that never name the object (61% for Qwen, 95% CI 54% to 68%; 92% for Llama, 83% to 103%). But for Qwen, merely stating that the object is somewhere in the room reproduces nearly all of it.
 - **Other formats and tasks.** It replicates when the model answers a fixed yes/no question. It is unchanged when the aligned task is not the exact one the agent pursued.
 - **Discrimination.** On our candidates it lowers how well the models rank working actions above failing ones: a large drop for Llama, a small one for Qwen. All failing candidates act on the goal's object while most working ones do not, so this reflects the task promoting actions on its object over unrelated working actions.
 - **Practical size depends on model and format.**
   - Llama's predicted success moves by 13–40 points.
   - Qwen's moves by 42 points before the agent has acted, and little after, because Qwen stays confident that these actions fail.
 - **Instructions.** An instruction to ignore the goal barely helps.
-- **Reasoning.** Qwen3 thinking mode narrows the aligned-vs-swapped gap by a third, but does not reduce the lift over a neutral task.
+- **Reasoning.** Qwen3 thinking mode narrows the aligned-vs-swapped gap by a third (34%, 95% CI 16% to 52%), but does not reduce the lift over a neutral task.
 - **Mechanism.** The dissociation test of "the task as evidence that its object exists" gave mixed readouts and needs a confirmatory test.
 - **Not missing information.** In the mechanism diagnostic, stating the facts that decide the failure barely reduces the effect, and stating the environment's rules *increases* it. The effect is fully present where the model answers questions about the state correctly. The best-supported account is a task-relevance bias at answer time, not a failure to track the state.
 - **Model size (Qwen3 0.6B to 32B).**
   - The effect is present at every size.
   - The logged prediction that it would not grow with size failed over the full range, because the two smallest models can't do the task.
-  - Among the competent sizes, the log-odds effect shrinks with size but the practical size does not. Qwen3-32B calls a failing action a success 15% of the time under the real task, against 6% under the swapped one.
+  - Among the competent sizes, the log-odds effect shrinks with size but the practical size does not. Asked whether a failing action will succeed, Qwen3-32B answers "Yes" on 11.6% of them under the real task, against 3.8% under the swapped one (its mean probability of "Yes", mean σ of the yes/no score, is 0.150 against 0.058).
 
 ## Status (2026-11-20)
 
@@ -78,7 +80,7 @@ The two models differ in where the effect lands:
 | Pilots A and B | `pilotA_*`, `pilotB_*` | Done (2026-11-17) |
 | Item collection, 134 `valid_unseen` games | `rq12_transitions_s0..s2` | Done; every item replay-verified |
 | RQ2 confirmatory (preregistered) | `rq2_score`, `rq2_analysis` | Done; results in `notes/rq2_results.md` |
-| RQ1, H1 and secondary RQ2 conditions | `rq1_score`, `rq1_analysis` | Done; results in `notes/rq1_results.md` (written-prediction numbers provisional) |
+| RQ1, H1 and secondary RQ2 conditions | `rq1_score`, `rq1_analysis` | Done; results in `notes/rq1_results.md` (parser audits ended without a pass; see the note) |
 | RQ3 confirmatory | `rq3`, `rq3_analysis` | Done; results in `notes/rq3_results.md` (H3 not supported) |
 | Object-free goals, working actions | `rq1x_score`, `rq1x_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Qwen3 thinking mode | `thinking_probe`, `thinking_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
@@ -86,29 +88,38 @@ The two models differ in where the effect lands:
 | Counterfactual aligned task, yes/no feasibility | `rq1v_score`, `rq1v_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Mechanism diagnostic: state inference or judgement | `mech_score`, `mech_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Model-size series, Qwen3 0.6B to 32B | `size_score_<model>`, `size_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
-| Second environment (ScienceWorld) | not in this repository yet | In development; not yet merged. Its histories need redesign before it can replicate the main test |
+| Audit analyses and reruns (CPU) | `audit_analysis`, `rq2_shared_analysis`, `rq1_analysis_v2`, `rq1x_analysis_v2`, `rq1v_analysis_v2`, `thinking_analysis_v2`, `size_analysis_v2` | Done (2026-11-20); changes listed in `notes/deviations.md` |
+| Model families, wave A (Gemma-2-9B, Mistral-7B-v0.3, Llama-3.2-1B/3B) | `family_score_<model>`, `families_analysis` | Done (exploratory); results in `notes/families_results.md`, design in `notes/families_design.md` |
+| Model families, wave B and post-training (Gemma 4, Ministral 3, Qwen3.5, OLMo 3) | not yet built | Planned; a separate pinned software environment is built |
+| Second environment: TextCraft | branch `textcraft` | Items built and checked (two independent checkers agree on every item); design reviewed; not yet scored. Design: `notes/textcraft_design.md` on that branch |
+| Second environment: τ-bench retail | branch `taubench` | Items built and checked (two independent checkers agree on every item); design reviewed; not yet scored. Design: `notes/tau_design.md` on that branch |
+| ScienceWorld | not in this repository | Paused. A pre-specified feasibility probe found almost no determined failures on the task's own object (99.6% of the few found were one generic parser reply), so it cannot replicate the main test; a set of control items on unrelated objects is available |
 
-Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring shard reports `shard complete`. Run output is not tracked by git, so a fresh clone has none. Real runs refuse mock files and work saved at another commit.
+Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring shard reports `shard complete`. Run output is not tracked by git, so a fresh clone has none; the data live on ICE (see [notes/reproducing.md](notes/reproducing.md)). Real runs refuse mock files and work saved at another commit.
+
+Two cautions for reading the numbers. The two-candidate score s = σ(L), sometimes logged as "P(success)" or "Δp", is not the model's probability that the action succeeds; it compares one success wording with "Nothing happens.". And the game-bootstrap 95% intervals are slightly narrow: in simulation they covered the true value 93–95% of the time ([notes/testing.md](notes/testing.md)). The preregistered verdicts also rest on the permutation test, which was calibrated.
 
 ## Documents in this repository
 
 - [PILOT_PROTOCOL.md](PILOT_PROTOCOL.md): the implementation spec for the pilots.
 - [notes/deviations.md](notes/deviations.md): the dated decision log. It records every change since the study was filed, and each exploratory design, logged before its data. It also holds the parser audits and what the write-up must mention. Where it and the protocol disagree, it is current.
-- [notes/rq2_results.md](notes/rq2_results.md) and [notes/rq1_results.md](notes/rq1_results.md): confirmatory results, with metrics in [notes/rq2_confirmatory_metrics.json](notes/rq2_confirmatory_metrics.json) and [notes/rq1_metrics.json](notes/rq1_metrics.json).
+- [notes/rq2_results.md](notes/rq2_results.md) and [notes/rq1_results.md](notes/rq1_results.md): confirmatory results, with metrics in [notes/rq2_confirmatory_metrics.json](notes/rq2_confirmatory_metrics.json), [notes/rq2_shared_metrics.json](notes/rq2_shared_metrics.json) (shared-spot sensitivity) and [notes/rq1_v2_metrics.json](notes/rq1_v2_metrics.json) (RQ1 at the final parser; it supersedes `notes/rq1_metrics.json`).
 - [notes/rq3_results.md](notes/rq3_results.md): the agent experiment (RQ3), with metrics in [notes/rq3_metrics.json](notes/rq3_metrics.json).
-- [notes/exploratory_results.md](notes/exploratory_results.md): the exploratory follow-ups, with metrics in `notes/rq1x_metrics.json`, `notes/thinking_metrics.json`, `notes/rq1d_metrics.json`, `notes/rq1v_metrics.json`, `notes/mech_metrics.json` and `notes/size_metrics.json`.
-- [notes/testing.md](notes/testing.md): test suite, mutation check and calibration of the statistics.
+- [notes/exploratory_results.md](notes/exploratory_results.md): the exploratory follow-ups, with metrics in `notes/rq1x_v2_metrics.json`, `notes/thinking_v2_metrics.json`, `notes/rq1d_metrics.json`, `notes/rq1v_v2_metrics.json`, `notes/mech_metrics.json`, `notes/size_v2_metrics.json` and `notes/audit_metrics.json`. The `_v2` files are the 2026-11-20 reruns and supersede the files of the same name without it, which are kept.
+- [notes/testing.md](notes/testing.md): test suite, mutation check, item verification and calibration of the statistics.
+- [notes/reproducing.md](notes/reproducing.md): software and model versions, where the data are, which run, commit and GPU produced each result, how to rerun everything, and licences.
+- [notes/extensions.md](notes/extensions.md): the pre-pilot list of extensions, archived.
 
 The filed proposal and preregistration are not in this repository.
 
 ## How the stages fit together
 
 1. **Tier 0** checks that the machinery works. It answers no research question.
-2. **Pilot A** builds items from 50 train games, then scores them with Qwen3-8B and Llama-3.1-8B-Instruct (few-shot) and the fine-tuned Word2World model. It reports A, ΔL, Δp and the first-token measures, applies the scoring stop rule, and sets the study's sample size. `PILOT_RULE_GOAL_CHANNEL` is advisory.
+2. **Pilot A** builds items from 50 train games, then scores them with Qwen3-8B and Llama-3.1-8B-Instruct (few-shot) and the fine-tuned Word2World model. It reports A, ΔL, Δp and the first-token measures, applies the scoring stop rule, and estimates the items needed for power. In the end the confirmatory run scored every eligible item (4,666, against a preregistered minimum of 1,000), so that estimate did not limit the study. `PILOT_RULE_GOAL_CHANNEL` is advisory.
 3. **Pilot B** runs in order: `pilotB_headroom` (does perfect foresight help?), `pilotB_consumption` (does the agent use predictions?), `pilotB_eligibility` (sets the error-injection rates) and `pilotB_retention_minirun` (chooses the retained format). `pilotB_consumption` is the gate: perfect predictions must change the agent's action on at least 10% of steps, the proposal's own pilot check. `PILOT_RULE_HEADROOM` is advisory since 2026-11-17 and never stops the job; `PILOT_RULE_RETAINED_FORMAT` applies after the mini-run.
 4. **`runs/PILOT_REPORT.md`** collects the results, using `python -m wf.tools.assemble_pilot_report`.
-5. **Tier 3** is optional and allowed only if Pilots A and B finish cleanly. Nothing depends on it.
-6. **The confirmatory study** runs on `valid_unseen`, with its design fixed by the pilot rules.
+5. **Tier 3** was an optional stage, allowed only if Pilots A and B finished cleanly. It was never run (no `t3_*` run exists), and nothing depends on it.
+6. **The confirmatory study** ran on `valid_unseen`, with its design fixed by the pilot rules: item collection, item verification, RQ2, RQ1 and RQ3, then the exploratory runs. None of them reads pilot output.
 
 Pilot A and Pilot B refuse to run without `runs/FILED.txt`, and that marker must not be a mock filing.
 
@@ -119,14 +130,14 @@ No GPU, models or ALFWorld server needed.
 ```bash
 pip install -e ".[dev]"
 pytest -q
-bash pace/run_mock_pipeline.sh     # every run, in order, on the simulator
+bash pace/run_mock_pipeline.sh     # Tier 0 and the pilots, in order, on the simulator
 python -m wf.runs t0_smoke --mock  # one run
 python scripts/mutation_check.py   # breaks the code on purpose; the tests must notice
 ```
 
 Mock runs use `wf/env/sim.py`, which reproduces the AgentGym server's behaviour behind the real client. They write only to `runs_mock/` or a temp folder and refuse any other `RUNS_DIR`. Mock records are marked, real runs refuse them, and cluster jobs refuse to start in mock mode.
 
-A passing mock run shows the logic holds together. It says nothing about the real server or real models, and only ICE can show that.
+A passing mock run shows the logic holds together. It says nothing about the real server or real models, and only ICE can show that. `run_mock_pipeline.sh` covers only Tier 0 and the pilots; the confirmatory and exploratory runners are exercised on mock data by the test suite instead.
 
 ## Run on PACE ICE
 
@@ -141,7 +152,7 @@ bash pace/submit.sh pilotA.sbatch
 bash pace/submit.sh pilotB.sbatch
 ```
 
-`submit.sh` adds the account, QOS, partition and GPU from `pace.env`, so use it for GPU jobs. `verify_env.sbatch` is the exception, because it runs on CPU:
+`submit.sh` adds the account, QOS, partition and GPU request from `pace.env`, so use it for GPU jobs. Leave `PACE_GRES` empty (or `gpu:1`): a typed request such as `gpu:A100:1` overrides each script's own "any of L40S, A40 or A100" setting. `verify_env.sbatch` is the exception, because it runs on CPU:
 
 ```bash
 sbatch pace/verify_env.sbatch                                # all real-server checks
@@ -151,6 +162,12 @@ sbatch --export=ALL,VERIFY_ONLY=games pace/verify_env.sbatch # just the real-gam
 Tier 0 and Pilot A stop vLLM before HF scoring, because the two cannot share the GPU. Pilot B uses only vLLM.
 
 `pilotB_headroom` no longer stops on the headroom rule; it stops (exit 1) only if keeping predictions in the history is materially worse than dropping them. `pace/pilotB_recheck.sbatch` is no longer used.
+
+### Confirmatory and exploratory runs
+
+These have their own scripts; their order, settings and costs are in [notes/reproducing.md](notes/reproducing.md). In short: `rq12_collect.sbatch` collects the items (one job per shard, `RQ12_RUN=rq12_transitions_s0` and so on); `verify_items.sbatch` replays every item on CPU; `rq2_score.sbatch` runs whichever scoring run `RQ2_RUN` names (RQ2, RQ1 and every exploratory scoring run), one game shard per job (`WF_SHARD`, `WF_N_SHARDS`); and `rq3.sbatch` runs RQ3. Qwen3-32B needs an A100 with 80 GB.
+
+### Getting code onto ICE
 
 To get new code onto ICE, clone or pull from GitHub (`main`). Jobs started on 2026-11-17 used checkouts made from git bundles under `/storage/ice1/2/1/gmat3/` (`text-wm-fix4`, `text-wm-fix5`); their commits are on `main`. Each checkout needs its own `pace/pace.env` naming its own `PROJECT_ROOT`.
 
@@ -171,7 +188,7 @@ WF_RESUME=1 bash pace/submit.sh pilotA.sbatch
 
 ## Where results go
 
-Each run writes to `runs/<run_id>/`:
+Each run writes to `runs/<run_id>/`. A run split across jobs by game writes one folder per part, `runs/<run_id>/shard_<i>_of_<n>/` (for example `runs/rq2_score/shard_00_of_04/`), and its analysis reads them all. Each folder holds:
 
 | File | Contents |
 | --- | --- |
@@ -196,6 +213,12 @@ Logs are in `logs/`, named by job id.
 | Path | Purpose |
 | --- | --- |
 | `wf/runs.py` | One function per run, plus gates and resume. Start reading here: `python -m wf.runs <run_id>` |
+| `wf/rq2.py` | Confirmatory RQ2 scoring and analysis, with the object-mention 2×2 |
+| `wf/rq1.py` | RQ1, H1 and the secondary RQ2 conditions |
+| `wf/rq3.py` | RQ3 agent experiment (statistics in `wf/analysis/rq3_stats.py`) |
+| `wf/rq1x.py`, `wf/rq1d.py`, `wf/rq1v.py` | Exploratory: object-free goals and working actions; dissociation; counterfactual task and yes/no question |
+| `wf/mech.py`, `wf/sizes.py`, `wf/thinking.py` | Exploratory: mechanism diagnostic; Qwen3 size series; thinking mode |
+| `wf/util.py` | Run folders, saving and resume helpers, mock guards |
 | `wf/constants.py` | Preregistered constants and engineering thresholds |
 | `wf/config/` | Settings for each run |
 | `wf/env/` | Server client (`server.py`), simulator (`sim.py`), replay (`replay.py`), scene scan (`scene.py`), expert labels (`expert.py`) |
@@ -203,17 +226,23 @@ Logs are in `logs/`, named by job id.
 | `wf/data/` | Goal parsing (`goals.py`), transitions and alternatives (`transitions.py`), success twins (`candidates.py`) |
 | `wf/scoring/` | Prompts (`prompts.py`), log-odds scoring (`logodds.py`), observation parser (`parser.py`) |
 | `wf/corruption/` | Which steps get a wrong prediction (`schedule.py`) |
-| `wf/analysis/` | Statistics (`stats.py`) and reports (`report.py`) |
-| `wf/tools/` | Real-server and model verifiers, review export, report assembly, environment record |
+| `wf/analysis/` | Statistics (`stats.py`, `rq3_stats.py`) and reports (`report.py`) |
+| `wf/tools/` | Real-server and model verifiers, full item verification (`verify_items.py`), the blind parser audit (`parser_audit.py`), review export, report assembly, environment record |
 | `pace/` | Job scripts and ICE setup |
 | `tests/` | Unit, regression, adversarial and crash-and-resume tests |
-| `scripts/` | Mutation check and vLLM smoke test |
+| `scripts/` | Mutation check, statistics calibration, few-shot set drawing, RQ1 prompt check, vLLM smoke test |
+| `notes/` | Results, decision log, metrics copies, testing and reproduction notes |
 
 ## Things worth knowing
 
-- **Some receptacles share a spot.** From `cabinet 1` the agent can act on `cabinet 2`, and `go to cabinet 2` does nothing. Items affected by this carry `shared_location`, stay scored, and are left out of Pilot A's main test. Read that section of [notes/deviations.md](notes/deviations.md) before analysing or writing up results.
+- **What "ALFWorld" means here.** ALFWorld as served by the AgentGym server shipped with Word2World (`e8dc240`), with Word2World's renamed actions (`put` is `move`; there is a `help` action) and data download, and alfworld 0.3.3. Only solvable games are used, 134 of the 195 in AgentGym's `valid_unseen` list, and the environment ends every episode at 50 steps. Every inadmissible command gets "Nothing happens.". Details are in [notes/rq2_results.md](notes/rq2_results.md), "Methods".
+- **Some receptacles share a spot.** From `cabinet 1` the agent can act on `cabinet 2`, and `go to cabinet 2` does nothing. Items affected by this carry `shared_location` and are left out of the main tests: Pilot A's, and RQ1's and RQ2's on the confirmatory data. Pilot A also scored them for a sensitivity check. On the confirmatory data no item was excluded by this rule alone, so the result with them is the same ([notes/rq2_results.md](notes/rq2_results.md), "Shared-spot sensitivity"). Read that section of [notes/deviations.md](notes/deviations.md) before analysing or writing up results.
 - **Solvable games only.** The split sizes are 2,179 train, 140 `valid_seen` and 134 `valid_unseen`. AgentGym's mappings also list unsolvable games that crash on reset, and `wf/env/server.py` filters them out. See protocol §5.1.
 - **The server keeps one live game per id.** Finished games refuse further steps, and ALFWorld ends every episode at 50 steps. Counterfactual replays run on a separate sandbox id, so they never touch the live episode.
 - **Steps are slow by design.** Every step replays the game from a reset, in every condition, which costs about 1.7 s before any model time.
-- **The real server leaks memory on every reset.** It reached about 20 GB after 4,281 resets over 30 games, or about 4.5 MB per reset, without getting slower. Jobs have 64 GB; the first Pilot A job (50 games plus scoring) peaked near that limit without failing, but the full RQ3 run, at roughly 100,000 resets, needs a fix or periodic restarts.
+- **The real server leaks memory on every reset.** It reached about 20 GB after 4,281 resets over 30 games, or about 4.5 MB per reset, without getting slower. Jobs have 64 GB; the first Pilot A job (50 games plus scoring) peaked near that limit without failing. The later long jobs restarted the server instead: item collection every 6 games, RQ3 every 40 episodes (`max_episodes_per_job` in `wf/config/rq3.yaml`), and item verification ran in parts of about 1,300 items.
 - **Expert labels are unavailable on the real server.** `on_expert_path` stays null rather than being approximated.
+
+## Model families, wave A (in progress, 2026-11-20)
+
+Gemma 2 9B, Mistral 7B v0.3 and Llama 3.2 1B and 3B are scored with the size series' prompts, one run per model (`family_score_<tag>`, `pace/family_score.sbatch`), and `families_analysis` sets them beside Qwen3-8B and Llama-3.1-8B. A tokenization gate checks every item through the scorer's own encoding before any score, and a small exploratory run (`family_placement_mistral-7b-v0.3`, `pace/family_placement.sbatch`) checks whether Mistral's goal effect depends on where its template puts the system text. The yes/no format is the primary cross-family comparison, for models that pass a competence gate fixed before data. Its one primary metric is the share of failures the goal moves toward Yes, per model and in seven planned paired comparisons (difference, and equivalence within 5 points), Holm-corrected as one family of fixed size. The goal-to-evidence ratio is secondary: across families it mostly reflects how far each model pushes its log-odds. Design, gate results and the three amendments made before any score was read: [notes/families_design.md](notes/families_design.md).

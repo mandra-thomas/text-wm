@@ -1,0 +1,12 @@
+run_id: rq2_shared_score
+# Shared-spot sensitivity (documentation audit A2, 2026-11-20; not preregistered): the confirmatory items left out of
+# RQ2's primary set only by the shared-spot rule (wf/rq2_shared.py), scored as rq2_score scores the primary items:
+# both co-primary models, aligned and swapped goals, history only, example set 1. No mention 2x2, no written
+# predictions. On the confirmatory collection the set is empty (checked 2026-11-20), so a shard loads no model.
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+n_shards: 1
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

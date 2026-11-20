@@ -24,7 +24,7 @@ from wf import constants as C
 from wf import rq1
 from wf.analysis.report import write_run_report
 from wf.analysis.stats import cluster_bootstrap
-from wf.rq2 import SOURCES, complete_shards, load_items, shard_items
+from wf.rq2 import SOURCES, analysis_provenance, complete_shards, load_items, shard_items
 from wf.runs import _effect, _finished, _init_run, _item_hash
 from wf.scoring.logodds import LogoddsScorer, build_messages
 from wf.tools.verify_items import verified
@@ -265,7 +265,8 @@ def run_rq1x_analysis(cfg: dict) -> int:
                 "history_0": _effect(s, [t for t in primary if t.get("history_len", 0) == 0], primary="aligned_desc", control="swapped_desc"),
                 "history_1plus": _effect(s, [t for t in primary if t.get("history_len", 0) > 0], primary="aligned_desc", control="swapped_desc")},
             "working_actions": {
-                "goal_effect_on_successes": _effect(s, successes, require_agnostic=False),
+                # outcome="success": before 2026-11-20 this read the failure filter and came out empty (audit B1)
+                "goal_effect_on_successes": _effect(s, successes, require_agnostic=False, outcome="success"),
                 "goal_effect_on_failures": _effect(s, primary),
                 "auc": {arm: _auc_ci(by, both, arm) for arm in SUCCESS_ARMS},
                 "auc_aligned_minus_neutral": _auc_diff(by, both, "aligned", "absent"),
@@ -282,6 +283,8 @@ def run_rq1x_analysis(cfg: dict) -> int:
             reasons[t.get("determination_reason") or "unknown"].append(t)
         rep["by_failure_reason"] = {r: _three_way(s, its) for r, its in sorted(reasons.items()) if len(its) >= 50}
         report[tag] = rep
+    report["provenance"] = analysis_provenance(cfg["source"], folders, cfg.get("sources", SOURCES),
+                                               others={cfg["base"]: base_folders})
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "RQ1/RQ2 follow-up (exploratory)", report)
     lines = [f"{tag}: named ΔL={report[tag]['named_goal']['delta_L_nats']:.2f}, object-free ΔL="

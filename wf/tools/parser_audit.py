@@ -27,7 +27,11 @@ from wf.scoring.parser import parse_prediction
 
 
 def parser_version() -> str:
-    """SHA-256 of the parser's source, recorded with every audit row."""
+    """SHA-256 of the parser's source, recorded with every audit row.
+
+    Every byte counts, comments included, so parser.py is not edited even for its header (2026-11-20): the last
+    audited version is 3c25d40cc71529e2.
+    """
     return hashlib.sha256(Path(_parser.__file__).read_bytes()).hexdigest()[:16]
 
 # How many rows each kind of reply gets (third audit, 2026-11-17). The hard cases are over-sampled on purpose:

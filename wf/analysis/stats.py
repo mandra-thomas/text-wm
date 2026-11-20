@@ -10,6 +10,21 @@ from wf.constants import BOOTSTRAP_RESAMPLES, PERMUTATIONS, STEP_CAP
 from wf.util import sigmoid
 
 
+OUTCOMES = ("failure", "success", "any")
+
+
+def _outcome_ok(meta: dict, outcome: str) -> bool:
+    """Does the item's true outcome match: "failure" ("Nothing happens."), "success" (anything else), or "any"?"""
+    failed = (meta.get("true_obs") or "").strip() == "Nothing happens."
+    if outcome == "failure":
+        return failed
+    if outcome == "success":
+        return not failed
+    if outcome == "any":
+        return True
+    raise ValueError(f"outcome must be one of {OUTCOMES}, not {outcome!r}")
+
+
 def paired_conditions(
     scores: list[dict],
     transitions: list[dict] | None = None,
@@ -17,12 +32,17 @@ def paired_conditions(
     control: str = "swapped",
     require_agnostic: bool = True,
     value: str = "L",
+    outcome: str = "failure",
 ) -> list[tuple[str, float, float]]:
     """(game_id, value_primary, value_control) per item; value is a score field, L by default.
 
-    With transitions given, only those items count, restricted to context_determined & true
-    failure (& history_goal_agnostic unless require_agnostic=False).
+    With transitions given, only those items count, restricted to context_determined items whose true outcome
+    is `outcome` (& history_goal_agnostic unless require_agnostic=False). The default, "failure", is the
+    preregistered population; "success" selects the determined successes and "any" both. Before 2026-11-20
+    the failure filter was fixed, so a goal effect asked for on successes silently came out empty (audit B1).
     """
+    if outcome not in OUTCOMES:
+        raise ValueError(f"outcome must be one of {OUTCOMES}, not {outcome!r}")
     tmeta = None if transitions is None else {t["id"]: t for t in transitions}
     by_tid: dict[str, dict[str, dict]] = defaultdict(dict)
     for s in scores:
@@ -37,7 +57,7 @@ def paired_conditions(
             meta = tmeta.get(tid)
             if meta is None or not meta.get("context_determined"):
                 continue
-            if (meta.get("true_obs") or "").strip() != "Nothing happens.":
+            if not _outcome_ok(meta, outcome):
                 continue
             if require_agnostic and not meta.get("history_goal_agnostic", True):
                 continue
@@ -71,9 +91,10 @@ def delta_p(
     primary_condition: str = "aligned",
     control: str = "swapped",
     require_agnostic: bool = True,
+    outcome: str = "failure",
 ) -> dict[str, Any]:
     """Mean sigmoid(L_aligned) - sigmoid(L_swapped) in percentage points (§4.9)."""
-    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic)
+    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic, outcome=outcome)
     return _paired_effect(pairs, lambda a, c: (sigmoid(a) - sigmoid(c)) * 100.0, "delta_p_pp")
 
 
@@ -83,9 +104,10 @@ def delta_L(
     primary_condition: str = "aligned",
     control: str = "swapped",
     require_agnostic: bool = True,
+    outcome: str = "failure",
 ) -> dict[str, Any]:
     """Prereg headline: mean L_aligned - L_swapped in nats."""
-    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic)
+    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic, outcome=outcome)
     return _paired_effect(pairs, lambda a, c: a - c, "delta_L_nats")
 
 
@@ -95,9 +117,11 @@ def delta_L_first(
     primary_condition: str = "aligned",
     control: str = "swapped",
     require_agnostic: bool = True,
+    outcome: str = "failure",
 ) -> dict[str, Any]:
     """Mean change in first-token log-odds, logit(q_first): ΔL without the wording penalty."""
-    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic, value="L_first")
+    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic, value="L_first",
+                              outcome=outcome)
     return _paired_effect(pairs, lambda a, c: a - c, "delta_L_first_nats")
 
 
@@ -107,12 +131,14 @@ def delta_c(
     primary_condition: str = "aligned",
     control: str = "swapped",
     require_agnostic: bool = True,
+    outcome: str = "failure",
 ) -> dict[str, Any]:
     """Mean change in the wording penalty c_hat = logit(q_first) - L between goals.
 
     ΔL = Δlogit(q_first) - Δc, so ΔL reads as a belief shift only while this stays near 0.
     """
-    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic, value="c_hat")
+    pairs = paired_conditions(scores, transitions, primary_condition, control, require_agnostic, value="c_hat",
+                              outcome=outcome)
     return _paired_effect(pairs, lambda a, c: a - c, "delta_c_nats")
 
 

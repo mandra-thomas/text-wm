@@ -1,9 +1,14 @@
-"""Frozen ReAct + world-model few-shot prompts (freeze before Pilot B)."""
+"""Prompts: the ReAct agent's prompt and the world model's few-shot prompt, with the three frozen example sets.
+
+Set 1 (WM_FEWSHOT_SET0) was frozen before Pilot B and is the preregistered primary set; sets 2 and 3 were frozen
+on 2026-11-18 (notes/deviations.md, "Example sets 2 and 3 frozen"). Only the task line differs between a
+prompt's goal conditions (`_replace_task_line`).
+"""
 from __future__ import annotations
 
 import re
 
-# --- Few-shot world-model exemplars (set 0; additional sets for SD later) ---
+# --- Few-shot world-model exemplars: set 1 (named WM_FEWSHOT_SET0 for history), the primary set ---
 # Every string is logged server output from t0_smoke on train games (job 6832744), so no
 # observation shown to a model is hand-written. Games, in order: train/700, train/270, train/2332.
 # Histories are the steps just before the action. One success and two failures, as before.
@@ -164,9 +169,16 @@ def world_model_prompt(
 
 
 def _replace_task_line(history_text: str, task_line: str) -> str:
-    """Swap the task line in place, leaving every other byte of the history unchanged."""
+    """Swap the task line in place, leaving every other byte of the history unchanged.
+
+    Exactly one task line must be replaced. Until 2026-11-20 a text without one got the new line prepended and
+    kept nothing to replace, and a text with two had both replaced; either would show a prompt other than the
+    one intended (in the first case the swapped prompt could still carry the real task), so both now raise.
+    """
     replaced, n = re.subn(r"^Your task is to:.*$", lambda _: task_line, history_text, flags=re.MULTILINE)
-    return replaced if n else f"{task_line}\n{history_text}"
+    if n != 1:
+        raise ValueError(f"expected exactly one 'Your task is to:' line to replace, found {n}")
+    return replaced
 
 
 REACT_SYSTEM = (

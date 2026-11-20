@@ -27,6 +27,7 @@ from wf.runs import (
 )
 from wf.scoring.logodds import LogoddsScorer, build_messages
 from wf.scoring.parser import parse_prediction
+from wf.provenance import provenance, shard_inputs
 from wf.tools.verify_items import verified
 from wf.util import append_jsonl, read_jsonl, require_filed, runs_root, write_json, write_status
 
@@ -229,6 +230,16 @@ def complete_shards(source_run: str) -> tuple[list[Path], list[str]]:
     return folders, problems
 
 
+def analysis_provenance(source: str | None, folders: list[Path], sources: tuple[str, ...] | list[str] = SOURCES,
+                        others: dict[str, list[Path]] | None = None, parser: bool = False) -> dict:
+    """The provenance block for an analysis that read `source`'s shards (and `others`) and the item files."""
+    runs = {**({source: runs_root() / source} if source else {}), **{s: runs_root() / s for s in sources}}
+    runs.update({name: runs_root() / name for name in (others or {})})
+    inputs = shard_inputs(list(folders) + [p for fs in (others or {}).values() for p in fs])
+    inputs += [runs_root() / s / "transitions.jsonl" for s in sources]
+    return provenance(runs=runs, inputs=inputs, parser=parser)
+
+
 def run_rq2_analysis(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
@@ -270,6 +281,7 @@ def run_rq2_analysis(cfg: dict) -> int:
         "verdicts": verdicts,
         "per_model": per_model,
     }
+    report["provenance"] = analysis_provenance(cfg["source"], folders, cfg.get("sources", SOURCES))
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "RQ2 (confirmatory)", report)
     lines = [f"{m}: dL={per_model[m]['delta_L_nats']:.3f} CI={per_model[m]['delta_L_ci']} "

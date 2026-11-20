@@ -45,13 +45,15 @@ PY
 echo "=== prefetch models ==="
 python - <<'PY'
 from huggingface_hub import snapshot_download
+from wf.constants import REVISIONS
 
+# Each model at its pinned snapshot (wf.constants.REVISIONS), the revision the scorers load.
 for repo in [
     "Qwen/Qwen3-8B",
     "X1AOX1A/WorldModel-Alfworld-Qwen2.5-7B",
 ]:
-    print("fetch model", repo, flush=True)
-    snapshot_download(repo)
+    print("fetch model", repo, REVISIONS[repo], flush=True)
+    snapshot_download(repo, revision=REVISIONS[repo])
     print("done", repo, flush=True)
 
 print("fetch dataset X1AOX1A/LLMasWorldModels", flush=True)
