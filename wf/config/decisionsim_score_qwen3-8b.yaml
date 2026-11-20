@@ -1,0 +1,15 @@
+run_id: decisionsim_score_qwen3-8b
+# Option A decision simulation (notes/decisionsim_design.md; wf/decisionsim.py). Yes/no feasibility scores of every
+# candidate at 300 seeded eligible states, under the aligned and the neutral task, at the pinned revision in
+# wf.constants.REVISIONS. n_states: all scores the 761-state census; add yn_swapped to arms for the swapped task.
+# Every condition of a state is scored in the same job. WF_N_SHARDS / WF_SHARD split it by game.
+model: qwen3-8b
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_states: 300
+seed: 20260924
+arms: [yn_aligned, yn_absent]
+n_shards: 1
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

@@ -90,6 +90,7 @@ The two models differ in where the effect lands:
 | Model-size series, Qwen3 0.6B to 32B | `size_score_<model>`, `size_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Audit analyses and reruns (CPU) | `audit_analysis`, `rq2_shared_analysis`, `rq1_analysis_v2`, `rq1x_analysis_v2`, `rq1v_analysis_v2`, `thinking_analysis_v2`, `size_analysis_v2` | Done (2026-11-20); changes listed in `notes/deviations.md` |
 | Model families, wave A (Gemma-2-9B, Mistral-7B-v0.3, Llama-3.2-1B/3B) | `family_score_<model>`, `families_analysis` | Done (exploratory); results in `notes/families_results.md`, design in `notes/families_design.md` |
+| Decision simulation (Option A): does the bias change a planner's choice? | `decisionsim_score_<model>`, `decisionsim_analysis` | Designed and built; existing yes/no scores cover no full candidate set, so a small yes/no scoring run (about 2 GPU-hours for five models) is needed before any result. Design: `notes/decisionsim_design.md` |
 | Model families, wave B and post-training (Gemma 4, Ministral 3, Qwen3.5, OLMo 3) | not yet built | Planned; a separate pinned software environment is built |
 | Second environment: TextCraft | branch `textcraft` | Items built and checked (two independent checkers agree on every item); design reviewed; not yet scored. Design: `notes/textcraft_design.md` on that branch |
 | Second environment: τ-bench retail | branch `taubench` | Items built and checked (two independent checkers agree on every item); design reviewed; not yet scored. Design: `notes/tau_design.md` on that branch |
@@ -218,6 +219,7 @@ Logs are in `logs/`, named by job id.
 | `wf/rq3.py` | RQ3 agent experiment (statistics in `wf/analysis/rq3_stats.py`) |
 | `wf/rq1x.py`, `wf/rq1d.py`, `wf/rq1v.py` | Exploratory: object-free goals and working actions; dissociation; counterfactual task and yes/no question |
 | `wf/mech.py`, `wf/sizes.py`, `wf/thinking.py` | Exploratory: mechanism diagnostic; Qwen3 size series; thinking mode |
+| `wf/families.py`, `wf/decisionsim.py` | Exploratory: model families; offline decision simulation (Option A) |
 | `wf/util.py` | Run folders, saving and resume helpers, mock guards |
 | `wf/constants.py` | Preregistered constants and engineering thresholds |
 | `wf/config/` | Settings for each run |

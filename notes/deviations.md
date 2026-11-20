@@ -10,6 +10,10 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided 2026-11-20: Option A, offline decision simulation (exploratory, before any score)
+
+Does the task-induced bias change which action a planner using the world model would choose, and how often does it make that planner choose a failing action? This is a decision-level diagnostic, not a measure of end-to-end planning harm. The design, its predictions and the rule for whether Option C (branching from real agent runs) is worth doing are in `decisionsim_design.md`, committed (72aa1fd) before any decision result. The existing yes/no scores cover no state's full candidate set with a working option (179 states are fully scored, all without a success), so a new yes/no scoring run is needed: every candidate at 300 seeded eligible states (3,857 candidates in 123 games), aligned and neutral task, Qwen3-8B and Llama-3.1-8B primary, Mistral-7B, Gemma-2-9B and Llama-3.2-3B secondary (`decisionsim_score_<model>`, `pace/decisionsim_score.sbatch`; then `decisionsim_analysis` on CPU). Not yet run.
+
 ## Decided or found 2026-11-20 (documentation and rigor audit)
 
 ### Changes from the 2026-11-20 audit
