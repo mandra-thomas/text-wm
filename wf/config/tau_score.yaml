@@ -1,0 +1,11 @@
+run_id: tau_score
+# τ-bench retail scoring (notes/tau_design.md §6): main population and natural set, aligned/swapped/neutral,
+# first token, yes/no and full replies, both co-primary models. Sharded by user: WF_SHARD / WF_N_SHARDS.
+build_run: tau_build
+verify_run: tau_verify
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+readouts: [first, yn, full]
+score_natural: true
+score_unachievable: false
+n_shards: 8
+expected_items_sha256: null

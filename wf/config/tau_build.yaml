@@ -1,0 +1,11 @@
+run_id: tau_build
+# τ-bench retail items (notes/tau_design.md §3-§5): generated items, natural items and few-shot examples. CPU, seconds.
+# The released trajectories (tau2-bench c06b07d, data/tau2/results/final) are read from natural_dir, or from
+# $TAU_NATURAL_DIR, and must match these sha256 values. They are not committed (they hold commercial models' text).
+natural_dir: third_party/tau2-bench/data/tau2/results/final
+natural_required: true
+natural_files:
+  claude-3-7-sonnet-20250219_retail_default_gpt-4.1-2025-04-14_4trials.json: ed41dbd18c080154156484e3a0122c095e324a11367a640d88e15956daed7b9d
+  gpt-4.1-2025-04-14_retail_default_gpt-4.1-2025-04-14_4trials.json: 5fc5b96ada0fe46a463eaed98d1bfed9947fe073bac052290162dae18d71394e
+  gpt-4.1-mini-2025-04-14_retail_base_gpt-4.1-2025-04-14_4trials.json: 6d6badb43b716adca31591b0b40e15fd493b49adddaa8e2c47035bb557549257
+  o4-mini-2025-04-16_retail_default_gpt-4.1-2025-04-14_4trials.json: 7135f38bbbbd46d6babe830574c8623bb276d8fd6da316580b905cf513853f98

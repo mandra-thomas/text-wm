@@ -1,0 +1,12 @@
+run_id: tau_score_smoke
+# Format and timing check for tau_score: 20 main-population items (by hash), both models, every readout.
+# Read for format only (token checks, first-token mass, timing), never for results.
+build_run: tau_build
+verify_run: tau_verify
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+readouts: [first, yn, full]
+score_natural: false
+score_unachievable: false
+limit_items: 20
+n_shards: 1
+expected_items_sha256: null

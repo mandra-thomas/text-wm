@@ -1384,6 +1384,14 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "rq2_score_smoke": lambda cfg: _rq2("run_rq2_score")(cfg),
     "rq2_analysis": lambda cfg: _rq2("run_rq2_analysis")(cfg),
     "rq2_smoke_analysis": lambda cfg: _rq2("run_rq2_analysis")(cfg),
+    # τ-bench retail replication (notes/tau_design.md)
+    "tau_build": lambda cfg: _lazy("tau.pipeline", "run_tau_build")(cfg),
+    "tau_verify": lambda cfg: _lazy("tau.pipeline", "run_tau_verify")(cfg),
+    "tau_score": lambda cfg: _lazy("tau.pipeline", "run_tau_score")(cfg),
+    "tau_score_smoke": lambda cfg: _lazy("tau.pipeline", "run_tau_score")(cfg),
+    "tau_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
+    "tau_smoke_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
+    "tau_contamination": lambda cfg: _lazy("tau.pipeline", "run_tau_contamination")(cfg),
 }
 
 

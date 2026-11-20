@@ -1,0 +1,8 @@
+run_id: tau_contamination
+# Exploratory pretraining-contamination check (notes/tau_design.md §10): 50 user, 50 order and 50 product records,
+# verbatim against identifier-digit-resampled. One job, both models.
+build_run: tau_build
+verify_run: tau_verify
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+per_kind: 50
+expected_items_sha256: null
