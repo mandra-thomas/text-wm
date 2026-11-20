@@ -12,9 +12,9 @@ $$\Delta L = \frac{1}{n}\sum_{i=1}^{n}\left[L_i(\text{aligned}) - L_i(\text{swap
 
 A world model that reads the history correctly gives a ΔL of zero, because the history alone decides the reply.
 
-**Prediction (logged now).** ΔL > 0 on the main population for both Qwen3-8B (thinking off) and Llama-3.1-8B-Instruct. For each model the prediction counts as confirmed when ΔL > 0, the 95% bootstrap interval clustered by goal pair excludes zero, and the permutation p-value (whole goal pairs flipped), Holm-adjusted over the two models, is below 0.01. The replication holds if it is confirmed for both models. We also report the RQ2 magnitude rule's verdict (support needs ΔL of at least 0.5 nats, strong at 1.0), as a description, not as the test.
+**Prediction (logged now).** *(The main population is drawn in same-history couples from section 12, B1 on; section 12, C7 adds named readouts below this test.)* ΔL > 0 on the main population for both Qwen3-8B (thinking off) and Llama-3.1-8B-Instruct. For each model the prediction counts as confirmed when ΔL > 0, the 95% bootstrap interval clustered by goal pair excludes zero, and the permutation p-value (whole goal pairs flipped), Holm-adjusted over the two models, is below 0.01. The replication holds if it is confirmed for both models. We also report the RQ2 magnitude rule's verdict (support needs ΔL of at least 0.5 nats, strong at 1.0), as a description, not as the test.
 
-**What a null would mean.** A ΔL near zero with a narrow interval (say, within ±0.25 nats) would mean the ALFWorld effect does not carry over to a crafting game whose failures are inventory arithmetic. That would point to something specific to ALFWorld, such as the task line acting as evidence that its object exists somewhere, or to the "Nothing happens." reply format, rather than to a general bias toward the task's object. Two readings would need to be told apart before drawing that conclusion: the models may fail at the accounting itself, so that L is high under every task line and there is no room for a shift (the neutral condition and the first-token readout show this); or the goal line may matter less here because both goals' recipes are on screen. A negative ΔL would mean naming the goal makes the model more careful about it. The ALFWorld mechanism diagnostic found a task-relevance bias at answer time; that account predicts a positive effect here too.
+**What a null would mean.** *(The ±0.25-nat criterion is replaced by equivalence margins, 1.0 nats for Qwen and 0.3 for Llama, in section 12, C4.)* A ΔL near zero with a narrow interval (say, within ±0.25 nats) would mean the ALFWorld effect does not carry over to a crafting game whose failures are inventory arithmetic. That would point to something specific to ALFWorld, such as the task line acting as evidence that its object exists somewhere, or to the "Nothing happens." reply format, rather than to a general bias toward the task's object. Two readings would need to be told apart before drawing that conclusion: the models may fail at the accounting itself, so that L is high under every task line and there is no room for a shift (the neutral condition and the first-token readout show this); or the goal line may matter less here because both goals' recipes are on screen. A negative ΔL would mean naming the goal makes the model more careful about it. The ALFWorld mechanism diagnostic found a task-relevance bias at answer time; that account predicts a positive effect here too.
 
 ## 2. Environment
 
@@ -126,7 +126,7 @@ The item's class is used up if any short input is used up, else too few if any i
 
 Selection is by a fixed rule with seeded draws, applied after deduplication.
 
-*(The main population's rule is replaced by section 11, A3: couples balanced on history fit within class, length bin and role.)*
+*(The main population's rule is replaced by section 11, A3: couples balanced on history fit within class, length bin and role; A3 is in turn replaced by section 12, B1: couples of items with the same history, one for each goal of the pair.)*
 
 - **Main population: 1,500 items, 500 per failure class.** If a class has fewer than its quota, all of its items are taken, and the remainder is split equally among the classes that still have spare items, repeated until the quota is filled or nothing is left.
 - **Within a class,** the quota is split equally over the length bins 1–3, 4–8 and 9–12, with the same redistribution rule.
@@ -181,7 +181,7 @@ The neutral line mirrors ALFWorld's neutral line ("Your task is to: explore the 
 
 1. a successful craft: the walk's first craft action at step 3 or later, with the history before it;
 2. a craft failure: an item of the main population from the second pair, chosen at random among its items with 2 to 5 history steps;
-3. a successful get: the walk's first get action at step 3 or later.
+3. a successful get: the walk's first get action at step 3 or later. *(Its goal line is set by the rule of section 12, C8, so that one example acts off its goal.)*
 
 Each example's goal line is its own goal. That is the goal whose tree holds the crafted object for example 1, and the item's goal for example 2. For a get, a coin seeded with `random.Random(f"{SEED}|textcraft|fewshot|goal|{k}")` picks one of the pair's goals, where k is the example's position (1 to 3). The examples are stored in `wf/textcraft/data/fewshot.json`.
 
@@ -286,7 +286,7 @@ The design changes the feasibility probe (scratch `envprobe/textcraft/`) in the 
 
 ## 10. Clarifications written while building (2026-11-20, before any scoring)
 
-These clarifications were added after the design commit (2b4b16a). None changes a rule that affected which items were built.
+These clarifications were added after the design commit (76626d6; this note first cited it as 2b4b16a, its hash before the branch history was rewritten in section 11, A6; corrected in section 12, B9). None changes a rule that affected which items were built.
 
 - **Order independence (section 2).** Reading the frozen files in reverse gives the same recipes, generic groups and items. Only the order of an item's alternative recipes follows the file order, and the frozen file fixes that order. The environment's craft step takes the first alternative that matches the inputs. That order could matter only if two alternatives took the same inputs with different output counts, and none do (sugar lists "craft 1 sugar using 1 sugar cane" twice, identically). A test checks both points.
 - **Splitting a quota (section 4).** When the remainder of a quota is smaller than the number of open classes or bins, one extra item goes to each of the first ones, in the order used in section 4 (classes used up, too few, never obtained; bins in ascending order). This is why the main cells hold 167, 167 and 166 items.
@@ -339,7 +339,7 @@ Review 1 found that 660 of the 1,500 main items could be decided from names alon
 - `pure_class` is true when all short inputs have the same class;
 - `needs_arithmetic` is true when every short input was obtained at some point in the history (peak above 0). For such an item the names alone do not decide the failure: the reader has to count what was obtained and what was used.
 
-**Named secondary readout (logged now).** ΔL on the main items with `needs_arithmetic` true, per model, with the same pair-clustered bootstrap and pair-level sign-flip permutation as the primary test. It is reported whatever the primary result, and it is not part of the Holm family of the primary test. The primary population still holds all three classes. A failure decided by a missing name is still a determined failure, which is what the primary test is about. The secondary readout asks whether the effect survives when the failure can only be seen by counting.
+**Named secondary readout (logged now; its population is narrowed in section 12, B6).** ΔL on the main items with `needs_arithmetic` true, per model, with the same pair-clustered bootstrap and pair-level sign-flip permutation as the primary test. It is reported whatever the primary result, and it is not part of the Holm family of the primary test. The primary population still holds all three classes. A failure decided by a missing name is still a determined failure, which is what the primary test is about. The secondary readout asks whether the effect survives when the failure can only be seen by counting.
 
 On the rebuilt main sample, 847 items need arithmetic (used up 488, too few 359) and 653 do not (never obtained 500, too few 141, used up 12). 1,343 items are pure; the 157 mixed items are too few (141) and used up (16).
 
@@ -349,7 +349,7 @@ The walks are goal-blind, but selection made the history track the real goal. Re
 
 **History fit (definition).** For a goal G, its *tree names* are every name on the lines of G's recipe tree (section 3), outputs and inputs alike. A history step's *object* is the item it produced: X for a reply "Got N X", and Y for a reply "Crafted K minecraft:Y_". Inventory steps have no object. Let the aligned count be the number of history steps whose object is in the aligned goal's tree names and not in the partner's, and the swapped count the same with the roles exchanged. The item's `history_fit` is `aligned` when the aligned count is larger, `swapped` when the swapped count is larger, and `tie` otherwise; both counts are stored in `history_fit_counts`. A text-only version computes the trees from the displayed lines: start from G, take every displayed line whose output is the current name (or, for planks and wool, one of the members listed in A1), and continue from each of its inputs. The checker recomputes every item's fit this way, and verify compares it with the builder's, which uses the environment's own tree.
 
-**Selection (replaces section 4's rule for the main population).** The main population is drawn in couples: one item whose history favours the aligned goal and one whose history favours the partner.
+**Selection (replaces section 4's rule for the main population; itself replaced by section 12, B1).** The main population is drawn in couples: one item whose history favours the aligned goal and one whose history favours the partner.
 
 1. 750 couples (1,500 items), split over the three classes, then over length bins within a class, then over the two roles within a class and bin, each split equal with the redistribution rule of section 4. A cell's capacity is the smaller of its numbers of aligned-favouring and swapped-favouring items.
 2. Within a class, bin and role cell with k couples, k aligned-favouring and k swapped-favouring items are drawn, each side round-robin over goal pairs with `random.Random(f"{SEED}|textcraft|select|main|{class}|{bin}|{role}|{fit}")`.
@@ -384,7 +384,7 @@ Because each full reply is its prefix followed by the name, L splits into the pr
 
 $$\Delta L_{\text{name}} = \frac{1}{n}\sum_{i=1}^{n}\left(\left[L_i(\text{aligned}) - L^{\text{pre}}_i(\text{aligned})\right] - \left[L_i(\text{swapped}) - L^{\text{pre}}_i(\text{swapped})\right]\right) = \Delta L - \Delta L_{\text{prefix}}.$$
 
-Both are reported per model on every population with the primary test's statistics, as named controls rather than tests. If the prefix part carries ΔL, the goal line moves the predicted outcome. If the remainder carries it, the effect is word priming of the name. The split is exact only when a prefix's tokens are a leading part of the full reply's tokens. The GPU smoke run checks this for each model's tokenizer (validation standard, step 7) before full scoring. Where it fails, the remainder will be reported as approximate.
+Both are reported per model on every population with the primary test's statistics, as named controls rather than tests. If the prefix part carries ΔL, the goal line moves the predicted outcome. If the remainder carries it, the effect is word priming of the name. *(The last sentence is wrong and is corrected in section 12, B3: priming of the name largely cancels in the remainder, which can itself carry outcome belief.)* The split is exact only when a prefix's tokens are a leading part of the full reply's tokens. The GPU smoke run checks this for each model's tokenizer (validation standard, step 7) before full scoring. Where it fails, the remainder will be reported as approximate.
 
 **Overlap flags and strata.** `object_goal_overlap` is true when the object's name shares a word (split on spaces) with the aligned goal's name, and `object_partner_overlap` the same for the partner. On the rebuilt main sample, 635 of the 982 ingredient-role items share a word with their aligned goal and 18 with the partner; 46 main items in all share a word with the partner. Before this amendment the counts were 641 of 869, and 50. Strata: role × goal overlap, and partner overlap.
 
@@ -416,3 +416,182 @@ The recipe JSON is Minecraft game data, which AgentGym's MIT licence does not co
 - **Blind checker.** The blind checker written from the pre-amendment note, rerun unchanged on the rebuilt items, agrees on every reply, class, short input, top-up and twin (2,000 of 2,000). A blind checker written from this amended note, covering history fit and the flags, is left for review 2.
 - **Manifest.** `wf/textcraft/data/manifest.json` is marked verified for items sha256 `8f7de347…50ee6bc` and prompt examples `29e9f14d…1b34804f`.
 - **Mutation check.** The first run of the 75 mutants killed 73. Two verify-side mutants survived. One switched off the balance condition in verify's gate, which no test reached because the gate sat inside the full verification run. The other switched off the goal-line check, which the negative prompt test failed to isolate because other checks also caught its broken prompt. The gate was moved into a tested function (`verify.replay_passes`), the negative test was narrowed so that only the goal-line check can catch it, and verify was rerun (verified, same hashes). The second run killed all 75. The scope of this claim: these are the 75 listed mutants, against `tests/test_textcraft_*.py`. It is not a claim that every possible bug would be caught.
+
+## 12. Amendments after review 2, before any score (2026-11-20)
+
+Two reviews read the rebuilt items of section 11: an adversarial review of the labels and controls (review 2), and a scientific-validity review of what the design can show. This section answers both. Nothing has been scored: no model has scored any TextCraft item. The items were rebuilt under the rules below and every safeguard of section 7 was rerun (results at the end). Part B answers review 2's must-fix list; part C answers the validity review. The primary test of section 1 keeps its statistic, its interval, its permutation, its Holm rule and its confirmation rule; what changes is how its population is drawn (B1) and how a null is read (C4).
+
+### B1. The history still pointed to the real goal: same-history couples
+
+**What review 2 found.** Section 11, A3 balanced one measure of how far the history works toward each goal: the number of steps whose object lies only in that goal's tree, and only its sign. Other measures computed from the same text still picked the real goal more often than chance. The number of distinct names produced in each goal's tree picked it for 0.685 of the used-up ingredient items. How close each goal was to completion picked it for 0.70 of the used-up ingredient items, and went the other way in the too-few ingredient (0.28) and never-obtained goal (0.36) cells. The first step in either tree picked it for about 0.63 of the too-few items. Within the balanced measure the margins differed (5.1 steps on the aligned-favouring side against 2.4 on the other), and the share of ingredient items whose name shares a word with the goal differed between the two sides (0.44 against 0.81). The coupling is structural: a used-up or too-few failure needs the history to have fetched or crafted the action's input, and that input lies in the real goal's tree.
+
+**The ten fit measures (definitions, all computed from the prompt text by `wf/textcraft/fit.py`, which imports no environment code).** For an item with aligned goal G and partner P, the exclusive names of G are the names on the lines of G's tree (section 11, A3, text-only version) that are not on the lines of P's tree, and the same for P. A step's object is the item it produced (X for "Got N X", Y for "Crafted K minecraft:Y_") and its count is N or K. Each measure gives two numbers, one for each goal, and its sign is +1 when G's number is larger, −1 when P's is larger and 0 otherwise. Exchanging G and P exchanges the two numbers, so every measure changes sign with the goals.
+
+1. *steps*: the number of history steps whose object is an exclusive name of the goal (this is section 11's `history_fit`).
+2. *quantity*: the sum of the counts of those steps.
+3. *crafts*: the number of those steps that are crafts.
+4. *distinct names*: the number of different exclusive names of the goal among the step objects.
+5. *first step*: the first step whose object is an exclusive name of either goal counts 1 for that goal; 0 for both when there is none.
+6. *last step*: the same for the last such step.
+7. *held now*: the total count held after the history (the checker's accounting) of the goal's exclusive names.
+8. *completion*: over the displayed lines whose output is the goal, the largest mean over the line's inputs of the smaller of the amount held and the amount needed, divided by the amount needed; a planks or wool input counts every member held.
+9. *goal words*: the number of words in the history (every action and reply, square brackets removed, "minecraft:x_y" read as "x y", split on spaces) that belong to the goal's name and not to the other goal's name.
+10. *last inventory*: in the last "Inventory:" reply that lists anything, the number of listed names that are exclusive names of the goal.
+
+On the rebuilt items, measures 1 to 8 and 10 agree in sign with review 2's own implementations (heur.py, heur2.py) on all 3,200 items; measure 9 agrees on 3,117, the rest because the reviewer's split keeps "minecraft:oak" and "[oak" as single words.
+
+**Selection (replaces section 11, A3): same-history couples.** The main population is drawn in couples of two items that come from the same goal pair, show the same history, and have the same failure class and role, one acting in each goal's tree. Within a pair, both goals are tested at every state of the same goal-blind walks (section 3), so such couples exist wherever both trees offer a failure of one class and role at one state. A couple slot is one history of a pair at which both goals have such an item; the 750 couples are split over classes, then length bins, then roles, as in section 4; within a class, bin and role cell the slots are drawn round-robin over goal pairs with `random.Random(f"{SEED}|textcraft|select|main|{class}|{bin}|{role}|couples")`, a random slot per pair and round, and a random item of each goal in the slot. Each slot is used once. Ties in history fit are now drawn too, because the couple balances them.
+
+**Why this removes the leak, and the assumption it needs.** Write the score of an item as
+
+$$L_i(g) = r_i(g) + c(h_i, g) + e_i,$$
+
+where g is the goal line, $r_i(g)$ is how the goal line bears on the action itself (the effect the study is about), $c(h, g)$ is any effect of how well the goal line agrees with the history h, and $e_i$ is everything else. The goal effect of an item whose aligned goal is G is $L_i(G) - L_i(P)$. In a couple, item 1 has aligned goal G and item 2 has aligned goal P, at the same history h, so the agreement terms contribute $c(h, G) - c(h, P)$ and $c(h, P) - c(h, G)$, which sum to zero. The mean ΔL over couples therefore contains no history–goal agreement at all, whatever measure of agreement one has in mind, listed or not, sign or magnitude. Every function of the history and the two goals that changes sign with the goals averages to exactly zero over the main sample, in every class, bin and role cell: all ten measures above, review 2's heuristics including the ones that do not use the history (the larger tree, the alphabetically first goal, the shorter name, whose top line is listed first), and the margins. On the rebuilt items each of review 2's heuristics picks the real goal for exactly 0.500 of main items, in every class × role cell. The assumption is additivity: the history pulls the two actions of a couple by the same amount, that is, c does not depend on which action follows. If agreement mattered more for one couple member's action than for the other's, a remainder would be left; the agreement contrast below measures how large c is, which bounds that remainder's importance.
+
+**Why 24 walks.** Same-history couples are rarer than items. With the 6 walks of section 3, the used-up class had 141 couple slots from about 50 pairs, short of its 250 couples. With 24 walks per pair (seeds 0 to 23; every rule of the walk unchanged) it has 623, and every class fills its quota. Couple slots per class (all bins and roles): never obtained 71,012, too few 2,505, used up 623 (used up on the goal: 3, all in one pair). The prompt examples are still drawn from walks 0 to 5 only, so adding walks did not change them (the example file changed only for C8).
+
+**Alternatives considered.** Exact mirroring of the ten signs across items with different histories gave about the same capacity as same-history couples and balances only the listed signs. Keeping only histories that favour neither goal on any measure leaves items only at 1 to 3 steps and only for never obtained (36 such items in the rebuilt main sample). Same-history couples balance every measure, magnitudes included, at no cost in quotas once the walks are extended.
+
+**The cost.** The main population now spans 229 goal pairs (257 before). Too few on an ingredient has fewer pairs per cell (13 at 1–3 steps), and used up on the goal has 3 couples from one pair (6 items), see B2.
+
+**The history–goal agreement contrast (a named readout, C7).** Half the difference between ΔL on the main items whose history favours their aligned goal (`history_fit` aligned) and ΔL on those whose history favours the partner. Within a couple these are the two members, so under the model above the half-difference estimates c, the amount history–goal agreement adds to an item's ΔL. This links TextCraft to ALFWorld, where agent histories pursued the aligned task by construction: there the measured effect is about ΔL plus c, here ΔL. Interval by pair bootstrap; no p-value.
+
+**Sensitivity analyses (kept, now descriptive).** Review 2 asked for two sensitivity analyses. With couples both are close to redundant, and the validity review asked that they be kept as secondary or dropped with a reason; we keep them, reported with intervals and without p-values:
+
+- *Regression.* ΔL of each main item regressed on the signs of the ten measures (least squares, intercept and ten slopes; interval of the intercept by pair bootstrap). Because every sign averages to zero over couples, the intercept equals ΔL exactly; the slopes describe how ΔL varies with fit, with the caveat that fit side is correlated with word overlap (B1 above: 0.57 of aligned-favouring and 0.78 of swapped-favouring ingredient items share a word with their goal).
+- *Items whose history speaks for the aligned goal on no measure* (every sign 0 or −1). This is a selected subset: it keeps one member of a couple whose signs disagree in one direction, and both members only when every sign is 0. Under additive agreement its ΔL is at or below the full ΔL. Sizes in the rebuilt main sample, class × role: never obtained × goal 103 items (84 pairs), never obtained × ingredient 101 (77), too few × goal 21 (20), too few × ingredient 29 (17), used up × ingredient 35 (23), used up × goal 0; 289 in all, from 154 pairs.
+- Exploratory regressions of aligned − neutral and swapped − neutral on the same signs.
+
+**Counterfactual-goal arm: not added.** In ALFWorld a counterfactual task line was used because agent histories agreed with the real task by construction, and the line broke that agreement while keeping the action's relation to the task. Couples break the agreement here without a new arm: across a couple the history agrees with the aligned line exactly as often, and as much, as with the swapped line. A TextCraft counterfactual goal would also be off-distribution in a way ALFWorld's was not. The environment always displays the goal's own recipe tree, so a goal outside both displayed trees (or a different top item whose tree contains the action's object) names something whose recipe is not on the screen, and showing its recipe would change the list as well as the goal line.
+
+### B2. Used up on the goal, and class contrasts
+
+Used up on the goal role holds 3 couples (6 items) from one pair (p125: chain and grindstone). An input is used up because an earlier craft consumed it, and the walk never crafts a goal, so used-up failures on the goal itself are rare in both trees at once. This cell is not interpreted on its own and is left out of every named readout and class contrast; it stays in the primary population (0.4% of it), and the primary is also reported without it. Class contrasts are computed within one role only: used up, too few and never obtained against each other within the ingredient role, and too few against never obtained within the goal role. Any class contrast pooled over roles is also a role contrast, because the classes hold different mixes of roles. All class contrasts are descriptive (C7).
+
+### B3. The prefix control: what the remainder means (corrects section 11, A4)
+
+Section 11, A4 read a remainder that carries ΔL as word priming. That is wrong. Both full replies end in the object's name, so priming that raises the name's probability equally after both prefixes cancels inside L, and it cancels again inside the remainder, which is the log-probability of the name after the success prefix minus that after the failure prefix. What the remainder can carry is outcome belief: after "Crafted 1" a model that expects success finds the name more probable than after "Could not find enough items to craft". So the prefix part says how much of ΔL is decided before the name, and the remainder is the rest of the same judgement, not a priming effect. The real lexical threat is on the prompt side: word overlap between the goal line and the action string, present in 77% of section 11's main items (every goal-role item, and most ingredient items). The prefix arms cannot detect it, because the action is in both arms' prompts; only the overlap split addresses it (the goal-role, overlap and usefulness-only readouts of C2). The prefix decomposition is now descriptive. ΔL, the prefix ΔL and the remainder are computed on one item set, the items with all four scores (aligned, swapped, prefix aligned, prefix swapped), so that ΔL equals the prefix part plus the remainder exactly; and the analysis counts missing scores on every arm of every item, and withholds the verdict while any is missing.
+
+### B4. A per-item certificate (validation standard, step 4)
+
+The text-only checker now emits, for each item, the observation that settles it, and the item stores it as `certificate`. For a craft failure, one entry per short input: its name; `held_step`, the history step (counted from 1) whose reply set the count held now, or "never" when no step changed it (then nothing is held); and `peak_step`, the first step at which its peak was reached, or "never" when it was never obtained. With the need, these give the rule: the action fails because the count set at `held_step` is below the need; the class is used up when the peak reached at `peak_step` met the need, too few when it did not, never obtained when there is no peak step. For a success (C3) the entries are the same for every input. For a get failure, the entry is the displayed line (counted from 1) whose output is the object, which makes it craftable and so not fetchable. The builder computes the same steps from the environment's inventory after each step, and verify compares the two on every item.
+
+### B5. Singular and plural twins
+
+The database holds 11 pairs of items whose names differ by a final "s": acacia log/logs, birch log/logs, brick/bricks, coal/coals, crimson stem/stems, dark oak log/logs, jungle log/logs, nether brick/bricks, oak log/logs, spruce log/logs, warped stem/stems (a test checks that these are all). A reader may take a held "nether bricks" for "nether brick". We exclude, as for tag reading (section 11, A1): a craft failure is excluded when one of its short inputs has its twin held just before the action. The rule removed 1,130 candidates before deduplication.
+
+### B6. The inventory shown after its last change
+
+When a history ends with an inventory look-up after its last get or craft, the prompt shows the inventory before the action verbatim, so the failure can be read off without counting. Every item now stores `inventory_shown_after_last_change` (true when an "Inventory:" reply comes after the last reply that got or crafted something). The counting readout of section 11, A2 is narrowed to the main items that need arithmetic and do not show the inventory after its last change (835; 51 items that need arithmetic show the inventory after its last change items); the readout as logged in A2 is kept as descriptive.
+
+### B7. Tokenization and golden chat prompts (validation standard, step 7)
+
+*Review 2's result, recorded.* For all 1,270 distinct (prefix, full reply) pairs in the items, the prefix's tokens are a leading part of the full reply's tokens in both Qwen3-8B and Llama-3.1-8B-Instruct, so the prefix and remainder split of A4 is exact token-wise.
+
+*On the rebuilt items, every arm.* `wf/textcraft/tokcheck.py` checks, for each item and arm, with the model's own tokenizer: the chat template's ids are the plain tokenization of its rendered text; each candidate tokenizes the same after the prompt as alone (the scorer joins separately tokenized ids); each prefix is a token prefix of its full reply, alone and after the prompt; "Yes" and "No" are single tokens. Run on ICE (tokenizers at the pinned snapshots, no GPU) over all 3,200 items and all eight arms (`wf/textcraft/data/tokcheck_ice.json`): no problem on any item for either model (0 of 3,200 each). Joined equals alone on every candidate, every prefix is a token prefix of its full reply alone and after the prompt, and Yes and No are single tokens in both. The golden prompts below were made in the same run and re-checked against both tokenizers (no difference).
+
+*Golden rendered prompts.* `wf/textcraft/data/chat_golden.json` holds, for the first main item, the aligned and yes/no prompts rendered by each model's real chat template (Qwen3-8B snapshot b968826d, thinking off; Llama-3.1-8B-Instruct snapshot 0e9e39f2), with the number and sha256 of the ids. A test checks without a tokenizer that the stored text holds every message of today's prompt in order and ends in the model's generation prompt. The smoke run (`textcraft_score_smoke`, `token_check: true`) runs the tokenization check on its items with the scorer's own tokenizer and encoder, and re-renders the golden item, before scoring each model; any failure stops the run before a score is written.
+
+### B8. Tests and mutation testing
+
+Review 2's mutation run left three of its 20 mutants alive: N3 (stone crafting materials lose blackstone), N4 (verify's tag-reading check switched off) and N10 (the stale-score check ignores unknown item ids). Tests now kill each: the member lists of the 14 tag-derived names are pinned; verify must report an item whose short input is declared to have a held member (and, for B5, a held twin); and a score whose item id is unknown is stale. All 20 of review 2's mutants (N7 rewritten for the couple draw) and mutants for every amendment of this section were added to `wf/textcraft/mutation_check.py`, which now runs workers in parallel. Results are at the end of this section.
+
+### B9. A stale commit reference
+
+Section 10 cited the design commit as 2b4b16a, its hash before the branch's history was rewritten (section 11, A6). The design commit is 76626d6; the reference is corrected in place. The old object is unreachable and goes at the repository's next garbage collection, which was not run here because the object store is shared with the main checkout.
+
+### C1. Same-history couples are the primary population
+
+The validity review endorsed the couples of B1 as the primary population. The primary test is ΔL on the 1,500 main items (750 couples), as before.
+
+### C2. Role-specific readouts, and usefulness-only couples oversampled
+
+The goal role and the ingredient role test different things. A goal-role action crafts the goal itself, so the action names the goal verbatim and completes the task; in ALFWorld the matching actions were intermediate steps on the task's object. An ingredient-role action is instrumentally relevant, a subgoal; when its name shares a word with the goal, naming can still act. Three named readouts split this (C7), each on whole couples so that the couple's balance holds within the readout:
+
+- *goal role*: the direct replication of the ALFWorld effect;
+- *ingredient with word overlap*: couples whose two items are both ingredients sharing a word with their own aligned goal;
+- *usefulness only*: couples whose two items are both ingredients sharing no word with either goal, so the goal line can matter only through what the object is for. ALFWorld's 2 × 2 analysis puts this part at 0.72 nats for Qwen and −0.18 for Llama, small next to the mention part.
+
+In the main sample, 239 ingredient couples have overlap on both members (478 items), 51 are usefulness-only on both (102 items), and 205 are mixed; mixed couples are in neither readout and are reported descriptively. The main sample holds only 51 usefulness-only couples, too few for that readout to detect an effect of ALFWorld's size for Qwen. A new population, `usefulness`, adds 300 couples (600 items) of never-obtained ingredient items whose name shares no word with either goal, at histories that no main couple uses, 100 couples per length bin. It is not part of the primary population. Same-history couples of this kind exist in only 23 goal pairs (both goals of a pair must have such an ingredient), which would leave the readout with about 30 items per pair and a minimum detectable effect near 2.4 nats for Qwen. The extra couples are therefore *sign-mirrored*: two items in the same length bin, possibly from different pairs, whose ten fit-measure signs (B1) are exact negatives of each other (two items with all signs zero also form a couple). Per bin, `random.Random(f"{SEED}|textcraft|select|usefulness|{bin}|mirrored")` walks the goal pairs round-robin (shuffled once), takes a random unused item of the pair and matches it with a random unused item of the opposite profile, dropping the item when none is left. Every listed measure's sign then sums to zero within the extra population, but magnitudes and unlisted measures are balanced only in expectation, a weaker guarantee than same-history couples; the readout states it. With the validity review's variance figures (item SD of ΔL 5.98 for Qwen and 1.93 for Llama, intraclass correlation 0.26 and 0.12), the readout's 702 items in 137 pairs give a minimum detectable effect, at a two-sided 0.005 level and 80% power, of about 1.2 nats for Qwen and 0.32 for Llama. The validity review asked for about 1 nat; usefulness-only items exist in only 139 goal pairs, so more items would add to the pairs already used and lower the figure little (1,000 items give about 1.1). The same calculation for the other readouts (items and pairs; Qwen and Llama, in nats):
+
+| Readout | Items | Pairs | Qwen | Llama |
+|---|---|---|---|---|
+| primary (main) | 1,500 | 229 | 0.88 | 0.23 |
+| goal role | 504 | 159 | 1.22 | 0.35 |
+| ingredient with overlap | 478 | 79 | 1.52 | 0.41 |
+| usefulness only | 702 | 137 | 1.19 | 0.32 |
+| counting | 833 | 167 | 1.08 | 0.30 |
+
+These assume ALFWorld's item spread and clustering; they are planning figures, not results.
+
+### C3. Matched determined successes
+
+Without scored successes, a null or the counting readout cannot be read: a model that fails at the accounting has no room to shift. A new population, `success`, holds 300 couples (600 items) of determined successes, drawn by the couple rule at the same kind of states (same pair and history, one craft in each goal's tree, same role), split over the length bins. A craft is a determined success when the text shows every input held in at least the line's count and the action is a displayed line with its generic inputs filled by members; the checker decides this from the text alone (`checker.matches_line`), and the environment's reply is "Crafted K minecraft:Y_". Its failure twin comes from the environment too: the same action after each input's holding is taken out (stored as `removal`), which gives "Could not find enough items to craft minecraft:Y_". For these items o+ is the reply and o− the twin. They are scored under all arms. They give:
+
+- a competence check per class: the AUC of L, under the neutral line (and under the aligned line), between the successes and the main and usefulness failures, overall and per failure class, with pair-bootstrap intervals. A model *discriminates* a class when its AUC is at least 0.6 and the interval's lower end is above 0.5. A null on the primary test, and the counting readout, are interpreted only for a model that discriminates the classes involved;
+- the AUC cost of the goal line (aligned against neutral);
+- a standardizer: ΔL divided by the mean L gap between successes and failures under the neutral line;
+- the goal effect on actions that work (ΔL on successes).
+
+All are descriptive except the competence rule, which gates interpretation.
+
+### C4. Reading a null: equivalence margins
+
+The ±0.25-nat criterion of section 1 is not feasible for Qwen, whose 95% interval half-width is expected near 0.5 nats. It is replaced by equivalence margins of about one sixth of the ALFWorld effect: 1.0 nats for Qwen and 0.3 for Llama. The effect is equivalent to zero when the 90% pair-bootstrap interval of ΔL lies inside ± the margin (two one-sided tests at the 5% level). A ΔL that is neither confirmed nor equivalent is inconclusive.
+
+### C5. The hidden-state account: the inventory-shown contrast
+
+TextCraft has no hidden state only if the reader accepts that the inventory starts empty, and the prompt never says so; AgentGym's instruction even says items come "from the inventory or the environment". The inventory is displayed somewhere in the history of about half of the main items. A named readout contrasts ΔL on items whose history shows an "Inventory:" reply with ΔL on items whose history shows none, within each length bin, averaged with the bins' item counts as weights. The walk looks at the inventory by a coin flip (probability 0.10 a step), independent of the goals and the state, so within a bin the two groups differ by chance only. If the goal line acts as evidence about hidden state (the ALFWorld "task as evidence" account), ΔL is smaller where the inventory is shown. We do not add a rules arm stating the empty start: it would add two arms to every item and change the prompt, while the contrast is close to a randomized comparison at no cost.
+
+### C6. Word overlap is the lexical threat; yes/no is the cross-benchmark metric
+
+As B3 says, priming of the name cancels inside L; the lexical threat is overlap between the goal line and the action, and only the overlap split (C2) addresses it. The two-candidate L depends on each benchmark's reply texts, so it is not comparable across benchmarks. The yes/no ΔL (aligned minus swapped on "Yes" against "No") uses the same question in every benchmark, and is named as the cross-benchmark metric (C7).
+
+### C7. A hierarchy of readouts
+
+1. **Primary** (unchanged statistic and rule): ΔL on the main population, per model, Holm over the two models, confirmed when ΔL > 0, the 95% interval excludes zero and the Holm p is below 0.01; equivalence by C4.
+2. **Seven named readouts**, per model, on the main population without used up on the goal, each with its 95% pair-bootstrap interval; those with a sign-flip permutation p are Holm-adjusted within the model. Predictions, written now:
+   - *goal role*: positive, of the order of ALFWorld's effect;
+   - *ingredient with overlap*: positive, smaller than the goal role;
+   - *usefulness only* (main and usefulness couples): small; near 0.7 nats for Qwen and near zero for Llama, as in ALFWorld's 2 × 2;
+   - *history–goal agreement* (B1): positive if agreement adds to the effect; we predict a small positive value;
+   - *inventory shown* (C5): negative under the hidden-state account, near zero under an answer-time relevance bias; we predict near zero;
+   - *yes/no*: positive, as in the ALFWorld validation runs;
+   - *counting* (B6): positive and smaller than the primary, if the effect survives where only counting settles the failure; interpreted only for a model that discriminates used up and too few (C3).
+3. **Descriptive** (estimates and intervals, no p-values): every stratum, the class contrasts within role (B2), the sensitivity analyses (B1), the prefix decomposition (B3), the first-token readout, the neutral contrasts, the successes (C3), the secondary get and empty-history strata, the primary without used up on the goal, and the A2 readout as logged.
+
+### C8. Outcomes and caveats, written before any score
+
+| Result | Reading |
+|---|---|
+| Primary confirmed for both models, goal role positive | The ALFWorld goal effect replicates in an environment whose failures are inventory arithmetic. |
+| Primary confirmed, usefulness only clearly positive | The goal line raises predicted success for actions that serve it, not only for actions that name it. |
+| Primary confirmed, usefulness only near zero | The effect rides on the goal's name in the action (goal role, overlap), as ALFWorld's 2 × 2 suggested. |
+| Primary equivalent to zero (C4), competence check passed | The effect does not carry over; with no hidden state here, this points to the ALFWorld effect working through the task as evidence about hidden state. |
+| Primary null, competence check failed | Uninterpretable: the model does not read the accounting, so there is nothing for the goal to shift. |
+| Primary negative | Naming the goal makes the model more careful about actions toward it. |
+| Agreement contrast large and positive | Much of an effect measured on agent histories (ALFWorld) can come from the history agreeing with the goal. |
+| Inventory-shown contrast clearly negative | Supports the hidden-state account: the goal matters less when the state is shown. |
+
+Caveats:
+
+- The estimand is conservative relative to ALFWorld's: couples remove history–goal agreement, which ALFWorld's histories had by construction (the agreement contrast estimates the difference).
+- The goal role in TextCraft is a task-completing action that names the goal verbatim, unlike ALFWorld's intermediate actions on the task's object.
+- The ingredient role tests instrumental relevance, an extension of the construct, not a replication of it.
+- The empty starting inventory is never stated (C5).
+- Couples need additivity (B1).
+- Too few on an ingredient comes from few pairs per cell, and used up from 95 or so pairs; class contrasts are descriptive for that reason too.
+- Histories come from a goal-blind scripted walk, not from agents.
+- The prompt examples: before this amendment all three acted inside their own goal's tree (two successes and an ingredient failure), so no off-goal action was ever shown, unlike ALFWorld's example set 1, which has a goal-irrelevant success. We changed the third example's goal line, by rule, to the pair's goal whose tree does not hold the fetched item: it now shows "get 2 jungle logs" succeed under "Goal: craft granite.". Goal relevance no longer predicts the outcome within the examples (one on-goal success, one on-goal failure, one off-goal success). The rule for the get example now reads: the goal is the pair's goal whose tree names do not include the fetched item when exactly one does not; otherwise the coin of section 5. This changes the prompt of every item, before any score.
+
+### Results of the rerun safeguards (rebuilt items, 2026-11-20)
+
+- **Counts.** 3,200 items: 1,500 main (750 same-history couples; 500 per class), 600 usefulness (300 sign-mirrored couples, 200 per bin, 137 pairs), 600 successes (300 same-history couples, 200 per bin, 300 goal and 300 ingredient, 167 pairs), 400 secondary gets, 100 empty-history items. Main cells, items (pairs): used up × ingredient 2 (1) / 248 (60) / 244 (87) at 1–3 / 4–8 / 9–12 steps; used up × goal 0 / 2 (1) / 4 (1); too few × goal 84 (42) in each bin; too few × ingredient 84 (13) / 82 (34) / 82 (40); never obtained × goal 84 (42) in each bin; never obtained × ingredient 84 (42) / 82 (41) / 82 (41). The main population spans 229 goal pairs. History fit (section 11's measure) is aligned / swapped / tie for 216 / 216 / 68 used-up, 195 / 195 / 110 too-few and 215 / 215 / 70 never-obtained items. Build exclusions: 84,312 duplicates, 577 tag-reading and 1,130 plural-reading candidates, no wrong-recipe or generic-name crafts; every craft success at a non-empty history is now an eligible success item. 254 item ids carry over from section 11's build, 52 of them main.
+- **Leak check.** Review 2's heuristics (heur.py, heur2.py), rerun unchanged on the main items: every one picks the real goal for exactly 0.500 of main items, overall and in every class × role cell; none is flagged.
+- **Replay and the text-only checker** in three fresh processes (hash seeds 0, 1 and 2): no replay, checker (including certificates and successes), structure or prompt failure, no duplicate, no prompt-example goal in any item, no unbalanced cell, and every main, usefulness and success couple well formed.
+- **Determinism.** Two fresh builds, hash seed 0 with 8 worker processes and hash seed 1 with 3, wrote the items and prompt-example files byte for byte.
+- **Upstream equivalence.** The unmodified AgentGym package at 3ef9235 builds the same database and reproduces every item's history, reply and twin, the successes' removal twins included (0 mismatches of 3,200).
+- **Blind checker.** The blind checker written from the pre-amendment note, rerun unchanged on the new items stripped to id, recipe lines, history and action, agrees with every stored reply, class, short input, top-up and twin, and calls every success item a success with the stored reply (3,200 of 3,200).
+- **Tokenization and golden prompts.** As B7: no problem on any of 3,200 items for either model; goldens made and re-checked.
+- **Manifest.** `wf/textcraft/data/manifest.json` is marked verified for items sha256 `3b81ac3f…5e421a6` and prompt examples `e6ddab93…adfb1253`.
+- **Tests.** `tests/test_textcraft_*.py`: 118 passed.
