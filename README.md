@@ -91,7 +91,7 @@ The two models differ in where the effect lands:
 | Audit analyses and reruns (CPU) | `audit_analysis`, `rq2_shared_analysis`, `rq1_analysis_v2`, `rq1x_analysis_v2`, `rq1v_analysis_v2`, `thinking_analysis_v2`, `size_analysis_v2` | Done (2026-11-20); changes listed in `notes/deviations.md` |
 | Model families, wave A (Gemma-2-9B, Mistral-7B-v0.3, Llama-3.2-1B/3B) | `family_score_<model>`, `families_analysis` | Done (exploratory); results in `notes/families_results.md`, design in `notes/families_design.md` |
 | Model families, wave B and post-training (Gemma 4, Ministral 3, Qwen3.5, OLMo 3) | not yet built | Planned; a separate pinned software environment is built |
-| Second environment: TextCraft | branch `textcraft` | Items built and checked (two independent checkers agree on every item); design reviewed; not yet scored. Design: `notes/textcraft_design.md` on that branch |
+| Second environment: TextCraft | branch `textcraft` | Items built and checked (two independent checkers agree on every item); design reviewed and frozen before scoring at tag `textcraft-design-frozen-2026-11-20` (commit `5a3702a`; the tag message records the test and what was seen before it); full scoring started 2026-11-20. Design: `notes/textcraft_design.md` on that branch |
 | Second environment: τ-bench retail | branch `taubench` | Items built and checked (two independent checkers agree on every item); design reviewed; not yet scored. Design: `notes/tau_design.md` on that branch |
 | ScienceWorld | not in this repository | Paused. A pre-specified feasibility probe found almost no determined failures on the task's own object (99.6% of the few found were one generic parser reply), so it cannot replicate the main test; a set of control items on unrelated objects is available |
 
