@@ -5,3 +5,7 @@ manifest: wf/textcraft/data/manifest.json
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
 max_items: 20
 n_shards: 1
+# Before scoring each model, check the tokenization of these real prompts (design section 12, B7): chat-template ids
+# equal the rendered text's ids, each candidate tokenizes the same after the prompt as alone, prefixes are token
+# prefixes of the full replies, and Yes/No are single tokens. Any failure stops the run.
+token_check: true

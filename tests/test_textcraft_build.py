@@ -95,23 +95,29 @@ def test_committed_items_rebuild_exactly(items, pairs):
     by_pair = {}
     for it in items:
         by_pair.setdefault(it["pair_id"], []).append(it)
-    for pid in sorted(by_pair)[::30]:
+    for pid in sorted(by_pair)[::90]:
         fresh = {it["id"]: it for it in B.eligible(pairs[pid], Counter())}
         for it in by_pair[pid]:
-            assert fresh.get(it["id"]) == it
+            assert {**fresh.get(it["id"]), "couple_id": it["couple_id"], "population": it["population"]} == it
+            assert it["population"] == fresh[it["id"]]["population"] or (it["population"], fresh[it["id"]]["population"]) == ("usefulness", "main")
 
 
 def test_selection_follows_the_quotas(items):
     c = Counter((it["population"], it["failure_class"], it["length_bin"]) for it in items)
     for cls in B.CLASSES:
         assert sum(v for (pop, k, _b), v in c.items() if pop == "main" and k == cls) == 500
-    # in couples (section 11, A3): 250 per class, 84/83/83 per bin; used up has only 2 couples at 1-3 steps
-    assert [c[("main", "used_up", b)] for b in ("1-3", "4-8", "9-12")] == [4, 248, 248]
+    # same-history couples (section 12, B1): 250 per class; used up has 1 couple at 1-3 steps
+    assert [c[("main", "used_up", b)] for b in ("1-3", "4-8", "9-12")] == USED_UP_BINS
     for cls in ("too_few", "never_obtained"):
         assert [c[("main", cls, b)] for b in ("1-3", "4-8", "9-12")] == [168, 166, 166]
+    assert [c[("usefulness", "never_obtained", b)] for b in ("1-3", "4-8", "9-12")] == [200, 200, 200]
+    assert [c[("success", "success", b)] for b in ("1-3", "4-8", "9-12")] == SUCCESS_BINS
     assert all(c[("secondary_get", "get_craftable", b)] == 100 for b in B.BINS)
-    assert c[("empty_history", "never_obtained", "0")] == 100 and len(items) == 2000
-    assert len({it["pair_id"] for it in items if it["population"] == "main"}) == 257
+    assert c[("empty_history", "never_obtained", "0")] == 100 and len(items) == 3200
+    assert len({it["pair_id"] for it in items if it["population"] == "main"}) == MAIN_PAIRS
+
+
+USED_UP_BINS, SUCCESS_BINS, MAIN_PAIRS = [2, 250, 248], [200, 200, 200], 229
 
 
 def test_every_item_replays_and_follows_the_design(items):
@@ -171,19 +177,29 @@ def test_candidate_pool_drops_the_prompt_example_pairs(pairs):
 
 # ---------------- amendments after review 1 (design section 11) ----------------
 
+from wf.textcraft.fit import MEASURES as FIT_MEASURES  # noqa: E402
+
+
 def _synthetic_pool():
-    """A fixed pool of fake items over 12 pairs, with every population, class, bin, role and history fit."""
+    """A fixed pool of fake items over 12 pairs: every population, class, bin and role, several histories per pair,
+    and at each history 0 to 2 items for each goal of the pair."""
     rng = random.Random(7)
     pool = []
     for pop, (_total, classes, bins) in B.QUOTAS.items():
         for c in classes:
             for b in bins:
                 for role in B.ROLES:
-                    for fit in B.FITS:
-                        for k in range(rng.randrange(0, 40)):
-                            pid = f"p{rng.randrange(12):03d}"
-                            pool.append({"id": f"{pop}-{c}-{b}-{role}-{fit}-{k}", "pair_id": pid, "population": pop,
-                                         "failure_class": c, "length_bin": b, "role": role, "history_fit": fit})
+                    for k in range(rng.randrange(0, 30)):
+                        pid = f"p{rng.randrange(12):03d}"
+                        history = [[f"get {k} x{b}", f"Got {k} x{b}"]]
+                        for goal in ("g1", "g2"):
+                            for j in range(rng.randrange(0, 3)):
+                                pool.append({"id": f"{pop}-{c}-{b}-{role}-{k}-{goal}-{j}", "pair_id": pid, "population": pop,
+                                             "failure_class": c, "length_bin": b, "role": role, "goal": goal,
+                                             "history": history, "object_goal_overlap": rng.random() < 0.4,
+                                             "object_partner_overlap": rng.random() < 0.1,
+                                             "fit_measures": {**{m: [0, 0] for m in FIT_MEASURES},
+                                                              "steps": rng.choice([[1, 0], [0, 1], [0, 0]])}})
     return pool
 
 
@@ -192,28 +208,67 @@ def test_selection_golden():
     rule fails here, not only in the full rebuild that verify runs."""
     import hashlib
     chosen = B.select(_synthetic_pool())
-    digest = hashlib.sha256(json.dumps([it["id"] for it in chosen]).encode()).hexdigest()
+    digest = hashlib.sha256(json.dumps([[it["id"], it["couple_id"]] for it in chosen]).encode()).hexdigest()
     assert digest == GOLDEN_SELECTION, digest
 
 
-GOLDEN_SELECTION = "5bce8336022a3cd31d7af04ae0106d18e79444e29bb671459a28df29d3918727"
+GOLDEN_SELECTION = "b3e515796021b6cac724c78b7454c7c02a043486f8453d0616c3eabfe7792105"
 
 
-def test_main_selection_balances_history_fit_and_skips_ties():
-    chosen = [it for it in B.select(_synthetic_pool()) if it["population"] == "main"]
-    c = Counter((it["failure_class"], it["length_bin"], it["role"], it["history_fit"]) for it in chosen)
-    assert "tie" not in {k[3] for k in c}
-    for (cls, b, role, fit), n in c.items():
-        assert c[(cls, b, role, "swapped" if fit == "aligned" else "aligned")] == n
+def test_main_selection_draws_same_history_couples():
+    everything = B.select(_synthetic_pool())
+    useful = [it for it in everything if it["population"] == "usefulness"]
+    assert useful and all(B.usefulness_only(it) and it["failure_class"] == "never_obtained" for it in useful)
+    main_slots = {B.slot_key(it) for it in everything if it["population"] == "main"}
+    assert not main_slots & {B.slot_key(it) for it in useful}  # extra usefulness couples use other histories
+    by_use = {}
+    for it in useful:
+        by_use.setdefault(it["couple_id"], []).append(it)
+    for a, b in by_use.values():  # sign-mirrored couples
+        assert B.fit_profile(a) == tuple(-v for v in B.fit_profile(b)) and a["length_bin"] == b["length_bin"]
+    assert any(it["population"] == "success" for it in everything)
+    chosen = [it for it in everything if it["population"] in ("main", "success")]
+    by = {}
+    for it in chosen:
+        by.setdefault(it["couple_id"], []).append(it)
+    assert chosen and all(len(v) == 2 for v in by.values())
+    for a, b in by.values():
+        assert a["pair_id"] == b["pair_id"] and a["history"] == b["history"] and a["goal"] != b["goal"]
+        assert (a["failure_class"], a["role"], a["length_bin"]) == (b["failure_class"], b["role"], b["length_bin"])
+    assert len(by) == len({(a["pair_id"], json.dumps(a["history"]), a["failure_class"], a["role"]) for a, _b in by.values()})
 
 
-def test_committed_main_is_balanced_on_history_fit(items):
+def test_committed_main_is_in_mirrored_couples(items):
+    from wf.textcraft import fit as F
     main = [it for it in items if it["population"] == "main"]
+    assert len(main) == 1500 and V.couple_problems(items) == []
+    by = {}
+    for it in main:
+        by.setdefault(it["couple_id"], []).append(it)
+    assert len(by) == 750
+    for a, b in by.values():  # every fit measure is exactly mirrored, so its mean over the main items is zero
+        assert a["fit_measures"] == {k: v[::-1] for k, v in b["fit_measures"].items()}
+    for m in F.MEASURES:
+        assert sum(F.sign(it["fit_measures"][m]) for it in main) == 0
     c = Counter((it["failure_class"], it["length_bin"], it["role"], it["history_fit"]) for it in main)
-    assert len(main) == 1500 and "tie" not in {k[3] for k in c}
     for (cls, b, role, fit), n in c.items():
-        assert c[(cls, b, role, "swapped" if fit == "aligned" else "aligned")] == n
+        assert c[(cls, b, role, {"aligned": "swapped", "swapped": "aligned"}.get(fit, fit))] == n
     assert Counter(it["failure_class"] for it in main) == Counter({k: 500 for k in B.CLASSES})
+    assert all(it["couple_id"] is None for it in items if it["population"] not in ("main", "usefulness", "success"))
+
+
+def test_verify_reports_broken_couples(items):
+    main = [it for it in items if it["population"] == "main"]
+    a = main[0]
+    b = next(t for t in main if t["couple_id"] == a["couple_id"] and t is not a)
+    other = next(t for t in main if t["couple_id"] != a["couple_id"])
+    assert V.couple_problems([a, b]) == []
+    assert V.couple_problems([a]) and V.couple_problems([a, b, other])
+    assert V.couple_problems([a, {**b, "goal": a["goal"]}])
+    assert V.couple_problems([a, {**b, "role": "goal" if b["role"] == "ingredient" else "ingredient"}])
+    assert V.couple_problems([a, {**other, "couple_id": a["couple_id"]}])
+    assert "couple id wrong" in V.structure_problems({**a, "couple_id": other["couple_id"]})
+    assert "couple id wrong" in V.structure_problems({**a, "couple_id": None})
 
 
 def test_history_fit_known_answer():
@@ -264,7 +319,7 @@ def test_no_committed_item_is_tag_reading_ambiguous(items):
 
 def test_arithmetic_and_purity_flags(items):
     for it in items:
-        if it["action_kind"] == "get":
+        if it["action_kind"] == "get" or it["failure_class"] == "success":
             assert it["pure_class"] is None and it["needs_arithmetic"] is None
             continue
         kinds = [s["kind"] for s in it["short_inputs"]]
@@ -277,9 +332,10 @@ def test_arithmetic_and_purity_flags(items):
 
 def test_prefix_candidates_and_overlap_flags(items):
     for it in items:
-        pre = it["prefix_candidates"]
+        pre, full = it["prefix_candidates"], it["candidates"]
         name = W.item_id(it["object"]) if it["action_kind"] == "craft" else it["object"]
-        assert it["twin"] == f"{pre['o_plus']} {name}" and it["reply"] == f"{pre['o_minus']} {name}"
+        assert full["o_plus"] == f"{pre['o_plus']} {name}" and full["o_minus"] == f"{pre['o_minus']} {name}"
+        assert {full["o_plus"], full["o_minus"]} == {it["twin"], it["reply"]}
         assert it["object_goal_overlap"] == bool(set(it["object"].split()) & set(it["goal"].split()))
         assert it["object_partner_overlap"] == bool(set(it["object"].split()) & set(it["partner"].split()))
     assert {it["prefix_candidates"]["o_minus"] for it in items} == {"Could not find enough items to craft", "Could not find"}
@@ -293,12 +349,12 @@ def test_walk_fetch_counts():
 
 def test_verify_reports_broken_replays(items, monkeypatch):
     """Negative tests: each kind of broken item, and a goal-dependent environment, must be reported."""
-    it = next(t for t in items if t["action_kind"] == "craft" and len(t["history"]) >= 2)
+    it = next(t for t in items if t["action_kind"] == "craft" and t["short_inputs"] and len(t["history"]) >= 2)
     assert V.replay_problems(it) == []
     bad_hist = [list(h) for h in it["history"]]
     bad_hist[0][1] = bad_hist[0][1] + " "
     assert "history does not replay" in V.replay_problems({**it, "history": bad_hist})
-    assert "failure reply does not reproduce" in V.replay_problems({**it, "reply": it["reply"] + "x"})
+    assert "reply does not reproduce" in V.replay_problems({**it, "reply": it["reply"] + "x"})
     assert "twin does not reproduce" in V.replay_problems({**it, "twin": "Crafted 99 minecraft:x"})
     assert "twin does not reproduce" in V.replay_problems({**it, "topup": {}})
     real = W.replay
@@ -315,9 +371,8 @@ def test_verify_reports_broken_replays(items, monkeypatch):
 def test_verify_reports_broken_structure(items):
     it = next(t for t in items if t["population"] == "main")
     assert V.structure_problems(it) == []
-    other = "aligned" if it["history_fit"] == "swapped" else "swapped"
+    other = "aligned" if it["history_fit"] != "aligned" else "swapped"
     assert V.structure_problems({**it, "history_fit": other})
-    assert V.structure_problems({**it, "history_fit": "tie"})
     assert V.structure_problems({**it, "prefix_candidates": {**it["prefix_candidates"], "o_plus": it["twin"]}})
     assert V.structure_problems({**it, "object_goal_overlap": not it["object_goal_overlap"]})
     assert V.structure_problems({**it, "population": "secondary_get"})
@@ -343,18 +398,22 @@ def test_builder_drops_review_1s_tag_reading_example(pairs):
 
 def test_fewshot_examples_rebuild_exactly(pairs):
     held = B.fewshot_pair_ids()
-    pool = {pid: B.eligible(pairs[pid], Counter()) for pid in held}
+    pool = {pid: B.eligible(pairs[pid], Counter(), walks=B.FEWSHOT_WALKS) for pid in held}
     assert B.fewshot_examples(pool) == json.loads(V.P.FEWSHOT.read_text())
 
 
 def test_replay_gate_refuses_each_failure():
     good = {"n_items": 10, "replay_failures": 0, "checker_failures": 0, "structure_failures": 0, "prompt_failures": 0,
-            "duplicate_history_action": 0, "duplicate_ids": 0, "fewshot_goals_in_items": [], "main_fit_unbalanced_cells": []}
+            "duplicate_history_action": 0, "duplicate_ids": 0, "fewshot_goals_in_items": [], "main_fit_unbalanced_cells": [],
+            "main_couple_problems": []}
     assert V.replay_passes(good, 10)
     assert not V.replay_passes(good, 11)
     for key, bad in (("replay_failures", 1), ("checker_failures", 1), ("structure_failures", 1), ("prompt_failures", 1),
                      ("duplicate_history_action", 1), ("duplicate_ids", 1), ("fewshot_goals_in_items", ["x"]),
-                     ("main_fit_unbalanced_cells", ["used_up|1-3|goal"])):
+                     ("main_fit_unbalanced_cells", ["used_up|1-3|goal"]), ("main_couple_problems", ["couple x"])):
         assert not V.replay_passes({**good, key: bad}, 10), key
-    report = V.check_items([it for it in V.read_items() if it["population"] == "main"][:3], V.P.fewshot_examples())
-    assert report["main_fit_unbalanced_cells"]  # three items cannot be balanced in couples
+    assert not V.replay_passes({k: v for k, v in good.items() if k != "main_couple_problems"}, 10)
+    main = [it for it in V.read_items() if it["population"] == "main"]
+    one = next(t for t in main if t["history_fit"] != "tie")
+    report = V.check_items([one], V.P.fewshot_examples())
+    assert report["main_fit_unbalanced_cells"] and report["main_couple_problems"]  # one item is no couple

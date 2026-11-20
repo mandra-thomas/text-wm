@@ -60,7 +60,8 @@ def test_yes_no_arms():
         q, plain = P.messages(it, f"yn_{c}"), P.messages(it, c)
         assert q[:-1] == plain[:-1] and q[-1]["content"].endswith("\n\nQuestion: Will this action succeed? Answer Yes or No.\nAnswer:")
         assert P.candidates(it, f"yn_{c}") == ("Yes", "No")
-        assert P.candidates(it, c) == (it["twin"], it["reply"])
+        assert P.candidates(it, c) == (it["candidates"]["o_plus"], it["candidates"]["o_minus"])
+        assert P.candidates(it, c)[0].startswith(("Crafted ", "Got "))  # o+ is always the success reply
     with pytest.raises(ValueError):
         P.messages(it, "absent")
 

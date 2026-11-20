@@ -9,15 +9,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import random
 import statistics
 import sys
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
 from wf import constants as C
+from wf.textcraft import fit as F
 from wf.textcraft import world as W
 
 SEED = C.RNG_SEED
@@ -26,14 +28,17 @@ ITEMS = DATA / "items.jsonl"
 FEWSHOT = DATA / "fewshot.json"
 
 EXCLUDED_GOALS = ("blue dye", "dark oak planks", "golden carrot")  # named in the fixed instruction text
-WALKS, STEPS = 6, 12
+WALKS, STEPS = 24, 12  # 6 walks before section 12, B1; the prompt examples still come from the first 6
+FEWSHOT_WALKS = 6
 P_INVENTORY, P_CRAFT = 0.10, 0.55
 GET_COUNTS = (1, 2, 3, 4)
 N_FEWSHOT_PAIRS = 3
 CLASSES = ("used_up", "too_few", "never_obtained")
 BINS = {"0": (0, 0), "1-3": (1, 3), "4-8": (4, 8), "9-12": (9, 12)}
-QUOTAS = {  # population -> (total, classes, bins)
+QUOTAS = {  # population -> (total, classes, bins); main, usefulness and success are drawn in same-history couples
     "main": (1500, CLASSES, ("1-3", "4-8", "9-12")),
+    "usefulness": (600, ("never_obtained",), ("1-3", "4-8", "9-12")),
+    "success": (600, ("success",), ("1-3", "4-8", "9-12")),
     "secondary_get": (400, ("get_craftable",), ("0", "1-3", "4-8", "9-12")),
     "empty_history": (100, ("never_obtained",), ("0",)),
 }
@@ -58,6 +63,15 @@ TAG_READING: dict[str, tuple[str, ...]] = {
     "wooden slabs": tuple(f"{w} slab" for w in _WOODS + ("crimson", "warped")),
     "soul fire base blocks": (),
 }
+# Items of the frozen database whose names differ only by a final "s" (design section 12, B5). A reader may take a
+# held "nether bricks" for "nether brick", so a test action whose short input has its twin held is excluded; a test
+# checks that this is every such pair in the database.
+PLURAL_TWINS: tuple[tuple[str, str], ...] = (
+    ("acacia log", "acacia logs"), ("birch log", "birch logs"), ("brick", "bricks"), ("coal", "coals"),
+    ("crimson stem", "crimson stems"), ("dark oak log", "dark oak logs"), ("jungle log", "jungle logs"),
+    ("nether brick", "nether bricks"), ("oak log", "oak logs"), ("spruce log", "spruce logs"),
+    ("warped stem", "warped stems"))
+_TWIN_OF = {**{a: b for a, b in PLURAL_TWINS}, **{b: a for a, b in PLURAL_TWINS}}
 
 
 def goal_line(goal: str) -> str:
@@ -167,6 +181,7 @@ class State:
     env: object
     history: list[list[str]]
     peak: dict[str, int]  # item id -> largest count held so far
+    trace: list[dict[str, int]] = field(default_factory=list)  # the inventory after each history step
 
     def held(self, name: str) -> int:
         return self.env.inventory.get(W.item_id(name), 0)
@@ -180,6 +195,7 @@ def apply(state: State, action: str) -> str:
     state.history.append([action, reply])
     for k, v in state.env.inventory.items():
         state.peak[k] = max(state.peak.get(k, 0), v)
+    state.trace.append(dict(state.env.inventory))
     return reply
 
 
@@ -238,7 +254,7 @@ def states_of(pair: Pair, actions: list[str]):
 
 
 def _copy(state: State) -> State:
-    return State(W.clone(state.env), [list(h) for h in state.history], dict(state.peak))
+    return State(W.clone(state.env), [list(h) for h in state.history], dict(state.peak), [dict(t) for t in state.trace])
 
 
 # ---------------- candidate actions ----------------
@@ -301,6 +317,33 @@ def tag_reading_ambiguous(state: State, short: list[dict]) -> bool:
     return any(state.held(m) > 0 for s in short for m in TAG_READING.get(s["name"], ()))
 
 
+def plural_ambiguous(state: State, short: list[dict]) -> bool:
+    """A short input's singular or plural twin is held (design section 12, B5)."""
+    return any(s["name"] in _TWIN_OF and state.held(_TWIN_OF[s["name"]]) > 0 for s in short)
+
+
+def certificate(state: State, short: list[dict]) -> list[dict]:
+    """For each short input, from the environment's inventory after each step: the last history step that changed
+    its count (which set the holding now) and the first step at which it reached its peak; "never" when no step
+    did (design section 12, B4). Steps count from 1."""
+    out = []
+    for s in short:
+        i = W.item_id(s["name"])
+        counts = [0] + [inv.get(i, 0) for inv in state.trace]
+        changed = [k for k in range(1, len(counts)) if counts[k] != counts[k - 1]]
+        peak_at = next((k for k in range(1, len(counts)) if counts[k] == s["peak"]), None) if s["peak"] > 0 else None
+        out.append({"name": s["name"], "held_step": changed[-1] if changed else "never",
+                    "peak_step": "never" if peak_at is None else peak_at})
+    return out
+
+
+def inventory_shown_after_last_change(history: list) -> bool:
+    """Some history step is an inventory look-up and no later step got or crafted anything: the prompt shows the
+    inventory as it is before the action (design section 12, B6)."""
+    last_change = max((k for k, (_a, o) in enumerate(history) if o.startswith(("Got ", "Crafted "))), default=-1)
+    return any(o.startswith("Inventory: ") for _a, o in history[last_change + 1:])
+
+
 @lru_cache(maxsize=None)
 def tree_names(goal: str) -> frozenset[str]:
     """Every name on the lines of the goal's recipe tree: outputs and inputs (design section 11, A3)."""
@@ -342,6 +385,14 @@ def prefix_candidates(action_kind: str, twin: str) -> dict[str, str]:
     return {"o_plus": " ".join(twin.split(" ")[:2]), "o_minus": "Could not find"}
 
 
+def removed_reply(state: State, removal: dict[str, int], action: str) -> str:
+    """The reply with these amounts taken out of the inventory first: the failure twin of a success (12, C3)."""
+    env = W.clone(state.env)
+    for name, n in removal.items():
+        env.inventory[W.item_id(name)] = env.inventory.get(W.item_id(name), 0) - n
+    return W.step(env, action)
+
+
 def topped_up_reply(state: State, short: list[dict], action: str) -> str:
     env = W.clone(state.env)
     for s in short:
@@ -368,7 +419,7 @@ def items_at(pair: Pair, seed: int, t: int, state: State, excluded: Counter) -> 
                     "neutral_task_line": NEUTRAL_LINE}
             if line is None:
                 if reply.startswith("Got "):
-                    excluded["success"] += 1
+                    excluded["success_get"] += 1
                     continue
                 if reply != f"Could not find {obj}":
                     raise RuntimeError(f"unexpected get reply {reply!r}")
@@ -380,42 +431,70 @@ def items_at(pair: Pair, seed: int, t: int, state: State, excluded: Counter) -> 
                 if any(W.is_tag(n) for _c, n in inputs):
                     excluded["category_literal"] += 1
                     continue
-                if reply.startswith("Crafted "):
-                    excluded["success"] += 1
-                    continue
-                if not reply.startswith("Could not find enough items to craft "):
+                if reply.startswith("Crafted "):  # a determined success (section 12, C3)
+                    if t == 0:
+                        excluded["success_empty_history"] += 1
+                        continue
+                    held = [{"name": n, "need": c, "held": state.held(n), "peak": state.peaked(n)} for c, n in inputs]
+                    removal = {h["name"]: h["held"] for h in held}
+                    twin = removed_reply(state, removal, action)
+                    if not twin.startswith("Could not find enough items to craft "):
+                        raise RuntimeError(f"emptied inputs still craft: {action!r} -> {twin!r}")
+                    item = {**base, "action_kind": "craft", "failure_class": "success", "short_inputs": [],
+                            "twin": twin, "twin_source": "env_remove", "topup": {}, "removal": removal,
+                            "population": "success", "pure_class": None, "needs_arithmetic": None,
+                            "certificate": certificate(state, held)}
+                elif not reply.startswith("Could not find enough items to craft "):
                     excluded["wrong_recipe"] += 1
                     continue
-                cls, short = classify(state, inputs)
-                twin = topped_up_reply(state, short, action)
-                if not twin.startswith("Crafted "):
-                    excluded["wrong_recipe"] += 1
-                    continue
-                if tag_reading_ambiguous(state, short):
-                    excluded["tag_reading"] += 1
-                    continue
-                item = {**base, "action_kind": "craft", "failure_class": cls, "short_inputs": short,
-                        "twin": twin, "twin_source": "env_topup",
-                        "topup": {s["name"]: s["need"] - s["held"] for s in short},
-                        "population": "main" if t >= 1 else "empty_history",
-                        "pure_class": len({s["kind"] for s in short}) == 1,
-                        "needs_arithmetic": all(s["peak"] > 0 for s in short)}
+                else:
+                    item = _failure_item(base, state, inputs, action, t, excluded)
+                    if item is None:
+                        continue
             if line is None:
                 item["pure_class"] = item["needs_arithmetic"] = None
-            item["candidates"] = {"o_plus": item["twin"], "o_minus": item["reply"]}
-            item["prefix_candidates"] = prefix_candidates(item["action_kind"], item["twin"])
+                item["certificate"] = [{"name": obj, "line": 1 + next(
+                    k for k, ln in enumerate(lines_of(pair)) if ln.out == obj)}]
+            item.setdefault("removal", {})
+            success = item["population"] == "success"
+            item["candidates"] = {"o_plus": item["reply"], "o_minus": item["twin"]} if success else \
+                {"o_plus": item["twin"], "o_minus": item["reply"]}
+            item["prefix_candidates"] = prefix_candidates(item["action_kind"], item["candidates"]["o_plus"])
             item["history_fit"], item["history_fit_counts"] = history_fit(state.history, goal, partner)
             item["object_goal_overlap"] = shares_word(obj, goal)
             item["object_partner_overlap"] = shares_word(obj, partner)
             item["id"] = item_id_for(pair.pair_id, item["history"], action)
+            item["inventory_shown_after_last_change"] = inventory_shown_after_last_change(state.history)
+            item["fit_measures"] = F.measures(list(pair.lines), state.history, goal, partner)
             out.append(item)
     return out
 
 
-def eligible(pair: Pair, excluded: Counter) -> list[dict]:
+def _failure_item(base: dict, state: State, inputs: list, action: str, t: int, excluded: Counter) -> dict | None:
+    """A craft failure item, or None (counted) when it is a wrong recipe or reading-ambiguous."""
+    cls, short = classify(state, inputs)
+    twin = topped_up_reply(state, short, action)
+    if not twin.startswith("Crafted "):
+        excluded["wrong_recipe"] += 1
+        return None
+    if tag_reading_ambiguous(state, short):
+        excluded["tag_reading"] += 1
+        return None
+    if plural_ambiguous(state, short):
+        excluded["plural_reading"] += 1
+        return None
+    return {**base, "action_kind": "craft", "failure_class": cls, "short_inputs": short,
+            "twin": twin, "twin_source": "env_topup", "topup": {s["name"]: s["need"] - s["held"] for s in short},
+            "population": "main" if t >= 1 else "empty_history",
+            "pure_class": len({s["kind"] for s in short}) == 1,
+            "needs_arithmetic": all(s["peak"] > 0 for s in short),
+            "certificate": certificate(state, short)}
+
+
+def eligible(pair: Pair, excluded: Counter, walks: int | None = None) -> list[dict]:
     """Every deduplicated item of one pair, in walk order (seed, then prefix length)."""
     seen, out = set(), []
-    for seed in range(WALKS):
+    for seed in range(WALKS if walks is None else walks):
         for t, state in states_of(pair, walk(pair, seed)):
             for it in items_at(pair, seed, t, state, excluded):
                 key = (it["pair_id"], json.dumps(it["history"]), it["action"])
@@ -466,14 +545,64 @@ ROLES = ("goal", "ingredient")
 COUPLE_FITS = ("aligned", "swapped")
 
 
-def select_main(pool: list[dict], total: int, classes: tuple[str, ...], bins: tuple[str, ...]) -> list[dict]:
-    """Main items in couples: within each class x bin x role cell, as many items whose history favours the aligned
-    goal as items whose history favours the partner; ties are not drawn (design section 11, A3)."""
-    cells = {(c, b, r, f): [] for c in classes for b in bins for r in ROLES for f in FITS}
+def couple_id(pair_id: str, history: list, failure_class: str, role: str) -> str:
+    h = hashlib.sha256(json.dumps([pair_id, history, failure_class, role]).encode()).hexdigest()[:12]
+    return f"cp-{pair_id}-{h}"
+
+
+def slot_key(it: dict) -> tuple[str, str, str, str]:
+    return it["pair_id"], json.dumps(it["history"]), it["failure_class"], it["role"]
+
+
+def usefulness_only(it: dict) -> bool:
+    """An ingredient whose name shares no word with either goal: the goal line can matter only through what the
+    object is for (design section 12, C2)."""
+    return it["role"] == "ingredient" and not it["object_goal_overlap"] and not it["object_partner_overlap"]
+
+
+def couple_slots(pool: list[dict], population: str = "main", keep=None, exclude: frozenset = frozenset()
+                 ) -> dict[tuple[str, str, str], dict[str, list[tuple[list[dict], list[dict]]]]]:
+    """(class, bin, role) -> pair -> slots. A slot is one visible history of the pair at which both goals have an
+    item of this population, class and role: (the first goal's items, the second goal's items), goals in sorted
+    order, items sorted by id (design section 12, B1). `keep` filters items; slots in `exclude` are skipped."""
+    by: dict[tuple, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
     for it in pool:
-        if it["population"] == "main":
-            cells[(it["failure_class"], it["length_bin"], it["role"], it["history_fit"])].append(it)
-    cap = {(c, b, r): min(len(cells[(c, b, r, f)]) for f in COUPLE_FITS) for c in classes for b in bins for r in ROLES}
+        if it["population"] == population and (keep is None or keep(it)) and slot_key(it) not in exclude:
+            by[slot_key(it)][it["goal"]].append(it)
+    cells: dict = defaultdict(lambda: defaultdict(list))
+    for (pid, _h, c, r), goals in sorted(by.items()):
+        if len(goals) == 2:
+            first, second = (sorted(goals[g], key=lambda it: it["id"]) for g in sorted(goals))
+            cells[(c, first[0]["length_bin"], r)][pid].append((first, second))
+    return cells
+
+
+def _draw_couples(slots: dict[str, list], n: int, rng: random.Random, population: str = "main") -> list[dict]:
+    """n couples, round-robin over goal pairs (shuffled once), a random slot of each pair per round, then a random
+    item of each goal in the slot."""
+    by_pair = {p: list(v) for p, v in slots.items()}
+    order = sorted(by_pair)
+    rng.shuffle(order)
+    chosen: list[dict] = []
+    while len(chosen) < 2 * n and any(by_pair.values()):
+        for p in order:
+            if by_pair[p] and len(chosen) < 2 * n:
+                first, second = by_pair[p].pop(rng.randrange(len(by_pair[p])))
+                for it in (rng.choice(first), rng.choice(second)):
+                    chosen.append({**it, "population": population,
+                                   "couple_id": couple_id(it["pair_id"], it["history"], it["failure_class"], it["role"])})
+    return chosen
+
+
+def select_main(pool: list[dict], total: int, classes: tuple[str, ...], bins: tuple[str, ...], population: str = "main",
+                source: str = "main", keep=None, exclude: frozenset = frozenset(), roles: tuple[str, ...] = ROLES) -> list[dict]:
+    """Items in same-history couples (design section 12, B1): both items of a couple come from the same goal pair
+    and show the same history, one acting in each goal's tree, with the same class and role. Couples are split over
+    classes, then bins, then roles, each equally with the redistribution rule of section 4. Items are drawn from the
+    pool's `source` population and labelled `population`."""
+    cells = couple_slots(pool, source, keep, exclude)
+    cap = {(c, b, r): sum(len(v) for v in cells.get((c, b, r), {}).values()) if r in roles else 0
+           for c in classes for b in bins for r in ROLES}
     chosen = []
     per_class = _split(total // 2, {c: sum(cap[(c, b, r)] for b in bins for r in ROLES) for c in classes})
     for c in classes:
@@ -481,9 +610,62 @@ def select_main(pool: list[dict], total: int, classes: tuple[str, ...], bins: tu
         for b in bins:
             per_role = _split(per_bin[b], {r: cap[(c, b, r)] for r in ROLES})
             for r in ROLES:
-                for f in COUPLE_FITS:
-                    rng = random.Random(f"{SEED}|textcraft|select|main|{c}|{b}|{r}|{f}")
-                    chosen += _round_robin(cells[(c, b, r, f)], per_role[r], rng)
+                rng = random.Random(f"{SEED}|textcraft|select|{population}|{c}|{b}|{r}|couples")
+                chosen += _draw_couples(cells.get((c, b, r), {}), per_role[r], rng, population)
+    return chosen
+
+
+def fit_profile(it: dict) -> tuple[int, ...]:
+    return tuple(F.signs(it["fit_measures"])[m] for m in F.MEASURES)
+
+
+def mirrored_couple_id(a: dict, b: dict) -> str:
+    return "mc-" + hashlib.sha256(json.dumps(sorted([a["id"], b["id"]])).encode()).hexdigest()[:12]
+
+
+def select_mirrored(pool: list[dict], total: int, bins: tuple[str, ...], exclude: frozenset) -> list[dict]:
+    """Usefulness-only never-obtained ingredient items (not at a history a main couple uses), in couples whose ten
+    fit-measure signs are exact negatives of each other, possibly from different goal pairs (design section 12, C2).
+    Same-history couples of this kind exist in only 23 pairs; mirrored couples spread over many more, and still make
+    every listed measure's sign sum to zero. Per bin, total / 3 items: round-robin over goal pairs (shuffled once),
+    a random unused item of the pair, matched with a random unused item of the opposite profile."""
+    chosen: list[dict] = []
+    per_bin = _split(total // 2, {b: 10 ** 9 for b in bins})
+    for b in bins:
+        cands = sorted((it for it in pool if it["population"] == "main" and it["failure_class"] == "never_obtained"
+                        and it["length_bin"] == b and usefulness_only(it) and slot_key(it) not in exclude),
+                       key=lambda it: it["id"])
+        rng = random.Random(f"{SEED}|textcraft|select|usefulness|{b}|mirrored")
+        by_pair: dict[str, list[dict]] = defaultdict(list)
+        by_profile: dict[tuple, list[dict]] = defaultdict(list)
+        for it in cands:
+            by_pair[it["pair_id"]].append(it)
+            by_profile[fit_profile(it)].append(it)
+        order = sorted(by_pair)
+        rng.shuffle(order)
+        gone: set[str] = set()
+        made = 0
+        while made < per_bin[b]:
+            progress = False
+            for p in order:
+                if made >= per_bin[b]:
+                    break
+                left = [x for x in by_pair[p] if x["id"] not in gone]
+                while left:
+                    x = left.pop(rng.randrange(len(left)))
+                    gone.add(x["id"])
+                    want = tuple(-v for v in fit_profile(x))
+                    options = [y for y in by_profile[want] if y["id"] not in gone]
+                    if options:
+                        y = options[rng.randrange(len(options))]
+                        gone.add(y["id"])
+                        cid = mirrored_couple_id(x, y)
+                        chosen += [{**z, "population": "usefulness", "couple_id": cid} for z in (x, y)]
+                        made += 1
+                        progress = True
+                        break
+            if not progress:
+                break
     return chosen
 
 
@@ -493,6 +675,13 @@ def select(pool: list[dict]) -> list[dict]:
         if population == "main":
             chosen += select_main(pool, total, classes, bins)
             continue
+        if population == "usefulness":  # extra usefulness-only items in sign-mirrored couples (12, C2)
+            used = frozenset(slot_key(it) for it in chosen)
+            chosen += select_mirrored(pool, total, bins, used)
+            continue
+        if population == "success":  # determined successes in couples (12, C3)
+            chosen += select_main(pool, total, classes, bins, "success", "success")
+            continue
         cells = {(c, b): [it for it in pool if it["population"] == population and it["failure_class"] == c
                           and it["length_bin"] == b] for c in classes for b in bins}
         per_class = _split(total, {c: sum(len(cells[(c, b)]) for b in bins) for c in classes})
@@ -500,7 +689,7 @@ def select(pool: list[dict]) -> list[dict]:
             per_bin = _split(per_class[c], {b: len(cells[(c, b)]) for b in bins})
             for b in bins:
                 rng = random.Random(f"{SEED}|textcraft|select|{population}|{c}|{b}")
-                chosen += _round_robin(cells[(c, b)], per_bin[b], rng)
+                chosen += [{**it, "couple_id": None} for it in _round_robin(cells[(c, b)], per_bin[b], rng)]
     return sorted(chosen, key=lambda it: (it["pair_id"], it["id"]))
 
 
@@ -508,7 +697,7 @@ def select(pool: list[dict]) -> list[dict]:
 
 
 def _walk_example(pair: Pair, kind: str, k: int) -> dict:
-    for seed in range(WALKS):
+    for seed in range(FEWSHOT_WALKS):
         actions = walk(pair, seed)
         for t in range(2, len(actions)):
             if actions[t].startswith(kind):
@@ -517,8 +706,10 @@ def _walk_example(pair: Pair, kind: str, k: int) -> dict:
                 if kind == "craft ":
                     crafted = next(ln.out for ln in lines_of(pair) if action.startswith(f"craft {ln.out_count} {ln.out} using"))
                     goal = next(g for g in pair.goals if W.item_id(crafted) in W.tree_craftables(W.item_id(g)))
-                else:
-                    goal = random.Random(f"{SEED}|textcraft|fewshot|goal|{k}").choice(pair.goals)
+                else:  # the goal whose tree does not hold the fetched item: an off-goal success (section 12, C8)
+                    fetched = action.split(" ", 2)[2]
+                    outside = [g for g in pair.goals if fetched not in tree_names(g)]
+                    goal = outside[0] if len(outside) == 1 else random.Random(f"{SEED}|textcraft|fewshot|goal|{k}").choice(pair.goals)
                 return {"pair_id": pair.pair_id, "goal": goal, "recipe_lines": list(pair.lines), "walk_seed": seed,
                         "history": history[:-1], "action": action, "observation": reply}
     raise RuntimeError(f"{pair.pair_id}: no walk has a {kind.strip()} at step 3 or later")
@@ -527,8 +718,8 @@ def _walk_example(pair: Pair, kind: str, k: int) -> dict:
 def fewshot_examples(pool_by_pair: dict[str, list[dict]]) -> list[dict]:
     pairs = {p.pair_id: p for p in all_pairs()}
     p1, p2, p3 = (pairs[i] for i in fewshot_pair_ids())
-    failures = sorted((it for it in pool_by_pair[p2.pair_id] if it["population"] == "main" and 2 <= it["history_len"] <= 5),
-                      key=lambda it: it["id"])
+    failures = sorted((it for it in pool_by_pair[p2.pair_id] if it["population"] == "main" and 2 <= it["history_len"] <= 5
+                       and it["walk_seed"] < FEWSHOT_WALKS), key=lambda it: it["id"])
     if not failures:
         raise RuntimeError(f"{p2.pair_id}: no main item with 2-5 history steps")
     f = random.Random(f"{SEED}|textcraft|fewshot|item").choice(failures)
@@ -546,10 +737,26 @@ def candidate_pool(pool_by_pair: dict[str, list[dict]]) -> list[dict]:
     return [it for p in all_pairs() if p.pair_id not in held_out for it in pool_by_pair[p.pair_id]]
 
 
-def build() -> tuple[list[dict], list[dict], dict]:
+def _eligible_of(pair_id: str) -> tuple[list[dict], Counter]:
+    excluded: Counter = Counter()
+    return eligible(next(p for p in all_pairs() if p.pair_id == pair_id), excluded), excluded
+
+
+def build(jobs: int = 1) -> tuple[list[dict], list[dict], dict]:
+    """Every pair's eligible items (in worker processes when jobs > 1; the result does not depend on jobs), then
+    selection and the prompt examples."""
     excluded: Counter = Counter()
     held_out = set(fewshot_pair_ids())
-    pool_by_pair = {p.pair_id: eligible(p, excluded) for p in all_pairs()}
+    ids = [p.pair_id for p in all_pairs()]
+    if jobs > 1:
+        import multiprocessing
+        with multiprocessing.get_context("spawn").Pool(jobs) as workers:
+            results = workers.map(_eligible_of, ids, chunksize=1)
+    else:
+        results = [_eligible_of(pid) for pid in ids]
+    pool_by_pair = {pid: its for pid, (its, _ex) in zip(ids, results)}
+    for _its, ex in results:
+        excluded.update(ex)
     pool = candidate_pool(pool_by_pair)
     items = select(pool)
     shots = fewshot_examples(pool_by_pair)
@@ -561,6 +768,12 @@ def build() -> tuple[list[dict], list[dict], dict]:
         "eligible_main_by_role_and_fit": {"|".join(k): v for k, v in sorted(Counter(
             (it["failure_class"], it["length_bin"], it["role"], it["history_fit"]) for it in pool
             if it["population"] == "main").items())},
+        "couple_slots_by_class_bin_role": {f"{pop}|" + "|".join(k): sum(len(x) for x in v.values())
+                                           for pop, keep in (("main", None), ("success", None), ("main_usefulness_only", usefulness_only))
+                                           for k, v in sorted(couple_slots(pool, pop.split("_")[0], keep).items())},
+        "couple_slot_pairs_by_class_bin_role": {f"{pop}|" + "|".join(k): len(v)
+                                                for pop, keep in (("main", None), ("success", None), ("main_usefulness_only", usefulness_only))
+                                                for k, v in sorted(couple_slots(pool, pop.split("_")[0], keep).items())},
     }
     return items, shots, stats
 
@@ -571,9 +784,10 @@ def dumps_items(items: list[dict]) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
+    jobs = int(os.environ.get("TEXTCRAFT_BUILD_JOBS") or os.cpu_count() or 1)
     out = Path(argv[0]) if argv else DATA
     out.mkdir(parents=True, exist_ok=True)
-    items, shots, stats = build()
+    items, shots, stats = build(jobs)
     (out / "items.jsonl").write_text(dumps_items(items), encoding="utf-8")
     (out / "fewshot.json").write_text(json.dumps(shots, indent=1, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
     (out / "build_stats.json").write_text(json.dumps(stats, indent=1, sort_keys=True) + "\n", encoding="utf-8")

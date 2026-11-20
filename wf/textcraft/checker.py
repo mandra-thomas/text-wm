@@ -56,15 +56,22 @@ class Ledger:
 
     held: dict[str, int] = field(default_factory=dict)
     peak: dict[str, int] = field(default_factory=dict)
+    changed_at: dict[str, int] = field(default_factory=dict)  # the last history step (from 1) that changed the count
+    peak_at: dict[str, int] = field(default_factory=dict)  # the first history step at which the peak was reached
+    step: int = 0
 
     def add(self, name: str, n: int) -> None:
         self.held[name] = self.held.get(name, 0) + n
-        self.peak[name] = max(self.peak.get(name, 0), self.held[name])
+        self.changed_at[name] = self.step
+        if self.held[name] > self.peak.get(name, 0):
+            self.peak[name], self.peak_at[name] = self.held[name], self.step
 
     def remove(self, name: str, n: int) -> None:
         left = self.held.get(name, 0) - n
         if left < 0:
             raise CheckerError(f"history crafts with {n} {name} but holds {self.held.get(name, 0)}")
+        if n:
+            self.changed_at[name] = self.step
         if left:
             self.held[name] = left
         else:
@@ -75,6 +82,7 @@ def account(history: list[list[str]] | list[tuple[str, str]]) -> Ledger:
     """Replay the history's replies on an empty inventory (rules in design section 2)."""
     ledger = Ledger()
     for action, reply in history:
+        ledger.step += 1
         got, crafted = GOT.fullmatch(reply), CRAFTED.fullmatch(reply)
         if got:
             ledger.add(got.group(2), int(got.group(1)))
@@ -112,6 +120,9 @@ class Verdict:
     short_inputs: list[dict] = field(default_factory=list)
     twin: str | None = None
     topup: dict[str, int] = field(default_factory=dict)
+    certificate: list[dict] = field(default_factory=list)
+    determined_success: bool = False
+    removal: dict[str, int] = field(default_factory=dict)
 
 
 CLASS_ORDER = ("used_up", "too_few", "never_obtained")
@@ -123,9 +134,10 @@ def decide(recipe_lines: list[str], history: list, action: str) -> Verdict:
     get = GET.fullmatch(action)
     if get:
         n, name = int(get.group(1)), get.group(2)
-        if name in displayed_outputs(recipe_lines):
+        line = next((k for k, text in enumerate(recipe_lines, 1) if parse_craft(text)[1] == name), None)
+        if line is not None:  # the object is the output of a displayed line, so it is craftable and cannot be got
             return Verdict(True, reply=f"Could not find {name}", failure_class="get_craftable",
-                           twin=f"Got {n} {name}")
+                           twin=f"Got {n} {name}", certificate=[{"name": name, "line": line}])
         return Verdict(False)
     count, target, inputs = parse_craft(action)
     short = []
@@ -135,12 +147,51 @@ def decide(recipe_lines: list[str], history: list, action: str) -> Verdict:
             kind = "used_up" if peak >= c else "too_few" if peak > 0 else "never_obtained"
             short.append({"name": name, "need": c, "held": held, "peak": peak, "kind": kind})
     if not short:
-        return Verdict(False)
+        # Every input is held. The craft is a sure success when it is a displayed line with its generic inputs
+        # (planks, wool) filled by members (section 2, rule 8 of section 11, A1); its failure twin empties the inputs.
+        if not any(matches_line(line, count, target, inputs) for line in recipe_lines):
+            return Verdict(False)
+        cert = [{"name": n, "held_step": ledger.changed_at.get(n, "never"), "peak_step": ledger.peak_at.get(n, "never")}
+                for _c, n in inputs]
+        return Verdict(False, reply=f"Crafted {count} {to_id(target)}", failure_class="success",
+                       twin=f"Could not find enough items to craft {to_id(target)}", certificate=cert,
+                       determined_success=True, removal={n: ledger.held[n] for _c, n in inputs})
     kinds = {s["kind"] for s in short}
     cls = next(k for k in CLASS_ORDER if k in kinds)
+    # The certificate: for each short input, the step whose reply set the count held now and the step at which it
+    # first reached its peak ("never" when no step did): with the need, these settle the failure and its class.
+    cert = [{"name": s["name"], "held_step": ledger.changed_at.get(s["name"], "never"),
+             "peak_step": ledger.peak_at.get(s["name"], "never")} for s in short]
     return Verdict(True, reply=f"Could not find enough items to craft {to_id(target)}", failure_class=cls,
                    short_inputs=short, twin=f"Crafted {count} {to_id(target)}",
-                   topup={s["name"]: s["need"] - s["held"] for s in short})
+                   topup={s["name"]: s["need"] - s["held"] for s in short}, certificate=cert)
+
+
+def matches_line(line: str, count: int, target: str, inputs: list[tuple[int, str]]) -> bool:
+    """The action crafts this displayed line: same output and count, and its inputs are the line's, in any order,
+    with each generic input of the line filled by one of its members and the counts equal."""
+    k, out, wanted = parse_craft(line)
+    if (k, out) != (count, target) or len(wanted) != len(inputs):
+        return False
+    left = list(inputs)
+    for c, n in sorted(wanted, key=lambda x: x[1] in GENERIC_MEMBERS):  # exact names first, then generic groups
+        hit = next((x for x in left if x[0] == c and (x[1] == n or x[1] in GENERIC_MEMBERS.get(n, ()))), None)
+        if hit is None:
+            return False
+        left.remove(hit)
+    return True
+
+
+def inventory_shown_after_last_change(history: list) -> bool:
+    """An "Inventory:" reply comes after the last reply that got or crafted something (or there is no such reply):
+    the inventory before the action is shown verbatim (design section 12, B6)."""
+    shown = False
+    for _action, reply in history:
+        if GOT.fullmatch(reply) or CRAFTED.fullmatch(reply):
+            shown = False
+        elif reply.startswith("Inventory: "):
+            shown = True
+    return shown
 
 
 # The only generic groups that appear as inputs on recipe lines, with their members (design section 2 and 11, A1).
@@ -193,8 +244,27 @@ def check_item(item: dict) -> list[str]:
     except CheckerError as e:
         return [f"checker error: {e}"]
     problems = []
-    if not v.determined_failure:
+    if item["failure_class"] == "success":
+        if not v.determined_success:
+            return ["not a determined success"]
+        problems += [f"{k} {getattr(v, k)!r} != stored {item[k]!r}" for k in ("reply", "twin", "certificate", "removal")
+                     if getattr(v, k) != item[k]]
+        if item["short_inputs"] or item["topup"]:
+            problems.append("a success has short inputs or a top-up")
+    elif not v.determined_failure:
         return ["not a determined failure"]
+    else:
+        problems += _failure_problems(item, v)
+    if item.get("inventory_shown_after_last_change") is not inventory_shown_after_last_change(item["history"]):
+        problems.append("inventory_shown_after_last_change disagrees")
+    fit = history_fit(item["recipe_lines"], item["history"], item["goal"], item["partner"])
+    if [item.get("history_fit"), item.get("history_fit_counts")] != [fit[0], fit[1]]:
+        problems.append(f"history fit {fit} != stored {item.get('history_fit')} {item.get('history_fit_counts')}")
+    return problems
+
+
+def _failure_problems(item: dict, v: Verdict) -> list[str]:
+    problems = []
     if v.reply != item["reply"]:
         problems.append(f"reply {v.reply!r} != stored {item['reply']!r}")
     if v.failure_class != item["failure_class"]:
@@ -210,7 +280,8 @@ def check_item(item: dict) -> list[str]:
             problems.append("pure_class disagrees")
         if item.get("needs_arithmetic") != all(s["peak"] > 0 for s in v.short_inputs):
             problems.append("needs_arithmetic disagrees")
-    fit = history_fit(item["recipe_lines"], item["history"], item["goal"], item["partner"])
-    if [item.get("history_fit"), item.get("history_fit_counts")] != [fit[0], fit[1]]:
-        problems.append(f"history fit {fit} != stored {item.get('history_fit')} {item.get('history_fit_counts')}")
+    if item.get("certificate") != v.certificate:
+        problems.append(f"certificate {v.certificate} != stored {item.get('certificate')}")
+    if item.get("removal"):
+        problems.append("a failure has a removal")
     return problems

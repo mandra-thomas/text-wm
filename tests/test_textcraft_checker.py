@@ -95,8 +95,12 @@ def test_check_item_reports_each_disagreement():
             "twin": "Crafted 4 minecraft:stick", "topup": {"oak planks": 2},
             "short_inputs": [{"name": "oak planks", "need": 2, "held": 0, "peak": 4, "kind": "used_up"}],
             "pure_class": True, "needs_arithmetic": True, "goal": "ladder", "partner": "minecart",
-            "history_fit": "aligned", "history_fit_counts": {"aligned": 4, "swapped": 0}}
+            "history_fit": "aligned", "history_fit_counts": {"aligned": 4, "swapped": 0},
+            "certificate": [{"name": "oak planks", "held_step": 4, "peak_step": 2}], "removal": {},
+            "inventory_shown_after_last_change": False}
     assert K.check_item(item) == []
+    assert K.check_item({**item, "certificate": [{"name": "oak planks", "held_step": 3, "peak_step": 2}]})
+    assert K.check_item({**item, "inventory_shown_after_last_change": True})
     assert K.check_item({**item, "needs_arithmetic": False})
     assert K.check_item({**item, "pure_class": False})
     assert K.check_item({**item, "history_fit": "swapped"})
@@ -107,5 +111,5 @@ def test_check_item_reports_each_disagreement():
 
 def test_checker_agrees_with_every_committed_item():
     items = [json.loads(line) for line in (REPO / "wf/textcraft/data/items.jsonl").read_text().splitlines()]
-    assert len(items) == 2000
+    assert len(items) == 3200
     assert [it["id"] for it in items if K.check_item(it)] == []

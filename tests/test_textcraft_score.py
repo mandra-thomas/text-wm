@@ -79,9 +79,12 @@ def test_score_every_arm_both_models_then_resume(mock_runs):
     for tag in S.CO_PRIMARY:
         prim = m["per_model"][tag]["primary_delta_L"]
         assert prim["n_pairs"] == 4 and prim["n_items"] == m["items"]["main"]
-        assert set(m["per_model"][tag]["main"]["strata"]) == set(A.STRATA)
-        assert m["per_model"][tag]["secondary_delta_L_needs_arithmetic"]["n_items"] == sum(
-            it["population"] == "main" and it["needs_arithmetic"] for it in items)
+        assert set(m["per_model"][tag]["descriptive"]["main"]["strata"]) == set(A.STRATA)
+        assert m["per_model"][tag]["named"]["counting"]["n_items"] == sum(
+            it["population"] == "main" and it["needs_arithmetic"] and not it["inventory_shown_after_last_change"]
+            and A.not_used_up_goal(it) for it in items)
+        assert m["per_model"][tag]["competence"]["neutral"]["all"]["auc"] == m["per_model"][tag]["competence"]["neutral"]["all"]["auc"]
+        assert "perm_p" not in json.dumps(m["per_model"][tag]["descriptive"])  # descriptive readouts carry no p-values
     assert set(m["verdicts"]) == set(S.CO_PRIMARY) | {"replicates"}
 
 

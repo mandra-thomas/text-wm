@@ -1,6 +1,6 @@
 """Scoring runs for the TextCraft replication (notes/textcraft_design.md, sections 5 and 6).
 
-`textcraft_score`: every verified item, both few-shot models, the aligned, swapped and neutral goal lines, each as
+`textcraft_score`: every verified item (main, usefulness, success, secondary get, empty history), both few-shot models, the aligned, swapped and neutral goal lines, each as
 the two-candidate prediction (success twin against the failure reply) and as the yes/no question. Sharded by goal
 pair (WF_SHARD / WF_N_SHARDS); each score is saved as it is made, so a resumed shard skips finished work.
 `textcraft_analysis` (wf/textcraft/analysis.py) combines the shards.
@@ -17,7 +17,7 @@ from wf import constants as C
 from wf.runs import _init_run
 from wf.scoring.logodds import LogoddsScorer
 from wf.textcraft import prompts as P
-from wf.util import REPO_ROOT, append_jsonl, read_jsonl, require_filed, write_status
+from wf.util import REPO_ROOT, append_jsonl, read_jsonl, require_filed, write_json, write_status
 
 MODELS = ((C.WM_FEWSHOT_MODEL, "qwen3-8b-fewshot"), (C.WM_FEWSHOT_LLAMA, "llama3.1-8b-fewshot"))
 CO_PRIMARY = tuple(tag for _, tag in MODELS)
@@ -67,9 +67,24 @@ def shard_items(items: list[dict], i: int, n: int) -> list[dict]:
 
 
 def selected_items(cfg: dict, items: list[dict]) -> list[dict]:
-    populations = set(cfg.get("populations", ("main", "secondary_get", "empty_history")))
+    populations = set(cfg.get("populations", ("main", "usefulness", "success", "secondary_get", "empty_history")))
     items = [t for t in items if t["population"] in populations]
     return smoke_subset(items, int(cfg["max_items"])) if cfg.get("max_items") else items
+
+
+def token_report(scorer, items: list[dict], shots, arms: tuple[str, ...], tag: str | None = None,
+                 all_items: list[dict] | None = None) -> dict:
+    """wf/textcraft/tokcheck.py with the scorer's own tokenizer and chat encoder, and (given the model's tag and the
+    whole items file) the golden rendered prompt of wf/textcraft/golden_chat.py; skipped in mock mode."""
+    if scorer.mock:
+        return {"ok": True, "skipped": "mock scorer has no tokenizer"}
+    from wf.textcraft import golden_chat, tokcheck
+    encode = lambda m: [int(i) for i in scorer._encode(m)[0]]
+    report = tokcheck.check(scorer._tok, items, shots, arms, encode=encode)
+    if tag is not None and all_items is not None:
+        report["golden_problems"] = golden_chat.problems(scorer._tok, tag, all_items, shots)
+        report["ok"] = report["ok"] and not report["golden_problems"]
+    return report
 
 
 def run_textcraft_score(cfg: dict) -> int:
@@ -98,6 +113,13 @@ def run_textcraft_score(cfg: dict) -> int:
         if not todo:
             continue
         scorer = LogoddsScorer(model_name, model_tag=tag)
+        if cfg.get("token_check"):  # the smoke run: tokenization on these real prompts before any score (B7)
+            report = token_report(scorer, items, shots, arms, tag, load_items(items_path))
+            write_json(d / f"token_check_{tag}.json", report)
+            if not report["ok"]:
+                write_status(run_id, f"tokenization check failed for {tag}: {report['examples']}", ok=False)
+                scorer.close()
+                return 1
         for t, arm in todo:
             plus, minus = P.candidates(t, arm)
             sc = scorer.score_pair(transition_id=t["id"], condition=arm, messages=P.messages(t, arm, shots),

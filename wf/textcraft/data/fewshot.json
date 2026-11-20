@@ -68,7 +68,7 @@
  },
  {
   "action": "get 2 jungle logs",
-  "goal": "birch sign",
+  "goal": "granite",
   "history": [
    [
     "get 2 birch logs",

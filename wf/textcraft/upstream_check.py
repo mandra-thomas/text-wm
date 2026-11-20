@@ -74,6 +74,9 @@ def main(argv: list[str]) -> int:
         for name, n in it["topup"].items():
             key = "minecraft:" + name.replace(" ", "_")
             env.inventory[key] = env.inventory.get(key, 0) + n
+        for name, n in it.get("removal", {}).items():  # a success's failure twin (design 12, C3)
+            key = "minecraft:" + name.replace(" ", "_")
+            env.inventory[key] = env.inventory.get(key, 0) - n
         twin = step(env, it["action"]) if it["action_kind"] == "craft" else it["twin"]
         if history != it["history"] or reply != it["reply"] or twin != it["twin"]:
             mismatches += 1
