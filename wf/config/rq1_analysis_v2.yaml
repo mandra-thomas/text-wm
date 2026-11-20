@@ -1,0 +1,6 @@
+run_id: rq1_analysis_v2
+# rq1_analysis re-run on 2026-11-20 (documentation audit A3): the same shards of rq1_score, every written prediction
+# re-read with the parser as it is now (version 3c25d40cc71529e2, the last audited one), and a provenance block.
+# A new run id, so the original rq1_analysis (parser 8639849027611cd2) stays as it was. No GPU.
+source: rq1_score
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot, w2w-qwen2.5-7b, w2w-llama3.1-8b]

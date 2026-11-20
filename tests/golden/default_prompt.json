@@ -1,0 +1,93 @@
+{
+ "source": "rq12_transitions_s0 (commit f8d20c1), item t_002295; real server text",
+ "item": {
+  "id": "t_002295",
+  "game_id": "valid_unseen/191",
+  "action": "take soapbar 1 from cabinet 1",
+  "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a countertop 1, a garbagecan 1, a handtowelholder 2, a handtowelholder 1, a sinkbasin 2, a sinkbasin 1, a toilet 1, a toiletpaperhanger 1, and a towelholder 1.\nYour task is to: put two soapbar in garbagecan.\n> go to cabinet 1\nYou arrive at cabinet 1. The cabinet 1 is closed.",
+  "history_pairs": [
+   [
+    "go to cabinet 1",
+    "You arrive at cabinet 1. The cabinet 1 is closed."
+   ]
+  ],
+  "task_line": "Your task is to: put two soapbar in garbagecan.",
+  "swapped_task_line": "Your task is to: put two spraybottle in garbagecan.",
+  "goal_object": "soapbar",
+  "swapped_goal_object": "spraybottle",
+  "candidates": {
+   "o_minus": "Nothing happens.",
+   "o_plus": "You pick up the soapbar 1 from the cabinet 1."
+  },
+  "true_obs": "Nothing happens.",
+  "history_len": 1
+ },
+ "aligned": [
+  {
+   "role": "system",
+   "content": "You are a text world model for household embodied tasks. Given the interaction history and the next action, predict the environment's next observation exactly in ALFWorld style. Output only the observation text."
+  },
+  {
+   "role": "user",
+   "content": "History:\nYour task is to: put a soapbottle in toilet.\n> go to cabinet 1\nYou arrive at cabinet 1. The cabinet 1 is closed.\n> open cabinet 1\nYou open the cabinet 1. The cabinet 1 is open. In it, you see a spraybottle 1.\n\nAction: take spraybottle 1 from cabinet 1\n\nNext observation:"
+  },
+  {
+   "role": "assistant",
+   "content": "You pick up the spraybottle 1 from the cabinet 1."
+  },
+  {
+   "role": "user",
+   "content": "History:\nYour task is to: put some candle on cabinet.\n> go to toilet 1\nYou arrive at toilet 1. On the toilet 1, you see a candle 2, and a candle 1.\n> take candle 1 from toilet 1\nYou pick up the candle 1 from the toilet 1.\n\nAction: move candle 1 to cabinet 1\n\nNext observation:"
+  },
+  {
+   "role": "assistant",
+   "content": "Nothing happens."
+  },
+  {
+   "role": "user",
+   "content": "History:\nYour task is to: put two soapbottle in garbagecan.\n> move soapbottle 2 to garbagecan 1\nYou move the soapbottle 2 to the garbagecan 1.\n> go to countertop 1\nYou arrive at countertop 1. On the countertop 1, you see a handtowel 1, a soapbar 1, a spraybottle 3, and a spraybottle 1.\n\nAction: take soapbottle 1 from countertop 1\n\nNext observation:"
+  },
+  {
+   "role": "assistant",
+   "content": "Nothing happens."
+  },
+  {
+   "role": "user",
+   "content": "History:\nYou are in the middle of a room. Looking quickly around you, you see a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a countertop 1, a garbagecan 1, a handtowelholder 2, a handtowelholder 1, a sinkbasin 2, a sinkbasin 1, a toilet 1, a toiletpaperhanger 1, and a towelholder 1.\nYour task is to: put two soapbar in garbagecan.\n> go to cabinet 1\nYou arrive at cabinet 1. The cabinet 1 is closed.\n\nAction: take soapbar 1 from cabinet 1\n\nNext observation:"
+  }
+ ],
+ "swapped": [
+  {
+   "role": "system",
+   "content": "You are a text world model for household embodied tasks. Given the interaction history and the next action, predict the environment's next observation exactly in ALFWorld style. Output only the observation text."
+  },
+  {
+   "role": "user",
+   "content": "History:\nYour task is to: put a soapbottle in toilet.\n> go to cabinet 1\nYou arrive at cabinet 1. The cabinet 1 is closed.\n> open cabinet 1\nYou open the cabinet 1. The cabinet 1 is open. In it, you see a spraybottle 1.\n\nAction: take spraybottle 1 from cabinet 1\n\nNext observation:"
+  },
+  {
+   "role": "assistant",
+   "content": "You pick up the spraybottle 1 from the cabinet 1."
+  },
+  {
+   "role": "user",
+   "content": "History:\nYour task is to: put some candle on cabinet.\n> go to toilet 1\nYou arrive at toilet 1. On the toilet 1, you see a candle 2, and a candle 1.\n> take candle 1 from toilet 1\nYou pick up the candle 1 from the toilet 1.\n\nAction: move candle 1 to cabinet 1\n\nNext observation:"
+  },
+  {
+   "role": "assistant",
+   "content": "Nothing happens."
+  },
+  {
+   "role": "user",
+   "content": "History:\nYour task is to: put two soapbottle in garbagecan.\n> move soapbottle 2 to garbagecan 1\nYou move the soapbottle 2 to the garbagecan 1.\n> go to countertop 1\nYou arrive at countertop 1. On the countertop 1, you see a handtowel 1, a soapbar 1, a spraybottle 3, and a spraybottle 1.\n\nAction: take soapbottle 1 from countertop 1\n\nNext observation:"
+  },
+  {
+   "role": "assistant",
+   "content": "Nothing happens."
+  },
+  {
+   "role": "user",
+   "content": "History:\nYou are in the middle of a room. Looking quickly around you, you see a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a countertop 1, a garbagecan 1, a handtowelholder 2, a handtowelholder 1, a sinkbasin 2, a sinkbasin 1, a toilet 1, a toiletpaperhanger 1, and a towelholder 1.\nYour task is to: put two spraybottle in garbagecan.\n> go to cabinet 1\nYou arrive at cabinet 1. The cabinet 1 is closed.\n\nAction: take soapbar 1 from cabinet 1\n\nNext observation:"
+  }
+ ]
+}

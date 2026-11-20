@@ -42,7 +42,7 @@ which H3 predicted to be negative. The primary set is the game–schedule units 
 
 - **Keeping predictions hurt even when they were perfect.** With perfect predictions kept in the history, success fell from 58.2% to 32.8%, below the 47.0% with no foresight at all. The agent repeated actions in 82 of 134 episodes with kept predictions, against 24 with dropped ones. This looks like a history-format artifact, not an effect of the errors.
 - **Floor effect.** 72–89% of the primary set's episodes failed.
-- **The error matching fell short.** Episodes received 1.8–2.2 false failures against 2.4–2.5 false successes.
+- **The error matching fell short.** Episodes received 1.8–2.2 false failures against 2.3–2.5 false successes (the false successes are the per-game means in `rq3_metrics.json`, `delivered_covariate_primary.mean_fs_delivered`: 2.33 discarded, 2.46 retained).
 - **A false success was cheap to correct.** The valid-or-not oracle did as well as perfect foresight, so the next real observation corrected a false success.
 - **Above all, the errors were injected.** They were not the world models' own predictions, so the experiment does not test what the goal leak found in RQ2 costs an agent.
 

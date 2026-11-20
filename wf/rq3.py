@@ -447,6 +447,10 @@ def run_rq3_analysis(cfg: dict) -> int:
     summary["provenance"] = {"source": cfg["source"], "shards": len(folders),
                              "git_sha": (folders[0] / "git_sha").read_text(encoding="utf-8").strip(),
                              "episodes_sha256": {p.name: file_sha(p / "episodes.jsonl") for p in folders}}
+    from wf.provenance import provenance  # the common block (2026-11-20), added beside the original keys
+
+    summary["provenance"].update(provenance(runs={cfg["source"]: source},
+                                            inputs=[p / "episodes.jsonl" for p in folders]))
     write_json(d / "metrics.json", summary)
     write_run_report(run_id, "RQ3 (confirmatory)", summary)
     prim = summary["primary"]

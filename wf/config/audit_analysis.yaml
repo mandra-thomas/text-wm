@@ -1,0 +1,20 @@
+run_id: audit_analysis
+# Audit analyses C1-C7 (wf/audit.py, 2026-11-20; exploratory, CPU only): exclusion flow, the instance-number items
+# among the "seen without the object" failures, yes-share against mean s in the size series, intervals for the
+# headline ratios, first-token coverage and ties, items per game and near-duplicates, twins lost to a winning plan.
+# Each input is a run name under runs/ or an absolute path to a run folder in another checkout.
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+inputs:
+  rq2_score: rq2_score
+  rq1_score: rq1_score
+  rq1x_score: rq1x_score
+  rq1v_score: rq1v_score
+  thinking_probe: thinking_probe
+  size_scores:
+    qwen3-0.6b: size_score_qwen3-0.6b
+    qwen3-1.7b: size_score_qwen3-1.7b
+    qwen3-4b: size_score_qwen3-4b
+    qwen3-8b: size_score_qwen3-8b
+    qwen3-14b: size_score_qwen3-14b
+    qwen3-32b: size_score_qwen3-32b
+thinking_n_items: 1000

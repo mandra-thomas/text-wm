@@ -9,10 +9,20 @@ pair differ only in the goal, as in the preregistered contrast:
                                                      touches the goal object, so it has not moved)
 - absent:  "There is no mug in this room."          (existence denied; counterfactual)
 
-The plain aligned and swapped prompts are rescored in the same job, so every comparison is paired on one GPU.
-If the goal works as evidence of existence, the aligned-vs-swapped effect should shrink sharply once the
-sentence settles existence (exist, located) or denies it (absent). If the goal works through what the agent
-wants, the effect should persist.
+The plain aligned and swapped prompts are rescored in the same job, so each item's comparisons are paired on one
+GPU (unless a resumed job finished the item on another).
+
+The first logged prediction was that the aligned-vs-swapped effect would shrink sharply once the sentence settles
+existence (exist, located) or denies it (absent) if the goal works as evidence of existence. It was amended
+before any score was read (notes/deviations.md, "Amendment to the dissociation test's readout", 2026-11-19),
+because a salience account predicts the same shrinkage. The readouts are levels on the swapped prompt:
+
+- primary: the denial sentence, L(swapped + absent) - L(swapped) (`absent_moves_swapped`): negative under the
+  evidence account, positive under salience;
+- secondary: the true-location sentence on the swapped prompt, split by whether the stated location matches
+  the action's receptacle (`location_matches_action`, `location_differs_from_action`);
+- reported, not decisive: the shared-sentence effects for all three sentences, and the exist sentence on the
+  swapped prompt (a replication of the extra-mention control).
 """
 from __future__ import annotations
 
@@ -23,7 +33,7 @@ from typing import Any
 
 from wf import rq1
 from wf.analysis.report import write_run_report
-from wf.rq2 import SOURCES, complete_shards, load_items, shard_items
+from wf.rq2 import SOURCES, analysis_provenance, complete_shards, load_items, shard_items
 from wf.runs import _effect, _finished, _init_run, _item_hash
 from wf.scoring.logodds import LogoddsScorer, build_messages
 from wf.tools.verify_items import verified
@@ -147,6 +157,7 @@ def run_rq1d_analysis(cfg: dict) -> int:
             "location_matches_action": _block(s, [t for t in located if location_matches(t)]),
             "location_differs_from_action": _block(s, [t for t in located if not location_matches(t)]),
         }
+    report["provenance"] = analysis_provenance(cfg["source"], folders, cfg.get("sources", SOURCES))
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Dissociation test (exploratory)", report)
     lines = [f"{tag}: plain {report[tag]['all']['plain']['delta_L_nats']:.2f}, "

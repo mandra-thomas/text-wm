@@ -22,7 +22,7 @@ from wf import constants as C
 from wf.analysis.report import write_run_report
 from wf.analysis.stats import _asymmetry, asymmetry_A, asymmetry_ci, cluster_bootstrap, gen_says_success, with_partial_rule
 from wf.data.transitions import determination_reason, main_test_items
-from wf.rq2 import SOURCES, _mean_ci_p, complete_shards, load_items, primary_set, shard_items
+from wf.rq2 import SOURCES, _mean_ci_p, analysis_provenance, complete_shards, load_items, primary_set, shard_items
 from wf.runs import PILOT_A_MODELS, _effect, _finished, _false_success_by_reason, _init_run, _item_hash, _pilotA_item_sets
 from wf.scoring.logodds import LogoddsScorer, build_messages
 from wf.scoring.parser import parse_prediction
@@ -310,6 +310,7 @@ def run_rq1_analysis(cfg: dict) -> int:
         "H1_llama_minus_qwen": a_difference(llama, qwen, items, absolute=False),
         "per_model": per_model,
     }
+    report["provenance"] = analysis_provenance(cfg["source"], folders, cfg.get("sources", SOURCES), parser=True)
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "RQ1 and RQ2 secondary", report)
     lines = []

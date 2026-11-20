@@ -1,0 +1,8 @@
+run_id: thinking_analysis_v2
+# thinking_analysis re-run on 2026-11-20 (documentation audit A3). reparse: true re-reads every answer with the
+# parser as it is now; the original run used the classes saved when the probe ran, before the parser's fifth and
+# sixth versions. A new run id, so the original stays as it was. No GPU.
+source: thinking_probe
+direct_sources: [rq1_score, rq1x_score]
+n_items: 1000
+reparse: true

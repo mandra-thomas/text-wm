@@ -27,7 +27,7 @@ from wf import rq1, rq1x
 from wf.analysis.report import write_run_report
 from wf.analysis.stats import cluster_bootstrap
 from wf.data.goals import make_swapped_task_line, parse_task_line
-from wf.rq2 import SOURCES, complete_shards, load_items, shard_items
+from wf.rq2 import SOURCES, analysis_provenance, complete_shards, load_items, shard_items
 from wf.runs import _effect, _finished, _init_run, _item_hash
 from wf.scoring.logodds import LogoddsScorer, build_messages
 from wf.tools.verify_items import verified
@@ -205,12 +205,15 @@ def run_rq1v_analysis(cfg: dict) -> int:
             "yes_no": {
                 "goal_effect_failures": _effect(s, primary, primary="yn_aligned", control="yn_swapped"),
                 "aligned_vs_neutral_failures": _effect(s, primary, primary="yn_aligned", control="yn_absent"),
-                "goal_effect_successes": _effect(s, successes, require_agnostic=False, primary="yn_aligned", control="yn_swapped"),
+                # outcome="success": before 2026-11-20 this read the failure filter and came out empty (audit B1)
+                "goal_effect_successes": _effect(s, successes, require_agnostic=False, primary="yn_aligned",
+                                                 control="yn_swapped", outcome="success"),
                 "auc": {a: rq1x._auc_ci(by, both, a) for a in YN_ARMS},
                 "auc_aligned_minus_neutral": rq1x._auc_diff(by, both, "yn_aligned", "yn_absent"),
                 "top_candidate_fails": _paired_top1(by, both, "yn_aligned", "yn_absent"),
             },
         }
+    report["provenance"] = analysis_provenance(cfg["source"], folders, cfg.get("sources", SOURCES))
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Validation runs: counterfactual task and yes/no feasibility (exploratory)", report)
     lines = [f"{tag}: real {report[tag]['counterfactual_task']['real_task_effect']['delta_L_nats']:.2f}, "

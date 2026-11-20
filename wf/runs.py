@@ -91,7 +91,7 @@ def load_config(run_id: str) -> dict:
 
 
 RUN_OUTPUTS = ("transitions.jsonl", "scoring.jsonl", "episodes.jsonl", "observations.jsonl",
-               "items.jsonl", "generations.jsonl", "games_done.jsonl")
+               "items.jsonl", "generations.jsonl", "games_done.jsonl", "jobs.jsonl")
 RULE_STOP_EXIT = 3  # a pilot rule says stop; distinct from a crash or a failed gate
 
 
@@ -151,6 +151,11 @@ def _init_run(run_id: str, cfg: dict, inputs: tuple[Path, ...] = ()) -> Path:
     write_json(d / "config.json", config)
     write_json(d / "inputs.json", {"inputs": hashes, "git_dirty": git_dirty()})
     (d / "git_sha").write_text(git_sha() + "\n", encoding="utf-8")
+    # Host, Slurm job and GPU of every job that works on this run (a resumed run gets one line per job), so an
+    # analysis can say which GPU scored which shard (wf/provenance.py).
+    from wf.provenance import JOBS_FILE, job_record
+
+    append_jsonl(d / JOBS_FILE, [job_record()])
     return d
 
 
@@ -649,9 +654,7 @@ def run_pilotA_transitions(cfg: dict) -> int:
     main_items = primary_items(eligible)
     states = {t["game_id"] + f"#{t['state_idx']}" for t in main_items}
     no_hidden_state = sorted({t["game_id"] for t in all_t if "hidden_state" in t and not t["hidden_state"]})
-    # the hidden state must describe this game's own scene: every object the live scan found appears in it
-    mismatched = sorted({t["game_id"] for t in all_t if not is_mock() and t.get("hidden_state") and t.get("scene_locations")
-                         and any(inst not in t["hidden_state"] for inst in t["scene_locations"])})
+    mismatched = _hidden_state_mismatches(all_t)
     verify = _verify_items(client, all_t, split, int(cfg.get("verify_sample", 0)))
     min_items, min_states = int(cfg.get("min_items", 500)), int(cfg.get("min_states", 80))
     ok = (len(main_items) >= min_items and len(states) >= min_states and not no_hidden_state and not mismatched
@@ -693,6 +696,27 @@ def run_pilotA_transitions(cfg: dict) -> int:
     return 0 if ok else 1
 
 
+def _hidden_state_mismatches(records: list[dict]) -> list[str]:
+    """Games whose hidden state does not list every object instance the live scan found.
+
+    The hidden state must describe this game's own scene. Instances are matched exactly, as parsed from the
+    hidden state's object list; until 2026-11-20 this was a substring test, so "mug 1" was found inside
+    "mug 10" (audit B8; wf.tools.verify_items has always compared exactly).
+    """
+    from wf.tools.verify_items import hidden_locations
+
+    parsed: dict[str, set[str]] = {}
+    bad = set()
+    for t in records:
+        if is_mock() or not t.get("hidden_state") or not t.get("scene_locations"):
+            continue
+        if t["hidden_state"] not in parsed:
+            parsed[t["hidden_state"]] = set(hidden_locations(t["hidden_state"]))
+        if any(inst not in parsed[t["hidden_state"]] for inst in t["scene_locations"]):
+            bad.add(t["game_id"])
+    return sorted(bad)
+
+
 def _verify_items(client: AlfworldClient, records: list[dict], split: str, n: int) -> dict:
     """Replay a seeded sample of saved items on the server: the history and the true outcome must
     reproduce exactly, or the saved data does not describe what the environment does."""
@@ -715,13 +739,17 @@ def _verify_items(client: AlfworldClient, records: list[dict], split: str, n: in
 
 
 def _effect(scores: list[dict], items: list[dict], require_agnostic: bool = True,
-            primary: str = "aligned", control: str = "swapped") -> dict:
-    """Δp, ΔL and first-token ΔL on one population, each with a game-clustered CI and permutation p."""
-    dp = delta_p(scores, items, primary, control, require_agnostic)
-    dl = delta_L(scores, items, primary, control, require_agnostic)
-    df = delta_L_first(scores, items, primary, control, require_agnostic)
+            primary: str = "aligned", control: str = "swapped", outcome: str = "failure") -> dict:
+    """Δp, ΔL and first-token ΔL on one population, each with a game-clustered CI and permutation p.
+
+    `outcome` picks the items by their true outcome: "failure" (the default, the preregistered population),
+    "success" or "any" (wf.analysis.stats.paired_conditions).
+    """
+    dp = delta_p(scores, items, primary, control, require_agnostic, outcome=outcome)
+    dl = delta_L(scores, items, primary, control, require_agnostic, outcome=outcome)
+    df = delta_L_first(scores, items, primary, control, require_agnostic, outcome=outcome)
     # ΔL = Δlogit(q_first) - Δc: if the penalty moves with the goal, ΔL is not a belief shift alone.
-    dc = delta_c(scores, items, primary, control, require_agnostic)
+    dc = delta_c(scores, items, primary, control, require_agnostic, outcome=outcome)
     masses = [s["first_mass"] for s in scores if s.get("first_mass") is not None and s["first_mass"] == s["first_mass"]
               and s.get("condition") in (primary, control) and s["transition_id"] in {t["id"] for t in items}]
     games = dp["item_games"]
@@ -1392,6 +1420,22 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "tau_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
     "tau_smoke_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
     "tau_contamination": lambda cfg: _lazy("tau.pipeline", "run_tau_contamination")(cfg),
+    # 2026-11-20, documentation audit: the shared-spot sensitivity (A2), the audit analyses (C) and re-runs of
+    # analyses under new run ids, so the original runs stay as they were (A3, B1, B4).
+    "rq2_shared_score": lambda cfg: _lazy("rq2_shared", "run_rq2_shared_score")(cfg),
+    "rq2_shared_analysis": lambda cfg: _lazy("rq2_shared", "run_rq2_shared_analysis")(cfg),
+    "audit_analysis": lambda cfg: _lazy("audit", "run_audit_analysis")(cfg),
+    "rq1_analysis_v2": lambda cfg: _rq1("run_rq1_analysis")(cfg),
+    "rq1x_analysis_v2": lambda cfg: _rq1x("run_rq1x_analysis")(cfg),
+    "rq1v_analysis_v2": lambda cfg: _rq1v("run_rq1v_analysis")(cfg),
+    "thinking_analysis_v2": lambda cfg: _thinking("run_thinking_analysis")(cfg),
+    "size_analysis_v2": lambda cfg: _lazy("sizes", "run_size_analysis")(cfg),
+    # 2026-11-20, model families wave A (wf/families.py, notes/families_design.md): one scoring run per model.
+    **{f"family_score_{tag}": (lambda cfg: _lazy("families", "run_family_score")(cfg))
+       for tag in ("gemma2-9b-it", "mistral-7b-v0.3", "llama3.2-1b", "llama3.2-3b")},
+    "families_analysis": lambda cfg: _lazy("families", "run_families_analysis")(cfg),
+    # 2026-11-20, logged before any wave A score was read: Mistral's system text in the first user turn.
+    "family_placement_mistral-7b-v0.3": lambda cfg: _lazy("families", "run_family_placement")(cfg),
 }
 
 

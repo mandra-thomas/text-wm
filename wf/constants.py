@@ -46,6 +46,44 @@ WM_FEWSHOT_MODEL = "Qwen/Qwen3-8B"
 WM_FEWSHOT_LLAMA = "meta-llama/Llama-3.1-8B-Instruct"  # co-primary (prereg); gated on Hugging Face
 WM_FT_QWEN = "X1AOX1A/WorldModel-Alfworld-Qwen2.5-7B"
 WM_FT_LLAMA = "X1AOX1A/WorldModel-Alfworld-Llama3.1-8B"
+
+# Hugging Face snapshot (commit) of every model the study loads (decided 2026-11-20, audit A5). Each model had
+# exactly one snapshot in the ICE caches (hfcache and hfcache/hub), so these are the revisions every reported
+# run used. Weights, tokenizer and chat template are all read at this revision, so a later push to the Hub
+# cannot change a prompt or a score. A model missing here is refused unless WF_ALLOW_UNPINNED=1.
+REVISIONS = {
+    "Qwen/Qwen3-8B": "b968826d9c46dd6066d109eabc6255188de91218",
+    "meta-llama/Llama-3.1-8B-Instruct": "0e9e39f249a16976918f6564b8830bc894c89659",
+    "X1AOX1A/WorldModel-Alfworld-Qwen2.5-7B": "8d4f069c4bf5a739763664897b26ca17c161f0da",
+    "X1AOX1A/WorldModel-Alfworld-Llama3.1-8B": "8f089d2126f0406a296747041ebf33b902837cd3",
+    "Qwen/Qwen3-0.6B": "c1899de289a04d12100db370d81485cdf75e47ca",
+    "Qwen/Qwen3-1.7B": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+    "Qwen/Qwen3-4B": "1cfa9a7208912126459214e8b04321603b3df60c",
+    "Qwen/Qwen3-14B": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+    "Qwen/Qwen3-32B": "9216db5781bf21249d130ec9da846c4624c16137",
+    # Model families, wave A (2026-11-20, wf/families.py): the Hub's current commit ("sha" from
+    # https://huggingface.co/api/models/<id>, read 2026-11-20, before any download); the prefetch job downloads
+    # exactly these.
+    "google/gemma-2-9b-it": "11c9b309abf73637e4b6f9a3fa1e92e615547819",
+    "mistralai/Mistral-7B-Instruct-v0.3": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+    "meta-llama/Llama-3.2-1B-Instruct": "9213176726f574b556790deb65791e0c5aa438b6",
+    "meta-llama/Llama-3.2-3B-Instruct": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+}
+
+
+def revision_for(model_id: str) -> str | None:
+    """The pinned snapshot for a model id. An unknown id fails loudly, unless WF_ALLOW_UNPINNED=1 is set,
+    in which case it loads the Hub's current revision (None) and the run record says so."""
+    import os
+
+    if model_id in REVISIONS:
+        return REVISIONS[model_id]
+    if os.environ.get("WF_ALLOW_UNPINNED") == "1":
+        return None
+    raise KeyError(f"model {model_id!r} has no pinned revision in wf.constants.REVISIONS; add its snapshot hash "
+                   f"or set WF_ALLOW_UNPINNED=1 to load the Hub's current revision")
+
+
 TRANSITION_DATASET = "X1AOX1A/LLMasWorldModels"
 PARSER_DATASET_FILE = "llama_factory/alfworld_test_with_env_195.json"
 CONFIRMATORY_GAMES = 134  # solvable valid_unseen; the game count sample sizes are planned for

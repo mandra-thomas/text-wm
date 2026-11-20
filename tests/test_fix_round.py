@@ -515,7 +515,7 @@ def _write_transitions(path: Path, items: list[dict]) -> None:
 
 def _item(i: int, **extra) -> dict:
     base = {"id": f"t_{i}", "game_id": f"train/{i % 3}", "split": "train", "state_idx": i, "action": f"take mug {i} from shelf 1",
-            "history_text": "h", "history_pairs": [], "task_line": "Your task is to: put a mug in shelf.",
+            "history_text": "You are in the middle of a room.\n\nYour task is to: put a mug in shelf.", "history_pairs": [], "task_line": "Your task is to: put a mug in shelf.",
             "swapped_task_line": "Your task is to: put a cup in shelf.", "goal_object": "mug", "swapped_goal_object": "cup",
             "true_obs": NOOP, "outcome_class": "noop", "context_determined": True, "shared_location": False,
             "history_goal_agnostic": True, "history_len": 1, "targets_goal_object": True,

@@ -25,6 +25,7 @@ from wf.rq2 import SOURCES, _mean_ci_p, complete_shards, load_items
 from wf.runs import _finished, _init_run, _item_hash
 from wf.scoring.parser import parse_prediction
 from wf.tools.verify_items import verified
+from wf.provenance import provenance
 from wf.util import append_jsonl, read_jsonl, require_filed, write_json, write_status
 
 ARMS = ("aligned", "swapped", "absent", "aligned_desc", "swapped_desc")
@@ -65,12 +66,13 @@ class _Engine:
     def __init__(self, model: str, max_len: int):
         from transformers import AutoTokenizer
         from vllm import LLM
-        self.tok = AutoTokenizer.from_pretrained(model)
+        self.revision = C.revision_for(model)  # pinned snapshot (wf.constants.REVISIONS); unknown ids refused
+        self.tok = AutoTokenizer.from_pretrained(model, revision=self.revision)
         # Prompt log-probabilities are computed over the whole vocabulary for every prompt token in a step, so the
         # step size is capped to keep that transient within the memory left free (4,096 tokens at 80% ran out
         # of memory on a 48 GB L40S, job 7168409).
-        self.llm = LLM(model=model, dtype="bfloat16", max_model_len=max_len, gpu_memory_utilization=0.70,
-                       max_num_batched_tokens=2048, seed=C.RNG_SEED)
+        self.llm = LLM(model=model, revision=self.revision, tokenizer_revision=self.revision, dtype="bfloat16",
+                       max_model_len=max_len, gpu_memory_utilization=0.70, max_num_batched_tokens=2048, seed=C.RNG_SEED)
 
     def prompt(self, msgs: list[dict[str, str]]) -> str:
         return self.tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True, enable_thinking=True)
@@ -100,6 +102,8 @@ class _Engine:
 
 
 class _MockEngine:
+    revision = None
+
     def prompt(self, msgs):
         return "\n".join(m["content"] for m in msgs)
 
@@ -130,7 +134,7 @@ def run_thinking(cfg: dict) -> int:
         raise SystemExit(f"{run_id}: saved records belong to different items; rerun without --resume.")
     done = {(r["transition_id"], r["condition"]) for r in saved}
     todo = [(t, a) for t in items for a in ARMS if (t["id"], a) not in done]
-    mock = bool(os.environ.get("WF_MOCK_SCORE"))
+    mock = os.environ.get("WF_MOCK_SCORE") == "1"  # as everywhere else: "0" or empty is a real run
     eng = _MockEngine() if mock else _Engine(cfg.get("model", C.WM_FEWSHOT_MODEL), int(cfg.get("max_model_len", 8192)))
     chunk, max_tokens = int(cfg.get("chunk", 250)), int(cfg.get("max_tokens", 4096))
     for s in range(0, len(todo), chunk):  # saved per chunk, so a cut-off job loses at most one chunk
@@ -151,6 +155,7 @@ def run_thinking(cfg: dict) -> int:
             recs.append({"transition_id": t["id"], "game_id": t["game_id"], "condition": a, "item_hash": hashes[t["id"]],
                          "text": text, "answer": answer, "finished": finished, "forced": k in cut, "n_tokens": n_tok,
                          "generated_class": cls, "says_success": gen_says_success(cls),
+                         "model_revision": eng.revision,
                          "mentions_goal_word": bool(GOAL_WORDS.search(think)),
                          "mentions_object": bool(re.search(rf"\b{re.escape(t.get('goal_object') or '~')}\b", think, re.I)),
                          "_prefix": p + reasoning_prefix(text) if finished else None,
@@ -191,18 +196,24 @@ def run_thinking_analysis(cfg: dict) -> int:
     d = _init_run(run_id, {**cfg, "resume": False}, inputs=())
     items = sample_items(rq1x.rq1x_sets(load_items(tuple(cfg.get("sources", SOURCES))))["primary"], int(cfg.get("n_items", 1000)))
     recs = read_jsonl(runs_root() / src / "thinking.jsonl")
+    reparse = reparse_answers(recs, items) if cfg.get("reparse") else None
+    if reparse is not None:
+        recs = reparse.pop("records")
     by = {(r["transition_id"], r["condition"]): {**r, "says": None if r["says_success"] is None else float(r["says_success"])}
           for r in recs}
-    base = []
+    base, base_folders = [], []
     for name in cfg.get("direct_sources", []):  # thinking-off scores for the same items
         folders, problems = complete_shards(name)
         if not problems:
+            base_folders += folders
             base += [s for p in folders for s in read_jsonl(p / "scoring.jsonl") if s["model"] == "qwen3-8b-fewshot"]
     direct = {(s["transition_id"], s["condition"]): {"L": s["L"]} for s in base}
     natural = {k: v for k, v in by.items() if not v.get("forced")}
     pairs = (("aligned", "swapped"), ("aligned", "absent"), ("swapped", "absent"), ("aligned_desc", "swapped_desc"))
     rep: dict[str, Any] = {
         "n_items": len(items), "n_records": len(recs),
+        # reparse: true re-reads every answer with the parser as it is now; otherwise the class saved at run time
+        "answers_read_with": reparse or {"parser": "as saved by the run", "saved_parser_version": None},
         "finished_rate": sum(r["finished"] for r in recs) / len(recs) if recs else float("nan"),
         "median_tokens": sorted(r["n_tokens"] for r in recs)[len(recs) // 2] if recs else None,
         "says_success_rate": {a: (lambda v: sum(v) / len(v) if v else float("nan"))(
@@ -222,12 +233,40 @@ def run_thinking_analysis(cfg: dict) -> int:
             "object_when_says_success": _rate([by[k] for k in by if k[1] == a and by[k]["says"] == 1.0], "mentions_object"),
         } for a in ARMS},
     }
+    rep["provenance"] = provenance(
+        runs={name: runs_root() / name for name in [src, *cfg.get("direct_sources", [])]},
+        inputs=[runs_root() / src / "thinking.jsonl"] + [p / "scoring.jsonl" for p in base_folders]
+        + [runs_root() / s / "transitions.jsonl" for s in cfg.get("sources", SOURCES)],
+        parser=bool(cfg.get("reparse")))
     write_json(d / "metrics.json", rep)
     write_run_report(run_id, "Thinking mode (exploratory)", rep)
     ws, la = rep["written_shift_pp"]["aligned_vs_swapped"], rep["L_after_reasoning"]["aligned_vs_swapped"]
     write_status(run_id, f"written shift {ws['estimate']:.1f} pp {ws['ci']}; L after reasoning {la['estimate']:.2f} {la['ci']}",
                  ok=False, reported="thinking report")
     return 0
+
+
+def reparse_answers(recs: list[dict], items: list[dict]) -> dict[str, Any]:
+    """Every answer re-read with the parser as it is now, as rq1_analysis does for RQ1's predictions.
+
+    The run saved the class its parser gave at the time; the parser changed afterwards (notes/deviations.md,
+    2026-11-19), so the saved classes are stale. An unfinished answer stays unparseable, as at run time.
+    """
+    from wf.tools.parser_audit import parser_version
+
+    meta = {t["id"]: t for t in items}
+    out, changed = [], 0
+    for r in recs:
+        t = meta.get(r["transition_id"])
+        if t is None:
+            out.append(r)
+            continue
+        cls = parse_prediction(r.get("answer") or "", t.get("goal_object"), t["action"]) if r.get("finished") else "unparseable"
+        said = gen_says_success(cls)
+        changed += said != r.get("says_success")  # includes readings that become or stop being unparseable
+        out.append({**r, "generated_class": cls, "says_success": said})
+    return {"records": out, "parser": "re-read at analysis time", "parser_version": parser_version(),
+            "n_readings_changed": changed}
 
 
 def _rate(rows: list[dict], key: str) -> dict:

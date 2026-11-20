@@ -297,7 +297,7 @@ Report (in `REPORT.md`):
 
 Decisions: apply `PILOT_RULE_GOAL_CHANNEL` (§7); set `ELIGIBLE_SET_TARGET` from the ICC to reach an SE of ≤ 1.5 points.
 
-### Pilot B — RQ3 headroom, consumption, calibration (after filing; job limit 6 h, not yet timed with real models)
+### Pilot B — RQ3 headroom, consumption, calibration (after filing; job limit 14 h and 128 GB, set from real episode times, which put the job at about 10–12 h; see `notes/deviations.md`, "Protocol changes")
 
 `pilotB_headroom`: 50 train games × {`none`, `oracle/discarded`, `oracle/retained`, `validity_only`}; 1 run each (schedules irrelevant without corruption).
 

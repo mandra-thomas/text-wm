@@ -29,7 +29,9 @@ trap cleanup EXIT
 start_alfworld_server
 start_vllm
 
-# Only after pilotB_headroom came back borderline (exit 3). The later stages run only if this clears it.
+# Historical: written for a borderline pilotB_headroom (exit 3), with the later stages running only if this
+# cleared it. Since 2026-11-17 the headroom rule is advisory and never stops Pilot B, so this recheck was not
+# needed and was not run (notes/deviations.md, the headroom decision; HEADROOM_RECHECK_GAMES is unused).
 run_wf pilotB_headroom_recheck
 run_wf pilotB_consumption
 run_wf pilotB_eligibility

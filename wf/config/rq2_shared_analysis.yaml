@@ -1,0 +1,8 @@
+run_id: rq2_shared_analysis
+# Shared-spot sensitivity (audit A2): ΔL, ΔL_first and Δs with game-clustered CIs for the shared-spot items alone
+# and for the confirmatory set with them included, beside the confirmatory set as scored (rq2_score). No GPU.
+# With no shared-spot item it needs only rq2_score's shards.
+source: rq2_shared_score
+base: rq2_score
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]

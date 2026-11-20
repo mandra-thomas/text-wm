@@ -1,0 +1,495 @@
+{
+  "L_after_reasoning": {
+    "aligned_desc_vs_swapped_desc": {
+      "ci": [
+        1.47034393948536,
+        3.4222499380705393
+      ],
+      "estimate": 2.4799485078912102,
+      "n_games": 123,
+      "n_items": 1000,
+      "perm_p": 0.000999000999000999
+    },
+    "aligned_vs_absent": {
+      "ci": [
+        7.709471382804602,
+        10.287830257061902
+      ],
+      "estimate": 9.006134761582878,
+      "n_games": 123,
+      "n_items": 1000,
+      "perm_p": 0.000999000999000999
+    },
+    "aligned_vs_swapped": {
+      "ci": [
+        2.8685207694444252,
+        5.1188595343901895
+      ],
+      "estimate": 4.005000483837905,
+      "n_games": 123,
+      "n_items": 1000,
+      "perm_p": 0.000999000999000999
+    },
+    "swapped_vs_absent": {
+      "ci": [
+        3.8805874616087612,
+        6.076655289607335
+      ],
+      "estimate": 5.001134277744957,
+      "n_games": 123,
+      "n_items": 1000,
+      "perm_p": 0.000999000999000999
+    }
+  },
+  "L_thinking_off_same_items": {
+    "aligned_desc_vs_swapped_desc": {
+      "ci": [
+        3.236336382621959,
+        4.319109903356641
+      ],
+      "estimate": 3.7594573463356644,
+      "n_games": 123,
+      "n_items": 1000,
+      "perm_p": 0.000999000999000999
+    },
+    "aligned_vs_absent": {
+      "ci": [
+        7.7860030490645995,
+        9.340824377483804
+      ],
+      "estimate": 8.56039365278215,
+      "n_games": 123,
+      "n_items": 1000,
+      "perm_p": 0.000999000999000999
+    },
+    "aligned_vs_swapped": {
+      "ci": [
+        5.3080586634123685,
+        6.757200267141225
+      ],
+      "estimate": 6.055656591119262,
+      "n_games": 123,
+      "n_items": 1000,
+      "perm_p": 0.000999000999000999
+    },
+    "swapped_vs_absent": {
+      "ci": [
+        2.1107212263035517,
+        2.899960826097271
+      ],
+      "estimate": 2.5047370616628863,
+      "n_games": 123,
+      "n_items": 1000,
+      "perm_p": 0.000999000999000999
+    }
+  },
+  "answers_read_with": {
+    "n_readings_changed": 219,
+    "parser": "re-read at analysis time",
+    "parser_version": "3c25d40cc71529e2"
+  },
+  "finished_rate": 1.0,
+  "forced_rate": {
+    "absent": {
+      "n": 1000,
+      "rate": 0.026
+    },
+    "aligned": {
+      "n": 1000,
+      "rate": 0.075
+    },
+    "aligned_desc": {
+      "n": 1000,
+      "rate": 0.073
+    },
+    "swapped": {
+      "n": 1000,
+      "rate": 0.054
+    },
+    "swapped_desc": {
+      "n": 1000,
+      "rate": 0.05
+    }
+  },
+  "median_tokens": 315,
+  "n_items": 1000,
+  "n_records": 5000,
+  "provenance": {
+    "analysis_checkout_dirty": false,
+    "analysis_commit": "28b4d3002544d6dea20fdd8f8e45753c245326bd",
+    "analysis_job": {
+      "git_sha": "28b4d3002544d6dea20fdd8f8e45753c245326bd",
+      "gpu": null,
+      "host": "atl1-1-01-005-2-1.pace.gatech.edu",
+      "slurm_job_id": "7194815",
+      "time": "2026-11-20T09:28:41-0500"
+    },
+    "input_sha256": {
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s0/transitions.jsonl": "f0f6a243e52ba6d3e2fa65f0ea516cb6fad67bf33bada6d0e21fe962a6749de3",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s1/transitions.jsonl": "d296975bf990881c3c3837bcf654a9b4c29f0814e7695f10aa2796a324240c4e",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq12_transitions_s2/transitions.jsonl": "7246ee1986ecf71ea32007d6836a24190a707f24e93d5b8366dbba70eda5334d",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_00_of_08/scoring.jsonl": "e29cf4315185da05222839f6a3bdf3312a8c46d0445aed1553817dfb0beb1a33",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_01_of_08/scoring.jsonl": "72e4851fb23a53c2d8822a321467d27290d3e40767fa3c4520554fbac9ada363",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_02_of_08/scoring.jsonl": "ea5e3b33b5b274b57dc4d0f96e0f6f0226bd8bcc78f24cadaf84cae592c04ba2",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_03_of_08/scoring.jsonl": "129d3ef46ea4411763c52dfecccd3d9319d28f8943dd3801a54669e6830d7408",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_04_of_08/scoring.jsonl": "733b5e06415d84aee3986eaf97a4f5fb966a11ae03e053e884ef6d06d4b94f1b",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_05_of_08/scoring.jsonl": "1646e72c32a6c18da922cae1c2458d922a8a210628cc43aee2cd1df60ab57169",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_06_of_08/scoring.jsonl": "a65e41c9902302aae35d057f4dde4c995ed7eaccb0253097c4a4c0c6fe198fd3",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_07_of_08/scoring.jsonl": "6c058d534459ec0ae92c80c88f09ae653d5ec3ae157c3781381e0a2d2ada2d53",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_00_of_08/scoring.jsonl": "7ec68d9c6156d273a85cf148c87d3ddd44488cffe7c88b560c5024fd0eafc625",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_01_of_08/scoring.jsonl": "fc47b768a4452904d7a9b1fb032513e0eec4870ceef68f4d9b5e587c0d3030df",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_02_of_08/scoring.jsonl": "a2bdaa032a70e3fcdbfe5dbdeca81f7923f5bd750c08891afb9e643cea5bf0fa",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_03_of_08/scoring.jsonl": "7a27fb2fdc5cbab9b8ebacde69f860844a40b046cf86af634de038225d541945",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_04_of_08/scoring.jsonl": "8693eb430c1af9a2fdc0b635a8ae0ce45b83025710d7c182254e21e98d7e292d",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_05_of_08/scoring.jsonl": "57edd1e49a09f7ec30de56cee2060a5ff80ecf59e8f2d8860b3b1be077f2e5ee",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_06_of_08/scoring.jsonl": "ff212a896be1b85f888e3d8edbd462bd43e2ee42f844973988e7d618c5202dff",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_07_of_08/scoring.jsonl": "1b833324bd7305665e708a2d6706d9977728621eec736257c598182393641ab1",
+      "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/thinking_probe/thinking.jsonl": "6d1fbd9ab79c0e35dc471a7769922d2ac76d764a2170e8ae47ddea5f25207f7c"
+    },
+    "parser_version": "3c25d40cc71529e2",
+    "runs_read": {
+      "rq1_score": {
+        "commits": [
+          "de407952f8efb0275202f807d9f387369fa6bd06"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score",
+        "shards": {
+          "shard_00_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_00_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_00_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_01_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_01_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_01_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_02_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_02_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_02_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_03_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_03_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_03_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_04_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_04_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_04_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_05_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_05_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_05_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_06_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_06_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_06_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_07_of_08": {
+            "commit": "de407952f8efb0275202f807d9f387369fa6bd06",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1_score/shard_07_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1_score/shard_07_of_08 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "rq1x_score": {
+        "commits": [
+          "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score",
+        "shards": {
+          "shard_00_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_00_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_00_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_01_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_01_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_01_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_02_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_02_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_02_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_03_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_03_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_03_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_04_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_04_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_04_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_05_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_05_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_05_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_06_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_06_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_06_of_08 \u2014 REPORTED (shard complete)"
+          },
+          "shard_07_of_08": {
+            "commit": "39722d6acfd73ec1dbd2cdb22dd4bb8c51883d48",
+            "gpu": "not recorded",
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/rq1x_score/shard_07_of_08",
+            "slurm_job_ids": null,
+            "status": "# STATUS \u2014 rq1x_score/shard_07_of_08 \u2014 REPORTED (shard complete)"
+          }
+        }
+      },
+      "thinking_probe": {
+        "commit": "adb652800220c3b186b778990291ea55c5555b81",
+        "gpu": "not recorded",
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix20/runs/thinking_probe",
+        "slurm_job_ids": null,
+        "status": "# STATUS \u2014 thinking_probe \u2014 REPORTED (run complete)"
+      }
+    }
+  },
+  "reasoning_mentions": {
+    "absent": {
+      "goal_word_when_says_nothing": {
+        "n": 932,
+        "rate": 0.51931330472103
+      },
+      "goal_word_when_says_success": {
+        "n": 62,
+        "rate": 0.8709677419354839
+      },
+      "object_when_says_success": {
+        "n": 62,
+        "rate": 1.0
+      }
+    },
+    "aligned": {
+      "goal_word_when_says_nothing": {
+        "n": 809,
+        "rate": 0.9159456118665018
+      },
+      "goal_word_when_says_success": {
+        "n": 186,
+        "rate": 1.0
+      },
+      "object_when_says_success": {
+        "n": 186,
+        "rate": 1.0
+      }
+    },
+    "aligned_desc": {
+      "goal_word_when_says_nothing": {
+        "n": 794,
+        "rate": 0.8589420654911839
+      },
+      "goal_word_when_says_success": {
+        "n": 202,
+        "rate": 0.995049504950495
+      },
+      "object_when_says_success": {
+        "n": 202,
+        "rate": 1.0
+      }
+    },
+    "swapped": {
+      "goal_word_when_says_nothing": {
+        "n": 859,
+        "rate": 0.8149010477299186
+      },
+      "goal_word_when_says_success": {
+        "n": 138,
+        "rate": 0.9855072463768116
+      },
+      "object_when_says_success": {
+        "n": 138,
+        "rate": 1.0
+      }
+    },
+    "swapped_desc": {
+      "goal_word_when_says_nothing": {
+        "n": 840,
+        "rate": 0.830952380952381
+      },
+      "goal_word_when_says_success": {
+        "n": 157,
+        "rate": 0.9872611464968153
+      },
+      "object_when_says_success": {
+        "n": 157,
+        "rate": 0.9936305732484076
+      }
+    }
+  },
+  "says_success_rate": {
+    "absent": 0.06237424547283702,
+    "aligned": 0.18693467336683417,
+    "aligned_desc": 0.20281124497991967,
+    "swapped": 0.13841524573721165,
+    "swapped_desc": 0.15747241725175526
+  },
+  "unforced_only": {
+    "L_after_reasoning": {
+      "aligned_desc_vs_swapped_desc": {
+        "ci": [
+          0.9974213027116348,
+          3.1093236058516958
+        ],
+        "estimate": 2.0448515319305627,
+        "n_games": 122,
+        "n_items": 891,
+        "perm_p": 0.000999000999000999
+      },
+      "aligned_vs_absent": {
+        "ci": [
+          7.842717964293194,
+          10.354218053230076
+        ],
+        "estimate": 9.091695139874364,
+        "n_games": 123,
+        "n_items": 902,
+        "perm_p": 0.000999000999000999
+      },
+      "aligned_vs_swapped": {
+        "ci": [
+          2.834706203817468,
+          5.206648944021372
+        ],
+        "estimate": 4.048148914135066,
+        "n_games": 122,
+        "n_items": 875,
+        "perm_p": 0.000999000999000999
+      },
+      "swapped_vs_absent": {
+        "ci": [
+          4.09052897544305,
+          6.370709766599987
+        ],
+        "estimate": 5.227868814396668,
+        "n_games": 123,
+        "n_items": 925,
+        "perm_p": 0.000999000999000999
+      }
+    },
+    "written_shift_pp": {
+      "aligned_desc_vs_swapped_desc": {
+        "ci": [
+          -0.24449877750611246,
+          4.862579281183932
+        ],
+        "estimate": 2.3728813559322033,
+        "n_games": 122,
+        "n_items": 885,
+        "perm_p": 0.08891108891108891
+      },
+      "aligned_vs_absent": {
+        "ci": [
+          6.555555555555556,
+          11.462882096069869
+        ],
+        "estimate": 8.978675645342312,
+        "n_games": 123,
+        "n_items": 891,
+        "perm_p": 0.000999000999000999
+      },
+      "aligned_vs_swapped": {
+        "ci": [
+          0.9163802978235969,
+          6.553672316384181
+        ],
+        "estimate": 3.79746835443038,
+        "n_games": 122,
+        "n_items": 869,
+        "perm_p": 0.007992007992007992
+      },
+      "swapped_vs_absent": {
+        "ci": [
+          3.6996735582154514,
+          7.835051546391752
+        ],
+        "estimate": 5.676855895196507,
+        "n_games": 123,
+        "n_items": 916,
+        "perm_p": 0.000999000999000999
+      }
+    }
+  },
+  "written_shift_pp": {
+    "aligned_desc_vs_swapped_desc": {
+      "ci": [
+        1.7543859649122806,
+        7.287822878228782
+      ],
+      "estimate": 4.527162977867203,
+      "n_games": 123,
+      "n_items": 994,
+      "perm_p": 0.001998001998001998
+    },
+    "aligned_vs_absent": {
+      "ci": [
+        9.324452901998097,
+        15.73389651531151
+      ],
+      "estimate": 12.537917087967642,
+      "n_games": 123,
+      "n_items": 989,
+      "perm_p": 0.000999000999000999
+    },
+    "aligned_vs_swapped": {
+      "ci": [
+        1.5274949083503055,
+        7.751937984496124
+      ],
+      "estimate": 4.733131923464249,
+      "n_games": 123,
+      "n_items": 993,
+      "perm_p": 0.005994005994005994
+    },
+    "swapped_vs_absent": {
+      "ci": [
+        5.089820359281437,
+        10.221285563751318
+      ],
+      "estimate": 7.669021190716448,
+      "n_games": 123,
+      "n_items": 991,
+      "perm_p": 0.000999000999000999
+    }
+  }
+}

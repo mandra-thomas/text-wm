@@ -1,0 +1,7 @@
+run_id: rq1x_analysis_v2
+# rq1x_analysis re-run on 2026-11-20: the goal effect on working actions (working_actions.goal_effect_on_successes),
+# a logged readout that came out empty because of the failure-only filter (audit B1), is now computed. Same shards
+# as rq1x_analysis; a new run id. No GPU.
+source: rq1x_score
+base: rq1_score
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
