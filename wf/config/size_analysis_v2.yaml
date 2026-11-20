@@ -1,0 +1,4 @@
+run_id: size_analysis_v2
+# size_analysis re-run on 2026-11-20: NaN scores are dropped from the flip count and the slope bootstrap (audit B4),
+# and the metrics carry a provenance block. Same size_score_* runs; a new run id. No GPU.
+models: [qwen3-0.6b, qwen3-1.7b, qwen3-4b, qwen3-8b, qwen3-14b, qwen3-32b]
