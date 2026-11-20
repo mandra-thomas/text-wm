@@ -1387,6 +1387,8 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     # TextCraft replication (notes/textcraft_design.md)
     "textcraft_score": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
     "textcraft_score_smoke": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
+    "textcraft_score_examples_on_goal": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
+    "textcraft_score_empty_start": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
     "textcraft_analysis": lambda cfg: _lazy("textcraft.analysis", "run_textcraft_analysis")(cfg),
 }
 

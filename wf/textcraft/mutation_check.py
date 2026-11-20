@@ -1,6 +1,9 @@
 """Put deliberate bugs into the TextCraft pipeline, one at a time, and confirm the TextCraft tests notice.
 
-    python -m wf.textcraft.mutation_check [jobs]     # jobs: parallel workers, each with its own copy
+    python -m wf.textcraft.mutation_check [jobs] [log.json]   # jobs: parallel workers, each with its own copy
+
+Each worker takes a fixed share (every jobs-th mutant in list order), so a run is reproducible; the killing test of
+each mutant (the first failing test, pytest stops there) is printed and, given a path, logged as JSON.
 
 Works on a copy of the repository, so the working tree is never touched. Each mutant runs against
 tests/test_textcraft_*.py; a timeout is reported as inconclusive, never as caught (as scripts/mutation_check.py).
@@ -137,8 +140,8 @@ MUTANTS = [
      'for s in scores if s["transition_id"] in hashes and hashes[s["transition_id"]] != s.get("item_hash")})'),
     ("N11 overlap by substring", T + "build.py", '    return bool(set(a.split(" ")) & set(b.split(" ")))', '    return a in b or b in a'),
     ("N12 get prefix drops the count", T + "build.py", '    return {"o_plus": " ".join(twin.split(" ")[:2]), "o_minus": "Could not find"}', '    return {"o_plus": twin.split(" ")[0], "o_minus": "Could not find"}'),
-    ("N13 secondary readout on items NOT needing arithmetic", T + "analysis.py", '    return [t for t in main if t["needs_arithmetic"] and not',
-     '    return [t for t in main if not t["needs_arithmetic"] and not'),
+    ("N13 secondary readout on items NOT needing arithmetic", T + "analysis.py", '    return t["needs_arithmetic"] and not t["inventory_shown_after_last_change"]',
+     '    return not t["needs_arithmetic"] and not t["inventory_shown_after_last_change"]'),
     ("N14 verify overlap check off", T + "verify.py", '    if item["object_goal_overlap"] != B.shares_word(item["object"], item["goal"]) or \\\n', '    if False and \\\n'),
     ("N15 missing model counts as p=0", T + "analysis.py", 'primary[m]["perm_p"] == primary[m]["perm_p"] else 1.0', 'primary[m]["perm_p"] == primary[m]["perm_p"] else 0.0'),
     ("N16 name remainder uses prefix_swapped twice", T + "analysis.py", 'for arm in ("aligned", "prefix_aligned", "swapped", "prefix_swapped")]',
@@ -188,7 +191,7 @@ MUTANTS = [
     ("B6 inventory flag counts the last change itself", T + "build.py", '    return any(o.startswith("Inventory: ") for _a, o in history[last_change + 1:])',
      '    return any(o.startswith("Inventory: ") for _a, o in history)'),
     ("B6 checker inventory-flag check off", T + "checker.py", '    if item.get("inventory_shown_after_last_change") is not inventory_shown_after_last_change(item["history"]):\n', "    if False:\n"),
-    ("B6 arithmetic readout keeps shown inventories", T + "analysis.py", ' and not t["inventory_shown_after_last_change"]]', "]"),
+    ("B6 arithmetic readout keeps shown inventories", T + "analysis.py", '    return t["needs_arithmetic"] and not t["inventory_shown_after_last_change"]', '    return t["needs_arithmetic"]'),
     ("B7 tokcheck joined-vs-alone off", T + "tokcheck.py", "            if ids(tok, text + cand) != prompt + alone:\n", "            if False:\n"),
     ("B7 tokcheck prefix check off", T + "tokcheck.py", "                if b[: len(a)] != a:\n", "                if False:\n"),
     ("B7 smoke run skips the token check", T + "score.py", '        if cfg.get("token_check"):', "        if False:"),
@@ -197,7 +200,8 @@ MUTANTS = [
     ("C2 usefulness admits partner overlap", T + "build.py", '    return it["role"] == "ingredient" and not it["object_goal_overlap"] and not it["object_partner_overlap"]',
      '    return it["role"] == "ingredient" and not it["object_goal_overlap"]'),
     ("C2 verify mirrored-couple check off", T + "verify.py", "                    or B.fit_profile(its[0]) != tuple(-v for v in B.fit_profile(its[1])):", "                    or False:"),
-    ("C2 usefulness readout drops the extra population", T + "analysis.py", "couples_where(core, B_usefulness_only) + usefulness,", "couples_where(core, B_usefulness_only),"),
+    ("C2 usefulness readout on single items (rewritten in section 13)", T + "analysis.py", 'effect(scores, couples_where(core, B_usefulness_only), "aligned", "swapped")',
+     'effect(scores, [t for t in core if B_usefulness_only(t)], "aligned", "swapped")'),
     ("C3 checker success ignores the removal", T + "checker.py", 'for k in ("reply", "twin", "certificate", "removal")', 'for k in ("reply", "twin", "certificate")'),
     ("C3 checker line match ignores counts", T + "checker.py", "if x[0] == c and (x[1] == n or", "if (x[1] == n or"),
     ("C3 checker success needs no displayed line", T + "checker.py", "        if not any(matches_line(line, count, target, inputs) for line in recipe_lines):\n", "        if False:\n"),
@@ -211,17 +215,71 @@ MUTANTS = [
     ("C5 inventory contrast reads the last-change flag", T + "analysis.py", '    return any(o.startswith("Inventory: ") for _a, o in t["history"])', '    return t["inventory_shown_after_last_change"]'),
     ("C8 prompt example goal by coin only", T + "build.py", "                    goal = outside[0] if len(outside) == 1 else", "                    goal = outside[0] if False else"),
     ("B1 prompt examples use every walk", T + "build.py", '\n                       and it["walk_seed"] < FEWSHOT_WALKS)', ")"),
+    # review 3's mutants (scratch review_textcraft3/mut3.py); R3-12 and R3-20 rewritten, R3-21 reversed (its "bug"
+    # was the fix made in section 13: the counting readout on whole couples)
+    ("R3-01 couple slots accept a single goal", T + "build.py", "        if len(goals) == 2:\n            first, second",
+     "        if len(goals) >= 1 and len(goals) == len(goals):\n            first, second = (sorted(goals[g], key=lambda it: it['id']) for g in (sorted(goals) * 2)[:2])\n            if False: first, second"),
+    ("R3-02 couple draws both items from the first goal", T + "build.py", "for it in (rng.choice(first), rng.choice(second)):", "for it in (rng.choice(first), rng.choice(first)):"),
+    ("R3-03 mirrored couple matches the same profile", T + "build.py", "want = tuple(-v for v in fit_profile(x))", "want = fit_profile(x)"),
+    ("R3-04 mirrored draw ignores main slots", T + "build.py", "and usefulness_only(it) and slot_key(it) not in exclude)", "and usefulness_only(it))"),
+    ("R3-05 fit first_step reads the last tagged step", T + "fit.py", '"first_step": side(tagged[0][0])', '"first_step": side(tagged[-1][0])'),
+    ("R3-06 fit completion ignores generic members", T + "fit.py", "held.get(n, 0) + sum(held.get(m, 0) for m in GENERIC_MEMBERS.get(n, ()))", "held.get(n, 0)"),
+    ("R3-07 fit goal_words keeps shared words", T + "fit.py", "wa, wp = set(goal.split()) - set(partner.split()), set(partner.split()) - set(goal.split())", "wa, wp = set(goal.split()), set(partner.split())"),
+    ("R3-08 checker peak_step is the last time the peak is reached", T + "checker.py", "        if self.held[name] > self.peak.get(name, 0):", "        if self.held[name] >= self.peak.get(name, 0):"),
+    ("R3-09 builder certificate held_step is the first change", T + "build.py", '"held_step": changed[-1] if changed else "never"', '"held_step": changed[0] if changed else "never"'),
+    ("R3-10 checker success ignores the line's output count", T + "checker.py", "    if (k, out) != (count, target) or len(wanted) != len(inputs):", "    if out != target or len(wanted) != len(inputs):"),
+    ("R3-11 competence ignores the interval's lower end", T + "analysis.py", '"discriminates": bool(boots) and a >= 0.6 and _pct(boots, 0.025) > 0.5}', '"discriminates": bool(boots) and a >= 0.6}'),
+    ("R3-12 competence per class uses every failure", T + "analysis.py", '(cls, [t for t in failures if cls == "all" or t["failure_class"] == cls])', "(cls, list(failures))"),
+    ("R3-13 named readouts keep used up on the goal", T + "analysis.py", "    core = [t for t in main if not_used_up_goal(t)]\n    ingredient", "    core = list(main)\n    ingredient"),
+    ("R3-14 named readouts not Holm-adjusted", T + "analysis.py", "    for k, p in holm(with_p).items():", "    for k, p in with_p.items():"),
+    ("R3-15 overlap readout on single items, not couples", T + "analysis.py", 'couples_where(core, lambda t: ingredient(t) and t["object_goal_overlap"])', '[t for t in core if ingredient(t) and t["object_goal_overlap"]]'),
+    ("R3-16 agreement contrast not halved", T + "analysis.py", 'return {**r, "estimate": r["estimate"] / 2, "ci": [x / 2 for x in r["ci"]]}', 'return {**r, "estimate": r["estimate"], "ci": [x / 2 for x in r["ci"]]}'),
+    ("R3-17 inventory contrast unweighted across cells", T + "analysis.py", "                w = len(yes) + len(no)\n", "                w = 1\n"),
+    ("R3-18 equivalence margins swapped between models", T + "analysis.py", 'EQUIVALENCE_MARGIN = {"qwen3-8b-fewshot": 1.0, "llama3.1-8b-fewshot": 0.3}', 'EQUIVALENCE_MARGIN = {"qwen3-8b-fewshot": 0.3, "llama3.1-8b-fewshot": 1.0}'),
+    ("R3-19 checker inventory-shown flag not reset by a later get", T + "checker.py", "        if GOT.fullmatch(reply) or CRAFTED.fullmatch(reply):\n            shown = False", "        if GOT.fullmatch(reply) or CRAFTED.fullmatch(reply):\n            shown = shown"),
+    ("R3-20 usefulness readout adds non-couple items (rewritten: the extras are descriptive now)", T + "analysis.py", '"usefulness_only": effect(scores, couples_where(core, B_usefulness_only),',
+     '"usefulness_only": effect(scores, couples_where(core, B_usefulness_only) + [t for t in core if B_usefulness_only(t)],'),
+    ("R3-21 counting readout on single items (reversed)", T + "analysis.py", "    return couples_where(main, counting_item)", "    return [t for t in main if counting_item(t)]"),
+    ("R3-22 item hash ignores the candidates", T + "score.py", '"neutral_task_line", "candidates", "prefix_candidates")}', '"neutral_task_line")}'),
+    # section 13
+    ("13 counting competence on every failure", T + "analysis.py", '{"counting": arithmetic_items(core)})', '{"counting": failures})'),
+    ("13 counting gate ignored", T + "analysis.py", '    if not comp["counting"]["discriminates"]:', "    if False:"),
+    ("13 coherence-robust keeps history-favoured members", T + "analysis.py", 'effect(scores, [t for t in main if t["history_fit"] != "aligned"], "aligned", "swapped")', 'effect(scores, main, "aligned", "swapped")'),
+    ("13 inventory contrast keeps readable inventories", T + "analysis.py", '        if t["inventory_shown_after_last_change"]:\n            continue\n', ""),
+    ("13 inventory contrast strata by bin only", T + "analysis.py", 'rows.append(((t["failure_class"], t["role"], t["length_bin"]), ', 'rows.append((t["length_bin"], '),
+    ("13 yes/no margins exchanged", T + "analysis.py", 'YES_NO_MARGIN = {"qwen3-8b-fewshot": 0.47, "llama3.1-8b-fewshot": 0.37}', 'YES_NO_MARGIN = {"qwen3-8b-fewshot": 0.37, "llama3.1-8b-fewshot": 0.47}'),
+    ("13 standardized equivalence on the raw mean", T + "analysis.py", "STANDARDIZED_MARGIN[model], standardized=True)", "STANDARDIZED_MARGIN[model], standardized=False)"),
+    ("13 yes/no equivalence reads the two-candidate arms", T + "analysis.py", 'YES_NO_MARGIN[model], "yn_aligned", "yn_swapped")', 'YES_NO_MARGIN[model], "aligned", "swapped")'),
+    ("13 withheld run writes per-model results", T + "analysis.py", '"incomplete_estimates_not_results": per_model}', '"per_model": per_model}'),
+    ("13 reading skips the confirmed-and-equivalent row", T + "analysis.py", '        if eq["two_candidate"]["equivalent"]:', "        if False:"),
+    ("13 reading ignores competence for a confirmed effect", T + "analysis.py", "        if not competent:\n            out +=", "        if False:\n            out +="),
+    ("13 reading ignores the coherence-robust interval", T + "analysis.py", '        if not robust["ci"][0] > 0:', "        if False:"),
+    ("13 negative rule ignores the interval", T + "analysis.py", 'r["estimate"] < 0 and r["ci"][1] < 0 and p < P_MAX', 'r["estimate"] < 0 and p < P_MAX'),
+    ("13 null reading needs only one scale", T + "analysis.py", "    if len(scales) == len(eq):", "    if scales:"),
+    ("13 item hash ignores the prompt examples", T + "score.py", '"fewshot": list(P.fewshot_examples() if shots is None else shots)}', '"fewshot": []}'),
+    ("13 item hash ignores the system text", T + "score.py", '"system": P.SYSTEM if system is None else system,', '"system": P.SYSTEM,'),
+    ("13 scorer hashes a variant with the verified context", T + "score.py", "    hashes = {t[\"id\"]: item_hash(t, shots, system) for t in items}", "    hashes = {t[\"id\"]: item_hash(t) for t in items}"),
+    ("13 variant prompt drops the variant system text", T + "score.py", "messages=P.messages(t, arm, shots, system),", "messages=P.messages(t, arm, shots),"),
+    ("13 variant sample seed ignores the variant", T + "score.py", 'f"{C.RNG_SEED}|textcraft|variant|{variant}"', 'f"{C.RNG_SEED}|textcraft|variant"'),
+    ("13 variant comparison sign reversed", T + "analysis.py", "lambda _by, tid: dl(by_v, tid) - dl(by_m, tid)", "lambda _by, tid: dl(by_m, tid) - dl(by_v, tid)"),
+    ("13 variant report reads scores made under another prompt", T + "analysis.py", "        if bad:\n            out[name] = {\"not_read\"", "        if False:\n            out[name] = {\"not_read\""),
+    ("13 golden check uses the variant's examples", T + "score.py", "shots if golden_shots is None else golden_shots)", "shots)"),
+    ("13 analysis stale check ignores the manifest's examples", T + "analysis.py", "    stale = stale_scores(scores, items, shots)", "    stale = stale_scores(scores, items)"),
+    ("13 prompt drops the system override", T + "prompts.py", '"content": SYSTEM if system is None else system}', '"content": SYSTEM}'),
+    ("13 tokcheck ignores the variant system text", T + "tokcheck.py", "        messages = P.messages(item, arm, shots, system)", "        messages = P.messages(item, arm, shots)"),
 ]
 
 
-def _run_tests(work: Path, timeout: int) -> str:
+def _run_tests(work: Path, timeout: int) -> tuple[str, str]:
+    """(outcome, the first failing test: the one that killed the mutant, as pytest's short summary names it)."""
     tests = sorted(str(p.relative_to(work)) for p in (work / "tests").glob("test_textcraft_*.py"))
     try:
-        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", *tests],
+        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-rfE", "-p", "no:cacheprovider", "--tb=no", *tests],
                            cwd=work, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return "timeout"
-    return "killed" if r.returncode != 0 else "survived"
+        return "timeout", ""
+    killer = next((line.split(" ", 2)[1] for line in r.stdout.splitlines() if line.startswith(("FAILED ", "ERROR "))), "")
+    return ("killed" if r.returncode != 0 else "survived"), killer
 
 
 def _skip(folder: str, names: list[str]) -> list[str]:
@@ -229,49 +287,56 @@ def _skip(folder: str, names: list[str]) -> list[str]:
     return [n for n in names if n in top or n in ("__pycache__", ".pytest_cache") or n.endswith(".pdf")]
 
 
-def _one(args: tuple[Path, tuple[str, str, str, str], int]) -> tuple[str, str]:
+def _one(args: tuple[Path, tuple[str, str, str, str], int]) -> tuple[str, str, str]:
     """Apply one mutant in this worker's own copy, run the tests, restore the file."""
     work, (name, rel, good, bad), timeout = args
     path = work / rel
     source = path.read_text(encoding="utf-8")
     if source.count(good) != 1:
-        return name, "NOT APPLIED"
+        return name, "NOT APPLIED", ""
     path.write_text(source.replace(good, bad), encoding="utf-8")
     try:
-        outcome = _run_tests(work, timeout)
+        outcome, killer = _run_tests(work, timeout)
     finally:
         path.write_text(source, encoding="utf-8")
-    return name, {"killed": "killed", "survived": "SURVIVED", "timeout": "TIMEOUT"}[outcome]
+    return name, {"killed": "killed", "survived": "SURVIVED", "timeout": "TIMEOUT"}[outcome], killer
 
 
-def _worker(args: tuple[Path, list, int]) -> list[tuple[str, str]]:
+def _worker(args: tuple[Path, list, int]) -> list[tuple[str, str, str]]:
     work, mutants, timeout = args
     out = []
     for m in mutants:
         out.append(_one((work, m, timeout)))
-        print(f"{out[-1][1]:<12} {out[-1][0]}", flush=True)
+        print(f"{out[-1][1]:<12} {out[-1][0]}  <- {out[-1][2] or '-'}", flush=True)
     return out
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Each of `jobs` workers (argument 1, default 1) runs its share of the mutants in its own copy of the repo."""
+    """Each of `jobs` workers (argument 1, default 1) runs a fixed share of the mutants (every jobs-th, in list order)
+    in its own copy of the repo; with a second argument, the outcome and killing test of every mutant are written to
+    that path as JSON."""
+    import json
     import multiprocessing
 
     argv = sys.argv[1:] if argv is None else argv
     jobs = int(argv[0]) if argv else 1
+    log = Path(argv[1]) if len(argv) > 1 else None
     timeout = 900
     with tempfile.TemporaryDirectory() as tmp:
         works = [Path(tmp) / f"repo{k}" for k in range(jobs)]
         for w in works:
             shutil.copytree(ROOT, w, ignore=_skip)
-        baseline = _run_tests(works[0], timeout)
+        baseline, _ = _run_tests(works[0], timeout)
         if baseline != "survived":
             print(f"the unmutated tests do not pass ({baseline}); nothing to measure")
             return 1
         shares = [(works[k], MUTANTS[k::jobs], timeout) for k in range(jobs)]
         with multiprocessing.get_context("spawn").Pool(jobs) as pool:
-            done = dict(r for share in pool.map(_worker, shares) for r in share)
-    results = [(name, done[name]) for name, *_ in MUTANTS]
+            done = {name: (r, k) for share in pool.map(_worker, shares) for name, r, k in share}
+    if log is not None:
+        log.write_text(json.dumps([{"mutant": name, "outcome": done[name][0], "killed_by": done[name][1]}
+                                   for name, *_ in MUTANTS], indent=1) + "\n", encoding="utf-8")
+    results = [(name, done[name][0]) for name, *_ in MUTANTS]
     killed = sum(r == "killed" for _, r in results)
     print(f"\n{killed}/{len(MUTANTS)} killed; others: {[(n, r) for n, r in results if r != 'killed']}")
     return 0 if killed == len(MUTANTS) else 1

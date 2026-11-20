@@ -3,13 +3,16 @@
 Primary: ΔL = mean of L(aligned) - L(swapped) on the main population, per model, with a 95% percentile bootstrap
 that resamples goal pairs and a sign-flip permutation p that flips whole goal pairs, Holm-adjusted over the two
 models. The prediction is confirmed for a model when ΔL > 0, the interval excludes zero and the Holm p < 0.01.
-A null is read with equivalence margins (TOST on the 90% pair-bootstrap interval: 1.0 nats for Qwen, 0.3 for
-Llama; design section 12, C4). Seven named readouts with written predictions (section 12, C7), Holm-adjusted within
-a model: the goal role, ingredients whose name shares a word with the goal, usefulness-only ingredients, the
-history-goal agreement contrast, the inventory-shown contrast, the yes/no effect, and the counting readout. A
-competence check on matched determined successes (C3). Everything else (strata, sensitivity analyses, class
-contrasts, the prefix decomposition) is descriptive: estimates and intervals, no p-values. Scores are joined to items by id and item hash; a score whose item has changed
-stops the analysis, and a missing score on any arm of any item withholds the verdict.
+A null is read with equivalence margins on three scales (TOST on the 90% pair-bootstrap interval; design 12, C4 and
+13): two-candidate nats, yes/no nats, and ΔL over its item SD. Five named readouts with written predictions, Holm-
+adjusted within a model (HOLM_FAMILY, design 13): the goal role, ingredients whose name shares a word with the goal,
+usefulness-only ingredients on same-history couples, the yes/no effect, and the counting readout. A competence check
+on matched determined successes (C3) gates the reading of a null and of the counting readout. Everything else
+(strata, the agreement and inventory-shown contrasts, the coherence-robust estimate, the usefulness extra population,
+sensitivity analyses, class contrasts, the prefix decomposition) is descriptive: estimates and intervals, no
+p-values. Scores are joined to items by id and item hash (which covers the system text and the prompt examples); a
+score whose item has changed stops the analysis, and a missing score on any arm of any item withholds every verdict:
+then no verdict or estimate is written as a result.
 """
 from __future__ import annotations
 
@@ -25,12 +28,18 @@ from wf.analysis.stats import cluster_bootstrap, holm, pair_permutation, prereg_
 from wf.rq2 import complete_shards
 from wf.runs import _init_run
 from wf.textcraft import fit as F
-from wf.textcraft.prompts import ARMS
-from wf.textcraft.score import CO_PRIMARY, item_hash, load_items, verified_files
+from wf.textcraft.prompts import ARMS, fewshot_examples
+from wf.textcraft.score import CO_PRIMARY, item_hash, load_items, variant_context, variant_items, verified_files
 from wf.util import read_jsonl, require_filed, sigmoid, write_json, write_status
 
 P_MAX = 0.01
 EQUIVALENCE_MARGIN = {"qwen3-8b-fewshot": 1.0, "llama3.1-8b-fewshot": 0.3}  # nats (design 12, C4)
+# One sixth of ALFWorld's effect on two further scales (design 13): the yes/no ΔL (2.80 and 2.21 nats there) and ΔL
+# over the item SD of ΔL (6.12 / 5.98 and 1.65 / 1.93 there).
+YES_NO_MARGIN = {"qwen3-8b-fewshot": 0.47, "llama3.1-8b-fewshot": 0.37}
+STANDARDIZED_MARGIN = {"qwen3-8b-fewshot": 0.17, "llama3.1-8b-fewshot": 0.14}
+# The named readouts whose permutation p-values are Holm-adjusted together within a model (design 13).
+HOLM_FAMILY = ("goal_role", "ingredient_with_overlap", "usefulness_only", "yes_no", "counting")
 
 
 def _value(s: dict | None, value: str) -> float | None:
@@ -90,19 +99,33 @@ def _pct(boots: list[float], q: float) -> float:
     return boots[min(len(boots) - 1, int(q * len(boots)))] if boots else float("nan")
 
 
-def equivalence(scores: list[dict], items: list[dict], margin: float) -> dict[str, Any]:
-    """TOST at the 5% level on each side: ΔL lies within ±margin when its 90% pair-bootstrap interval does."""
+def _standardized(xs: list[float]) -> float:
+    return sum(xs) / len(xs) / statistics.stdev(xs) if len(xs) > 1 and statistics.stdev(xs) > 0 else float("nan")
+
+
+def equivalence(scores: list[dict], items: list[dict], margin: float, a: str = "aligned", b: str = "swapped",
+                standardized: bool = False) -> dict[str, Any]:
+    """TOST at the 5% level on each side: the effect (value(a) - value(b), or its mean over its SD when standardized)
+    lies within ±margin when its 90% pair-bootstrap interval does."""
     by = {(s["transition_id"], s["condition"]): s for s in scores}
     rows, pairs = [], []
     for t in items:
-        u, v = _value(by.get((t["id"], "aligned")), "L"), _value(by.get((t["id"], "swapped")), "L")
+        u, v = _value(by.get((t["id"], a)), "L"), _value(by.get((t["id"], b)), "L")
         if u is not None and v is not None:
             rows.append(u - v)
             pairs.append(t["pair_id"])
-    mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
+    mean = _standardized if standardized else (lambda xs: sum(xs) / len(xs) if xs else float("nan"))
     boots = _cluster_boots(mean, rows, pairs)
     ci90 = [_pct(boots, 0.05), _pct(boots, 0.95)]
-    return {"margin": margin, "ci90": ci90, "equivalent": bool(boots) and -margin < ci90[0] and ci90[1] < margin}
+    return {"margin": margin, "estimate": mean(rows) if rows else float("nan"), "ci90": ci90,
+            "equivalent": bool(boots) and -margin < ci90[0] and ci90[1] < margin}
+
+
+def equivalences(scores: list[dict], main: list[dict], model: str) -> dict[str, Any]:
+    """The three equivalence tests of a null (design 13): two-candidate nats, yes/no nats, standardized ΔL."""
+    return {"two_candidate": equivalence(scores, main, EQUIVALENCE_MARGIN[model]),
+            "yes_no": equivalence(scores, main, YES_NO_MARGIN[model], "yn_aligned", "yn_swapped"),
+            "standardized": equivalence(scores, main, STANDARDIZED_MARGIN[model], standardized=True)}
 
 
 def couples_where(items: list[dict], pred) -> list[dict]:
@@ -119,8 +142,9 @@ def not_used_up_goal(t: dict) -> bool:
 
 def agreement_contrast(scores: list[dict], main: list[dict]) -> dict[str, Any]:
     """Half the difference between ΔL on items whose history favours their aligned goal and on items whose history
-    favours the partner (history_fit, section 11 A3). In a couple the two are mirrored, so if the history adds c to
-    L when the goal line agrees with it, this estimates c (design 12, C1)."""
+    favours the partner (history_fit, section 11 A3). Descriptive (design 13): it does not estimate the agreement
+    term c, because the history-favoured member of a couple also differs in its action (it holds more of the
+    action's inputs, names them, misses less), and one-sided coherence and symmetric agreement give the same value."""
     r = contrast(scores, [t for t in main if t["history_fit"] == "aligned"], [t for t in main if t["history_fit"] == "swapped"])
     return {**r, "estimate": r["estimate"] / 2, "ci": [x / 2 for x in r["ci"]]}
 
@@ -129,16 +153,26 @@ def shows_inventory(t: dict) -> bool:
     return any(o.startswith("Inventory: ") for _a, o in t["history"])
 
 
+def coherence_robust(scores: list[dict], main: list[dict]) -> dict[str, Any]:
+    """ΔL on the main items whose history does not favour their aligned goal (history_fit swapped or tie): the
+    members of the 626 opposite-fit couples whose history favours the partner, and both members of the tie couples.
+    One-sided coherence (the goal line helps only when the history favours it) adds nothing here (design 13)."""
+    return effect(scores, [t for t in main if t["history_fit"] != "aligned"], "aligned", "swapped")
+
+
 def inventory_contrast(scores: list[dict], main: list[dict]) -> dict[str, Any]:
     """ΔL on items whose history shows an inventory reply minus ΔL on items whose history shows none, within each
-    length bin, averaged with the bins' item counts as weights (design 12, C5). The walk looks at the inventory by
-    a coin flip, so within a bin the two groups differ by chance only."""
+    class x role x length bin cell, averaged with the cells' item counts as weights; items whose inventory is shown
+    after its last change (readable directly) are left out (design 13). Descriptive: within a cell the shown items
+    still have about one fewer productive step."""
     by = {(s["transition_id"], s["condition"]): s for s in scores}
     rows, pairs = [], []
     for t in main:
+        if t["inventory_shown_after_last_change"]:
+            continue
         u, v = _value(by.get((t["id"], "aligned")), "L"), _value(by.get((t["id"], "swapped")), "L")
         if u is not None and v is not None:
-            rows.append((t["length_bin"], shows_inventory(t), u - v))
+            rows.append(((t["failure_class"], t["role"], t["length_bin"]), shows_inventory(t), u - v))
             pairs.append(t["pair_id"])
 
     def stat(rs):
@@ -166,20 +200,23 @@ def auc(pos: list[float], neg: list[float]) -> float:
                for x in pos) / (len(pos) * len(neg))
 
 
-def competence(scores: list[dict], successes: list[dict], failures: list[dict], arm: str = "neutral") -> dict[str, Any]:
+def competence(scores: list[dict], successes: list[dict], failures: list[dict], arm: str = "neutral",
+               also: dict[str, list[dict]] | None = None) -> dict[str, Any]:
     """Does the model tell the determined successes from the determined failures (design 12, C3)? AUC of L under
-    one goal line, overall and per failure class, with pair-bootstrap intervals; the L gap that standardizes ΔL."""
+    one goal line, overall, per failure class and for each named set of failures in `also` (the counting items,
+    design 13), with pair-bootstrap intervals; the L gap that standardizes ΔL."""
     by = {(s["transition_id"], s["condition"]): s for s in scores}
     L = lambda t: _value(by.get((t["id"], arm)), "L")
     out: dict[str, Any] = {}
-    for cls in ("all",) + tuple(sorted({t["failure_class"] for t in failures})):
-        neg_items = [t for t in failures if cls == "all" or t["failure_class"] == cls]
+    sets = [(cls, [t for t in failures if cls == "all" or t["failure_class"] == cls])
+            for cls in ("all",) + tuple(sorted({t["failure_class"] for t in failures}))]
+    for cls, neg_items in sets + sorted((also or {}).items()):
         rows = [(1, L(t)) for t in successes if L(t) is not None] + [(0, L(t)) for t in neg_items if L(t) is not None]
         pairs = [t["pair_id"] for t in successes if L(t) is not None] + [t["pair_id"] for t in neg_items if L(t) is not None]
         stat = lambda rs: auc([x for y, x in rs if y], [x for y, x in rs if not y])
         boots = _cluster_boots(stat, rows, pairs)
         a = stat(rows)
-        out[cls] = {"auc": a, "ci": [_pct(boots, 0.025), _pct(boots, 0.975)],
+        out[cls] = {"auc": a, "ci": [_pct(boots, 0.025), _pct(boots, 0.975)], "n": [sum(y for y, _x in rows), sum(1 - y for y, _x in rows)],
                     "discriminates": bool(boots) and a >= 0.6 and _pct(boots, 0.025) > 0.5}
     ls = [L(t) for t in successes if L(t) is not None]
     lf = [L(t) for t in failures if L(t) is not None]
@@ -189,24 +226,66 @@ def competence(scores: list[dict], successes: list[dict], failures: list[dict], 
     return out
 
 
-def named_readouts(scores: list[dict], main: list[dict], usefulness: list[dict]) -> dict[str, Any]:
-    """The seven named readouts (design 12, C7); used-up items on the goal role are left out of all of them."""
+def named_readouts(scores: list[dict], main: list[dict]) -> dict[str, Any]:
+    """The five named readouts of HOLM_FAMILY (design 13), each on whole same-history couples of the main
+    population; used-up items on the goal role are left out of all of them."""
     core = [t for t in main if not_used_up_goal(t)]
     ingredient = lambda t: t["role"] == "ingredient"
     out = {
-        "goal_role": effect(scores, [t for t in core if t["role"] == "goal"], "aligned", "swapped"),
+        "goal_role": effect(scores, couples_where(core, lambda t: t["role"] == "goal"), "aligned", "swapped"),
         "ingredient_with_overlap": effect(scores, couples_where(core, lambda t: ingredient(t) and t["object_goal_overlap"]),
                                           "aligned", "swapped"),
-        "usefulness_only": effect(scores, couples_where(core, B_usefulness_only) + usefulness, "aligned", "swapped"),
-        "history_agreement": agreement_contrast(scores, core),
-        "inventory_shown": inventory_contrast(scores, core),
+        "usefulness_only": effect(scores, couples_where(core, B_usefulness_only), "aligned", "swapped"),
         "yes_no": effect(scores, core, "yn_aligned", "yn_swapped"),
         "counting": effect(scores, arithmetic_items(core), "aligned", "swapped"),
     }
-    with_p = {k: v["perm_p"] for k, v in out.items() if "perm_p" in v}
+    with_p = {k: out[k]["perm_p"] for k in HOLM_FAMILY}
     for k, p in holm(with_p).items():
         out[k]["holm_p_within_model"] = p
     return out
+
+
+def confirmed(r: dict, p: float) -> bool:
+    """The confirmation rule of section 1: estimate above zero, 95% interval above zero, adjusted p below 0.01."""
+    return bool(r["estimate"] > 0 and r["ci"][0] > 0 and p < P_MAX)
+
+
+def negative(r: dict, p: float) -> bool:
+    """The same rule mirrored (design 13): estimate below zero, 95% interval below zero, adjusted p below 0.01."""
+    return bool(r["estimate"] < 0 and r["ci"][1] < 0 and p < P_MAX)
+
+
+def counting_reading(named: dict, comp: dict) -> str:
+    """The counting readout is read only for a model that discriminates the counting failures (design 13)."""
+    if not comp["counting"]["discriminates"]:
+        return "withheld: the model does not tell the successes from the counting failures"
+    r = named["counting"]
+    p = r["holm_p_within_model"]
+    return "confirmed" if confirmed(r, p) else "negative" if negative(r, p) else "not confirmed"
+
+
+def primary_reading(r: dict, holm_p: float, eq: dict[str, dict], comp: dict, robust: dict) -> str:
+    """The row of the outcome table (design 13) that one model's primary result falls in."""
+    competent = comp["all"]["discriminates"]
+    if confirmed(r, holm_p):
+        out = "confirmed"
+        if eq["two_candidate"]["equivalent"]:
+            out = "confirmed and equivalent: present, but smaller than one sixth of ALFWorld's effect"
+        if not competent:
+            out += "; competence fails: the goal line moves the prediction of a model that does not track the accounting"
+        if not robust["ci"][0] > 0:
+            out += "; not robust to one-sided coherence (the coherence-robust interval reaches zero)"
+        return out
+    if negative(r, holm_p):
+        return "negative" + ("" if competent else "; competence fails")
+    scales = [k for k, v in eq.items() if v["equivalent"]]
+    if not competent:
+        return "uninterpretable: competence fails"
+    if len(scales) == len(eq):
+        return "equivalent to zero on every scale"
+    if scales:
+        return "inconclusive; equivalent to zero on " + ", ".join(scales) + " only"
+    return "inconclusive"
 
 
 def B_usefulness_only(t: dict) -> bool:
@@ -295,10 +374,15 @@ def class_contrasts(scores: list[dict], main: list[dict]) -> dict[str, Any]:
             "goal|too_few_minus_never_obtained": contrast(scores, cell("too_few", "goal"), cell("never_obtained", "goal"))}
 
 
+def counting_item(t: dict) -> bool:
+    """Every short input was obtained at some point, and the history does not show the inventory after its last
+    change (design 11, A2, amended in 12, B6)."""
+    return t["needs_arithmetic"] and not t["inventory_shown_after_last_change"]
+
+
 def arithmetic_items(main: list[dict]) -> list[dict]:
-    """The named arithmetic readout's items: every short input was obtained at some point, and the history does not
-    show the inventory after its last change (design 11, A2, amended in 12, B6)."""
-    return [t for t in main if t["needs_arithmetic"] and not t["inventory_shown_after_last_change"]]
+    """The counting readout's items: the whole couples whose two members are both counting items (design 13)."""
+    return couples_where(main, counting_item)
 
 
 def sensitivity(scores: list[dict], items: list[dict]) -> dict[str, Any]:
@@ -371,9 +455,10 @@ def strata(scores: list[dict], items: list[dict], names: tuple[str, ...] | None 
     return out
 
 
-def stale_scores(scores: list[dict], items: list[dict]) -> list[str]:
-    """Scores that do not belong to the current items: unknown id, or an item hash other than the item's now."""
-    hashes = {t["id"]: item_hash(t) for t in items}
+def stale_scores(scores: list[dict], items: list[dict], shots=None) -> list[str]:
+    """Scores that do not belong to the current items and prompt examples: unknown id, or an item hash other than the
+    item's now."""
+    hashes = {t["id"]: item_hash(t, shots) for t in items}
     return sorted({f"{s['transition_id']} ({'unknown item' if s['transition_id'] not in hashes else 'item changed'})"
                    for s in scores if hashes.get(s["transition_id"]) != s.get("item_hash")})
 
@@ -386,9 +471,45 @@ def verdicts(primary: dict[str, dict]) -> dict[str, Any]:
     for m in CO_PRIMARY:
         r = primary.get(m, {"estimate": float("nan"), "ci": [float("nan")] * 2})
         ok = r["estimate"] > 0 and r["ci"][0] > 0 and adjusted[m] < P_MAX
-        out[m] = {"confirmed": bool(ok), "holm_p": adjusted[m],
+        out[m] = {"confirmed": bool(ok), "negative": negative(r, adjusted[m]), "holm_p": adjusted[m],
                   "rq2_magnitude_rule": prereg_rq2_verdict(r["estimate"], r["ci"], adjusted[m])}
     out["replicates"] = all(out[m]["confirmed"] for m in CO_PRIMARY)
+    hit = [m for m in CO_PRIMARY if out[m]["confirmed"]]
+    out["confirmed_for"] = "both models" if len(hit) == len(CO_PRIMARY) else f"{hit[0]} only" if hit else "neither model"
+    return out
+
+
+def variant_comparison(main_scores: list[dict], variant_scores: list[dict], items: list[dict]) -> dict[str, Any]:
+    """An exploratory prompt variant (design 13) against the verified prompt on the same items: ΔL under each, and
+    the per-item difference of the two ΔL (variant minus verified), clustered by goal pair. Descriptive."""
+    by_v = {(s["transition_id"], s["condition"]): s for s in variant_scores}
+    by_m = {(s["transition_id"], s["condition"]): s for s in main_scores}
+    dl = lambda by, tid: (None if None in (u := _value(by.get((tid, "aligned")), "L"), v := _value(by.get((tid, "swapped")), "L"))
+                          else u - v)
+    both = [t for t in items if dl(by_v, t["id"]) is not None and dl(by_m, t["id"]) is not None]
+    return descriptive({"delta_L_variant": effect_of(variant_scores, both, dl),
+                        "delta_L_verified_prompt": effect_of(main_scores, both, dl),
+                        "variant_minus_verified": effect_of(main_scores, both, lambda _by, tid: dl(by_v, tid) - dl(by_m, tid))})
+
+
+def variants_report(cfg: dict, items: list[dict], verified_shots, scores: list[dict], models: list[str]) -> dict[str, Any]:
+    """Each exploratory variant run named in cfg['variants'] (name -> source run), or why it is not read."""
+    out: dict[str, Any] = {}
+    for name, source in sorted(cfg.get("variants", {}).items()):
+        folders, problems = complete_shards(source)
+        if problems:
+            out[name] = {"not_read": problems}
+            continue
+        vs = [s for p in folders for s in read_jsonl(p / "scoring.jsonl")]
+        shots, system = variant_context(name, verified_shots)
+        hashes = {t["id"]: item_hash(t, shots, system) for t in items}
+        bad = sorted({s["transition_id"] for s in vs if hashes.get(s["transition_id"]) != s.get("item_hash")})
+        if bad:
+            out[name] = {"not_read": f"{len(bad)} items scored under another prompt or item: {bad[:5]}"}
+            continue
+        mine = variant_items(items, name)
+        out[name] = {m: variant_comparison([s for s in scores if s["model"] == m], [s for s in vs if s["model"] == m], mine)
+                     for m in models}
     return out
 
 
@@ -404,8 +525,9 @@ def run_textcraft_analysis(cfg: dict) -> int:
         write_status(run_id, "waits for every scoring shard and verified items:\n" + "\n".join(problems), ok=False)
         return 1
     items = load_items(files[0])
+    shots = fewshot_examples(files[1])
     scores = [s for p in folders for s in read_jsonl(p / "scoring.jsonl")]
-    stale = stale_scores(scores, items)
+    stale = stale_scores(scores, items, shots)
     if stale:
         write_status(run_id, f"{len(stale)} scored items do not match the verified items (rescore them):\n"
                      + "\n".join(stale[:20]), ok=False)
@@ -416,37 +538,60 @@ def run_textcraft_analysis(cfg: dict) -> int:
     have = {(s["model"], s["transition_id"], s["condition"]) for s in scores if s.get("L") == s.get("L")}
     missing_primary = {(m, t["id"], a) for m in models for t in pops["main"] for a in ("aligned", "swapped")} - have
     missing = {(m, t["id"], a) for m in models for t in items for a in ARMS} - have  # every arm of every item (B3)
+    core = [t for t in pops["main"] if not_used_up_goal(t)]
     per_model, primary = {}, {}
     for m in models:
         mine = [s for s in scores if s["model"] == m]
         primary[m] = effect(mine, pops["main"], "aligned", "swapped")
         failures = pops["main"] + pops["usefulness"]
+        named = named_readouts(mine, pops["main"])
+        comp = {arm: competence(mine, pops["success"], failures, arm, {"counting": arithmetic_items(core)})
+                for arm in ("neutral", "aligned")}
         per_model[m] = {"primary_delta_L": primary[m],
-                        "equivalence": equivalence(mine, pops["main"], EQUIVALENCE_MARGIN[m]),
-                        "named": named_readouts(mine, pops["main"], pops["usefulness"]),
-                        "competence": {arm: competence(mine, pops["success"], failures, arm) for arm in ("neutral", "aligned")},
+                        "coherence_robust_delta_L": descriptive(coherence_robust(mine, pops["main"])),
+                        "equivalence": equivalences(mine, pops["main"], m),
+                        "named": named,
+                        "counting_reading": counting_reading(named, comp["neutral"]),
+                        "competence": comp,
                         "successes": descriptive({**readouts(mine, pops["success"]), "strata": strata(mine, pops["success"], ("role", "length_bin"))}),
                         "descriptive": descriptive({
-                            "primary_without_used_up_on_goal": effect(mine, [t for t in pops["main"] if not_used_up_goal(t)], "aligned", "swapped"),
+                            "history_agreement_contrast": agreement_contrast(mine, core),
+                            "inventory_shown_contrast": inventory_contrast(mine, core),
+                            "usefulness_extra_population_goal_identity_confounded": effect(mine, pops["usefulness"], "aligned", "swapped"),
+                            "primary_without_used_up_on_goal": effect(mine, core, "aligned", "swapped"),
                             "needs_arithmetic_as_logged_in_A2": effect(mine, [t for t in pops["main"] if t["needs_arithmetic"]], "aligned", "swapped"),
                             "sensitivity_history_fit": sensitivity(mine, pops["main"]),
-                            "class_contrasts_within_role": class_contrasts(mine, [t for t in pops["main"] if not_used_up_goal(t)]),
+                            "class_contrasts_within_role": class_contrasts(mine, core),
                             "standardized_delta_L": primary[m]["estimate"] / per_model_gap(mine, pops["success"], failures),
                             "main": {**readouts(mine, pops["main"]), "strata": strata(mine, pops["main"])},
                             "usefulness": readouts(mine, pops["usefulness"]),
                             "secondary_get": readouts(mine, pops["secondary_get"]),
                             "empty_history": readouts(mine, pops["empty_history"])})}
-    report = {"hierarchy": "primary (Holm over models, confirmed rule, TOST for a null); then named readouts (Holm "
-                           "within model); everything under 'descriptive', 'successes' and the strata has no p-values",
-              "items": {k: len(v) for k, v in pops.items()} | {"pairs_main": len({t["pair_id"] for t in pops["main"]}),
-                                                                 "missing_primary_scores": len(missing_primary),
-                                                                 "missing_scores_any_arm": len(missing)},
-              "verdicts": verdicts(primary), "per_model": per_model}
+    counts = {k: len(v) for k, v in pops.items()} | {"pairs_main": len({t["pair_id"] for t in pops["main"]}),
+                                                     "missing_primary_scores": len(missing_primary),
+                                                     "missing_scores_any_arm": len(missing)}
+    hierarchy = ("primary (Holm over models, confirmed rule, three equivalence scales for a null, competence gate); "
+                 f"then the named readouts {list(HOLM_FAMILY)} (Holm within model; counting gated by competence on its "
+                 "items); everything under 'descriptive', 'successes', 'coherence_robust_delta_L' and the strata has no p-values")
+    if missing:  # withheld: nothing below is a result (design 13)
+        report = {"hierarchy": hierarchy, "items": counts,
+                  "verdicts": f"withheld: {len(missing)} scores missing on some arm",
+                  "incomplete_estimates_not_results": per_model}
+        write_json(d / "metrics.json", report)
+        write_status(run_id, f"items={counts}\nverdicts withheld: {len(missing)} scores missing "
+                             f"({len(missing_primary)} on the primary arms); rescore before reading anything", ok=False)
+        return 1
+    v = verdicts(primary)
+    for m in models:
+        v[m]["reading"] = primary_reading(primary[m], v[m]["holm_p"], per_model[m]["equivalence"],
+                                          per_model[m]["competence"]["neutral"], per_model[m]["coherence_robust_delta_L"])
+    report = {"hierarchy": hierarchy, "items": counts, "verdicts": v, "per_model": per_model,
+              "exploratory_variants": variants_report(cfg, items, shots, scores, models)}
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "TextCraft replication of the RQ2 goal effect", report)
-    lines = [f"{m}: dL={primary[m]['estimate']:.3f} CI={primary[m]['ci']} holm_p={report['verdicts'][m]['holm_p']} "
-             f"confirmed={report['verdicts'][m]['confirmed']} equivalent_within_{EQUIVALENCE_MARGIN[m]}="
-             f"{per_model[m]['equivalence']['equivalent']}" for m in models]
-    write_status(run_id, f"items={report['items']}\n" + "\n".join(lines) + f"\nreplicates: {report['verdicts']['replicates']}",
-                 ok=False, reported="TextCraft verdict" if not missing else None)
-    return 0 if not missing else 1
+    lines = [f"{m}: dL={primary[m]['estimate']:.3f} CI={primary[m]['ci']} holm_p={v[m]['holm_p']} "
+             f"confirmed={v[m]['confirmed']} reading={v[m]['reading']!r} counting={per_model[m]['counting_reading']!r}"
+             for m in models]
+    write_status(run_id, f"items={counts}\n" + "\n".join(lines) + f"\nconfirmed for: {v['confirmed_for']}",
+                 ok=False, reported="TextCraft verdict")
+    return 0

@@ -36,11 +36,12 @@ def chat_ids(tok, messages: list[dict]) -> list[int]:
     return list(out[0] if out and isinstance(out[0], list) else out)
 
 
-def item_problems(tok, item: dict, shots, arms: tuple[str, ...] = P.ARMS, encode=None) -> list[str]:
-    """Every check above for one item; `encode` is the scorer's own chat encoder (messages -> ids) when given."""
+def item_problems(tok, item: dict, shots, arms: tuple[str, ...] = P.ARMS, encode=None, system: str | None = None) -> list[str]:
+    """Every check above for one item; `encode` is the scorer's own chat encoder (messages -> ids) when given;
+    `system` is a variant's system text (design 13)."""
     problems = []
     for arm in arms:
-        messages = P.messages(item, arm, shots)
+        messages = P.messages(item, arm, shots, system)
         text = render(tok, messages)
         prompt = ids(tok, text)
         if (encode(messages) if encode else chat_ids(tok, messages)) != prompt:
@@ -63,8 +64,8 @@ def item_problems(tok, item: dict, shots, arms: tuple[str, ...] = P.ARMS, encode
     return problems
 
 
-def check(tok, items: list[dict], shots, arms: tuple[str, ...] = P.ARMS, encode=None) -> dict:
-    bad = {t["id"]: p for t in items if (p := item_problems(tok, t, shots, arms, encode))}
+def check(tok, items: list[dict], shots, arms: tuple[str, ...] = P.ARMS, encode=None, system: str | None = None) -> dict:
+    bad = {t["id"]: p for t in items if (p := item_problems(tok, t, shots, arms, encode, system))}
     return {"n_items": len(items), "arms": list(arms), "n_items_with_problems": len(bad),
             "examples": dict(list(bad.items())[:5]), "ok": not bad}
 

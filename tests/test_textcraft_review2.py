@@ -224,7 +224,8 @@ def test_arithmetic_readout_leaves_out_shown_inventories(items):
     main = [t for t in items if t["population"] == "main"]
     arith = A.arithmetic_items(main)
     assert arith and all(t["needs_arithmetic"] and not t["inventory_shown_after_last_change"] for t in arith)
-    assert len(arith) == sum(t["needs_arithmetic"] and not t["inventory_shown_after_last_change"] for t in main)
+    # whole couples only (design 13): 835 single items qualify, 766 of them in couples whose partner qualifies too
+    assert len(arith) == 766 < sum(t["needs_arithmetic"] and not t["inventory_shown_after_last_change"] for t in main) == 835
     assert any(t["needs_arithmetic"] and t["inventory_shown_after_last_change"] for t in main)
     for t in items[::9]:
         assert t["inventory_shown_after_last_change"] is K.inventory_shown_after_last_change(t["history"])
@@ -385,12 +386,12 @@ def test_usefulness_items(items):
     assert V.structure_problems({**use[0], "population": "main"})  # population is checked
 
 
-def test_named_readouts_and_competence():
-    """Wiring: each named readout reads its own items; used up on the goal is left out; AUC and equivalence."""
+def _readout_fixture():
+    """Main items in couples with known ΔL per couple (aligned L = d, swapped L = 0; yes/no a tenth of that)."""
     items, scores = [], []
-    def add(i, cls, role, ov, pov, fit, inv, arith, d, pop="main", pair=None):
+    def add(i, cls, role, ov, pov, fit, inv, arith, d, pop="main", pair=None, bin_="4-8"):
         t = {"id": f"t{i}", "pair_id": pair or f"p{i % 7}", "couple_id": f"c{i // 2}", "failure_class": cls, "role": role,
-             "object_goal_overlap": ov, "object_partner_overlap": pov, "history_fit": fit, "length_bin": "4-8",
+             "object_goal_overlap": ov, "object_partner_overlap": pov, "history_fit": fit, "length_bin": bin_,
              "history": [["inventory", "Inventory: [x] (1) "]] if inv else [], "needs_arithmetic": arith,
              "inventory_shown_after_last_change": False, "population": pop}
         items.append(t)
@@ -402,19 +403,23 @@ def test_named_readouts_and_competence():
         add(k, "never_obtained", "ingredient", True, False, "aligned", False, False, 3.0); add(k + 1, "never_obtained", "ingredient", True, False, "swapped", False, False, 3.0); k += 2
         add(k, "never_obtained", "ingredient", False, False, "tie", False, False, 1.0); add(k + 1, "never_obtained", "ingredient", False, False, "tie", False, False, 1.0); k += 2
         add(k, "used_up", "goal", True, False, "tie", False, True, 100.0); add(k + 1, "used_up", "goal", True, False, "tie", False, True, 100.0); k += 2
-    extra = [{"id": f"u{i}", "pair_id": f"q{i}", "couple_id": f"m{i // 2}", "failure_class": "never_obtained",
-              "role": "ingredient", "object_goal_overlap": False, "object_partner_overlap": False, "population": "usefulness"}
-             for i in range(20)]
-    scores += [{"transition_id": t["id"], "condition": c, "L": v} for t in extra for c, v in (("aligned", 3.0), ("swapped", 0.0))]
-    r = A.named_readouts(scores, items, extra)
+    return items, scores, add, k
+
+
+def test_named_readouts_and_competence():
+    """Wiring: each named readout reads its own items; used up on the goal is left out; AUC and equivalence."""
+    items, scores, add, k = _readout_fixture()
+    r = A.named_readouts(scores, items)
+    assert set(r) == set(A.HOLM_FAMILY)
     assert r["goal_role"]["estimate"] == pytest.approx(6.0)  # used up on the goal left out
     assert r["ingredient_with_overlap"]["estimate"] == pytest.approx(3.0)
-    assert r["usefulness_only"]["estimate"] == pytest.approx((20 * 1.0 + 20 * 3.0) / 40)  # main couples and the extras
-    assert r["history_agreement"]["estimate"] == pytest.approx(((8.0 + 3.0) / 2 - (4.0 + 3.0) / 2) / 2)
+    assert r["usefulness_only"]["estimate"] == pytest.approx(1.0)  # same-history main couples only (design 13)
     assert r["yes_no"]["estimate"] == pytest.approx(sum([0.8, 0.4, 0.3, 0.3, 0.1, 0.1]) / 6)
     assert r["counting"]["estimate"] == pytest.approx(6.0)
-    assert r["inventory_shown"]["estimate"] == pytest.approx(8.0 - (4 + 3 + 3 + 1 + 1) / 5)
-    assert "holm_p_within_model" in r["goal_role"]
+    core = [t for t in items if A.not_used_up_goal(t)]
+    assert A.agreement_contrast(scores, core)["estimate"] == pytest.approx(((8.0 + 3.0) / 2 - (4.0 + 3.0) / 2) / 2)
+    assert A.inventory_contrast(scores, core)["estimate"] == pytest.approx(8.0 - 4.0)  # within too few x goal x 4-8
+    assert A.coherence_robust(scores, core)["estimate"] == pytest.approx((4.0 + 3.0 + 1.0 + 1.0) / 4)
     assert A.auc([2.0, 3.0], [1.0, 2.0]) == pytest.approx((1.5 + 2.0) / 4)
     succ = [{"id": f"s{i}", "pair_id": f"p{i % 7}"} for i in range(20)]
     sc = [{"transition_id": t["id"], "condition": "neutral", "L": 5.0} for t in succ]

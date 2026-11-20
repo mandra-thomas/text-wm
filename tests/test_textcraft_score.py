@@ -80,16 +80,25 @@ def test_score_every_arm_both_models_then_resume(mock_runs):
         prim = m["per_model"][tag]["primary_delta_L"]
         assert prim["n_pairs"] == 4 and prim["n_items"] == m["items"]["main"]
         assert set(m["per_model"][tag]["descriptive"]["main"]["strata"]) == set(A.STRATA)
-        assert m["per_model"][tag]["named"]["counting"]["n_items"] == sum(
-            it["population"] == "main" and it["needs_arithmetic"] and not it["inventory_shown_after_last_change"]
-            and A.not_used_up_goal(it) for it in items)
+        core = [it for it in items if it["population"] == "main" and A.not_used_up_goal(it)]
+        assert m["per_model"][tag]["named"]["counting"]["n_items"] == len(A.couples_where(core, A.counting_item))
+        assert set(m["per_model"][tag]["named"]) == set(A.HOLM_FAMILY)
+        assert m["verdicts"][tag]["reading"] and m["per_model"][tag]["counting_reading"]
+        # the counting gate is computed on the counting couples themselves, against every success (design 13)
+        gate = m["per_model"][tag]["competence"]["neutral"]["counting"]
+        assert gate["n"] == [sum(it["population"] == "success" for it in items), len(A.couples_where(core, A.counting_item))]
+        assert m["per_model"][tag]["counting_reading"].startswith("withheld") != gate["discriminates"]
+        assert m["per_model"][tag]["named"]["usefulness_only"]["n_items"] == len(A.couples_where(core, A.B_usefulness_only))
+        assert m["per_model"][tag]["coherence_robust_delta_L"]["n_items"] == sum(
+            it["population"] == "main" and it["history_fit"] != "aligned" for it in items)
         assert m["per_model"][tag]["competence"]["neutral"]["all"]["auc"] == m["per_model"][tag]["competence"]["neutral"]["all"]["auc"]
         assert "perm_p" not in json.dumps(m["per_model"][tag]["descriptive"])  # descriptive readouts carry no p-values
         assert m["per_model"][tag]["descriptive"]["needs_arithmetic_as_logged_in_A2"]["n_items"] == sum(
             it["population"] == "main" and it["needs_arithmetic"] for it in items) < m["items"]["main"]
         assert m["per_model"][tag]["descriptive"]["primary_without_used_up_on_goal"]["n_items"] == sum(
             it["population"] == "main" and A.not_used_up_goal(it) for it in items)
-    assert set(m["verdicts"]) == set(S.CO_PRIMARY) | {"replicates"}
+    assert set(m["verdicts"]) == set(S.CO_PRIMARY) | {"replicates", "confirmed_for"}
+    assert m["exploratory_variants"] == {}  # none configured here
 
 
 def test_smoke_subset_is_fixed_and_spans_items():

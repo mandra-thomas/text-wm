@@ -36,6 +36,8 @@ SYSTEM = (
     "action, predict the environment's next observation exactly in TextCraft style. Output only the observation "
     "text.\n\nThe agent was given these instructions:\n" + INSTRUCTION
 )
+# The exploratory empty-start arm (design 13) appends this rule to the system text; the default prompt never states it.
+EMPTY_START = "\n\nThe inventory is empty when the game starts; it holds only what the history's get and craft steps put in it."
 YN_QUESTION = "Question: Will this action succeed? Answer Yes or No.\nAnswer:"
 NEXT = "Next observation:"
 CONDITIONS = ("aligned", "swapped", "neutral")
@@ -73,15 +75,17 @@ def fewshot_examples(path: Path = FEWSHOT) -> tuple[dict, ...]:
     return _load_fewshot(str(path))
 
 
-def messages(item: dict, arm: str, fewshot: tuple[dict, ...] | list[dict] | None = None) -> list[dict[str, str]]:
+def messages(item: dict, arm: str, fewshot: tuple[dict, ...] | list[dict] | None = None,
+             system: str | None = None) -> list[dict[str, str]]:
     """The chat for one item under one arm: a condition or prefix_<condition> (two-candidate prediction; the prefix
-    arm shares the condition's prompt) or yn_<condition> (question)."""
+    arm shares the condition's prompt) or yn_<condition> (question). `system` replaces the system text (only the
+    exploratory variants of design 13 pass it)."""
     question = arm.startswith("yn_")
     condition = arm[3:] if question else arm.removeprefix("prefix_") if arm in PREFIX_ARMS else arm
     if condition not in CONDITIONS:
         raise ValueError(arm)
     shots = fewshot_examples() if fewshot is None else fewshot
-    out = [{"role": "system", "content": SYSTEM}]
+    out = [{"role": "system", "content": SYSTEM if system is None else system}]
     for ex in shots:
         out.append({"role": "user", "content": turn(ex["recipe_lines"], ex["history"], ex["action"],
                                                      f"Goal: craft {ex['goal']}.")})

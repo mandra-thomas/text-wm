@@ -39,5 +39,32 @@
   "ok": true,
   "snapshot": "b968826d9c46dd6066d109eabc6255188de91218"
  },
- "run": "ICE login node, ~/scratch/envs/serve2 (transformers 5.23.0), HF_HUB_OFFLINE=1, 2026-11-20"
+ "run": "ICE login node, ~/scratch/envs/serve2 (transformers 5.23.0), HF_HUB_OFFLINE=1, 2026-11-20",
+ "variants_section_13": {
+  "llama3.1-8b-fewshot|empty_start": {
+   "examples": {},
+   "n_items": 600,
+   "n_items_with_problems": 0,
+   "ok": true
+  },
+  "llama3.1-8b-fewshot|examples_on_goal": {
+   "examples": {},
+   "n_items": 400,
+   "n_items_with_problems": 0,
+   "ok": true
+  },
+  "qwen3-8b-fewshot|empty_start": {
+   "examples": {},
+   "n_items": 600,
+   "n_items_with_problems": 0,
+   "ok": true
+  },
+  "qwen3-8b-fewshot|examples_on_goal": {
+   "examples": {},
+   "n_items": 400,
+   "n_items_with_problems": 0,
+   "ok": true
+  },
+  "run": "ICE login node, ~/scratch/envs/serve2 (transformers 5.23.0), HF_HUB_OFFLINE=1, 2026-11-20; same snapshots; arms aligned and swapped; system text and prompt examples of each variant (score.VARIANTS)"
+ }
 }

@@ -4,3 +4,7 @@ run_id: textcraft_analysis
 source: textcraft_score
 manifest: wf/textcraft/data/manifest.json
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+# Exploratory prompt variants (design section 13), read descriptively against the verified prompt on the same items.
+variants:
+  examples_on_goal: textcraft_score_examples_on_goal
+  empty_start: textcraft_score_empty_start
