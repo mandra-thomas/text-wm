@@ -139,7 +139,7 @@ Not predicted: the effect's size, the ordering across families, or whether Llama
 
 ## Running (ICE)
 
-1. **Prefetch** (CPU job, `families_prefetch.sbatch`). It downloads the pinned revisions into the cache transformers reads, using HF_TOKEN from pace.env, which is never printed. It reports OK or the HTTP status per model; a 403 for a gated model whose access is still pending doesn't stop the others. Then it checks each tokenizer offline.
+1. **Prefetch** (CPU job, `families_prefetch.sbatch`). It downloads the pinned revisions into the cache transformers reads, using HF_TOKEN from pace.env, which is never printed. It reports OK or the HTTP status per model, and a refused model doesn't stop the others. All four are gated; access to Gemma 2 and Llama 3.2 was granted by 2026-11-20 (Meta approved both Llama 3.2 models), and Mistral 7B v0.3 is no longer gated. A 403 on ICE would then mean that pace.env's token belongs to another account or lacks read access. Then it checks each tokenizer offline.
 2. **Score** each model, one job and one shard (`family_score.sbatch`, any L40S, A40 or A100). A model is about 43,700 forward passes. From the RQ2 sizing (about 0.4 s a pass at 8B), expect roughly:
    - Mistral: 5 h;
    - Gemma: 6 h, since eager attention is slower;
