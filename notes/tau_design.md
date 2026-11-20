@@ -595,3 +595,15 @@ history shows the deciding facts anyway.
 
   Prompts are about 9.5k tokens for Qwen3 and 8.6k for Llama.
 - **Bug fixed before the full build.** Natural items without a swapped line broke the build's stratum counts (a None sort). There is a regression test.
+- **Correction to §3.4, found by the upstream equivalence check.** §3.4 says the tools overwrite the status on
+  success, so the two twin routes agree. That is wrong for two tools: `modify_pending_order_address` and
+  `modify_pending_order_payment` leave the status alone.
+  - **What happens.** For `status` items on those two tools, the patch route shows the patched status
+    (`pending`), while the bypass route shows the order's real status.
+  - **Which twin stands.** The bypass twin is the designed one: only the violated check is removed, and nothing
+    in the state is edited.
+  - **How the check changed.** The equivalence script now puts the true status back on the patch route for
+    those two tools before comparing, and counts how often it does so.
+  - **Whom it affects.** 561 items, all `status` items whose aligned task is not achievable, so none is in the
+    main population or the natural set.
+  - **Before the fix,** every other generated and natural item agreed byte for byte.

@@ -11,7 +11,8 @@ Checks:
    included) gives identical outputs, and the full database is identical afterwards.
 2. For every item file given: each item's history outputs and failure reply are identical under upstream,
    and upstream's twin, made by patching the database copy (design §3.4, second route), equals the item's
-   twin, which the port made by bypassing the check.
+   twin, which the port made by bypassing the check. modify_pending_order_address and _payment keep the
+   order's status on success, so for them the patched status is put back to the true one before comparing.
 Exit status 0 only if every comparison is identical.
 """
 from __future__ import annotations
@@ -115,6 +116,10 @@ def fuzz(Up, episodes: int, calls: int, seed: int) -> dict:
     return out
 
 
+# Tools that do not overwrite the order's status on success (notes/tau_design.md, changes of 2026-11-20).
+KEEPS_STATUS = ("modify_pending_order_address", "modify_pending_order_payment")
+
+
 def _patch(env, GiftCard, item: dict):
     """Upstream twin, second route: patch the database copy so the violated check passes."""
     db = env.env.tools.db
@@ -122,7 +127,9 @@ def _patch(env, GiftCard, item: dict):
     cls, a = item["cls"], act["arguments"]
     if cls == "status":
         need = "delivered" if act["name"] in ("exchange_delivered_order_items", "return_delivered_order_items") else "pending"
+        true_status = db.orders[a["order_id"]].status
         db.orders[a["order_id"]].status = need
+        return true_status
     elif cls == "unavailable":
         order = db.orders[a["order_id"]]
         for old, new in zip(a["item_ids"], a["new_item_ids"]):
@@ -136,11 +143,12 @@ def _patch(env, GiftCard, item: dict):
         db.users[uid].payment_methods[a["payment_method_id"]].balance = 10 ** 6
     else:
         raise ValueError(cls)
+    return None
 
 
 def check_items(Up, GiftCard, path: Path) -> dict:
     out = {"file": str(path), "items": 0, "history_mismatches": 0, "failure_mismatches": 0, "twin_mismatches": 0,
-           "examples": []}
+           "status_restored": 0, "examples": []}
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -155,8 +163,14 @@ def check_items(Up, GiftCard, path: Path) -> dict:
         twin_env = Up()
         for h in it["history"]:
             twin_env.call(h["name"], h["arguments"])
-        _patch(twin_env, GiftCard, it)
+        true_status = _patch(twin_env, GiftCard, it)
         twin = twin_env.call(it["action"]["name"], it["action"]["arguments"])
+        if true_status and it["action"]["name"] in KEEPS_STATUS and not twin.startswith("Error"):
+            # these two tools leave the status alone on success, so the patched status would show; restore it
+            rec = json.loads(twin)
+            rec["status"] = true_status
+            twin = json.dumps(rec)
+            out["status_restored"] += 1
         if twin != it["success_twin"]:
             out["twin_mismatches"] += 1
             if len(out["examples"]) < 5:
