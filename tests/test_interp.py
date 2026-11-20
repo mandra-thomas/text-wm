@@ -455,14 +455,14 @@ def test_direction_helpers():
 
 # ---------------- review 1 fixes (amendment 1, 2026-11-20) ----------------
 
-SUBWORD_SPLIT = r"\w+?(?=bottle\b)|bottle|\s+|\w+|[^\w\s]"
+SUBWORD_SPLIT = r"glass(?=\w)|\w+?(?=bottle\b)|bottle|\s+|\w+|[^\w\s]"
 
 
-def _bottle_item():
-    return _item(id="t_000003", goal_object="glassbottle", swapped_goal_object="winebottle",
-                 task_line="Your task is to: put some glassbottle on countertop.",
-                 swapped_task_line="Your task is to: put some winebottle on countertop.",
-                 history_text=_item()["history_text"].replace("put some mug on", "put some glassbottle on"))
+def _bottle_item(**kw):
+    return _item(**{"id": "t_000003", "goal_object": "glassbottle", "swapped_goal_object": "winebottle",
+                    "task_line": "Your task is to: put some glassbottle on countertop.",
+                    "swapped_task_line": "Your task is to: put some winebottle on countertop.",
+                    "history_text": _item()["history_text"].replace("put some mug on", "put some glassbottle on"), **kw})
 
 
 @pytest.fixture(scope="module")
@@ -471,7 +471,7 @@ def subword_tok():
     from tokenizers import Regex, Tokenizer, models, pre_tokenizers
     from transformers import PreTrainedTokenizerFast
 
-    words = sorted(set(re.findall(SUBWORD_SPLIT, _corpus([_item(), _bottle_item()]) + " glassbottle winebottle")))
+    words = sorted(set(re.findall(SUBWORD_SPLIT, _corpus([_item(), _bottle_item()]) + " glassbottle winebottle glassjar")))
     vocab = {w: i for i, w in enumerate(SPECIALS + words)}
     core = Tokenizer(models.WordLevel(vocab, unk_token="<unk>"))
     core.pre_tokenizer = pre_tokenizers.Split(Regex(SUBWORD_SPLIT), behavior="isolated")
@@ -490,6 +490,15 @@ def test_a_shared_word_ending_stays_in_the_span(subword_tok):
     assert rest.startswith(" on countertop") and "bottle" not in rest
     assert [pr.a.ids[i] for i in pr.groups["action"]] == [pr.b.ids[j] for j in pr.to_b(pr.groups["action"])]
     assert PR.char_diff("put glassbottle on", "put winebottle on") == (4, 15, 14)
+
+
+def test_a_shared_word_start_stays_in_the_span(subword_tok):
+    """glassbottle and glassjar share the token "glass"; the span is still the whole name."""
+    tok = subword_tok
+    t = _bottle_item(swapped_goal_object="glassjar", swapped_task_line="Your task is to: put some glassjar on countertop.")
+    pr = PR.build_pair(tok, t, "yn")
+    assert "".join(tok.decode([pr.a.ids[i]]) for i in range(*pr.span_a)).strip() == "glassbottle"
+    assert "".join(tok.decode([pr.b.ids[i]]) for i in range(*pr.span_b)).strip() == "glassjar"
 
 
 def test_new_goals_build_and_name_their_objects(tok):
@@ -590,14 +599,14 @@ def test_each_cell_is_paired_with_the_clean_row_of_its_own_batch(tok):
     q = parts(_qwen(len(tok)))
     pr = PR.build_pair(tok, _item(), "yn")
     plus, minus = PR.readout_ids(tok, "yn")
-    cells = [Cell("resid", layer, g) for layer in range(q.n_layers) for g in ("action", "final", "query")]
+    cells = [Cell("resid", layer, g) for layer in range(q.n_layers) for g in ("action", "final", "query")][:11]
     drift = _BatchDrift(q)
     try:
         res = sweep(q, pr, cells, plus, minus, batch_size=4)
     finally:
         drift.remove()
-    assert set(drift.sizes) == {4}  # the source run and every batch, the last one padded, have 4 rows
-    assert len(res["clean"]) == 4 and len(set(res["clean"])) == 4  # 12 cells, 3 per batch; every batch differs
+    assert drift.sizes == [4] * 5  # the source run and every batch, the last one padded, have 4 rows
+    assert len(res["clean"]) == 4 and len(set(res["clean"])) == 4  # 11 cells, 3 per batch; every batch differs
     assert res["d_target"] == res["clean"][0]
     for k, c in enumerate(cells):
         assert res["cell_clean"][c.key()] == res["clean"][k // 3]
