@@ -563,3 +563,35 @@ history shows the deciding facts anyway.
 - **Long prompts.** About 6–10k tokens.
 - **Swapped achievability varies.** It is a stratum, not a control.
 - **A single author built the checker.** Hence the blind second checker.
+
+## Changes and implementation record (after the design commit)
+
+**2026-11-20, no design change.** Built and checked as designed. What the build established:
+
+- **Generated items.** 3,371 items from 304 users.
+  - **Main population** (aligned task achievable): 1,389 items from 296 users. By class:
+    - `status`: 666;
+    - `unavailable`: 655;
+    - `wrong_return_pm`: 61;
+    - `gc_balance`: 7.
+  - **Status-matched:** 856 items from 175 users.
+  - **Swapped task achievable:** 1,201 items, against 188 where it is not.
+  - **Rejections:** 118 candidates, all because a second check failed when the twin was made (gift-card balance 97, exactly-one-payment 21).
+- **Natural items.** Only 28 from 23 users, fewer than the probe's 66. The drops:
+  - the class filter (one of the four test classes): 102 dropped;
+  - exact duplicates: 60;
+  - same order, tool and error as a kept item: 58;
+  - not determined by the history: 19;
+  - echoes: 9;
+  - second-check failures: 3;
+  - history too long: 1.
+
+  No trajectory failed to replay. Of the 28, 17 have an achievable aligned task and 5 have no swapped line.
+- **Token checks.** Run on ICE with `wf/tau/token_check.py`, on 40 main items, for both models:
+  - `{"`, `Error`, `Yes` and `No` are single tokens;
+  - the twins and failure replies start with them;
+  - the generation prompt ends in a newline;
+  - no token merges across the prompt/answer boundary.
+
+  Prompts are about 9.5k tokens for Qwen3 and 8.6k for Llama.
+- **Bug fixed before the full build.** Natural items without a swapped line broke the build's stratum counts (a None sort). There is a regression test.

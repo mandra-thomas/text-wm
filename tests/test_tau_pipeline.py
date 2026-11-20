@@ -30,7 +30,13 @@ def runs(tmp_path_factory):
 
 
 def _score_cfg(**kw):
-    return {**load_config("tau_score"), "n_shards": 2, **kw}
+    """The real scoring config, unpinned: the pinned sha256 is the full build's, not this small one's."""
+    return {**load_config("tau_score"), "n_shards": 2, "expected_items_sha256": None, **kw}
+
+
+def test_scoring_configs_pin_one_item_file():
+    pins = {load_config(n).get("expected_items_sha256") for n in ("tau_score", "tau_score_smoke", "tau_contamination")}
+    assert len(pins) == 1 and len(pins.pop() or "") == 64
 
 
 def test_runs_are_registered():
@@ -119,7 +125,7 @@ def test_scoring_refuses_a_verification_of_other_files(runs):
 
 
 def test_contamination_runs_on_mock(runs):
-    assert P.run_tau_contamination({**load_config("tau_contamination"), "per_kind": 3}) == 0
+    assert P.run_tau_contamination({**load_config("tau_contamination"), "per_kind": 3, "expected_items_sha256": None}) == 0
     m = json.loads((runs / "tau_contamination" / "metrics.json").read_text())
     assert m["n_records"] == 9 and m["models"]["qwen3-8b-fewshot"]["all"]["n"] == 9
 

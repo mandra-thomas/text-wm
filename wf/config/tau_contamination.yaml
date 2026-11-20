@@ -5,4 +5,4 @@ build_run: tau_build
 verify_run: tau_verify
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
 per_kind: 50
-expected_items_sha256: null
+expected_items_sha256: b6337c43ae503be5bf9ae990502a5cc83eb901972609638d5247d6d3b12a6a10  # local build at a1a60ea; an ICE rebuild must reproduce it

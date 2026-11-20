@@ -8,4 +8,4 @@ readouts: [first, yn, full]
 score_natural: true
 score_unachievable: false
 n_shards: 8
-expected_items_sha256: null
+expected_items_sha256: b6337c43ae503be5bf9ae990502a5cc83eb901972609638d5247d6d3b12a6a10  # local build at a1a60ea; an ICE rebuild must reproduce it
