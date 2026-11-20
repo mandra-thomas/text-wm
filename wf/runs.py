@@ -1426,6 +1426,12 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "mech2_score": lambda cfg: _lazy("mech2", "run_mech2_score")(cfg),
     "mech2_score_smoke": lambda cfg: _lazy("mech2", "run_mech2_score")(cfg),
     "mech2_analysis": lambda cfg: _lazy("mech2", "run_mech2_analysis")(cfg),
+    # 2026-11-20, model families wave A (wf/families.py, notes/families_design.md): one scoring run per model.
+    **{f"family_score_{tag}": (lambda cfg: _lazy("families", "run_family_score")(cfg))
+       for tag in ("gemma2-9b-it", "mistral-7b-v0.3", "llama3.2-1b", "llama3.2-3b")},
+    "families_analysis": lambda cfg: _lazy("families", "run_families_analysis")(cfg),
+    # 2026-11-20, logged before any wave A score was read: Mistral's system text in the first user turn.
+    "family_placement_mistral-7b-v0.3": lambda cfg: _lazy("families", "run_family_placement")(cfg),
 }
 
 

@@ -1,0 +1,11 @@
+run_id: family_score_gemma2-9b-it
+# Model families, wave A (decided 2026-11-20; notes/families_design.md): Gemma 2 9B instruct (google/gemma-2-9b-it), pinned in
+# wf.constants.REVISIONS, scored with the size series' prompts and arms (wf/families.py). One shard by default;
+# WF_N_SHARDS / WF_SHARD split it by game.
+model: gemma2-9b-it
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_shards: 1
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

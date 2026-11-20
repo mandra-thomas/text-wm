@@ -61,6 +61,13 @@ REVISIONS = {
     "Qwen/Qwen3-4B": "1cfa9a7208912126459214e8b04321603b3df60c",
     "Qwen/Qwen3-14B": "40c069824f4251a91eefaf281ebe4c544efd3e18",
     "Qwen/Qwen3-32B": "9216db5781bf21249d130ec9da846c4624c16137",
+    # Model families, wave A (2026-11-20, wf/families.py): the Hub's current commit ("sha" from
+    # https://huggingface.co/api/models/<id>, read 2026-11-20, before any download); the prefetch job downloads
+    # exactly these.
+    "google/gemma-2-9b-it": "11c9b309abf73637e4b6f9a3fa1e92e615547819",
+    "mistralai/Mistral-7B-Instruct-v0.3": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+    "meta-llama/Llama-3.2-1B-Instruct": "9213176726f574b556790deb65791e0c5aa438b6",
+    "meta-llama/Llama-3.2-3B-Instruct": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
 }
 
 

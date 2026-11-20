@@ -44,6 +44,7 @@ def test_log_probabilities_are_not_rounded_to_bfloat16():
     logits = (torch.randn(1, 5, 1000, generator=gen) * 8).to(torch.bfloat16)
     scorer = LogoddsScorer.__new__(LogoddsScorer)
     scorer.mock, scorer._tok, scorer._model = False, _Tok(), _Model(logits)
+    scorer.template_kwargs = {}  # read by _encode since 2026-11-20
     total, n, first, _ = scorer._teacher_force_logprob([{"role": "user", "content": "x"}], "You x")
     exact = torch.log_softmax(logits[0].float(), dim=-1)
     want_first = exact[2, 5].item()
