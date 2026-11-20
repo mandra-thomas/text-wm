@@ -2,7 +2,9 @@ run_id: tau_score
 # τ-bench retail scoring (notes/tau_design.md §6, amended 2026-11-20 after review 1): main population and natural set,
 # both co-primary models. Per item: the failing call under the aligned, swapped and neutral task lines (first token,
 # yes/no, full replies), the mention-only pair (first token, yes/no), the manipulation check (aligned, swapped), the
-# success witness (all readouts), and for the rules-only arm's 500 items the failing call without the agent policy.
+# success witness (all readouts), and for the exploratory arms' 500 items (the same items in both) the failing call
+# without the agent policy (rules-only) and without the statement of what the backend sees, with own-order few-shot
+# examples (ALFWorld-matched; amendment after review 2). Few-shot order reversed for about half of the items.
 # Sharded by user: WF_SHARD / WF_N_SHARDS. Time per shard: pace/tau_score.sbatch.
 build_run: tau_build
 verify_run: tau_verify
@@ -12,6 +14,7 @@ witness: true
 mention: true
 target_check: true
 rules_arm_items: 500
+matched_arm_items: 500
 score_natural: true
 score_unachievable: false
 n_shards: 16

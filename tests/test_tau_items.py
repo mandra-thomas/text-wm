@@ -221,7 +221,8 @@ def test_prompt_layout(built):
     assert f"Next call: {json.dumps({'name': it['action']['name'], 'arguments': it['action']['arguments']})}\nTool output:" in q
     for h in it["history"]:
         assert f"Output: {h['output']}" in q
-    assert ms[2]["content"] == few[0]["output"]
+    from wf.tau.prompts import fewshot_for
+    assert ms[2]["content"] == fewshot_for(it, few)[0]["output"]
     with pytest.raises(ValueError):
         build_messages({**it, "task_swapped": None}, "swapped", few)
     with pytest.raises(ValueError):
@@ -370,8 +371,11 @@ def test_witnesses_are_real_successes_with_class_failure_texts(built):
         assert it["witness_failure"].startswith("Error: ") and error_class(it["witness_failure"]) == it["cls"]
         assert it["witness_checker"] == check(it["history"], w).verdict != "FAIL"
         seen[(it["cls"], it["witness_checker"])] += 1
-        assert it["task_mention_aligned"] == f"The user has a question about order {it['order_id']}."
-        assert it["task_mention_swapped"] == f"The user has a question about order {it['comparison_order_id']}."
+        # review 2: the mention line names the product whenever the write's task line does
+        want = (lambda o, p: f"The user has a question about the {p} in order {o}." if p else f"The user has a question about order {o}.")
+        assert it["task_mention_aligned"] == want(it["order_id"], it["product"])
+        assert it["task_mention_swapped"] == want(it["comparison_order_id"], it["comparison_product"])
+        assert (it["product"] is None) == ("{p}" not in I.TEMPLATES[it["action"]["name"]])
     # a status item's witness changes the tool, and its success needs a variant's availability that is not shown
     assert seen[("status", "UNKNOWN")] > 0 and seen[("unavailable", "PASS")] > 0
     assert not [k for k in seen if k[0] != "status" and k[1] != "PASS"]
@@ -387,3 +391,236 @@ def test_witnesses_are_real_successes_with_class_failure_texts(built):
     for t in built["generated"]:
         if t["main_pool"] and t["cls"] == "unavailable":
             assert t["witness_failure"] == f"Error: New item {t['aligned_witness']['arguments']['new_item_ids'][0]} not found or available"
+
+
+# ---------------- review 2: golden system messages, each backend rule against the port, matched arm, order ----------------
+
+GOLDEN_SYSTEM_SHA256 = {  # sha256 of the rendered system message per arm (amendments after review 2)
+    "main": "b5dbd6acc23d6ffdb59f9b3d96cd86a6b434ebd163cc5913fcb821a24f871c46",
+    "rules_only": "50f15ceb6e847c196d2f1b5307cbae478907d5ab3ea9525edd6d030a5f26e1c6",
+    "matched": "291bcbf2b0ef1516f1e8d3000ce723f53b1fc0e985f995afec474c364b857352",
+}
+
+
+def test_system_messages_and_questions_are_golden():
+    from wf.tau.prompts import ARMS, OUTPUT_CUE, _BACKEND_LEAD
+    assert set(ARMS) == set(GOLDEN_SYSTEM_SHA256)
+    for arm, want in GOLDEN_SYSTEM_SHA256.items():
+        assert hashlib.sha256(system_message(arm).encode()).hexdigest() == want, arm
+    assert YN_QUESTION == ("Question: will this tool call succeed, or will it return an error? Answer Yes if it succeeds "
+                           "and No if it returns an error.\nAnswer:")
+    assert TARGET_QUESTION == ("Question: is this call on the order the user asked about? Answer Yes if it is and No if "
+                               "it is not.\nAnswer:")
+    assert OUTPUT_CUE == "Tool output:"
+    blind = "it does not see the user's messages or task"
+    assert blind in system_message("main") and blind in system_message("rules_only")
+    # the matched arm is the main arm with only the statement of what the backend sees removed
+    matched = system_message("matched")
+    assert blind not in matched and "sees only" not in matched and "does not see" not in matched
+    assert "does not check the agent's conduct (authentication, confirmation with the user)" in matched
+    assert matched == system_message("main").replace(_BACKEND_LEAD["main"], _BACKEND_LEAD["matched"], 1)
+    assert BACKEND_RULES in matched and "# Retail agent policy" in matched
+
+
+def _rule(tool):
+    (line,) = [x for x in BACKEND_RULES.splitlines() if x.startswith(f"- {tool}:")]
+    return line
+
+
+def _owned(pred):
+    """A fresh env and one of its orders (and the order's user) copied so that the test may edit them."""
+    db = base_db()
+    o = next(o for _, o in sorted(db["orders"].items()) if pred(o, db))
+    env = fresh_env()
+    env.state.own_order(o["order_id"])
+    env.state.own_user(o["user_id"])
+    return env, env.state.orders[o["order_id"]], env.state.users[o["user_id"]], db
+
+
+def _alts(db, it, available):
+    vs = db["products"][it["product_id"]]["variants"]
+    return [k for k, v in sorted(vs.items()) if k != it["item_id"] and v["available"] == available]
+
+
+def _gift(u, other_than):
+    return next((k for k, m in sorted(u["payment_methods"].items()) if m["source"] == "gift_card" and k != other_than), None)
+
+
+def _ok(out):
+    return not out.startswith("Error")
+
+
+def _cancel_cases():
+    env, o, u, db = _owned(lambda o, db: o["status"] == "pending")
+    oid = o["order_id"]
+    yield 'the order\'s status is exactly "pending"', (
+        _ok(env.fork().call("cancel_pending_order", {"order_id": oid, "reason": "no longer needed"})))
+    o["status"] = "pending (item modified)"
+    yield 'the order\'s status is exactly "pending"', (
+        env.fork().call("cancel_pending_order", {"order_id": oid, "reason": "no longer needed"}) == "Error: Non-pending order cannot be cancelled")
+    o["status"] = "pending"
+    yield 'the reason is "no longer needed" or "ordered by mistake"', (
+        _ok(env.fork().call("cancel_pending_order", {"order_id": oid, "reason": "ordered by mistake"}))
+        and env.fork().call("cancel_pending_order", {"order_id": oid, "reason": "found a better price"}) == "Error: Invalid reason")
+
+
+def _address_args(o, u):
+    return {"order_id": o["order_id"], **{k: u["address"][k] for k in I.ADDRESS_ARGS}}
+
+
+def _address_cases():
+    env, o, u, db = _owned(lambda o, db: o["status"] == "processed")
+    yield 'the order\'s status contains "pending" (so "pending (item modified)" is accepted)', (
+        env.fork().call("modify_pending_order_address", _address_args(o, u)) == "Error: Non-pending order cannot be modified")
+    o["status"] = "pending (item modified)"
+    yield 'the order\'s status contains "pending" (so "pending (item modified)" is accepted)', (
+        _ok(env.fork().call("modify_pending_order_address", _address_args(o, u))))
+
+
+def _payment_cases():
+    env, o, u, db = _owned(lambda o, db: o["status"] == "pending" and len(o["payment_history"]) == 1
+                           and _gift(db["users"][o["user_id"]], o["payment_history"][0]["payment_method_id"]))
+    pm0 = o["payment_history"][0]["payment_method_id"]
+    gc = _gift(u, pm0)
+    call = lambda pm: env.fork().call("modify_pending_order_payment", {"order_id": o["order_id"], "payment_method_id": pm})
+    amount = o["payment_history"][0]["amount"]
+    u["payment_methods"][gc]["balance"] = amount
+    o["status"] = "pending (item modified)"
+    yield 'the order\'s status contains "pending"', _ok(call(gc))
+    o["status"] = "pending"
+    yield "a gift card's balance is at least that payment's amount", _ok(call(gc))
+    u["payment_methods"][gc]["balance"] = round(amount - 0.01, 2)
+    yield "a gift card's balance is at least that payment's amount", call(gc) == "Error: Insufficient gift card balance to pay for the order"
+    u["payment_methods"][gc]["balance"] = amount + 1
+    yield "the payment method is one of the user's", call("credit_card_0") == "Error: Payment method not found"
+    yield "the new method differs from that payment's method", call(pm0) == "Error: The new payment method should be different from the current one"
+    o["payment_history"].append(dict(o["payment_history"][0]))
+    yield "the order's payment_history has exactly one entry, and it is a payment", call(gc) == "Error: There should be exactly one payment for a pending order"
+    o["payment_history"][:] = [{**o["payment_history"][0], "transaction_type": "refund"}]
+    yield "the order's payment_history has exactly one entry, and it is a payment", call(gc) == "Error: There should be exactly one payment for a pending order"
+
+
+def _swap_cases(tool, status):
+    env, o, u, db = _owned(lambda o, db: o["status"] == status and _alts(db, o["items"][0], True) and _alts(db, o["items"][0], False)
+                           and db["products"][o["items"][0]["product_id"]]["variants"][o["items"][0]["item_id"]]["available"]
+                           and _gift(db["users"][o["user_id"]], None))
+    it, pm0 = o["items"][0], o["payment_history"][0]["payment_method_id"]
+    args = {"order_id": o["order_id"], "item_ids": [it["item_id"]], "new_item_ids": [_alts(db, it, True)[0]], "payment_method_id": pm0}
+    call = lambda **kw: env.fork().call(tool, {**args, **kw})
+    yield "every old item is in the order", call(item_ids=["123"]).startswith("Error: ") and "not found" in call(item_ids=["123"])
+    yield "there are as many new items as old ones", call(new_item_ids=[]).startswith("Error: The number of items to be exchanged should match")
+    yield "is available", call(new_item_ids=[_alts(db, it, False)[0]]) == f"Error: New item {_alts(db, it, False)[0]} not found or available"
+    other = next(p for p in sorted(db["products"]) if p != it["product_id"])
+    yield "a variant of the same product", call(new_item_ids=[next(iter(db["products"][other]["variants"]))]) == "Error: Variant not found"
+    yield "the payment method is one of the user's", call(payment_method_id="credit_card_0") == "Error: Payment method not found"
+    gc = _gift(u, None)
+    new = _alts(db, it, True)[0]
+    diff = db["products"][it["product_id"]]["variants"][new]["price"] - it["price"]
+    u["payment_methods"][gc]["balance"] = round(diff, 2) - 0.01 if diff > 0.01 else -1.0
+    phrase = "a gift card's balance is at least the total price difference" if tool == "modify_pending_order_items" else \
+        "a gift card's balance is at least the price difference"
+    yield phrase, call(payment_method_id=gc).startswith("Error: Insufficient gift card balance")
+    u["payment_methods"][gc]["balance"] = max(round(diff, 2), 0) + 0.01
+    yield phrase, _ok(call(payment_method_id=gc))
+    same = call(new_item_ids=[it["item_id"]])
+    if tool == "modify_pending_order_items":
+        yield "each new item differs from the old item it replaces", same == "Error: The new item id should be different from the old item id"
+        o["status"] = "pending (item modified)"
+        yield 'the order\'s status is exactly "pending"', call() == "Error: Non-pending order cannot be modified"
+    else:
+        yield "the backend accepts the old item itself as its new item, although the policy asks for a different one", _ok(same)
+        o["status"] = "exchange requested"
+        yield 'the order\'s status is exactly "delivered"', call() == "Error: Non-delivered order cannot be exchanged"
+
+
+def _return_cases():
+    env, o, u, db = _owned(lambda o, db: o["status"] == "delivered" and _gift(db["users"][o["user_id"]], o["payment_history"][0]["payment_method_id"])
+                           and any(m["source"] != "gift_card" and k != o["payment_history"][0]["payment_method_id"]
+                                   for k, m in db["users"][o["user_id"]]["payment_methods"].items()))
+    pm0 = o["payment_history"][0]["payment_method_id"]
+    other = next(k for k, m in sorted(u["payment_methods"].items()) if m["source"] != "gift_card" and k != pm0)
+    args = {"order_id": o["order_id"], "item_ids": [o["items"][0]["item_id"]], "payment_method_id": pm0}
+    call = lambda **kw: env.fork().call("return_delivered_order_items", {**args, **kw})
+    phrase = ("the refund method is one of the user's and is either the order's original payment method (the first entry "
+              "of its payment_history) or a gift card")
+    yield phrase, _ok(call()) and _ok(call(payment_method_id=_gift(u, pm0)))
+    yield phrase, call(payment_method_id=other) == "Error: Payment method should be the original payment method"
+    yield phrase, call(payment_method_id="credit_card_0") == "Error: Payment method not found"
+    yield "every item is in the order", call(item_ids=["123"]) == "Error: Some item not found"
+    o["status"] = "return requested"
+    yield 'the order\'s status is exactly "delivered"', call() == "Error: Non-delivered order cannot be returned"
+
+
+RULE_CASES = {"cancel_pending_order": _cancel_cases, "modify_pending_order_address": _address_cases,
+              "modify_pending_order_payment": _payment_cases,
+              "modify_pending_order_items": lambda: _swap_cases("modify_pending_order_items", "pending"),
+              "exchange_delivered_order_items": lambda: _swap_cases("exchange_delivered_order_items", "delivered"),
+              "return_delivered_order_items": _return_cases}
+
+
+@pytest.mark.parametrize("tool", sorted(RULE_CASES))
+def test_each_backend_rule_states_what_the_port_enforces(tool):
+    """Every phrase of the tool's rule line is in the prompt and the port behaves as it says (review 2)."""
+    line = _rule(tool)
+    cases = list(RULE_CASES[tool]())
+    assert len(cases) >= 2
+    for phrase, behaves in cases:
+        assert phrase in line, (tool, phrase)
+        assert behaves, (tool, phrase)
+    assert BACKEND_RULES.splitlines()[0] == "Every order write needs the order to exist, and a payment method must be one of the order's user's."
+    # "Every order write needs the order to exist": the same call on an order id that does not exist
+    assert fresh_env().call("cancel_pending_order", {"order_id": "#W0000000", "reason": "no longer needed"}) == "Error: Order not found"
+
+
+def test_backend_rules_cover_every_order_write_once():
+    tools = [x.split(":")[0][2:] for x in BACKEND_RULES.splitlines() if x.startswith("- ")]
+    assert sorted(tools) == sorted(RULE_CASES)
+
+
+def test_matched_arm_examples_name_their_own_orders_with_unchanged_outputs(built):
+    from wf.tau.prompts import fewshot_for
+    few = built["fewshot"]
+    assert [ex["task_own"] == ex["task"] for ex in few] == [True, False, False, True]
+    assert few[1]["task_own"] == I.task_line("cancel_pending_order", few[1]["order_id"], None)
+    o = base_db()["orders"][few[2]["order_id"]]
+    assert few[2]["task_own"] == I.task_line("return_delivered_order_items", few[2]["order_id"], o["items"][0]["name"])
+    it = next(t for t in built["generated"] if t["main_pool"])
+    ms_main = build_messages(it, "aligned", few)
+    ms = build_messages(it, "aligned", few, arm="matched")
+    exs = fewshot_for(it, few, "matched")
+    for k, ex in enumerate(exs):
+        assert ms[1 + 2 * k]["content"].startswith(f"Task: {ex['task_own']}\n")
+        assert ms[2 + 2 * k] == ms_main[2 + 2 * k]  # outputs unchanged
+        named = ex["task_own"].split("order ")[1].rstrip(".")
+        assert named == ex["action"]["arguments"]["order_id"]
+    assert ms[-1] == ms_main[-1]
+    bad = [dict(x) for x in few]
+    bad[2]["task_own"] = bad[2]["task"]
+    assert any("own-order task" in p for p in fewshot_problems(bad))
+
+
+def test_fewshot_order_is_counterbalanced_by_item_and_fixed_within_an_item(built):
+    from wf.tau.prompts import fewshot_reversed
+    few = built["fewshot"]
+    main = [t for t in built["generated"] if t["main_pool"]]
+    for t in main[:50]:
+        assert fewshot_reversed(t["id"]) == (I.h(t["id"], "fewshot-order") % 2 == 1)
+    share = sum(fewshot_reversed(t["id"]) for t in main) / len(main)
+    assert 0.45 < share < 0.55
+    rev = next(t for t in main if fewshot_reversed(t["id"]))
+    fwd = next(t for t in main if not fewshot_reversed(t["id"]))
+    for t, order in ((fwd, few), (rev, few[::-1])):
+        for arm in ("main", "rules_only", "matched"):
+            for c in ALL_CONDITIONS:
+                ms = build_messages(t, c, few, arm=arm, action="witness" if c == "aligned" else "fail")
+                assert [ms[2 + 2 * k]["content"] for k in range(4)] == [ex["output"] for ex in order]
+    first = build_messages(rev, "aligned", few)[1]["content"]
+    assert first.startswith(f"Task: {few[3]['task']}\n")  # the own-order failure comes first when reversed
+
+
+def test_verifier_checks_the_fewshot_order_balance(built, monkeypatch):
+    from wf.tau import verify as V
+    gen = built["generated"]
+    assert V.order_balance_problems(gen, []) == []
+    monkeypatch.setattr(V, "fewshot_reversed", lambda item_id: False)
+    assert any("not about half" in x for x in V.order_balance_problems(gen, []))

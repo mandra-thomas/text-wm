@@ -31,7 +31,10 @@ KIND = {"cancel_pending_order": "cancel", "modify_pending_order_address": "addre
         "exchange_delivered_order_items": "swap", "return_delivered_order_items": "return"}
 NEUTRAL = "The user wants help with their account."
 # Mention-only pair (amendment of 2026-11-20 after review 1): names an order without asking for any write.
+# After review 2 it also names the product whenever the write's task line does, so that the write-request line and
+# the mention line differ only in the request.
 MENTION = "The user has a question about order {o}."
+MENTION_PRODUCT = "The user has a question about the {p} in order {o}."
 REASONS = ("no longer needed", "ordered by mistake")
 ADDRESS_ARGS = ("address1", "address2", "city", "state", "country", "zip")
 NATURAL_MAX_CALLS = 30
@@ -57,6 +60,10 @@ def task_line(tool: str, order_id: str, product: str | None) -> str:
     if "{p}" in template and not product:
         raise ValueError(f"{tool} needs a product")
     return template.format(o=order_id, p=product)
+
+
+def mention_line(order_id: str, product: str | None) -> str:
+    return MENTION_PRODUCT.format(o=order_id, p=product) if product else MENTION.format(o=order_id)
 
 
 def claim_problems(db: dict, user_id: str, tool: str, order_id: str, product: str | None) -> list[str]:
@@ -123,7 +130,8 @@ def fewshot_examples(db: dict) -> list[dict]:
     """Four examples from four distinct users, the first in hash order meeting each need (design §5.3, as amended
     2026-11-20). Balanced 2x2: the task names the call's own order or another order of the same user, and the call
     succeeds or fails. No failure is of a test class. Prompt order: own-order success, other-order failure,
-    other-order success, own-order failure."""
+    other-order success, own-order failure. Each example also records `task_own`, the task line naming its own
+    order (for the own-order examples, its task), used by the ALFWorld-matched arm (amendment after review 2)."""
     users = sorted(db["users"], key=lambda u: h(u, "fewshot"))
     used: set[str] = set()
 
@@ -147,30 +155,32 @@ def fewshot_examples(db: dict) -> list[dict]:
     uid, oid, _ = first(lambda o, others: o["status"] == "pending")
     addr = db["users"][uid]["address"]
     specs.append(("own", "success", uid, oid, "modify_pending_order_address",
-                  {"order_id": oid, **{k: addr[k] for k in ADDRESS_ARGS}}, task_line("modify_pending_order_address", oid, None)))
+                  {"order_id": oid, **{k: addr[k] for k in ADDRESS_ARGS}}, task_line("modify_pending_order_address", oid, None),
+                  task_line("modify_pending_order_address", oid, None)))
     # 2. other order, failure: cancel a pending order with a reason the tool does not accept
     uid, oid, w2 = first(lambda o, others: o["status"] == "pending" and bool(others))
     specs.append(("other", "failure", uid, oid, "cancel_pending_order", {"order_id": oid, "reason": "found a better price"},
-                  task_line("cancel_pending_order", w2, None)))
+                  task_line("cancel_pending_order", w2, None), task_line("cancel_pending_order", oid, None)))
     # 3. other order, success: return the first item of a delivered order to its original payment method
     uid, oid, w2 = first(lambda o, others: o["status"] == "delivered" and bool(others))
     o = db["orders"][oid]
     specs.append(("other", "success", uid, oid, "return_delivered_order_items",
                   {"order_id": oid, "item_ids": [o["items"][0]["item_id"]],
                    "payment_method_id": o["payment_history"][0]["payment_method_id"]},
-                  task_line("return_delivered_order_items", w2, db["orders"][w2]["items"][0]["name"])))
+                  task_line("return_delivered_order_items", w2, db["orders"][w2]["items"][0]["name"]),
+                  task_line("return_delivered_order_items", oid, o["items"][0]["name"])))
     # 4. own order, failure: change the payment method of a pending order to the method it already uses
     uid, oid, _ = first(lambda o, others: o["status"] == "pending" and one_payment(o))
     specs.append(("own", "failure", uid, oid, "modify_pending_order_payment",
                   {"order_id": oid, "payment_method_id": db["orders"][oid]["payment_history"][0]["payment_method_id"]},
-                  task_line("modify_pending_order_payment", oid, None)))
+                  task_line("modify_pending_order_payment", oid, None), task_line("modify_pending_order_payment", oid, None)))
     examples = []
-    for names, outcome, uid, oid, tool, args, task in specs:
+    for names, outcome, uid, oid, tool, args, task, task_own in specs:
         env = fresh_env()
         calls = [{"name": "get_user_details", "arguments": {"user_id": uid}},
                  {"name": "get_order_details", "arguments": {"order_id": oid}}]
         history = [{**c, "output": o} for c, o in zip(calls, env.replay(calls))]
-        examples.append({"user_id": uid, "order_id": oid, "task": task, "names": names, "outcome": outcome,
+        examples.append({"user_id": uid, "order_id": oid, "task": task, "task_own": task_own, "names": names, "outcome": outcome,
                          "history": history, "action": {"name": tool, "arguments": args}, "output": env.call(tool, args)})
     return examples
 
@@ -406,7 +416,8 @@ def build_generated(db: dict, exclude_users: set[str], max_users: int | None = N
                     "aligned_achievable": w_al is not None, "aligned_witness": w_al,
                     "swapped_achievable": w_sw is not None, "swapped_witness": w_sw,
                     "main_pool": w_al is not None, "key": key,
-                    "task_mention_aligned": MENTION.format(o=oid), "task_mention_swapped": MENTION.format(o=w2),
+                    "task_mention_aligned": mention_line(oid, product),
+                    "task_mention_swapped": mention_line(w2, item2["name"] if item2 else None),
                     "target_product_id": item["product_id"] if item else None,
                     **witness_fields(history, w_al, cls),
                 })
@@ -553,7 +564,8 @@ def _natural_item(db: dict, f: dict, log: Counter) -> dict | None:
         "aligned_achievable": w_al is not None, "aligned_witness": w_al,
         "swapped_achievable": (w_sw is not None) if w2 else None, "swapped_witness": w_sw,
         "main_pool": w_al is not None, "key": f["key"],
-        "task_mention_aligned": MENTION.format(o=oid), "task_mention_swapped": MENTION.format(o=w2) if w2 else None,
+        "task_mention_aligned": mention_line(oid, product),
+        "task_mention_swapped": mention_line(w2, item2["name"] if item2 else None) if w2 else None,
         "target_product_id": target_product_id(f["history"], oid, item_id),
         **witness_fields(f["history"], w_al, cls),
         "provenance": {"file": tr["file"], "simulation_id": tr["simulation_id"], "task_id": tr["task_id"],

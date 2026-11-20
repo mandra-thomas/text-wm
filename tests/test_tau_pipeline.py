@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 
 import pytest
 
@@ -30,10 +31,15 @@ def runs(tmp_path_factory):
     mp.undo()
 
 
+def _small_pins():
+    d = P.runs_root() / "tau_build"
+    return {n: P.file_sha(d / n) for n in P.OUTPUT_FILES}
+
+
 def _score_cfg(**kw):
-    """The real scoring config, unpinned: the pinned sha256 values are the full build's, not this small one's. Its
-    rules-only arm (500 items) takes every primary item of this small build."""
-    return {**load_config("tau_score"), "n_shards": 2, "expected_outputs_sha256": None, **kw}
+    """The real scoring config, pinned to this small build (the config's own pins are the full build's). Its
+    exploratory arms (500 items each) take every primary item of this small build."""
+    return {**load_config("tau_score"), "n_shards": 2, "expected_outputs_sha256": _small_pins(), **kw}
 
 
 def test_scoring_configs_pin_every_item_file_alike():
@@ -42,6 +48,9 @@ def test_scoring_configs_pin_every_item_file_alike():
     assert set(pins[0]) == set(P.OUTPUT_FILES) and all(len(v) == 64 for v in pins[0].values())
     full = load_config("tau_score")
     assert full["witness"] and full["mention"] and full["target_check"] and full["rules_arm_items"] == 500
+    assert full["matched_arm_items"] == 500
+    smoke = load_config("tau_score_smoke")
+    assert smoke["add_longest"] and smoke["limit_items"] == 20 and smoke["matched_arm_items"] == smoke["rules_arm_items"] == 20
 
 
 def test_runs_are_registered():
@@ -69,18 +78,18 @@ def test_score_then_analysis(runs, monkeypatch):
     main = [t for t in read_jsonl(runs / "tau_build" / "items.jsonl") if t["main_pool"]]
     recs = [r for i in (0, 1) for r in read_jsonl(runs / "tau_score" / f"shard_{i:02d}_of_02" / "scoring.jsonl")]
     # every main item x model x job, once; shards split by user. Per item: failing call 3 conditions x (first, yn,
-    # full) = 9, mention pair x (first, yn) = 4, manipulation check 2, witness 9; the rules-only arm 6 on every
-    # primary item here (fewer than its 500).
+    # full) = 9, mention pair x (first, yn) = 4, manipulation check 2, witness 9; the rules-only and the matched arm
+    # 6 each on every primary item here (fewer than their 500).
     assert all(t["task_swapped"] and t["aligned_witness"] for t in main)
     n_primary = sum(t["status_matched"] for t in main)
     assert 0 < n_primary < 500
-    assert len(recs) == 2 * (len(main) * (9 + 4 + 2 + 9) + n_primary * 6)
+    assert len(recs) == 2 * (len(main) * (9 + 4 + 2 + 9) + n_primary * 12)
     keys = [P.score_key(r) for r in recs]
     assert len(keys) == len(set(keys)) and all(r["seconds"] >= 0 for r in recs)
     assert {(r["arm"], r["action"], r["readout"]) for r in recs} == {
         ("main", "fail", "first"), ("main", "fail", "yn"), ("main", "fail", "full"), ("main", "fail", "target"),
         ("main", "witness", "first"), ("main", "witness", "yn"), ("main", "witness", "full"),
-        ("rules_only", "fail", "first"), ("rules_only", "fail", "yn")}
+        ("rules_only", "fail", "first"), ("rules_only", "fail", "yn"), ("matched", "fail", "first"), ("matched", "fail", "yn")}
     users = [{r["user_id"] for r in read_jsonl(runs / "tau_score" / f"shard_{i:02d}_of_02" / "scoring.jsonl")} for i in (0, 1)]
     assert not users[0] & users[1]
     assert P.run_tau_analysis(load_config("tau_analysis")) == 0
@@ -100,6 +109,20 @@ def test_score_then_analysis(runs, monkeypatch):
     assert q["primary_controls"]["fail_minus_witness_effect"]["first"]["n_items"] == len(primary)
     assert q["primary_controls"]["write_minus_mention_effect"]["yn"]["n_items"] == len(primary)
     assert q["rules_only_arm"]["first"]["rules_only"]["aligned_minus_swapped"]["n_items"] == len(primary)
+    assert q["matched_arm"]["first"]["matched"]["aligned_minus_swapped"]["n_items"] == len(primary)
+    assert q["matched_arm"]["yn"]["main_minus_matched"]["n_items"] == len(primary)
+    assert set(m["matched_arm_verdicts"]) == set(P.CO_PRIMARY) and all("reading" in v for v in m["matched_arm_verdicts"].values())
+    assert q["primary"]["first_without_fewshot_tool_classes"]["aligned_minus_swapped"]["n_items"] == sum(
+        t["cls"] not in ("wrong_return_pm", "gc_balance") for t in primary)
+    by_cls = q["primary_controls"]["discrimination_by_class"]
+    if any(t["cls"] == "status" for t in primary):
+        assert by_cls["status"]["evidence"] is False and by_cls["status"]["holds"] is None
+    if any(t["cls"] == "unavailable" for t in primary):
+        assert by_cls["unavailable"]["evidence"] is True and by_cls["unavailable"]["n_items"] == sum(
+            t["cls"] == "unavailable" and t["witness_checker"] == "PASS" for t in primary)
+    assert "outcome_table" in m["verdicts"]["per_model"]["qwen3-8b-fewshot"]
+    sens = m["sensitivity_without_fewshot_tool_classes"]
+    assert set(sens) == set(P.CO_PRIMARY) and all("same_category" in x for x in sens.values())
     assert set(q["primary"]["by_class"]) <= {"status", "unavailable"}
     assert q["format"]["yn_mass_median"] > 0 and q["format"]["target_mass_median"] > 0
     assert set(m["verdicts"]["per_model"]) == set(P.CO_PRIMARY)
@@ -213,7 +236,7 @@ def test_scoring_refuses_a_verification_of_other_files(runs):
 
 
 def test_contamination_runs_on_mock(runs):
-    assert P.run_tau_contamination({**load_config("tau_contamination"), "per_kind": 3, "expected_outputs_sha256": None}) == 0
+    assert P.run_tau_contamination({**load_config("tau_contamination"), "per_kind": 3, "expected_outputs_sha256": _small_pins()}) == 0
     m = json.loads((runs / "tau_contamination" / "metrics.json").read_text())
     assert m["n_records"] == 9 and m["models"]["qwen3-8b-fewshot"]["all"]["n"] == 9
     assert m["minus_llama"]["qwen3-8b-fewshot"]["all"]["n"] == 9 and "llama3.1-8b-fewshot" not in m["minus_llama"]
@@ -245,41 +268,125 @@ def test_two_sided_decision_rule(est, ci, p, want):
     assert P.tau_verdict(est, ci, p) == want
 
 
+OK = {"manipulation_check_passed": True, "discrimination_holds": True}
+
+
+def _checks(**kw):
+    return {m: {**OK, **kw} for m in P.CO_PRIMARY}
+
+
 def test_holm_runs_over_both_models_and_one_model_is_never_a_replication():
     good = {"estimate": 1.0, "ci": [0.6, 1.4], "perm_p": 0.004}
-    v = P.verdicts({"qwen3-8b-fewshot": good})
+    v = P.verdicts({"qwen3-8b-fewshot": good}, _checks())
     assert v["per_model"]["qwen3-8b-fewshot"]["holm_p"] == pytest.approx(0.008)
     assert v["per_model"]["llama3.1-8b-fewshot"]["verdict"] == "not scored"
     assert v["overall"] == "one model only (not a replication)"
-    assert P.verdicts({m: good for m in P.CO_PRIMARY})["overall"] == "replicates (both models)"
+    assert P.verdicts({m: good for m in P.CO_PRIMARY}, _checks())["overall"] == "replicates (both models)"
     rev = {"estimate": -1.0, "ci": [-1.4, -0.6], "perm_p": 0.004}
-    assert P.verdicts({"qwen3-8b-fewshot": good, "llama3.1-8b-fewshot": rev})["overall"].startswith("mixed")
-    assert P.verdicts({m: rev for m in P.CO_PRIMARY})["overall"] == "reversed (both models)"
+    assert P.verdicts({"qwen3-8b-fewshot": good, "llama3.1-8b-fewshot": rev}, _checks())["overall"].startswith("mixed")
+    assert P.verdicts({m: rev for m in P.CO_PRIMARY}, _checks())["overall"] == "reversed (both models)"
     small = {"estimate": 0.2, "ci": [0.1, 0.3], "perm_p": 0.001}
-    assert P.verdicts({"qwen3-8b-fewshot": good, "llama3.1-8b-fewshot": small})["overall"] == "one model only (not a replication)"
+    assert P.verdicts({"qwen3-8b-fewshot": good, "llama3.1-8b-fewshot": small}, _checks())["overall"] == \
+        "ALFWorld direction in both models, size met by one (not a replication)"
+
+
+def test_holm_decides_when_both_raw_p_values_are_below_the_bar():
+    """Raw p 0.006 for both models: Holm makes both 0.012, above 0.01, so neither replicates (review 2)."""
+    both = {m: {"estimate": 1.0, "ci": [0.6, 1.4], "perm_p": 0.006} for m in P.CO_PRIMARY}
+    v = P.verdicts(both, _checks())
+    for m in P.CO_PRIMARY:
+        assert v["per_model"][m]["holm_p"] == pytest.approx(0.012)
+        assert v["per_model"][m]["verdict"] == "inconclusive"
+    assert v["overall"] == "inconclusive"
+    assert P.tau_verdict(1.0, [0.6, 1.4], 0.006) == "replicates (ALFWorld direction)"  # unadjusted, it would
 
 
 @pytest.mark.parametrize("v,want", [
     ({"a": "replicates (ALFWorld direction)", "b": "replicates (ALFWorld direction)"}, "replicates (both models)"),
     ({"a": "replicates (ALFWorld direction)", "b": "inconclusive"}, "one model only (not a replication)"),
+    ({"a": "reversed (naming sharpens failure prediction)", "b": "no effect larger than 0.5 nats"}, "one model only (not a replication)"),
     ({"a": "no effect larger than 0.5 nats", "b": "no effect larger than 0.5 nats"}, "no effect larger than 0.5 nats (both models)"),
     ({"a": "no effect larger than 0.5 nats", "b": "inconclusive"}, "inconclusive"),
     ({"a": "small effect, direction positive", "b": "small effect, direction positive"}, "inconclusive"),
+    ({"a": "replicates (ALFWorld direction)", "b": "small effect, direction positive"},
+     "ALFWorld direction in both models, size met by one (not a replication)"),
+    ({"a": "reversed (naming sharpens failure prediction)", "b": "small effect, direction negative"},
+     "reversed direction in both models, size met by one"),
+    ({"a": "replicates (ALFWorld direction)", "b": "small effect, direction negative"}, "mixed (the models disagree in direction)"),
+    ({"a": "reversed (naming sharpens failure prediction)", "b": "small effect, direction positive"}, "mixed (the models disagree in direction)"),
+    ({"a": "replicates (ALFWorld direction)", "b": "reversed (naming sharpens failure prediction)"}, "mixed (the models disagree in direction)"),
+    ({"a": "replicates (ALFWorld direction)", "b": "inconclusive (reversed, but the model is not shown to discriminate failing from working calls)"},
+     "one model only (not a replication)"),
 ])
 def test_joint_verdict_rule(v, want):
     assert P.joint_verdict(v) == want
 
 
-def test_a_null_needs_the_manipulation_check_and_an_effect_is_read_through_discrimination():
-    null = {"estimate": 0.05, "ci": [-0.2, 0.3], "perm_p": 0.6}
-    ok = {m: {"manipulation_check_passed": True, "discrimination_holds": True} for m in P.CO_PRIMARY}
-    bad = {m: {"manipulation_check_passed": False, "discrimination_holds": False} for m in P.CO_PRIMARY}
-    assert P.verdicts({m: null for m in P.CO_PRIMARY}, ok)["overall"] == "no effect larger than 0.5 nats (both models)"
-    v = P.verdicts({m: null for m in P.CO_PRIMARY}, bad)
-    assert v["per_model"]["qwen3-8b-fewshot"]["verdict"].startswith("inconclusive (null") and v["overall"] == "inconclusive"
-    good = {"estimate": 1.0, "ci": [0.6, 1.4], "perm_p": 0.004}
-    assert "not read as the task overriding" in P.verdicts({m: good for m in P.CO_PRIMARY}, bad)["per_model"]["qwen3-8b-fewshot"]["reading"]
-    assert "can see" in P.verdicts({m: good for m in P.CO_PRIMARY}, ok)["per_model"]["qwen3-8b-fewshot"]["reading"]
+NULL = {"estimate": 0.05, "ci": [-0.2, 0.3], "perm_p": 0.6}
+REV = {"estimate": -1.0, "ci": [-1.4, -0.6], "perm_p": 0.004}
+GOOD = {"estimate": 1.0, "ci": [0.6, 1.4], "perm_p": 0.004}
+
+
+@pytest.mark.parametrize("effect,manip,disc,want", [
+    (NULL, True, True, "no effect larger than 0.5 nats"),
+    (NULL, False, True, "inconclusive (null, but the task line is not shown to be read)"),
+    (NULL, True, False, "inconclusive (null, but the model is not shown to discriminate failing from working calls)"),
+    (NULL, False, False, "inconclusive (null, but the task line is not shown to be read)"),
+    (REV, True, True, "reversed (naming sharpens failure prediction)"),
+    (REV, True, False, "inconclusive (reversed, but the model is not shown to discriminate failing from working calls)"),
+    (REV, False, True, "reversed (naming sharpens failure prediction)"),
+    (GOOD, False, False, "replicates (ALFWorld direction)"),
+])
+def test_gates_read_the_right_check_for_each_verdict(effect, manip, disc, want):
+    """A null needs the manipulation check and then discrimination; a reversal needs discrimination; the two flags
+    are set differently so that a gate reading the wrong check is caught (review 2)."""
+    v = P.verdicts({m: effect for m in P.CO_PRIMARY}, _checks(manipulation_check_passed=manip, discrimination_holds=disc))
+    assert v["per_model"]["qwen3-8b-fewshot"]["verdict"] == want
+
+
+def _blk(lo, hi, n=10):
+    return {"estimate": (lo + hi) / 2, "ci": [lo, hi], "n_items": n}
+
+
+@pytest.mark.parametrize("verdict,disc,fmw,wmm,reading,mention", [
+    ("replicates (ALFWorld direction)", True, _blk(0.4, 1.2), _blk(0.3, 0.9), "overrides a visible fact", "adds to naming"),
+    ("replicates (ALFWorld direction)", True, _blk(-0.2, 0.2), _blk(-0.2, 0.2), "general task-consistency bias", "naming the order is enough"),
+    ("replicates (ALFWorld direction)", True, _blk(-1.2, -0.4), None, "general task-consistency bias", None),
+    ("replicates (ALFWorld direction)", True, _blk(-0.3, 0.9), _blk(-0.3, 0.9), "general task-consistency bias", "uncertain"),
+    ("replicates (ALFWorld direction)", False, _blk(0.4, 1.2), None, "not read as the task overriding visible evidence", None),
+    ("small effect, direction positive", True, _blk(0.1, 0.3), None, "below the 0.5-nat size", None),
+    ("reversed (naming sharpens failure prediction)", True, None, None, "sharpens failure prediction", None),
+    ("no effect larger than 0.5 nats", True, None, None, "No leak", None),
+    ("inconclusive", True, None, None, "Inconclusive", None),
+])
+def test_outcome_table_reading(verdict, disc, fmw, wmm, reading, mention):
+    r = P.outcome_reading(verdict, disc, fmw, wmm)
+    assert reading in r["reading"]
+    if mention:
+        assert mention in r["mention"]
+    if fmw is not None:
+        assert r["specificity"].startswith("specific" if fmw["ci"][0] > 0 else "not specific")
+
+
+def test_verdict_reading_uses_the_controls_passed_in():
+    c = _checks(fail_minus_witness=_blk(-0.2, 0.2), write_minus_mention=_blk(0.3, 0.9))
+    v = P.verdicts({m: GOOD for m in P.CO_PRIMARY}, c)["per_model"]["qwen3-8b-fewshot"]
+    assert "general task-consistency bias" in v["reading"] and "adds to naming" in v["outcome_table"]["mention"]
+    bad = P.verdicts({m: GOOD for m in P.CO_PRIMARY}, _checks(discrimination_holds=False))["per_model"]["qwen3-8b-fewshot"]
+    assert "not read as the task overriding" in bad["reading"]
+
+
+@pytest.mark.parametrize("main,matched,want", [
+    ("replicates (ALFWorld direction)", "replicates (ALFWorld direction)", "effect under both prompts"),
+    ("no effect larger than 0.5 nats", "small effect, direction positive", "suppresses the effect here"),
+    ("no effect larger than 0.5 nats", "no effect larger than 0.5 nats", "under either prompt"),
+    ("replicates (ALFWorld direction)", "no effect larger than 0.5 nats", "main prompt only"),
+    ("inconclusive (null, but the task line is not shown to be read)", "replicates (ALFWorld direction)", "inconclusive"),
+])
+def test_matched_arm_reading(main, matched, want):
+    assert want in P.matched_reading(main, matched)
+    mv = P.matched_verdicts({m: GOOD for m in P.CO_PRIMARY}, {m: {"verdict": main} for m in P.CO_PRIMARY})
+    assert mv["qwen3-8b-fewshot"]["verdict"] == "replicates (ALFWorld direction)" and mv["qwen3-8b-fewshot"]["main_verdict"] == main
 
 
 @pytest.mark.parametrize("est,ci,want", [(1.2, [0.3, 2.0], True), (0.9, [0.3, 1.5], False), (1.5, [-0.1, 3.0], False),
@@ -409,3 +516,173 @@ def test_each_job_scores_the_right_call_question_and_candidates(runs):
         assert ms[-1]["content"].endswith("\n" + cue) and ms[-1]["content"].startswith(f"Task: {t['task_' + job[3]]}\n")
         assert f"Next call: {json.dumps({'name': call['name'], 'arguments': call['arguments']})}\n" in ms[-1]["content"]
         assert ms[0]["content"] == system_message(job[0])
+
+
+# ---------------- review 2: direction and condition of every control, arms, hashes, projection, smoke ----------------
+
+
+def _control_scores(n=12):
+    """Constructed scores where every condition, action and readout has its own value, so that a control reading the
+    wrong condition, the wrong action or the wrong direction gives a different number."""
+    items = [{"id": f"i{k}", "user_id": f"u{k}", "cls": "unavailable", "witness_checker": "PASS"} for k in range(n)]
+    L = {("fail", "aligned"): 3.0, ("fail", "swapped"): 1.0, ("fail", "neutral"): -2.0,
+         ("fail", "mention_aligned"): 0.5, ("fail", "mention_swapped"): 0.25,
+         ("witness", "aligned"): 4.0, ("witness", "swapped"): 3.5, ("witness", "neutral"): 2.5}
+    by = {}
+    for k, t in enumerate(items):
+        jitter = 0.01 * k
+        for (act, c), v in L.items():
+            for r in ("first", "yn"):
+                by[(t["id"], "main", act, r, c)] = {"L": v + jitter + (0.1 if r == "yn" else 0.0), "logp_plus": 0.0, "logp_minus": 0.0}
+        by[(t["id"], "main", "fail", "target", "aligned")] = {"L": 2.0 + jitter}
+        by[(t["id"], "main", "fail", "target", "swapped")] = {"L": -1.0 + jitter}
+    return items, by
+
+
+def test_controls_read_the_designed_condition_action_and_direction():
+    items, by = _control_scores()
+    c = P.controls_block(by, items)
+    assert c["manipulation"]["estimate"] == pytest.approx(3.0)  # target: aligned minus swapped, not the reverse
+    assert c["discrimination"]["first"]["estimate"] == pytest.approx(2.5 - (-2.0))  # neutral task, witness minus fail
+    assert c["discrimination"]["yn"]["estimate"] == pytest.approx(4.5)
+    assert c["discrimination_by_class"]["unavailable"]["first"]["estimate"] == pytest.approx(4.5)
+    assert c["fail_minus_witness_effect"]["first"]["estimate"] == pytest.approx((3.0 - 1.0) - (4.0 - 3.5))
+    assert c["write_minus_mention_effect"]["first"]["estimate"] == pytest.approx((3.0 - 1.0) - (0.5 - 0.25))
+    m = c["mention"]["first"]
+    assert m["mention_aligned_minus_mention_swapped"]["estimate"] == pytest.approx(0.25)
+    assert m["mention_aligned_minus_neutral"]["estimate"] == pytest.approx(2.5)
+    assert m["aligned_minus_mention_aligned"]["estimate"] == pytest.approx(2.5)
+    assert c["witness"]["first"]["aligned_minus_swapped"]["estimate"] == pytest.approx(0.5)
+    assert P.check_passes(c["manipulation"]) and P.check_passes(c["discrimination"]["first"])
+
+
+def test_arm_contrast_subtracts_the_named_arm():
+    items, by = _control_scores()
+    for t in items:
+        for c, v in (("aligned", 1.0), ("swapped", 0.75)):
+            by[(t["id"], "matched", "fail", "first", c)] = {"L": v}
+    out = P.contrast_of_effects(by, items, "first", ("fail", "aligned", "swapped"), ("fail", "aligned", "swapped"), arms=("main", "matched"))
+    assert out["estimate"] == pytest.approx(2.0 - 0.25)
+
+
+def test_status_class_is_flagged_without_discrimination_evidence():
+    items, by = _control_scores()
+    status = [{**t, "id": f"s{k}", "cls": "status", "witness_checker": "UNKNOWN"} for k, t in enumerate(items)]
+    for k, t in enumerate(items):
+        for key in [x for x in by if x[0] == t["id"]]:
+            by[(f"s{k}",) + key[1:]] = by[key]
+    c = P.controls_block(by, items + status)
+    assert c["discrimination_by_class"]["status"]["evidence"] is False and "no discrimination evidence" in c["discrimination_by_class"]["status"]["note"]
+    assert c["discrimination_by_class"]["unavailable"]["holds"] is True
+    assert c["discrimination"]["first"]["n_items"] == len(items)  # status witnesses never enter the check
+
+
+def test_exploratory_arms_are_drawn_from_the_whole_set_not_per_shard(runs, monkeypatch):
+    """With 3 items per arm over 2 shards, exactly 3 items get each arm (drawn per shard it would be up to 6)."""
+    cfg = _score_cfg(run_id="tau_score_arms", rules_arm_items=3, matched_arm_items=3)
+    for i in (0, 1):
+        monkeypatch.setenv("WF_SHARD", str(i))
+        assert P.run_tau_score(cfg) == 0
+    recs = [r for i in (0, 1) for r in read_jsonl(runs / "tau_score_arms" / f"shard_{i:02d}_of_02" / "scoring.jsonl")]
+    every = P.scoring_sets(cfg)
+    for arm in ("rules_only", "matched"):
+        got = {r["transition_id"] for r in recs if r["arm"] == arm}
+        assert got == P.arm_ids(every, 3) and len(got) == 3
+    assert P.extra_arm_ids(every, cfg)["rules_only"] == P.extra_arm_ids(every, cfg)["matched"]  # the same items
+
+
+@pytest.mark.parametrize("field", ["history", "action", "failure_reply", "success_twin", "task_aligned", "task_swapped",
+                                   "task_neutral", "task_mention_aligned", "task_mention_swapped", "aligned_witness",
+                                   "witness_output", "witness_failure"])
+def test_item_hash_covers_every_scored_field(runs, field):
+    t = next(x for x in read_jsonl(runs / "tau_build" / "items.jsonl") if x["main_pool"])
+    changed = {**t, field: (t[field] + "x") if isinstance(t[field], str) else {"changed": t[field]}}
+    assert P.item_hash(changed) != P.item_hash(t)
+
+
+def _fake_smoke_report(sec_a, sec_b, sd=1.0):
+    blk = lambda s: {"format": {"seconds_mean_by_readout": {r: s for r in ("first", "yn", "full", "target")}},
+                     "sd_of_differences": {"first": {"n": 20, "sd": sd}}}
+    return {"models": {"qwen3-8b-fewshot": blk(sec_a), "llama3.1-8b-fewshot": blk(sec_b)}}
+
+
+def test_projection_adds_both_models_hours_and_checks_the_limit(runs, monkeypatch):
+    real = P.load_config
+    cfg = _score_cfg()
+    monkeypatch.setattr(P, "load_config", lambda name: cfg if name == "tau_score" else real(name))
+    pr = P.projection("tau_score", _fake_smoke_report(1.0, 3.0), {"build_run": "tau_build"},
+                      {"time_limit_hours": 8, "alfworld_first_token_delta_l": {"llama3.1-8b-fewshot": 0.68}})
+    q, l = pr["models"]["qwen3-8b-fewshot"], pr["models"]["llama3.1-8b-fewshot"]
+    assert l["hours_max_shard"] == pytest.approx(3 * q["hours_max_shard"])
+    assert pr["hours_max_shard_both_models"] == pytest.approx(q["hours_max_shard"] + l["hours_max_shard"])
+    assert pr["fits_time_limit"] is (pr["hours_max_shard_both_models"] <= 8)
+    every = P.scoring_sets(cfg)
+    jobs = sum(len(P.jobs_for(t, cfg, P.extra_arm_ids(every, cfg))) for t in every)
+    assert q["hours_all_shards"] == pytest.approx(jobs / 3600)
+    prim = [t for t in every if P.is_primary(t)]
+    assert l["precision"]["first"]["primary"]["n"] == len(prim)
+    assert l["power_if_alfworld_sized"]["alfworld_first_token_delta_l"] == 0.68 and q["power_if_alfworld_sized"] is None
+
+
+def test_precision_and_power_formulas():
+    items = [{"user_id": u} for u in ["a"] * 3 + ["b"]]  # n = 4, m_eff = (9 + 1) / 4 = 2.5
+    p = P.precision(2.0, items)
+    assert p["m_eff"] == pytest.approx(2.5) and p["se"] == pytest.approx([1.0, 2.0 * math.sqrt(2.5 / 4)])
+    assert p["ci_half_width"][0] == pytest.approx(1.96)
+    w = P.power_at(0.68, 0.1)
+    from statistics import NormalDist
+    assert w["p_estimate_at_least_0.5"] == pytest.approx(NormalDist().cdf(1.8))
+    assert w["p_ci_above_0"] == pytest.approx(NormalDist().cdf(6.8 - 1.96))
+    assert P.power_at(0.0, 0.1)["p_null_verdict_if_true_effect_0"] == pytest.approx(2 * NormalDist().cdf(5 - 1.96) - 1)
+    assert P.power_at(0.0, 1.0)["p_null_verdict_if_true_effect_0"] == 0.0
+
+
+def test_smoke_analysis_reports_format_timing_and_precision_but_no_estimate(runs, monkeypatch):
+    run_id = "tau_score_smoke_r2"
+    cfg = {**load_config("tau_score_smoke"), "run_id": run_id, "expected_outputs_sha256": _small_pins()}
+    assert P.run_tau_score(cfg) == 0
+    real = P.load_config
+    monkeypatch.setattr(P, "load_config", lambda name: cfg if name == run_id else _score_cfg() if name == "tau_score" else real(name))
+    acfg = {**load_config("tau_smoke_analysis"), "run_id": f"{run_id}_analysis", "source": run_id}
+    assert P.run_tau_analysis(acfg) == 0
+    text = (runs / f"{run_id}_analysis" / "metrics.json").read_text()
+    m = json.loads(text)
+    assert "verdicts" not in m and "matched_arm_verdicts" not in m
+    assert '"estimate"' not in text and '"perm_p"' not in text and '"ci"' not in text
+    for blk in m["models"].values():
+        assert set(blk) == {"format", "sd_of_differences"}
+    pr = m["projection"]
+    assert pr["time_limit_hours"] == 8 and "fits_time_limit" in pr
+    assert pr["models"]["llama3.1-8b-fewshot"]["power_if_alfworld_sized"]["alfworld_first_token_delta_l"] == 0.68
+    status = (runs / f"{run_id}_analysis" / "STATUS.md").read_text()
+    assert "ΔL" not in status and "overall" not in status and "projected hours" in status
+
+
+def test_smoke_set_adds_the_longest_items_and_the_limit_matches_the_sbatch(runs):
+    cfg = {**load_config("tau_score_smoke"), "expected_outputs_sha256": _small_pins()}
+    got = P.scoring_sets(cfg)
+    main = [t for t in read_jsonl(runs / "tau_build" / "items.jsonl") if t["main_pool"]]
+    longest = max(main, key=lambda t: (P.prompt_chars(t), t["id"]))
+    assert longest["id"] in {t["id"] for t in got} and 20 <= len(got) <= 22
+    assert len({t["id"] for t in got}) == len(got)
+    sbatch = (P.Path(__file__).resolve().parents[1] / "pace" / "tau_score.sbatch").read_text()
+    hours = int(re.search(r"#SBATCH --time=(\d+):00:00", sbatch).group(1))
+    assert load_config("tau_smoke_analysis")["time_limit_hours"] == hours == 8
+
+
+def test_a_scoring_config_without_pins_is_refused(runs):
+    for pins in (None, {}):
+        ok, why = P.verified(_score_cfg(expected_outputs_sha256=pins))
+        assert not ok and "pins no sha256" in why
+    assert P.verified(_score_cfg())[0]
+
+
+def test_sensitivity_verdict_compares_categories_under_holm():
+    prim = {m: GOOD for m in P.CO_PRIMARY}
+    sens = {m: {"estimate": 0.3, "ci": [0.1, 0.5], "perm_p": 0.001} for m in P.CO_PRIMARY}
+    out = P.sensitivity_verdicts(sens, prim)
+    assert out["qwen3-8b-fewshot"] == {"verdict": "small effect, direction positive",
+                                       "primary_ungated_verdict": "replicates (ALFWorld direction)", "same_category": False}
+    both = P.sensitivity_verdicts({m: {**GOOD, "perm_p": 0.006} for m in P.CO_PRIMARY}, prim)
+    assert both["llama3.1-8b-fewshot"]["verdict"] == "inconclusive"  # Holm within the sensitivity analysis
+    assert P.sensitivity_verdicts(prim, prim)["llama3.1-8b-fewshot"]["same_category"] is True

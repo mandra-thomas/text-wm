@@ -10,9 +10,11 @@ all hold:
 - at the prompt/answer boundary, tokenising prompt and answer separately (as the scorer does) gives the same ids as
   tokenising the concatenated text, for the failing call's and the witness's replies;
 - the rendered prompts of every task line of an item differ only in the task line, for every scored variant
-  (failing call and witness; output cue, yes/no and manipulation question; main and rules-only arm).
-It also reports prompt lengths in tokens (median and maximum) of the output-cue prompts; the yes/no and
-manipulation questions add about 25 tokens.
+  (failing call and witness; output cue, yes/no and manipulation question; main, rules-only and ALFWorld-matched
+  arm), each item with its own few-shot order (reversed for about half of the items; amendment after review 2).
+It also reports prompt lengths in tokens (median and maximum) of the output-cue prompts per arm and action, and the
+longest prompt over every rendered variant (with its item, arm, action, cue and task line) and that prompt plus the
+longer of its two candidate replies.
 """
 from __future__ import annotations
 
@@ -37,6 +39,7 @@ def check_model(name: str, items: list[dict], fewshot: list[dict], cache_dir: st
     gen_tail = render([{"role": "user", "content": "x"}])[-24:]
     bad = {"first_token": [], "boundary": [], "only_task_line": []}
     lengths: dict[str, list[int]] = {}
+    longest, longest_total = [0], [0]
     for it in items:
         actions = ["fail"] + (["witness"] if it.get("aligned_witness") else [])
         conds = [c for c in ALL_CONDITIONS if it.get(f"task_{c}")]
@@ -48,6 +51,12 @@ def check_model(name: str, items: list[dict], fewshot: list[dict], cache_dir: st
             for arm in ARMS:
                 for cue in CUES:
                     rendered = {c: render(build_messages(it, c, fewshot, cue=cue, action=action, arm=arm)) for c in conds}
+                    for c in conds:
+                        n_tok = len(enc(rendered[c]))
+                        if n_tok > longest[0]:
+                            longest[:] = [n_tok, it["id"], arm, action, cue, c]
+                        if n_tok + max(len(p_ids), len(m_ids)) > longest_total[0]:
+                            longest_total[:] = [n_tok + max(len(p_ids), len(m_ids)), it["id"], arm, action, cue, c]
                     base = rendered["aligned"].replace(f"Task: {it['task_aligned']}\n", "Task: <X>\n", 1)
                     for c in conds[1:]:
                         if rendered[c].replace(f"Task: {it[f'task_{c}']}\n", "Task: <X>\n", 1) != base:
@@ -66,6 +75,8 @@ def check_model(name: str, items: list[dict], fewshot: list[dict], cache_dir: st
             "generation_prompt_tail": gen_tail, "items": len(items),
             "problems": {k: len(v) for k, v in bad.items()}, "examples": {k: v[:5] for k, v in bad.items()},
             "prompt_tokens": {k: {"median": statistics.median(v), "max": max(v), "n": len(v)} for k, v in sorted(lengths.items())},
+            "longest_prompt": longest, "longest_prompt_plus_reply": longest_total,
+            "model_max_length": getattr(tok, "model_max_length", None),
             "passed": passed}
 
 

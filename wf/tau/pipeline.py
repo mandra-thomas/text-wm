@@ -25,7 +25,7 @@ from wf.analysis.stats import cluster_bootstrap, holm, pair_permutation
 from wf.runs import _finished, _init_run, load_config
 from wf.scoring.logodds import LogoddsScorer
 from wf.tau import items as I
-from wf.tau.prompts import CONDITIONS, MENTION_CONDITIONS, build_messages
+from wf.tau.prompts import CONDITIONS, MENTION_CONDITIONS, build_messages, render_history
 from wf.tau.retail import check_vendor, pristine_sha256, vendor_manifest
 from wf.tau.verify import fresh_process_sample, sample_ids, verify_sets
 from wf.util import append_jsonl, file_sha, read_jsonl, require_filed, runs_root, write_json, write_status
@@ -172,16 +172,22 @@ def verified(cfg: dict) -> tuple[bool, str]:
     if rep.get("files") != now:
         return False, "verify.json does not cover the current item files"
     pins = cfg.get("expected_outputs_sha256")
-    if pins is not None:
-        for name in OUTPUT_FILES:
-            if pins.get(name) is None:
-                return False, f"no pinned sha256 for {name}"
-            if now.get(name) != pins[name]:
-                return False, f"{name} sha256 {now.get(name)} differs from the pinned {pins[name]}"
+    if not pins:  # a scoring config without pins is an error (amendment after review 2), never a pass
+        return False, "the scoring config pins no sha256 values (expected_outputs_sha256)"
+    for name in OUTPUT_FILES:
+        if pins.get(name) is None:
+            return False, f"no pinned sha256 for {name}"
+        if now.get(name) != pins[name]:
+            return False, f"{name} sha256 {now.get(name)} differs from the pinned {pins[name]}"
     return True, ""
 
 
 # ---------------- scoring ----------------
+
+
+def prompt_chars(t: dict) -> int:
+    """Length of the item's rendered history and call, in characters (a tokenizer-free proxy for prompt length)."""
+    return len(render_history(t["history"])) + len(json.dumps(t["action"]))
 
 
 def scoring_sets(cfg: dict) -> list[dict]:
@@ -193,6 +199,14 @@ def scoring_sets(cfg: dict) -> list[dict]:
         out += nat
     if cfg.get("limit_items"):
         out = sorted(out, key=lambda t: I.h(t["id"], "smoke"))[: int(cfg["limit_items"])]
+        if cfg.get("add_longest"):  # the smoke run (review 2): also the longest generated main item and natural item
+            ids = {t["id"] for t in out}
+            for pool in ([t for t in gen if t["main_pool"]], nat):
+                if pool:
+                    longest = max(pool, key=lambda t: (prompt_chars(t), t["id"]))
+                    if longest["id"] not in ids:
+                        out.append(longest)
+                        ids.add(longest["id"])
     return out
 
 
@@ -202,9 +216,18 @@ def is_primary(t: dict) -> bool:
     return t["source"] == "generated" and t["main_pool"] and t["status_matched"]
 
 
-def rules_arm_ids(items: list[dict], n: int) -> set[str]:
-    """The exploratory rules-only arm: the first n primary items of the scoring set in hash order."""
+EXTRA_ARMS = {"rules_only": "rules_arm_items", "matched": "matched_arm_items"}  # arm -> config key of its size
+
+
+def arm_ids(items: list[dict], n: int) -> set[str]:
+    """An exploratory arm's items: the first n primary items of the whole scoring set in hash(id, "rules") order.
+    The rules-only and the ALFWorld-matched arms both draw this way, so with the same n they hold the same items."""
     return set(sorted((t["id"] for t in items if is_primary(t)), key=lambda i: I.h(i, "rules"))[: max(0, int(n))])
+
+
+def extra_arm_ids(items: list[dict], cfg: dict) -> dict[str, set[str]]:
+    """Each exploratory arm's items, drawn from the whole scoring set (never per shard)."""
+    return {arm: arm_ids(items, cfg.get(key, 0)) for arm, key in EXTRA_ARMS.items()}
 
 
 def shard_by_user(items: list[dict], i: int, n: int) -> list[dict]:
@@ -219,7 +242,7 @@ def item_hash(t: dict) -> str:
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def jobs_for(t: dict, cfg: dict, rules_ids: set[str] = frozenset()) -> list[tuple[str, str, str, str]]:
+def jobs_for(t: dict, cfg: dict, arms: dict[str, set[str]] | None = None) -> list[tuple[str, str, str, str]]:
     """Every scored (arm, action, readout, condition) of one item (design §6.0, amended 2026-11-20)."""
     readouts = tuple(cfg.get("readouts", READOUTS))
     conds = [c for c in CONDITIONS if c != "swapped" or t.get("task_swapped")]
@@ -231,8 +254,9 @@ def jobs_for(t: dict, cfg: dict, rules_ids: set[str] = frozenset()) -> list[tupl
         jobs += [("main", "fail", "target", c) for c in conds if c != "neutral"]
     if cfg.get("witness", True) and t.get("aligned_witness"):
         jobs += [("main", "witness", r, c) for r in readouts for c in conds]
-    if t["id"] in rules_ids:
-        jobs += [("rules_only", "fail", r, c) for r in single for c in conds]
+    for arm in EXTRA_ARMS:
+        if t["id"] in (arms or {}).get(arm, ()):
+            jobs += [(arm, "fail", r, c) for r in single for c in conds]
     return jobs
 
 
@@ -281,7 +305,7 @@ def run_tau_score(cfg: dict) -> int:
     d = _init_run(run_id, cfg, inputs=tuple(_build_dir(cfg) / name for name in OUTPUT_FILES if (_build_dir(cfg) / name).exists()))
     _, _, fewshot = load_built(cfg)
     every = scoring_sets(cfg)
-    rules_ids = rules_arm_ids(every, cfg.get("rules_arm_items", 0))
+    arms = extra_arm_ids(every, cfg)
     items = shard_by_user(every, i, n)
     hashes = {t["id"]: item_hash(t) for t in items}
     saved = read_jsonl(d / "scoring.jsonl") if cfg.get("resume") else []
@@ -289,7 +313,7 @@ def run_tau_score(cfg: dict) -> int:
         raise SystemExit(f"{run_id}: saved records belong to different items; rerun without --resume.")
     done = {score_key(s) for s in saved}
     for tag in cfg.get("models", CO_PRIMARY):
-        todo = [(t, job) for t in items for job in jobs_for(t, cfg, rules_ids) if (tag, t["id"], *job) not in done]
+        todo = [(t, job) for t in items for job in jobs_for(t, cfg, arms) if (tag, t["id"], *job) not in done]
         if not todo:
             continue
         scorer = LogoddsScorer(MODELS[tag], model_tag=tag)
@@ -363,13 +387,14 @@ def paired(by: dict, items: list[dict], readout: str, a: str, b: str, *, action:
     return out
 
 
-def contrast_of_effects(by: dict, items: list[dict], readout: str, first: tuple[str, str, str], second: tuple[str, str, str]) -> dict[str, Any]:
-    """Per item, (aligned - swapped effect of `first`) minus (that of `second`), each given as (action, condition a,
-    condition b); user-clustered CI and sign-flip p. Used for failing call against witness, and write request
-    against mention."""
+def contrast_of_effects(by: dict, items: list[dict], readout: str, first: tuple[str, str, str], second: tuple[str, str, str],
+                        arms: tuple[str, str] = ("main", "main")) -> dict[str, Any]:
+    """Per item, (the a - b effect of `first`) minus (that of `second`), each given as (action, condition a,
+    condition b) and scored in `arms` (default both main); user-clustered CI and sign-flip p. Used for failing call
+    against witness, write request against mention, and main arm against the ALFWorld-matched arm."""
     diffs, users = [], []
     for t in items:
-        keys = [(t["id"], "main", act, readout, c) for act, a, b in (first, second) for c in (a, b)]
+        keys = [(t["id"], arm, act, readout, c) for arm, (act, a, b) in zip(arms, (first, second)) for c in (a, b)]
         if not all(k in by for k in keys):
             continue
         L = [by[k]["L"] for k in keys]
@@ -416,13 +441,19 @@ def check_passes(block: dict | None) -> bool:
     return est == est and ci[0] == ci[0] and est >= CHECK_MIN_NATS and ci[0] > 0
 
 
+POSITIVE = ("replicates", "small effect, direction positive")
+NEGATIVE = ("reversed", "small effect, direction negative")
+
+
 def joint_verdict(per_model: dict[str, str]) -> str:
-    """Both co-primary models must agree for a joint claim (amendment of 2026-11-20)."""
+    """Both co-primary models must agree for a joint claim (amendments of 2026-11-20 after reviews 1 and 2)."""
     v = list(per_model.values())
     rep = sum(x.startswith("replicates") for x in v)
     rev = sum(x.startswith("reversed") for x in v)
+    pos = sum(x.startswith("small effect, direction positive") for x in v)
+    neg = sum(x.startswith("small effect, direction negative") for x in v)
     null = sum(x.startswith("no effect") for x in v)
-    if rep and rev:
+    if (rep and (rev or neg)) or (rev and pos):
         return "mixed (the models disagree in direction)"
     if rep == len(v):
         return "replicates (both models)"
@@ -430,15 +461,63 @@ def joint_verdict(per_model: dict[str, str]) -> str:
         return "reversed (both models)"
     if null == len(v):
         return "no effect larger than 0.5 nats (both models)"
+    if rep and rep + pos == len(v):
+        return "ALFWorld direction in both models, size met by one (not a replication)"
+    if rev and rev + neg == len(v):
+        return "reversed direction in both models, size met by one"
     if rep or rev:
         return "one model only (not a replication)"
     return "inconclusive"
 
 
+def _ci_above(block: dict | None) -> bool:
+    return bool(block) and block.get("n_items", 0) > 0 and block["ci"][0] > 0
+
+
+def _ci_inside(block: dict | None) -> bool:
+    return bool(block) and block.get("n_items", 0) > 0 and -SUPPORT < block["ci"][0] and block["ci"][1] < SUPPORT
+
+
+def outcome_reading(verdict: str, disc: bool | None, fail_minus_witness: dict | None = None,
+                    write_minus_mention: dict | None = None) -> dict[str, Any]:
+    """The outcome table of design A9 (as amended after review 2), applied to one model's primary results:
+    discrimination, specificity to failing calls (fail minus witness) and the mention pair (write minus mention)."""
+    out: dict[str, Any] = {"discrimination_holds": disc}
+    if fail_minus_witness is not None:
+        out["specificity"] = ("specific to failing calls (fail minus witness above 0)" if _ci_above(fail_minus_witness)
+                              else "not specific to failing calls (fail minus witness about 0, negative or uncertain)")
+    if write_minus_mention is not None:
+        out["mention"] = ("the request to act adds to naming the order (write minus mention above 0)" if _ci_above(write_minus_mention)
+                          else "naming the order is enough; the request to act adds nothing (write minus mention inside ±0.5)"
+                          if _ci_inside(write_minus_mention) else "uncertain")
+    if verdict.startswith(POSITIVE):
+        size = "" if verdict.startswith("replicates") else " (below the 0.5-nat size)"
+        if not disc:
+            out["reading"] = ("The task shifts predictions, but the model is not shown to use the visible record: not read "
+                              "as the task overriding visible evidence" + size)
+        elif _ci_above(fail_minus_witness):
+            out["reading"] = ("The task overrides a visible fact about the named object, more for failing calls than "
+                              "for working ones: the ALFWorld effect in its stronger form" + size)
+        else:
+            out["reading"] = ("A general task-consistency bias: naming the order raises the success belief of calls on it "
+                              "whether they fail or not; reported as goal leakage, not as an override specific to "
+                              "failures" + size)
+    elif verdict.startswith(NEGATIVE):
+        size = "" if verdict.startswith("reversed") else " (below the 0.5-nat size)"
+        out["reading"] = ("Naming the object sharpens failure prediction (attention to its record); the ALFWorld effect "
+                          "would then need the deciding fact to lie outside the named object" + size if disc else
+                          "A shift toward failure, but the model is not shown to use the visible record: inconclusive" + size)
+    elif verdict.startswith("no effect"):
+        out["reading"] = "No leak of more than 0.5 nats, with the task line read and the visible record used"
+    else:
+        out["reading"] = "Inconclusive: " + verdict
+    return out
+
+
 def verdicts(primary: dict[str, dict], checks: dict[str, dict] | None = None) -> dict[str, Any]:
-    """Per-model verdicts on the primary contrast, Holm over the two models, gated by the manipulation check (a
-    null needs the task line to be read) and read through the discrimination check (an effect without
-    discrimination is not read as the task overriding visible evidence)."""
+    """Per-model verdicts on the primary contrast, Holm over the two models. A null needs the manipulation check (the
+    task line is read) and discrimination (the visible record is used); a reversal needs discrimination; every
+    non-null effect is read through the outcome table (outcome_reading)."""
     checks = checks or {}
     adjusted = holm({m: primary[m]["perm_p"] if m in primary else 1.0 for m in CO_PRIMARY})
     per = {}
@@ -451,15 +530,57 @@ def verdicts(primary: dict[str, dict], checks: dict[str, dict] | None = None) ->
         manip, disc = c.get("manipulation_check_passed"), c.get("discrimination_holds")
         if v.startswith("no effect") and not manip:
             v = "inconclusive (null, but the task line is not shown to be read)"
-        if v.startswith(("replicates", "reversed", "small effect")):
-            reading = ("the task shifts predictions about a call whose failure the model can see" if disc else
-                       "the task shifts predictions, but the model does not discriminate failing from working calls: "
-                       "not read as the task overriding visible evidence")
-        else:
-            reading = None
+        elif v.startswith(("no effect", "reversed")) and not disc:
+            v = (f"inconclusive ({'null' if v.startswith('no effect') else 'reversed'}, but the model is not shown to "
+                 "discriminate failing from working calls)")
+        reading = outcome_reading(v, disc, c.get("fail_minus_witness"), c.get("write_minus_mention"))
         per[m] = {"verdict": v, "holm_p": adjusted[m], "manipulation_check_passed": manip, "discrimination_holds": disc,
-                  "reading": reading}
+                  "reading": reading["reading"], "outcome_table": reading}
     return {"per_model": per, "overall": joint_verdict({m: x["verdict"] for m, x in per.items()})}
+
+
+def sensitivity_verdicts(sens: dict[str, dict], primary: dict[str, dict]) -> dict[str, Any]:
+    """The few-shot tool sensitivity analysis (review 2): the §6.3 rule (Holm over the two models) on the primary
+    population without the classes whose tool is a few-shot example's, beside the primary's ungated verdict. A
+    different category is reported as the primary result being sensitive to few-shot tool matching."""
+    adj_s = holm({m: sens[m]["perm_p"] if m in sens else 1.0 for m in CO_PRIMARY})
+    adj_p = holm({m: primary[m]["perm_p"] if m in primary else 1.0 for m in CO_PRIMARY})
+    out = {}
+    for m in CO_PRIMARY:
+        if m in sens and m in primary:
+            v = tau_verdict(sens[m]["estimate"], sens[m]["ci"], adj_s[m])
+            p = tau_verdict(primary[m]["estimate"], primary[m]["ci"], adj_p[m])
+            out[m] = {"verdict": v, "primary_ungated_verdict": p, "same_category": v == p}
+    return out
+
+
+def matched_reading(main_verdict: str, matched_verdict: str) -> str:
+    """The ALFWorld-matched arm's prestated reading (amendment after review 2), from the confirmatory main-arm verdict
+    and the matched arm's own verdict under the same rule."""
+    eff = lambda v: v.startswith(POSITIVE)
+    null = lambda v: v.startswith("no effect")
+    if eff(main_verdict) and eff(matched_verdict):
+        return "effect under both prompts: stating that the backend does not see the task does not remove it"
+    if null(main_verdict) and eff(matched_verdict):
+        return ("null under the main prompt but an effect under the matched prompt: an explicit statement that the backend "
+                "does not see the task (with the other-order few-shot examples) suppresses the effect here")
+    if null(main_verdict) and null(matched_verdict):
+        return "no effect larger than 0.5 nats under either prompt: the null does not rest on the debiasing statement"
+    if eff(main_verdict) and null(matched_verdict):
+        return "effect under the main prompt only: not predicted; reported, not interpreted"
+    return "inconclusive"
+
+
+def matched_verdicts(matched: dict[str, dict], main_per_model: dict[str, dict]) -> dict[str, Any]:
+    adjusted = holm({m: matched[m]["perm_p"] if m in matched else 1.0 for m in CO_PRIMARY})
+    out = {}
+    for m in CO_PRIMARY:
+        if m not in matched:
+            continue
+        v = tau_verdict(matched[m]["estimate"], matched[m]["ci"], adjusted[m])
+        main_v = main_per_model.get(m, {}).get("verdict", "not scored")
+        out[m] = {"verdict": v, "holm_p": adjusted[m], "main_verdict": main_v, "reading": matched_reading(main_v, v)}
+    return out
 
 
 def flip_shares(by: dict, items: list[dict]) -> dict[str, float]:
@@ -488,6 +609,9 @@ def _agreement(by: dict, items: list[dict]) -> dict[str, Any]:
 
 PRESPECIFIED_CLASSES = ("status", "unavailable")
 DESCRIPTIVE_CLASSES = ("wrong_return_pm", "gc_balance")
+# Classes whose failing tool is the tool of a few-shot example (return: example 3; payment change: example 4), so the
+# example's (task-shape, outcome) cell can be matched by tool; the sensitivity analysis of review 2 leaves them out.
+FEWSHOT_TOOL_CLASSES = ("wrong_return_pm", "gc_balance")
 KEEPS_STATUS = ("modify_pending_order_address", "modify_pending_order_payment")
 
 
@@ -505,6 +629,7 @@ def population_block(by: dict, pop: list[dict]) -> dict[str, Any]:
     out["first_probability_shift"] = paired(by, pop, "first", "aligned", "swapped", scale="prob")
     out["first_product_clustered"] = paired(by, pop, "first", "aligned", "swapped", cluster="product")
     out["first_flips"] = flip_shares(by, pop)
+    out["first_without_fewshot_tool_classes"] = effects(by, [t for t in pop if t["cls"] not in FEWSHOT_TOOL_CLASSES], "first")
     out["by_class"] = {k: effects(by, v, "first") for k, v in sorted(_group(pop, lambda t: t["cls"]).items())
                        if k in PRESPECIFIED_CLASSES}
     out["by_class_descriptive"] = {k: effects(by, v, "first", inference=False) for k, v in sorted(_group(pop, lambda t: t["cls"]).items())
@@ -512,17 +637,34 @@ def population_block(by: dict, pop: list[dict]) -> dict[str, Any]:
     return out
 
 
+def discrimination(by: dict, items: list[dict], readout: str) -> dict[str, Any]:
+    """The witness's score minus the failing call's, both under the neutral task, paired by item."""
+    return paired(by, items, readout, "neutral", "neutral", action="witness", action_b="fail")
+
+
 def controls_block(by: dict, pop: list[dict]) -> dict[str, Any]:
     """Success controls, the mention-only pair and the manipulation check, on one population."""
     out: dict[str, Any] = {}
     out["witness"] = {r: effects(by, pop, r, action="witness") for r in ("first", "yn", "full", "full_norm")}
-    # discrimination: the witness's score minus the failing call's, both under the neutral task. The check is read on
-    # the items whose witness success the text-only checker can also see (PASS; every class but status, whose
-    # witness needs a variant's availability that the status items' histories do not show); all items are reported.
+    # discrimination is read on the items whose witness success the text-only checker can also see (PASS; every class
+    # but status, whose witness needs a variant's availability that the status items' histories do not show); all
+    # items are reported, and per class (review 2): status has no discrimination evidence and is flagged.
     determined = [t for t in pop if t.get("witness_checker") == "PASS"]
-    out["discrimination"] = {r: paired(by, determined, r, "neutral", "neutral", action="witness", action_b="fail") for r in ("first", "yn")}
-    out["discrimination_all_witnesses"] = {r: paired(by, pop, r, "neutral", "neutral", action="witness", action_b="fail")
-                                           for r in ("first", "yn")}
+    out["discrimination"] = {r: discrimination(by, determined, r) for r in ("first", "yn")}
+    out["discrimination_all_witnesses"] = {r: discrimination(by, pop, r) for r in ("first", "yn")}
+    out["discrimination_by_class"] = {}
+    for k, v in sorted(_group(pop, lambda t: t["cls"]).items()):
+        if k not in PRESPECIFIED_CLASSES:
+            continue
+        det = [t for t in v if t.get("witness_checker") == "PASS"]
+        if not det:
+            out["discrimination_by_class"][k] = {
+                "evidence": False, "n_items": 0, "holds": None,
+                "note": ("no witness of this class is determined by its history (checker UNKNOWN), so there is no "
+                         "discrimination evidence: a null or a reversal in this class is not read as use of the record")}
+            continue
+        blk = discrimination(by, det, "first")
+        out["discrimination_by_class"][k] = {"evidence": True, "n_items": blk["n_items"], "first": blk, "holds": check_passes(blk)}
     out["mention"] = {r: {"mention_aligned_minus_mention_swapped": paired(by, pop, r, "mention_aligned", "mention_swapped"),
                           "mention_aligned_minus_neutral": paired(by, pop, r, "mention_aligned", "neutral"),
                           "aligned_minus_mention_aligned": paired(by, pop, r, "aligned", "mention_aligned")}
@@ -538,7 +680,7 @@ def controls_block(by: dict, pop: list[dict]) -> dict[str, Any]:
 
 def format_block(by: dict) -> dict[str, Any]:
     """Format checks (design §6.4 and the smoke run): two-way probability mass of each single-token readout, and
-    the seconds per scored job by readout."""
+    the seconds per scored job by readout (median and mean; the projection uses the means)."""
     out: dict[str, Any] = {}
     for r in ("first", "yn", "target"):
         masses = [math.exp(x["logp_plus"]) + math.exp(x["logp_minus"]) for k, x in by.items() if k[3] == r]
@@ -549,12 +691,23 @@ def format_block(by: dict) -> dict[str, Any]:
         if x.get("seconds") is not None:
             secs[k[3]].append(x["seconds"])
     out["seconds_median_by_readout"] = {r: statistics.median(v) for r, v in sorted(secs.items())}
+    out["seconds_mean_by_readout"] = {r: sum(v) / len(v) for r, v in sorted(secs.items())}
     out["seconds_total"] = sum(sum(v) for v in secs.values())
     return out
 
 
+def arm_block(by: dict, items: list[dict], arm: str) -> dict[str, Any] | None:
+    """An exploratory arm beside the main arm on the same items, and per item main minus that arm's effect."""
+    if not items:
+        return None
+    return {r: {arm: effects(by, items, r, arm=arm), "main_same_items": effects(by, items, r),
+                f"main_minus_{arm}": contrast_of_effects(by, items, r, ("fail", "aligned", "swapped"), ("fail", "aligned", "swapped"),
+                                                         arms=("main", arm))}
+            for r in ("first", "yn")}
+
+
 def model_block(by: dict, primary: list[dict], main: list[dict], natural: list[dict], unach: list[dict],
-                rules: list[dict]) -> dict[str, Any]:
+                arm_items: dict[str, list[dict]]) -> dict[str, Any]:
     out: dict[str, Any] = {"primary": population_block(by, primary), "primary_controls": controls_block(by, primary),
                            "main_pool": population_block(by, main), "main_pool_controls": controls_block(by, main)}
     out["main_pool"]["by_swapped_achievable"] = {str(k): effects(by, v, "first") for k, v in
@@ -567,11 +720,21 @@ def model_block(by: dict, primary: list[dict], main: list[dict], natural: list[d
     out["unachievable"] = ({"all": effects(by, unach, "first"),
                             "without_incoherent_twins": effects(by, [t for t in unach if not twin_status_incoherent(t)], "first")}
                            if unach else None)
-    out["rules_only_arm"] = ({r: {"rules_only": effects(by, rules, r, arm="rules_only"), "main_same_items": effects(by, rules, r)}
-                              for r in ("first", "yn")} if rules else None)
+    out["rules_only_arm"] = arm_block(by, arm_items.get("rules_only", []), "rules_only")
+    out["matched_arm"] = arm_block(by, arm_items.get("matched", []), "matched")
     out["format"] = format_block(by)
     out["first_vs_full_agreement"] = _agreement(by, main)
     return out
+
+
+def sd_of_differences(by: dict, items: list[dict], readout: str) -> dict[str, Any]:
+    """Standard deviation of the failing call's per-item aligned - swapped difference (no mean is reported)."""
+    diffs = []
+    for t in items:
+        a, b = by.get((t["id"], "main", "fail", readout, "aligned")), by.get((t["id"], "main", "fail", readout, "swapped"))
+        if a and b:
+            diffs.append(value(a, readout) - value(b, readout))
+    return {"n": len(diffs), "sd": statistics.stdev(diffs) if len(diffs) > 1 else float("nan")}
 
 
 def run_tau_analysis(cfg: dict) -> int:
@@ -586,68 +749,137 @@ def run_tau_analysis(cfg: dict) -> int:
         return 1
     scfg = {**load_config(cfg["source"]), "build_run": cfg.get("build_run", "tau_build")}
     items = scoring_sets(scfg)  # exactly the scoring run's item set
-    rules_ids = rules_arm_ids(items, scfg.get("rules_arm_items", 0))
+    arms = extra_arm_ids(items, scfg)
     primary_items = [t for t in items if is_primary(t)]
     main = [t for t in items if t["source"] == "generated" and t["main_pool"]]
     natural = [t for t in items if t["source"] == "natural"]
     unach = [t for t in items if t["source"] == "generated" and not t["main_pool"]]
-    rules = [t for t in items if t["id"] in rules_ids]
+    arm_items = {arm: [t for t in items if t["id"] in ids] for arm, ids in arms.items()}
     scores = [x for p in folders for x in read_jsonl(p / "scoring.jsonl")]
     hashes = {t["id"]: item_hash(t) for t in items}
     stale = sum(1 for s in scores if hashes.get(s["transition_id"]) != s.get("item_hash"))
     models = tuple(cfg.get("models", CO_PRIMARY))
-    wanted = {(m, t["id"], *job) for m in models for t in items for job in jobs_for(t, scfg, rules_ids)}
+    wanted = {(m, t["id"], *job) for m in models for t in items for job in jobs_for(t, scfg, arms)}
     got = {score_key(s) for s in scores}
     missing = len(wanted - got)
+    ok = missing == 0 and stale == 0
     report: dict[str, Any] = {"items": {"primary": len(primary_items), "primary_users": len({t["user_id"] for t in primary_items}),
                                         "main": len(main), "main_users": len({t["user_id"] for t in main}),
-                                        "natural": len(natural), "unachievable": len(unach), "rules_only_arm": len(rules)},
+                                        "natural": len(natural), "unachievable": len(unach),
+                                        **{f"{arm}_arm": len(v) for arm, v in arm_items.items()}},
                               "missing_scores": missing, "stale_scores": stale, "models": {}}
     tokens = {}
     for p in folders:
         for f in p.glob("tokens_*.json"):
             tokens.setdefault(f.stem[len("tokens_"):], json.loads(f.read_text(encoding="utf-8")))
     report["token_checks"] = tokens
-    primary, checks = {}, {}
+    by_model = {m: {(s["transition_id"], s.get("arm", "main"), s.get("action", "fail"), s["readout"], s["condition"]): s
+                    for s in scores if s["model"] == m} for m in models}
+    if cfg.get("project_to"):
+        # the smoke run (review 2): format, timing and precision only; no estimate, no verdict is computed or printed
+        for m in models:
+            report["models"][m] = {"format": format_block(by_model[m]),
+                                   "sd_of_differences": {r: sd_of_differences(by_model[m], main, r) for r in ("first", "yn", "full")}}
+        report["projection"] = projection(cfg["project_to"], report, scfg, cfg)
+        write_json(d / "metrics.json", report)
+        write_run_report(run_id, "τ-bench retail smoke run: format, timing and precision only (no estimates)", report)
+        pr = report["projection"]
+        write_status(run_id, f"items={report['items']} missing={missing} stale={stale}\nprojected hours per shard, both models: "
+                             f"{pr['hours_max_shard_both_models']:.2f} (limit {pr['time_limit_hours']}; fits: {pr['fits_time_limit']})",
+                     ok=False, reported="τ-bench smoke: format and timing" if ok else None)
+        return 0 if ok else 1
+    primary, checks, matched = {}, {}, {}
     for m in models:
-        by = {(s["transition_id"], s.get("arm", "main"), s.get("action", "fail"), s["readout"], s["condition"]): s
-              for s in scores if s["model"] == m}
-        blk = model_block(by, primary_items, main, natural, unach, rules)
+        by = by_model[m]
+        blk = model_block(by, primary_items, main, natural, unach, arm_items)
         report["models"][m] = blk
         primary[m] = blk["primary"]["first"]["aligned_minus_swapped"]
-        checks[m] = {"manipulation_check_passed": check_passes(blk["primary_controls"]["manipulation"]),
-                     "discrimination_holds": check_passes(blk["primary_controls"]["discrimination"]["first"])}
+        ctl = blk["primary_controls"]
+        checks[m] = {"manipulation_check_passed": check_passes(ctl["manipulation"]),
+                     "discrimination_holds": check_passes(ctl["discrimination"]["first"]),
+                     "fail_minus_witness": ctl["fail_minus_witness_effect"]["first"],
+                     "write_minus_mention": ctl["write_minus_mention_effect"]["first"]}
+        if blk["matched_arm"]:
+            matched[m] = blk["matched_arm"]["first"]["matched"]["aligned_minus_swapped"]
     report["verdicts"] = verdicts(primary, checks)
-    if cfg.get("project_to"):
-        report["projection"] = projection(cfg["project_to"], report, scfg)
+    report["sensitivity_without_fewshot_tool_classes"] = sensitivity_verdicts(
+        {m: report["models"][m]["primary"]["first_without_fewshot_tool_classes"]["aligned_minus_swapped"] for m in models}, primary)
+    report["matched_arm_verdicts"] = matched_verdicts(matched, report["verdicts"]["per_model"]) if matched else None
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "τ-bench retail: does the task override a visible fact about the named object?", report)
     lines = [f"{m}: ΔL1 {primary[m]['estimate']:.3f} CI {primary[m]['ci']} -> {report['verdicts']['per_model'][m]['verdict']}"
              for m in models]
-    ok = missing == 0 and stale == 0
     write_status(run_id, f"items={report['items']} missing={missing} stale={stale}\n" + "\n".join(lines)
                  + f"\noverall: {report['verdicts']['overall']}", ok=False,
                  reported="τ-bench verdict" if ok else None)
     return 0 if ok else 1
 
 
-def projection(target_run: str, report: dict, smoke_cfg: dict) -> dict[str, Any]:
-    """From a smoke run's seconds per job, the GPU hours per shard of the full scoring run (one model after the
-    other, as run_tau_score does), so the sbatch time limit can be checked before the full run."""
+def m_eff(items: list[dict]) -> float:
+    """Effective cluster size, sum over users of n_u^2 divided by n: the design effect when items of a user are
+    perfectly correlated."""
+    n_u = defaultdict(int)
+    for t in items:
+        n_u[t["user_id"]] += 1
+    n = sum(n_u.values())
+    return sum(v * v for v in n_u.values()) / n if n else float("nan")
+
+
+def precision(sd: float, items: list[dict]) -> dict[str, Any]:
+    """Projected standard error and 95% CI half-width of a mean paired difference over `items`, between no
+    within-user correlation (SE = sd / sqrt(n)) and perfect within-user correlation (SE = sd * sqrt(m_eff / n))."""
+    n, m = len(items), m_eff(items)
+    lo, hi = sd / math.sqrt(n), sd * math.sqrt(m / n)
+    return {"n": n, "m_eff": m, "se": [lo, hi], "ci_half_width": [1.96 * lo, 1.96 * hi]}
+
+
+def power_at(delta: float, se: float) -> dict[str, float]:
+    """For a true effect `delta` and standard error `se` (normal approximation): the chance that the point estimate
+    reaches 0.5 nats, that the CI lies above 0, and both (the size and significance parts of "replicates")."""
+    phi = statistics.NormalDist().cdf
+    if not se > 0:  # no spread measured (mock scores, or fewer than two items): nothing to say
+        return {k: float("nan") for k in ("p_estimate_at_least_0.5", "p_ci_above_0", "p_both", "p_null_verdict_if_true_effect_0")}
+    return {"p_estimate_at_least_0.5": phi((delta - SUPPORT) / se), "p_ci_above_0": phi(delta / se - 1.96),
+            "p_both": phi((delta - max(SUPPORT, 1.96 * se)) / se),
+            "p_null_verdict_if_true_effect_0": max(0.0, 2 * phi((SUPPORT - 1.96 * se) / se) - 1)}
+
+
+def projection(target_run: str, report: dict, smoke_cfg: dict, analysis_cfg: dict | None = None) -> dict[str, Any]:
+    """From a smoke run: (1) the GPU hours per shard of the full scoring run (one model after the other, as
+    run_tau_score does), from the mean seconds per job by readout, checked against the sbatch time limit; (2) the
+    projected CI half-widths of the primary contrast and the matched arm's, from the standard deviation of the smoke
+    items' paired differences; (3) for each model, the chance of each part of a "replicates" verdict if its τ effect
+    equalled its ALFWorld first-token ΔL (amendments after review 2). No estimate of any τ effect is used."""
+    analysis_cfg = analysis_cfg or {}
     full = {**load_config(target_run), "build_run": smoke_cfg.get("build_run", "tau_build")}
     items = scoring_sets(full)
-    rules_ids = rules_arm_ids(items, full.get("rules_arm_items", 0))
+    arms = extra_arm_ids(items, full)
     n = int(full.get("n_shards", 1))
     shards = [shard_by_user(items, i, n) for i in range(n)]
-    out: dict[str, Any] = {"run": target_run, "n_shards": n, "models": {}}
+    limit = float(analysis_cfg.get("time_limit_hours", float("nan")))
+    out: dict[str, Any] = {"run": target_run, "n_shards": n, "time_limit_hours": limit, "models": {}}
+    primary = [t for t in items if is_primary(t)]
+    matched = [t for t in items if t["id"] in arms["matched"]]
+    refs = analysis_cfg.get("alfworld_first_token_delta_l", {})
     for m, blk in report["models"].items():
-        sec = blk["format"]["seconds_median_by_readout"]
+        sec = blk["format"]["seconds_mean_by_readout"]
         hours = []
         for sh in shards:
-            jobs = [j for t in sh for j in jobs_for(t, full, rules_ids)]
+            jobs = [j for t in sh for j in jobs_for(t, full, arms)]
             hours.append(sum(sec.get(j[2], float("nan")) for j in jobs) / 3600)
-        out["models"][m] = {"hours_max_shard": max(hours), "hours_all_shards": sum(hours)}
+        prec = {}
+        for r, s in blk.get("sd_of_differences", {}).items():
+            prec[r] = {"smoke_sd": s["sd"], "smoke_n": s["n"], "primary": precision(s["sd"], primary) if primary else None,
+                       "matched_arm": precision(s["sd"], matched) if matched else None}
+        power = None
+        if m in refs and prec.get("first", {}).get("primary"):
+            se = prec["first"]["primary"]["se"]
+            power = {"alfworld_first_token_delta_l": refs[m],
+                     "at_se_without_clustering": power_at(refs[m], se[0]), "at_se_with_full_clustering": power_at(refs[m], se[1])}
+        out["models"][m] = {"hours_max_shard": max(hours), "hours_all_shards": sum(hours), "precision": prec,
+                            "power_if_alfworld_sized": power}
     out["hours_max_shard_both_models"] = sum(v["hours_max_shard"] for v in out["models"].values())
+    out["fits_time_limit"] = out["hours_max_shard_both_models"] <= limit
     return out
 
 

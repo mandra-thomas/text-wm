@@ -9,8 +9,8 @@ Per item:
   identical error text;
 - the achievability flags are re-derived from the witness search, and each recorded witness succeeds;
 - the task lines are the templates' (aligned, swapped, neutral), and none asserts a false fact;
-- every prompt variant (failing call or witness; output cue, yes/no or manipulation question; main or rules-only
-  arm) differs across the task lines only in the task line;
+- every prompt variant (failing call or witness; output cue, yes/no or manipulation question; main, rules-only or
+  ALFWorld-matched arm) differs across the task lines only in the task line;
 - the success witness's output regenerates and succeeds, its failure text is the class's, and the checker's verdict
   on it is recorded correctly (never FAIL);
 - generated histories show the products in the same counterbalanced order as the orders, and the comparison item
@@ -18,6 +18,8 @@ Per item:
 - generated histories contain only the design's reads, with both orders shown;
 - the item id and key are its (history, action) hash, and no two items share them;
 - no item comes from a few-shot user.
+Over the set: the few-shot examples are the balanced 2x2 with correct own-order task lines, and the few-shot order
+is reversed for about half of all items and of the primary items.
 At the end the pristine database's hash must be unchanged. `python -m wf.tau.verify --fresh <items> <ids>`
 replays the listed items in a new process that reloads the database from disk (run for a seeded sample).
 """
@@ -32,7 +34,7 @@ from typing import Any
 
 from wf.tau import items as I
 from wf.tau.checker import check, error_class
-from wf.tau.prompts import ALL_CONDITIONS, ARMS, CUES, N_FEWSHOT, build_messages
+from wf.tau.prompts import ALL_CONDITIONS, ARMS, CUES, N_FEWSHOT, build_messages, fewshot_reversed
 from wf.tau.retail import base_db, fresh_env, pristine_sha256
 
 REPO = Path(__file__).resolve().parents[2]
@@ -93,8 +95,9 @@ def item_problems(it: dict, db: dict, fewshot: list[dict], fewshot_users: set[st
     for order, product in ((it["order_id"], it.get("product")), (it.get("comparison_order_id"), it.get("comparison_product"))):
         if order and I.claim_problems(db, it["user_id"], tool, order, product):
             out.append(f"task line for {order} asserts a false fact: {I.claim_problems(db, it['user_id'], tool, order, product)}")
-    if it.get("task_mention_aligned") != I.MENTION.format(o=it["order_id"]) or (
-            it.get("comparison_order_id") and it.get("task_mention_swapped") != I.MENTION.format(o=it["comparison_order_id"])):
+    if it.get("task_mention_aligned") != I.mention_line(it["order_id"], it.get("product")) or (
+            it.get("comparison_order_id")
+            and it.get("task_mention_swapped") != I.mention_line(it["comparison_order_id"], it.get("comparison_product"))):
         out.append("mention task lines are not the template")
     # success witness (the recorded aligned witness, scored as a success control)
     w = it.get("aligned_witness")
@@ -189,12 +192,36 @@ def fewshot_problems(fewshot: list[dict]) -> list[str]:
             out.append(f"few-shot task of {ex['user_id']} names the wrong order")
         if named not in db["users"][ex["user_id"]]["orders"]:
             out.append(f"few-shot task of {ex['user_id']} names another user's order")
+        # the matched arm's own-order task line (amendment after review 2): the template on the call's own order and
+        # the called item's product; identical to the task for the own-order examples
+        args = ex["action"]["arguments"]
+        product = None
+        if "{p}" in I.TEMPLATES[ex["action"]["name"]]:
+            order = db["orders"][args["order_id"]]
+            product = next(it["name"] for it in order["items"] if it["item_id"] == args["item_ids"][0])
+        if ex.get("task_own") != I.task_line(ex["action"]["name"], args["order_id"], product):
+            out.append(f"few-shot own-order task of {ex['user_id']} is not the template on its own order")
+        if ex.get("names") == "own" and ex.get("task_own") != ex["task"]:
+            out.append(f"few-shot own-order example of {ex['user_id']} has a different own-order task")
     for ex in fewshot:
         env = fresh_env()
         if env.replay(ex["history"]) != [x["output"] for x in ex["history"]]:
             out.append(f"few-shot history for {ex['user_id']} differs on replay")
         if env.call(ex["action"]["name"], ex["action"]["arguments"]) != ex["output"]:
             out.append(f"few-shot output for {ex['user_id']} differs on replay")
+    return out
+
+
+def order_balance_problems(generated: list[dict], natural: list[dict]) -> list[str]:
+    """The few-shot order is counterbalanced by item hash (amendment after review 2): reversed for about half of all
+    items and of the primary items."""
+    out = []
+    for name, xs in (("all items", generated + natural),
+                     ("primary", [t for t in generated if t["main_pool"] and t["status_matched"]])):
+        if xs:
+            share = sum(fewshot_reversed(t["id"]) for t in xs) / len(xs)
+            if not 0.45 <= share <= 0.55:
+                out.append(f"few-shot order reversed for {share:.3f} of {name}, not about half")
     return out
 
 
@@ -214,6 +241,7 @@ def verify_sets(generated: list[dict], natural: list[dict], fewshot: list[dict])
             failures[it["id"]] = p
     if pristine_sha256() != before:
         problems.append("the pristine database changed during verification")
+    problems += order_balance_problems(generated, natural)
     return {"n_generated": len(generated), "n_natural": len(natural), "n_failed_items": len(failures),
             "failures": dict(list(failures.items())[:50]), "problems": problems,
             "passed": not failures and not problems and bool(generated)}

@@ -939,3 +939,239 @@ All run at commit f669ac6, which holds the amendments above and their code, befo
   2.52.
 - Both the database and the trajectories are public; contamination is checked only exploratorily (A12).
 - One domain, one environment family; a customer-service backend whose rules are software, not physics.
+
+## Amendments after review 2 and the scientific re-review, before any score (2026-11-20)
+
+Review 2 (engineering: 24 new mutants, an independent token-length check on every prompt, the blind checker rerun,
+a blind read of 50 rendered prompts) and the scientific re-review read the code and items at fb95207. Everything
+below was decided and committed before any GPU run; no score of any model on these items exists. Where an
+amendment changes an earlier one, the earlier text stands only as a record.
+
+### B1. ALFWorld-matched arm (exploratory, prestated reading)
+
+**Problem.** The main prompt carries two debiasing cues that ALFWorld never had: the statement that the backend does
+not see the user's messages or task (A2), and few-shot examples whose task names *another* order of the user (A2's
+2 × 2), which demonstrate the swapped condition itself. ALFWorld's few-shot sets had off-goal actions but never a task
+naming another instance, and TextCraft's examples are own-goal only. The scientific re-review also notes that
+ALFWorld never ran the combination of a rules statement with an ignore-note, which is what the main arm amounts to.
+Review 2's finding 5 is the same point from the other side: no condition measures the goal effect without the
+debiasing cues, so a null in the main arm could be produced by the prompt. A16's sentence "the rules-only arm and the
+witness controls bound this" overstated: the rules-only arm keeps the statement that the backend does not see the
+task, so it bounds the policy's contribution, not the statement's.
+
+**Decision.** A third arm, `matched`, on the same 500 primary items as the rules-only arm (both take the first 500
+primary items in hash(id, "rules") order, so the three arms are compared on identical items), failing call only,
+first-token and yes/no readouts, aligned, swapped and neutral task lines (6 passes per item and model, 3,000 per
+model). It differs from the main arm in exactly two things:
+
+1. The backend section's lead drops the statement of what the backend sees. The main lead reads "The backend sees
+   only each call's name and arguments and the current database: it does not see the user's messages or task, and
+   it does not check the agent's conduct (authentication, confirmation with the user)." The matched lead reads "The
+   backend does not check the agent's conduct (authentication, confirmation with the user)." Everything else in the
+   system message (instruction, the backend's rules, the policy, the tools) is byte-identical (a test checks that
+   the matched message is the main message with only the lead replaced). The scientific re-review asked to drop
+   only the "does not see the user's messages or task" clause and keep the conduct clause; the "sees only each
+   call's name and arguments and the current database" clause is dropped too, because it states the same fact in
+   positive form, and keeping it would leave the very cue the arm is meant to remove.
+2. Own-order few-shot examples. Only the task lines of examples 2 and 3 change, to name their own orders: example 2
+   becomes "The user wants to cancel order {its order}." and example 3 "The user wants to return the {returned
+   item's product} from order {its order}." Calls, histories and outputs are unchanged (example 2 still fails with
+   "Invalid reason", example 3 still succeeds). The builder stores this line as `task_own` on every example (for
+   examples 1 and 4 it equals the task), and the verifier re-derives it.
+
+**Prestated reading.** The matched arm gets its own per-model verdict under the §6.3 rule (Holm over the two models
+within the arm). Its reading combines that verdict with the confirmatory main-arm verdict of each model:
+
+- an effect in the ALFWorld direction under both prompts: the statement that the backend does not see the task
+  does not remove it;
+- a null under the main prompt (with its gates passed) but an effect under the matched prompt: an explicit
+  statement that the backend does not see the task, together with the other-order examples, suppresses the effect
+  here; τ-bench is then read as showing the leak is removable by stating the system's blindness, not as showing no
+  leak;
+- a null under both: the null does not rest on the debiasing statement;
+- an effect under the main prompt only: not predicted; reported, not interpreted;
+- anything else: inconclusive.
+
+Also reported per model and readout: the main arm on the same 500 items, and per item the main arm's aligned −
+swapped minus the matched arm's, with a user-clustered CI. The matched arm has no manipulation check or witness of
+its own; its null is therefore read only beside the main arm's gated verdict. The arm never changes the
+confirmatory verdict of A8.
+
+**Few-shot tool matching in this arm.** In the matched arm example 3 is an own-order return that succeeds, so a
+`wrong_return_pm` item (a return) under the aligned task matches it in tool and task shape, a positive artefact
+(the main arm's is negative; B6). The matched arm's 500 items contain about 25 such items.
+
+### B2. Few-shot order counterbalanced by item
+
+The scientific re-review found an ordering artefact: in the design order the most recent other-order example is a
+success and the most recent own-order example a failure, so recency or shape matching pushes swapped toward success
+and aligned toward failure, a negative artefact on ΔL. The order is now reversed for the items whose
+h(item id, "fewshot-order") is odd (`fewshot_reversed`, about half: the verifier requires 45–55% of all items and of
+the primary items). Within an item every job (arm, action, readout, task line) uses the same order, so every paired
+contrast still differs only in the task line. The stored `fewshot.json` keeps the design order; the reversal happens
+when the prompt is rendered.
+
+### B3. Outcome table and joint verdict, revised (replacing A9's table and A8's joint rule)
+
+Review 2 and the re-review found three gaps: a null or a reversal with discrimination failing was unclassified, or
+read as "no leak"; "fail minus witness" negative (the witness moved more than the failing call) was unclassified;
+and the joint rule called "one replicates, the other a small positive effect" one model only, and "one replicates,
+the other a small negative effect" also one model only instead of mixed. Per model, on the primary population
+(`verdicts`, `outcome_reading`):
+
+| Verdict on ΔL1 | Discrimination | Fail minus witness | Reading |
+| --- | --- | --- | --- |
+| replicates or small positive | holds | CI above 0 | The task overrides a visible fact about the named object, more for failing calls than working ones (the ALFWorld effect in its stronger form) |
+| replicates or small positive | holds | about 0, negative, or a CI that includes 0 | A general task-consistency bias: naming the order raises the success belief of calls on it whether they fail or not; goal leakage, not an override specific to failures |
+| replicates or small positive | fails | any | The task shifts predictions, but the model is not shown to use the visible record; not read as overriding evidence |
+| reversed | holds | any | Naming the object sharpens failure prediction |
+| reversed | fails | any | Verdict becomes "inconclusive (reversed, but the model is not shown to discriminate ...)" |
+| small negative | fails | any | A shift toward failure without shown use of the record: inconclusive |
+| CI inside ±0.5 | holds (and the manipulation check passes) | any | No leak of more than 0.5 nats |
+| CI inside ±0.5 | fails | any | Verdict becomes "inconclusive (null, but the model is not shown to discriminate ...)" |
+| CI inside ±0.5, manipulation check fails | any | any | Verdict becomes "inconclusive (null, but the task line is not shown to be read)" |
+
+"Small" means the rule's CI and Holm conditions hold but the estimate is under 0.5 nats in absolute value; its
+reading carries "(below the 0.5-nat size)". The mention pair is read beside every non-null verdict: write minus
+mention with a CI above 0 means the request to act adds to naming the order; a CI inside ±0.5 means naming the
+order is enough; otherwise uncertain.
+
+**Joint verdict.** Mixed if one model replicates and the other is reversed or a small negative effect, or one is
+reversed and the other a small positive effect; "replicates (both models)" and "reversed (both models)" as before;
+"no effect larger than 0.5 nats (both models)" only if both are that null after their gates; "ALFWorld direction in
+both models, size met by one (not a replication)" if one replicates and the other is a small positive effect;
+"reversed direction in both models, size met by one" for the mirror case; "one model only (not a replication)" if
+exactly one replicates or reverses and the other is null or inconclusive; "inconclusive" otherwise.
+
+### B4. Discrimination per class, and the gates
+
+Discrimination (A4a) is read on items whose witness the text-only checker can determine (PASS): 447 of the 856
+primary items, 405 of them `unavailable`. `status` items (409) have no discrimination evidence at all: their witness
+needs a variant's availability that their histories do not show. So the pooled check is in effect the `unavailable`
+class's. The analysis now also reports discrimination per prespecified class (`discrimination_by_class`): for
+`unavailable` the check on its PASS items with its own "holds"; for `status` the flag "no discrimination evidence",
+with the note that a null or a reversal in that class is not read as use of the record. The per-model gates use the
+pooled check, as before, and now apply it to nulls and reversals (B3). A class-level result for `status` is
+reported as a goal effect only, never as an override of evidence the model was shown to use.
+
+### B5. The smoke run: format, timing and precision only
+
+- **No estimates in the smoke analysis.** With `project_to` set, `tau_smoke_analysis` computes and writes no
+  estimate, CI, p or verdict (review 2 found it printed the per-model ΔL and verdicts). It reports the format
+  checks, the token reports, the mean seconds per job by readout, the projection, and the standard deviation of the
+  failing call's per-item aligned − swapped difference per readout (no mean). A test checks that its metrics have no
+  `estimate`, `ci`, `perm_p` or verdict and its status line no ΔL.
+- **The two longest items.** The smoke set adds the longest generated main item and the longest natural item (by
+  rendered history and call length in characters) to its 20 hash-chosen items, so the longest prompts are scored
+  on the GPU before the full run.
+- **Time.** The projection uses the mean seconds per job by readout (not the median) and both models' hours per
+  shard added (they run one after the other in one job), and compares them with `time_limit_hours` (8, equal to the
+  sbatch `--time`; a test keeps them equal). `fits_time_limit` must be true before the full run is submitted.
+- **Precision (scientific re-review item 5).** From each readout's standard deviation, the projection gives the
+  standard error of the primary contrast over the full run's primary items, between two bounds: no within-user
+  correlation, and perfect within-user correlation, where the design effect is the effective cluster size (5.62 for
+  the primary population):
+
+$$\mathrm{SE}_{\text{low}} = \frac{s}{\sqrt{n}}, \qquad \mathrm{SE}_{\text{high}} = s\,\sqrt{\frac{m_{\text{eff}}}{n}}, \qquad m_{\text{eff}} = \frac{\sum_u n_u^2}{n},$$
+
+  with the CI half-width 1.96 times each, for the primary population and the matched arm's 500 items. For each model
+  it gives, at both bounds, the chance (normal approximation) that the point estimate reaches 0.5 nats, that the CI
+  lies above 0, and both, if the model's τ effect equalled its ALFWorld first-token ΔL (Qwen3 2.52, Llama-3.1
+  0.68), and the chance of a null verdict if the true effect were 0. For Llama, with ALFWorld's 0.68 only 0.18 nats
+  above the threshold, the chance of reaching 0.5 is close to a coin flip unless the standard error is well below
+  0.18; the projection says how close. These numbers are copied into this note and committed before the full run
+  is submitted; they change no rule.
+
+### B6. Few-shot tool matching: a prelogged sensitivity analysis
+
+Two classes have the tool of a few-shot example: `wrong_return_pm` items are returns, like example 3 (other order,
+success), and `gc_balance` items are payment changes, like example 4 (own order, failure). Under the swapped task a
+`wrong_return_pm` item matches example 3's cell (other order, the same tool, success), and under the aligned task a
+`gc_balance` item matches example 4's (own order, the same tool, failure); both push ΔL negative, against the
+prediction. B2's counterbalancing does not remove this, because it changes positions, not cells. The two classes
+are 42 of the 856 primary items (4.9%).
+
+**Decision.** Keep them in the primary population (changing the confirmatory population again for 4.9% of items
+would cost more than it saves) and prelog a sensitivity analysis: ΔL1 on the primary population without those two
+classes (814 items), with the full inference, its own Holm adjustment over the two models, and its §6.3 category
+beside the primary's ungated category (`sensitivity_without_fewshot_tool_classes`, `same_category`). If the
+categories differ for a model, the paper reports that model's primary result as sensitive to few-shot tool
+matching. The limit is also stated (A16 addition below). The `status` and `unavailable` classes (95% of the primary
+items) use exchange and modify-items, which no example uses.
+
+### B7. Wording of the backend rules, tied to the port; golden system messages
+
+Review 2 found three loose phrasings. Now: the payment rule says "the order's payment_history has exactly one entry,
+and it is a payment" (the tool checks both); modify-items and exchange say "there are as many new items as old
+ones"; a first line says "Every order write needs the order to exist, and a payment method must be one of the
+order's user's"; modify-items says each new item "differs from the old item it replaces, is a variant of the same
+product, and is available"; exchange says each new item "is a variant of the same product and is available (the
+backend accepts the old item itself as its new item, although the policy asks for a different one)", because the
+exchange tool, unlike modify-items, has no different-item check. A test per tool pairs every phrase of its rule
+line with constructed calls on the port that show the phrase is what the tool enforces (both sides of each status
+rule, the reason list, the one-payment rule in both its parts, the different-method rule, gift-card boundaries at
+the amount and one cent below, equal lengths, availability, same-product variants, the user's methods, the return
+method rule, the same-item exchange). The sha256 of the rendered system message of each arm is pinned in a test,
+and the yes/no, manipulation and output cues are pinned as exact text.
+
+### B8. Mention lines name the product
+
+The mention-only lines named only the order, so write − mention measured the request and the product's name
+together. For items whose task line names a product, the mention line is now "The user has a question about the
+{product} in order {order}." (the swapped one names the comparison item's product), so the two lines differ only in
+the request. Items without a product (cancel, address and payment changes) keep "The user has a question about
+order {order}."
+
+### B9. Contamination contrast: tokenizer confound
+
+The Qwen3-minus-Llama contrast of A12 is confounded by tokenization: Llama-3's tokenizer splits digit runs into
+chunks of up to three digits and Qwen3's into single digits, so resampled identifiers cost the two models different
+numbers of tokens and different per-token surprisal. The contrast stays exploratory and is reported with this
+caveat; it is low-stakes, because the deciding facts are in the context and the failing calls are ours.
+
+### B10. Scoring gates
+
+A scoring config without `expected_outputs_sha256` (missing or empty) is now refused ("pins no sha256 values"),
+where before it was accepted unchecked; the tests pin the small test build's own hashes.
+
+### B11. Tests and mutation testing; correction to A15
+
+**Correction.** A15 said "86 mutants, 86 killed". That claim was not verifiable and, for one mutant, wrong. The
+runner ran pytest with `--tb=no` and recorded only killed or survived, so no kill could be traced to a test, and it
+never checked that the unmutated copy passed. Review 2 reran review 1's Holm mutant (verdicts using the raw p instead
+of the Holm-adjusted p) and it survived: no test had p values where Holm changes the verdict. Review 2's own 24
+mutants left 12 alive: the exchange rule's "exactly", the modify-items availability clause, the "does not see the
+task" clause and the gift-card return exception in the rules text (M1, M2, M3, M5); the manipulation contrast
+reversed (M9); the null gate reading discrimination instead of the manipulation check (M14); discrimination under
+the aligned instead of the neutral task (M15); the rules-only arm drawn per shard (M17); the item hash ignoring the
+witness fields (M18); the projection taking one model's hours (M19); the manipulation question's wording (M22); and
+write − mention computed against neutral (M23).
+
+**Now.** Tests pin the direction and condition of every control on constructed scores where each condition and
+action has its own value (manipulation aligned − swapped, discrimination neutral witness − neutral failing call,
+fail − witness, write − mention against the mention-swapped line, arm contrasts); a verdict test with raw p = 0.006
+for both models (Holm 0.012, so no replication); gate tests that set the manipulation and discrimination flags
+differently; the exploratory arms drawn from the whole set (3 items over 2 shards gives exactly 3); the item hash
+changing with every scored field; the projection adding both models' hours; the golden system messages and the rule
+tests of B7. The mutation runner now first requires the unmutated copy to pass, runs mutants serially within a
+deterministic shard (MUTANTS[i::n]), and logs for each kill the first failing test's id and error line. All of
+review 2's mutants are in the script (R2-M1 to R2-M24; its adapted copies of review 1's A3, A5, A8 and G1 are the R1-
+entries), with 23 more for this round's code (N31-N53).
+
+### B12. GPU time (replacing A14's count)
+
+Per model: about 30 passes per main item, 18 per natural item, plus 6 for each of the 500 rules-only items and 6
+for each of the 500 matched-arm items (the same items): about 48,000 passes per model and 96,000 in all, about
+6,000 per shard over 16 shards. At about 1.5 s a pass a shard takes about 2.5 hours (about 5 on an A40), under the
+8-hour limit. The smoke projection (B5) decides.
+
+### A16, additions
+
+- The main prompt states that the backend does not see the task and shows other-order few-shot examples. The
+  ALFWorld-matched arm (B1) measures the effect without both cues on 500 items; the rules-only arm and the witness
+  controls do not bound the statement's contribution (correcting the sentence above).
+- 4.9% of primary items share a tool with a few-shot example whose cell favours a negative ΔL (B6); a sensitivity
+  analysis without them is prelogged.
+- `status` items have no discrimination evidence (B4); any `status` effect is a goal effect, not shown to override
+  evidence the model uses.
+- The contamination contrast is confounded by tokenization (B9).

@@ -2,11 +2,20 @@
 """Deliberate bugs in the τ-bench port, builder, checker, verifier, prompts and runs (notes/tau_design.md §8.6).
 
 Each mutant is applied alone to a copy of the repo, and tests/test_tau_*.py must fail. A timeout counts as
-inconclusive, never as caught. Usage: python scripts/tau_mutation_check.py [shard/shards]
+inconclusive, never as caught. Usage:
 
-Three groups: the original 29; review 1's 27 (prefixed R1-, adapted where the code they hit was rewritten in the
+    python scripts/tau_mutation_check.py [shard/shards] [--out results.json]
+
+Before any mutant, the unmutated copy must pass the tests (otherwise every mutant would look killed). Mutants run
+one at a time (serially) in one copy; a shard i/n takes MUTANTS[i::n], a deterministic split. For each killed
+mutant the first failing test's id and its error line are recorded (pytest -x --tb=line -rf), so every kill can be
+audited.
+
+Four groups: the original 29; review 1's 27 (prefixed R1-, adapted where the code they hit was rewritten in the
 amendments of 2026-11-20: A1 now hits the user cluster in cluster_of, A3 the Holm-adjusted p in verdicts, A5 the
-missing-score set, A8 the identifier regex, G1 the pass-flag check); and 30 for the amended code (N1-N30).
+missing-score set, A8 the identifier regex, G1 the pass-flag check); 30 for the amended code (N1-N30); and, after
+review 2, review 2's 24 (R2-M1 to R2-M24, adapted to the code of this round) and 23 for this round's code (N31-N53).
+Review 2's adapted copies of R1-A3, A5, A8 and G1 are the R1- entries themselves.
 
 Equivalence arguments (review 1 marked B3, B5 and G1 as candidates; each now has a killing test, so none is argued
 away): B3 cannot change the item set on this database, which has no product with fewer than two variants, so it is
@@ -17,6 +26,7 @@ sets verify.json's flag to false directly.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -88,7 +98,7 @@ MUTANTS = [
     ("query uses the aligned task always", "wf/tau/prompts.py",
      'messages.append({"role": "user", "content": user_turn(task_for(item, condition)', 'messages.append({"role": "user", "content": user_turn(item["task_aligned"]'),
     ("scoring ignores the pinned sha", "wf/tau/pipeline.py",
-     '            if now.get(name) != pins[name]:', '            if False:'),
+     '        if now.get(name) != pins[name]:', '        if False:'),
     ("scoring ignores a changed file", "wf/tau/pipeline.py",
      '    if rep.get("files") != now:', '    if False:'),
     ("one-sided verdict", "wf/tau/pipeline.py",
@@ -146,7 +156,7 @@ MUTANTS = [
      'return rec["logp_plus"] / rec["n_tokens_plus"] - rec["logp_minus"] / rec["n_tokens_minus"]',
      'return rec["logp_plus"] / rec["n_tokens_minus"] - rec["logp_minus"] / rec["n_tokens_plus"]'),
     ("R1-A5 analysis does not require swapped scores", "wf/tau/pipeline.py",
-     'for job in jobs_for(t, scfg, rules_ids)}', 'for job in jobs_for(t, scfg, rules_ids) if job[3] != "swapped"}'),
+     'for job in jobs_for(t, scfg, arms)}', 'for job in jobs_for(t, scfg, arms) if job[3] != "swapped"}'),
     ("R1-A6 stale-score check disabled", "wf/tau/pipeline.py",
      'stale = sum(1 for s in scores if hashes.get(s["transition_id"]) != s.get("item_hash"))', 'stale = 0'),
     ("R1-A7 neutral never scored", "wf/tau/pipeline.py", 'conds = [c for c in CONDITIONS if c != "swapped" or t.get("task_swapped")]',
@@ -160,8 +170,8 @@ MUTANTS = [
     ("N2 status witness failure text ignores the witness tool", "wf/tau/items.py", '        return "Error: " + _STATUS_ERRORS[tool]',
      '        return "Error: Non-pending order cannot be modified"'),
     ("N3 witness checker verdict not computed", "wf/tau/items.py", '"witness_checker": check(history, witness).verdict}', '"witness_checker": "PASS"}'),
-    ("N4 mention-swapped names the target order", "wf/tau/items.py", '"task_mention_swapped": MENTION.format(o=w2),',
-     '"task_mention_swapped": MENTION.format(o=oid),'),
+    ("N4 mention-swapped names the target order", "wf/tau/items.py", '"task_mention_swapped": mention_line(w2, item2["name"] if item2 else None),',
+     '"task_mention_swapped": mention_line(oid, product),'),
     ("N5 backend rules left out of the main arm", "wf/tau/prompts.py", '    return f"{INSTRUCTION}\\n\\n{backend}\\n\\n{policy}\\n\\n# Tools\\n\\n{tool_lines}"',
      '    return f"{INSTRUCTION}\\n\\n{policy}\\n\\n# Tools\\n\\n{tool_lines}"'),
     ("N6 rules-only arm keeps the policy", "wf/tau/prompts.py", '    if arm == "rules_only":\n        return', '    if False:\n        return'),
@@ -173,12 +183,13 @@ MUTANTS = [
     ("N11 witness full readout uses the item's twin", "wf/tau/pipeline.py",
      'if action == "fail" else (t["witness_output"], t["witness_failure"]))', 'if True else (t["witness_output"], t["witness_failure"]))'),
     ("N12 null verdict without the manipulation check", "wf/tau/pipeline.py", '        if v.startswith("no effect") and not manip:', '        if False:'),
-    ("N13 effect always read as override", "wf/tau/pipeline.py", 'if disc else', 'if True else'),
+    ("N13 effect always read as override", "wf/tau/pipeline.py", '        if not disc:\n            out["reading"] = ("The task shifts',
+     '        if False:\n            out["reading"] = ("The task shifts'),
     ("N14 discrimination on every witness", "wf/tau/pipeline.py", '    determined = [t for t in pop if t.get("witness_checker") == "PASS"]', '    determined = pop'),
     ("N15 one model counts as a replication", "wf/tau/pipeline.py", '    if rep == len(v):', '    if rep:'),
     ("N16 token gate disabled", "wf/tau/pipeline.py", '        if not report.get("first_token_ok"):', '        if False:'),
     ("N17 an unpinned file is accepted", "wf/tau/pipeline.py",
-     '            if pins.get(name) is None:\n                return False, f"no pinned sha256 for {name}"', '            if pins.get(name) is None:\n                continue'),
+     '        if pins.get(name) is None:\n            return False, f"no pinned sha256 for {name}"', '        if pins.get(name) is None:\n            continue'),
     ("N18 addresses resampled", "wf/tau/pipeline.py", 'KEEP_SUBTREES = ("address",)', 'KEEP_SUBTREES = ()'),
     ("N19 flips toward failure counted as toward success", "wf/tau/pipeline.py", '    down = sum(1 for a, s in pairs if s > 0 > a) / len(pairs)',
      '    down = sum(1 for a, s in pairs if a > 0 > s) / len(pairs)'),
@@ -192,31 +203,135 @@ MUTANTS = [
     ("N27 verifier accepts few-shot examples in any order", "wf/tau/verify.py", '    if cells != [("own", "success"), ("other", "failure"), ("other", "success"), ("own", "failure")]:', '    if False:'),
     ("N28 rules-only arm drawn from the whole main pool", "wf/tau/pipeline.py", 'return set(sorted((t["id"] for t in items if is_primary(t))', 'return set(sorted((t["id"] for t in items if t["main_pool"])'),
     ("N29 seconds not recorded", "wf/tau/pipeline.py", '                                                "seconds": round(time.perf_counter() - t0, 4)}])', '                                                }])'),
-    ("N30 discrimination compares the witness with itself", "wf/tau/pipeline.py", 'action="witness", action_b="fail") for r in ("first", "yn")}\n    out["discrimination_all',
-     'action="witness", action_b="witness") for r in ("first", "yn")}\n    out["discrimination_all'),
+    ("N30 discrimination compares the witness with itself", "wf/tau/pipeline.py", 'action="witness", action_b="fail")\n\n\ndef controls_block',
+     'action="witness", action_b="witness")\n\n\ndef controls_block'),
+    # ---- review 2's mutants (scratchpad review_tau2/my_mutants*.py), adapted to the code after fix round 2 ----
+    ("R2-M1 rules: exchange status 'contains' instead of 'exactly'", "wf/tau/prompts.py",
+     '- exchange_delivered_order_items: the order\'s status is exactly "delivered"', '- exchange_delivered_order_items: the order\'s status contains "delivered"'),
+    ("R2-M2 rules: modify-items availability dropped", "wf/tau/prompts.py",
+     'is a variant of the same product, and is available;', 'is a variant of the same product;'),
+    ("R2-M3 rules: 'does not see the task' dropped (main lead)", "wf/tau/prompts.py",
+     'current database: it does not see the user\'s messages or task, and it does not check', 'current database, and it does not check'),
+    ("R2-M4 rules section after the policy", "wf/tau/prompts.py",
+     'return f"{INSTRUCTION}\\n\\n{backend}\\n\\n{policy}\\n\\n# Tools\\n\\n{tool_lines}"',
+     'return f"{INSTRUCTION}\\n\\n{policy}\\n\\n{backend}\\n\\n# Tools\\n\\n{tool_lines}"'),
+    ("R2-M5 rules: return gift-card exception dropped", "wf/tau/prompts.py",
+     'payment method (the first entry of its payment_history) or a gift card;', 'payment method (the first entry of its payment_history);'),
+    ("R2-M6 few-shot other-success names its own order", "wf/tau/items.py",
+     'task_line("return_delivered_order_items", w2, db["orders"][w2]["items"][0]["name"])',
+     'task_line("return_delivered_order_items", oid, db["orders"][oid]["items"][0]["name"])'),
+    ("R2-M7 witness scored under aligned only", "wf/tau/pipeline.py",
+     'jobs += [("main", "witness", r, c) for r in readouts for c in conds]', 'jobs += [("main", "witness", r, "aligned") for r in readouts]'),
+    ("R2-M8 mention pair: first token only", "wf/tau/pipeline.py",
+     'jobs += [("main", "fail", r, c) for r in single for c in MENTION_CONDITIONS', 'jobs += [("main", "fail", r, c) for r in single[:1] for c in MENTION_CONDITIONS'),
+    ("R2-M9 manipulation contrast reversed", "wf/tau/pipeline.py",
+     'out["manipulation"] = paired(by, pop, "target", "aligned", "swapped")', 'out["manipulation"] = paired(by, pop, "target", "swapped", "aligned")'),
+    ("R2-M10 check passes without CI above 0", "wf/tau/pipeline.py", 'est >= CHECK_MIN_NATS and ci[0] > 0', 'est >= CHECK_MIN_NATS'),
+    ("R2-M11 check threshold 0.5 nats", "wf/tau/pipeline.py", 'CHECK_MIN_NATS = 1.0', 'CHECK_MIN_NATS = 0.5'),
+    ("R2-M12 mixed direction never reported", "wf/tau/pipeline.py", '    if (rep and (rev or neg)) or (rev and pos):\n', '    if False:\n'),
+    ("R2-M13 joint null needs one model only", "wf/tau/pipeline.py", '    if null == len(v):', '    if null:'),
+    ("R2-M14 manipulation gate reads discrimination", "wf/tau/pipeline.py",
+     '        if v.startswith("no effect") and not manip:', '        if v.startswith("no effect") and not disc:'),
+    ("R2-M15 discrimination under the aligned task", "wf/tau/pipeline.py",
+     'return paired(by, items, readout, "neutral", "neutral", action="witness"', 'return paired(by, items, readout, "aligned", "aligned", action="witness"'),
+    ("R2-M16 analysis ok with missing scores", "wf/tau/pipeline.py", '    ok = missing == 0 and stale == 0', '    ok = stale == 0'),
+    ("R2-M17 exploratory arms drawn per shard", "wf/tau/pipeline.py",
+     '    arms = extra_arm_ids(every, cfg)\n    items = shard_by_user(every, i, n)', '    items = shard_by_user(every, i, n)\n    arms = extra_arm_ids(items, cfg)'),
+    ("R2-M18 item hash ignores witness fields", "wf/tau/pipeline.py", '"aligned_witness", "witness_output", "witness_failure")}', ')}'),
+    ("R2-M19 projection: one model's hours only", "wf/tau/pipeline.py", 'out["hours_max_shard_both_models"] = sum(', 'out["hours_max_shard_both_models"] = max('),
+    ("R2-M20 witness full pair reversed", "wf/tau/pipeline.py",
+     'else (t["witness_output"], t["witness_failure"]))', 'else (t["witness_failure"], t["witness_output"]))'),
+    ("R2-M21 replicates needs only CI, not Holm p", "wf/tau/pipeline.py", '    if excludes_zero and holm_p < P_MAX:', '    if excludes_zero:'),
+    ("R2-M22 manipulation question changed", "wf/tau/prompts.py",
+     'TARGET_QUESTION = ("Question: is this call on the order the user asked about?', 'TARGET_QUESTION = ("Question: is this call on an order of the user?'),
+    ("R2-M23 write-minus-mention uses mention_aligned minus neutral", "wf/tau/pipeline.py",
+     '("fail", "mention_aligned", "mention_swapped")) for r in ("first", "yn")}', '("fail", "mention_aligned", "neutral")) for r in ("first", "yn")}'),
+    ("R2-M24 target check scheduled on neutral instead of swapped", "wf/tau/pipeline.py",
+     'jobs += [("main", "fail", "target", c) for c in conds if c != "neutral"]', 'jobs += [("main", "fail", "target", c) for c in conds if c != "swapped"]'),
+    # ---- fix round 2 (matched arm, counterbalancing, outcome table, smoke, gates) ----
+    ("N31 matched arm keeps the other-order few-shot tasks", "wf/tau/prompts.py",
+     'if arm == "matched" else list(fewshot)', 'if False else list(fewshot)'),
+    ("N32 few-shot order never reversed", "wf/tau/prompts.py", '    return exs[::-1] if fewshot_reversed(item["id"]) else exs', '    return exs'),
+    ("N33 few-shot order hashed with another salt", "wf/tau/prompts.py", 'f"{SEED}|{item_id}|fewshot-order"', 'f"{SEED}|{item_id}|fewshot"'),
+    ("N34 matched arm never scheduled", "wf/tau/pipeline.py",
+     'EXTRA_ARMS = {"rules_only": "rules_arm_items", "matched": "matched_arm_items"}', 'EXTRA_ARMS = {"rules_only": "rules_arm_items"}'),
+    ("N35 a config without pins passes", "wf/tau/pipeline.py",
+     '    if not pins:  # a scoring config without pins', '    if False:  # a scoring config without pins'),
+    ("N36 smoke analysis computes estimates", "wf/tau/pipeline.py",
+     '    if cfg.get("project_to"):\n        # the smoke run', '    if False:\n        # the smoke run'),
+    ("N37 projection from medians", "wf/tau/pipeline.py",
+     '        sec = blk["format"]["seconds_mean_by_readout"]', '        sec = blk["format"]["seconds_median_by_readout"]'),
+    ("N38 smoke set without the longest items", "wf/tau/pipeline.py", '        if cfg.get("add_longest"):', '        if False:'),
+    ("N39 a reversal is not gated on discrimination", "wf/tau/pipeline.py",
+     '        elif v.startswith(("no effect", "reversed")) and not disc:', '        elif v.startswith("no effect") and not disc:'),
+    ("N40 specificity read the wrong way", "wf/tau/pipeline.py",
+     '        elif _ci_above(fail_minus_witness):', '        elif not _ci_above(fail_minus_witness):'),
+    ("N41 size met by one without the other's direction", "wf/tau/pipeline.py", '    if rep and rep + pos == len(v):', '    if rep:'),
+    ("N42 matched reading for a main null inverted", "wf/tau/pipeline.py",
+     '    if null(main_verdict) and eff(matched_verdict):', '    if eff(main_verdict) and null(matched_verdict):'),
+    ("N43 per-class discrimination on every witness", "wf/tau/pipeline.py",
+     '        det = [t for t in v if t.get("witness_checker") == "PASS"]', '        det = v'),
+    ("N44 sensitivity analysis excludes nothing", "wf/tau/pipeline.py",
+     'FEWSHOT_TOOL_CLASSES = ("wrong_return_pm", "gc_balance")', 'FEWSHOT_TOOL_CLASSES = ()'),
+    ("N45 mention line without the product", "wf/tau/items.py",
+     '    return MENTION_PRODUCT.format(o=order_id, p=product) if product else MENTION.format(o=order_id)', '    return MENTION.format(o=order_id)'),
+    ("N46 verifier skips the own-order task", "wf/tau/verify.py",
+     '        if ex.get("task_own") != I.task_line(', '        if False and ex.get("task_own") != I.task_line('),
+    ("N47 verifier skips the order balance", "wf/tau/verify.py", '            if not 0.45 <= share <= 0.55:', '            if False:'),
+    ("N48 matched lead keeps 'sees only'", "wf/tau/prompts.py",
+     '"matched": ("The policy below is written for the agent. The backend does not check',
+     '"matched": ("The policy below is written for the agent. The backend sees only each call\'s name and arguments and the current database, and it does not check'),
+    ("N49 rules: equal-length check dropped", "wf/tau/prompts.py",
+     'every old item is in the order; there are as many new items as old ones; each new item is a variant',
+     'every old item is in the order; each new item is a variant'),
+    ("N50 rules: payment entry is any transaction", "wf/tau/prompts.py",
+     "the order's payment_history has exactly one entry, and it is a payment;", "the order has exactly one payment;"),
+    ("N51 precision ignores clustering", "wf/tau/pipeline.py",
+     '    lo, hi = sd / math.sqrt(n), sd * math.sqrt(m / n)', '    lo, hi = sd / math.sqrt(n), sd / math.sqrt(n)'),
+    ("N53 sensitivity analysis compared without Holm", "wf/tau/pipeline.py",
+     '            v = tau_verdict(sens[m]["estimate"], sens[m]["ci"], adj_s[m])', '            v = tau_verdict(sens[m]["estimate"], sens[m]["ci"], sens[m]["perm_p"])'),
+    ("N52 arm contrast ignores the arms", "wf/tau/pipeline.py",
+     'for arm, (act, a, b) in zip(arms, (first, second))', 'for arm, (act, a, b) in zip(("main", "main"), (first, second))'),
 ]
 
 
-def _run(python: str, work: Path, timeout: int) -> str:
+def _run(python: str, work: Path, timeout: int) -> tuple[str, str]:
+    """(outcome, the first failing test's id and error line); never silent about what killed a mutant."""
     try:
-        r = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", *TESTS], cwd=work,
-                           capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=line", "-rfE", *TESTS],
+                           cwd=work, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return "timeout"
-    return "killed" if r.returncode != 0 else "survived"
+        return "timeout", ""
+    if r.returncode == 0:
+        return "survived", ""
+    lines = r.stdout.splitlines()
+    test = next((x.split(" ", 1)[1].split(" - ")[0] for x in lines if x.startswith(("FAILED ", "ERROR "))), "")
+    err = next((x.strip() for x in lines if x.startswith("E ") or ": assert" in x or "Error" in x), "")
+    if not test:
+        tail = (r.stdout + r.stderr).strip().splitlines()
+        test = "no test id (collection or import error)"
+        err = err or (tail[-1] if tail else "")
+    return "killed", f"{test} | {err[:200]}"
 
 
 def main() -> int:
-    shard, shards = map(int, sys.argv[1].split("/")) if len(sys.argv) > 1 else (0, 1)
+    args = [a for a in sys.argv[1:] if not a.startswith("--out")]
+    out_path = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--out=")), None)
+    shard, shards = map(int, args[0].split("/")) if args else (0, 1)
     chosen = MUTANTS[shard::shards]
     only = os.environ.get("MUTANTS_MATCHING")  # "a|b": only mutants whose name contains a or b
     if only:
         chosen = [m for m in chosen if any(o in m[0] for o in only.split("|"))]
     timeout = int(os.environ.get("MUTATION_TIMEOUT", "900"))
-    results: dict[str, list[str]] = {"killed": [], "survived": [], "timeout": [], "not applied": []}
+    results: dict[str, list] = {"killed": [], "survived": [], "timeout": [], "not applied": []}
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp) / "repo"
-        shutil.copytree(ROOT, work, ignore=lambda folder, names: [n for n in names if n in (".git", ".venv", "runs", "runs_mock", "__pycache__", ".pytest_cache")])
+        shutil.copytree(ROOT, work, ignore=lambda folder, names: [n for n in names if n in (".git", ".venv", "runs", "runs_mock", "__pycache__", ".pytest_cache", "pace.env")])
+        base, why = _run(sys.executable, work, timeout)
+        if base != "survived":
+            print(f"BASELINE FAILS ({base}): {why}; no mutant is run", flush=True)
+            return 2
+        print("baseline: the unmutated copy passes", flush=True)
         for name, rel, good, bad in chosen:
             path = work / rel
             src = path.read_text(encoding="utf-8")
@@ -225,12 +340,14 @@ def main() -> int:
                 print(f"NOT APPLIED  {name}", flush=True)
                 continue
             path.write_text(src.replace(good, bad), encoding="utf-8")
-            outcome = _run(sys.executable, work, timeout)
+            outcome, by = _run(sys.executable, work, timeout)
             path.write_text(src, encoding="utf-8")
-            results[outcome].append(name)
-            print(f"{outcome:<12} {name}", flush=True)
+            results[outcome].append([name, by] if outcome == "killed" else name)
+            print(f"{outcome:<12} {name}" + (f"  <- {by}" if by else ""), flush=True)
     print(f"\n{len(results['killed'])}/{len(chosen)} killed; survived={results['survived']}; "
           f"timeout={results['timeout']}; not applied={results['not applied']}")
+    if out_path:
+        Path(out_path).write_text(json.dumps({"shard": f"{shard}/{shards}", "n": len(chosen), **results}, indent=1))
     return 0 if len(results["killed"]) == len(chosen) else 1
 
 
