@@ -17,7 +17,7 @@ from wf import constants as C
 from wf import rq1, rq1v, rq1x
 from wf.analysis.report import write_run_report
 from wf.analysis.stats import decision_flip_share
-from wf.rq2 import SOURCES, complete_shards, load_items, shard_items
+from wf.rq2 import SOURCES, analysis_provenance, complete_shards, load_items, shard_items
 from wf.runs import _effect, _finished, _init_run, _item_hash
 from wf.scoring.logodds import LogoddsScorer
 from wf.tools.verify_items import verified
@@ -96,7 +96,12 @@ def _mean_s(s: list[dict], items: list[dict], arm: str) -> float:
 
 
 def _flips(s: list[dict], items: list[dict], a: str = "aligned", b: str = "swapped") -> float:
-    by = {(x["transition_id"], x["condition"]): x["L"] for x in s}
+    """Share of items whose full L is above zero under `a` and below zero under `b` (one direction).
+
+    NaN scores are left out of the count and the denominator alike (before 2026-11-20 a NaN pair counted as a
+    non-flip, audit B4).
+    """
+    by = {(x["transition_id"], x["condition"]): x["L"] for x in s if x["L"] == x["L"]}
     pairs = [(by[(t["id"], a)], by[(t["id"], b)]) for t in items if (t["id"], a) in by and (t["id"], b) in by]
     return sum(1 for x, y in pairs if x > 0 > y) / len(pairs) if pairs else float("nan")
 
@@ -159,9 +164,13 @@ def size_slope(per_model: dict[str, dict[str, list[float]]], B: int = 1000) -> d
     games = sorted({g for m in tags for g in per_model[m]})
     est = slope(games)
     rng = random.Random(C.RNG_SEED)
-    boots = sorted(slope([rng.choice(games) for _ in games]) for _ in range(B))
-    return {"estimate": est, "ci": [boots[int(0.025 * B)], boots[int(0.975 * B) - 1]], "models": tags,
-            "log_params": xs}
+    # A resample in which some size has no item gives a NaN slope; it is dropped, not sorted in (NaN does not
+    # order, so it would scramble the percentiles; audit B4). The count dropped is reported.
+    draws = [slope([rng.choice(games) for _ in games]) for _ in range(B)]
+    boots = sorted(b for b in draws if b == b)
+    k = len(boots)
+    ci = [boots[int(0.025 * k)], boots[int(0.975 * k) - 1]] if k else [float("nan"), float("nan")]  # as before
+    return {"estimate": est, "ci": ci, "models": tags, "log_params": xs, "n_resamples_dropped_nan": B - k}
 
 
 def run_size_analysis(cfg: dict) -> int:
@@ -172,11 +181,13 @@ def run_size_analysis(cfg: dict) -> int:
     report: dict[str, Any] = {"items": {"n_primary": len(sets["primary"]), "n_successes": len(sets["successes"])},
                               "models": {}, "waiting": {}}
     per_model: dict[str, dict] = {}
+    read: dict[str, list] = {}
     for tag in cfg["models"]:
         folders, problems = complete_shards(f"size_score_{tag}")
         if problems:
             report["waiting"][tag] = problems
             continue
+        read[f"size_score_{tag}"] = folders
         s = [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag]
         report["models"][tag] = {"params_b": SIZES[tag][1], **model_block(s, sets["primary"], sets["successes"])}
         per_model[tag] = {arms: _diffs_by_game(s, sets["primary"], *arms)
@@ -184,6 +195,7 @@ def run_size_analysis(cfg: dict) -> int:
     if len(per_model) >= 3:
         report["slope_vs_log_params"] = {arms[0]: size_slope({m: v[arms] for m, v in per_model.items()})
                                          for arms in (("aligned", "swapped"), ("yn_aligned", "yn_swapped"))}
+    report["provenance"] = analysis_provenance(None, [], cfg.get("sources", SOURCES), others=read)
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Model-size series, Qwen3 dense (exploratory)", report)
     lines = [f"{tag} ({m['params_b']}B): dL {m['goal_effect']['delta_L_nats']:.2f}, flips {m['flips_to_success']:.3f}, "

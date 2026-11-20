@@ -21,7 +21,9 @@ tok = None
 if len(sys.argv) > 1:
     from transformers import AutoTokenizer
 
-    tok = AutoTokenizer.from_pretrained(sys.argv[1])
+    from wf.constants import revision_for
+
+    tok = AutoTokenizer.from_pretrained(sys.argv[1], revision=revision_for(sys.argv[1]))  # the pinned snapshot
 
 
 def check(t: dict, arm: str, ft: bool) -> None:

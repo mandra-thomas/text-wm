@@ -10,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from wf.constants import REVISIONS, revision_for
 from wf.data.goals import make_swapped_task_line
 from wf.env.server import parse_game_id
 from wf.scoring.prompts import (
@@ -41,6 +42,8 @@ class ScoreResult:
     # The first token as the model saw it after the chat template, decoded, to confirm what was scored.
     first_token_plus: str = ""
     first_token_minus: str = ""
+    # The Hugging Face snapshot the weights and tokenizer were loaded at (wf.constants.REVISIONS).
+    model_revision: str | None = None
 
     @property
     def L_first(self) -> float:
@@ -75,6 +78,7 @@ class ScoreResult:
             "first_token_minus": self.first_token_minus,
             "first_mass": self.first_mass,
             "c_hat": self.c_hat,
+            "model_revision": self.model_revision,
         }
 
 
@@ -91,6 +95,8 @@ class LogoddsScorer:
         self.model_name = model_name
         self.model_tag = model_tag or model_name.split("/")[-1].lower()
         self.mock = os.environ.get("WF_MOCK_SCORE", "0") == "1"
+        # Real runs load a pinned snapshot and refuse an unpinned id; mock runs load nothing.
+        self.revision = REVISIONS.get(model_name) if self.mock else revision_for(model_name)
         self._cache: dict[tuple[str, str, str, str], ScoreResult] = {}
         self._model = None
         self._tok = None
@@ -103,10 +109,13 @@ class LogoddsScorer:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        self._tok = AutoTokenizer.from_pretrained(self.model_name, trust_remote_code=True)
+        # trust_remote_code stays as in every reported run; the pinned revision fixes which code and chat
+        # template that is, so a later push to the Hub cannot change them.
+        self._tok = AutoTokenizer.from_pretrained(self.model_name, revision=self.revision, trust_remote_code=True)
         torch_dtype = getattr(torch, self.dtype, torch.bfloat16)
         self._model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
+            revision=self.revision,
             torch_dtype=torch_dtype,
             device_map="auto",
             trust_remote_code=True,
@@ -211,6 +220,7 @@ class LogoddsScorer:
             logp_first_minus=first_minus,
             first_token_plus=tok_plus,
             first_token_minus=tok_minus,
+            model_revision=self.revision,
         )
         self._cache[key] = result
         return result
@@ -247,7 +257,7 @@ class LogoddsScorer:
         return ScoreResult(transition_id=transition_id, model=self.model_tag, condition=condition, logp_plus=plus,
                            logp_minus=minus, L=L, p_success=sigmoid(L), n_tokens_plus=1, n_tokens_minus=1,
                            logp_first_plus=plus, logp_first_minus=minus, first_token_plus=self._tok.decode(ids[0]),
-                           first_token_minus=self._tok.decode(ids[1]))
+                           first_token_minus=self._tok.decode(ids[1]), model_revision=self.revision)
 
     def _stop_tokens(self) -> list[int]:
         """Every end-of-turn token. Fine-tuned checkpoints leave the tokenizer's out of their generation config."""

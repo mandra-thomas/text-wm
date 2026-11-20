@@ -34,7 +34,7 @@ from wf import rq1
 from wf.analysis.report import write_run_report
 from wf.analysis.stats import cluster_bootstrap
 from wf.data.transitions import HistoryFacts, history_facts
-from wf.rq2 import SOURCES, complete_shards, load_items, shard_items
+from wf.rq2 import SOURCES, analysis_provenance, complete_shards, load_items, shard_items
 from wf.runs import _effect, _finished, _init_run, _item_hash
 from wf.scoring.logodds import LogoddsScorer
 from wf.scoring.prompts import REACT_FEWSHOT, REACT_SYSTEM, _replace_task_line
@@ -402,6 +402,7 @@ def run_mech_analysis(cfg: dict) -> int:
                                         "n_state_question": sum(1 for t in primary if state_questions(t))}}
     for tag in cfg.get("models", rq1.FEWSHOT):
         report[tag] = _model_block([x for x in scores if x["model"] == tag], primary)
+    report["provenance"] = analysis_provenance(cfg["source"], folders, cfg.get("sources", SOURCES))
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Mechanism diagnostic: state inference against judgement (exploratory)", report)
     lines = []
