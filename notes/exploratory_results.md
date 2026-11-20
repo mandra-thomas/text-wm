@@ -1,6 +1,8 @@
 # Exploratory follow-ups to RQ2 (2026-11-19)
 
-None of these analyses was preregistered. Each design was logged in `deviations.md` before its data; the dates and wording are there. Numbers marked **post hoc** were computed by one-off scripts after the results were in, and are not yet produced by a pipeline run. All other numbers come from the analysis runs named in each section, whose metrics are copied here as `<run>_metrics.json`.
+None of these analyses was preregistered. Each design was logged in `deviations.md` before its data; the dates and wording are there. Numbers marked **post hoc** were computed by one-off scripts after the results were in, and are not yet produced by a pipeline run. All other numbers come from the analysis runs named in each section, whose metrics are copied here as `<run>_metrics.json`, except where a number is marked as a re-parse with the final parser. Which run, commit and GPU produced each section is in `reproducing.md`.
+
+**Multiple comparisons.** No adjustment is made across the analyses in this note. Holm's correction applies only to the two co-primary tests of the preregistered RQ2 result. The p-values and intervals here are unadjusted and should be read as descriptive; with this many readouts, some will exclude zero by chance. Nearly every bootstrap and permutation in these analyses also uses the same seed (20260924; the written-prediction shift uses 0), so the intervals of different analyses are not independent draws.
 
 Common setup, unless stated otherwise:
 
@@ -10,13 +12,15 @@ Common setup, unless stated otherwise:
 - **Measures:**
   - L is the log-odds of the success text against "Nothing happens.".
   - ΔL is the mean of L(aligned task) − L(swapped task), in nats.
-  - The two-candidate score is s = σ(L), and Δs is its shift in percentage points.
-  - The first-word term ℓ_first is the part of L carried by the first word ("You" against "Nothing").
+  - The two-candidate score is s = σ(L), and Δs is its shift in percentage points. s is not the model's probability that the action succeeds: it compares one success wording with "Nothing happens.", so a long or unguessable success text lowers it.
+  - The first-word term ℓ_first is the part of L carried by the first token ("You" against "Nothing").
+  - **Yes-share** is the mean of σ(L) on the yes/no question, where L is the log-odds of "Yes" against "No". It is a mean probability, **not** the share of items on which "Yes" scores above "No". The two can differ a lot when most items sit near 0 or 1. The share of items answered Yes is pending (to be computed next to each yes-share).
+  - **Flips** are defined two ways in this project. The *one-direction* flip counts items whose full L is below zero under the swapped task and above zero under the aligned task (`flips_to_success`). The *first-token sign change* counts items whose first-token log-odds changes sign between the two tasks, in either direction (`decision_flip`). For the same items the second is larger. Each table says which it uses.
 - **Intervals:** game-clustered bootstrap 95% intervals.
 
 ## 1. Object-free goals, extra-mention design, working actions (`rq1x_score`, `rq1x_analysis`)
 
-This run uses a secondary scoring of the same items, which carries all the controls. It ran on different GPUs, so individual scores differ slightly: overall ΔL is 6.10 and 1.64, against 6.12 and 1.65 in the confirmatory run.
+This run uses a secondary scoring of the same items, which carries all the controls. It ran on different GPUs, so individual scores differ slightly: overall ΔL is 6.10 and 1.64, against 6.12 and 1.65 in the confirmatory run. Some contrasts in this section pair a score from `rq1_score` (the named aligned task, the neutral task) with one from `rq1x_score` (the described tasks), so the two sides of such a pair may come from different jobs and GPU types. That adds noise of the size measured in `deviations.md` ("Scores across GPU types"), not bias.
 
 - **Described (object-free) goal.** Every object name in the task is replaced by a fixed description with no ALFWorld object name ("cool some thick drinking vessel with a handle for hot drinks and put it in cabinet"). The action still names `mug 1`.
   - Most of the effect survives: Qwen 3.71 nats [3.30, 4.11], 61% of the named-goal effect; Llama 1.51 [1.36, 1.67], 92%.
@@ -45,9 +49,10 @@ This run uses a secondary scoring of the same items, which carries all the contr
 Qwen3-8B reasoned before answering. The run used 1,000 sampled items and five task lines: aligned, swapped, neutral, and both described goals. Sampling followed Qwen's recommended settings, with the reasoning capped at 3,072 tokens; 2.6–7.5% of replies hit the cap and were forced to answer, and leaving them out changes nothing. L was scored given the model's own reasoning.
 
 - **Smaller gap.** The aligned-vs-swapped effect is 4.01 nats [2.87, 5.12] with reasoning, against 6.06 [5.31, 6.76] with thinking off on the same items.
+- **The comparison crosses scoring engines.** The after-reasoning L is scored with vLLM's prompt log-probabilities, given the model's own sampled reasoning. The thinking-off numbers come from `rq1_score` and `rq1x_score`, scored with HF transformers. The two engines, and sampled against greedy text, are not the same measurement, and the reasoning differs between an item's aligned and swapped prompts, so the after-reasoning effect is not a task-line-only contrast. vLLM sampling is also not guaranteed to repeat across hardware or batch sizes.
 - **But not less lift.** Relative to the neutral task, the aligned task raises L about equally: 9.0 nats with reasoning and 8.6 without. The swapped task's lift doubles, from 2.5 to 5.0. Reasoning spreads the lift to other tasks; it does not remove it.
 - **Answers off target** (**post hoc**, by reading the reasoning). In 14% of answers the reasoning drifted to another object or to a few-shot example. On the answers that stayed on target (**post hoc**), the pattern holds.
-- **Written predictions.** Their aligned-vs-swapped shift is 4.7 points [1.6, 8.3] (final parser version). These rates are not used further, because of the off-target answers.
+- **Written predictions.** Their aligned-vs-swapped shift is 4.7 points [1.6, 8.3] (re-parse with the final parser version, `3c25d40cc71529e2`, recorded in `deviations.md`; `thinking_metrics.json` still holds the earlier parser's 5.4). These rates are not used further, because of the off-target answers.
 
 ## 3. Dissociation test (`rq1d_score`, `rq1d_analysis`)
 
@@ -76,7 +81,7 @@ The readouts are mixed. They need a confirmatory test with a design that separat
   - **What this rules out:** that the effect needs the exact real task. It does not rule out that the history fits the task's object.
 - **Yes/no question.** The final prompt line is replaced by a fixed question: will the action succeed, or will the environment reply "Nothing happens."? "Yes" is scored against "No".
   - **Goal effect.** It replicates in log-odds: 2.80 [2.59, 3.02] for Qwen and 2.21 [2.05, 2.39] for Llama.
-  - **Yes-share.** Qwen almost never says yes to these failures (0.2% under the aligned task, **post hoc**). Llama's yes-share shifts by 16 points: 40 at step 0 and 13 afterwards (**post hoc**).
+  - **Yes-share** (mean σ of the yes/no score; see the definitions above). Qwen's is almost zero on these failures (0.2% under the aligned task, **post hoc**). Llama's shifts by 16 points: 40 at step 0 and 13 afterwards (**post hoc**). The one-off script is not in the repository; Qwen's 0.2% equals the size run's mean σ for Qwen3-8B, so these are most likely means of σ too, not shares of answers.
   - **Discrimination.**
     - AUC falls from 0.99 to 0.95 for Qwen and from 0.97 to 0.85 for Llama.
     - A failing action is ranked first at 8% against 2% of states for Qwen, and 20% against 7% for Llama.
@@ -144,16 +149,16 @@ Design and readouts were logged in `deviations.md` before any score existed, and
 
 ## 6. Model-size series, Qwen3 dense (`size_score_<model>`, `size_analysis`)
 
-Design and prediction were logged before any score. Scoring ran at 8bfd84c and the analysis at 10a61a7, on the 4,666 primary items and 292 determined successes. Metrics are in `size_metrics.json`. The rescored Qwen3-8B reproduces the confirmatory results exactly: 6.12 nats two-candidate, 2.80 yes/no.
+Design and prediction were logged before any score. Scoring ran at 8bfd84c and the analysis at 10a61a7, on the 4,666 primary items and 292 determined successes. Metrics are in `size_metrics.json`. The rescored Qwen3-8B reproduces the earlier results to the two decimals reported: 6.12 nats two-candidate (the confirmatory run), 2.80 yes/no (`rq1v`). Individual scores repeat exactly only on the same GPU type (`deviations.md`, "Scores across GPU types"); the agreement of the means shows the prompt and code did not change, not that every score is identical.
 
 **The columns:**
 - the two ΔL columns are the aligned-minus-swapped effect in nats;
-- the score shift is in percentage points of the two-candidate success score;
-- flips are the share of items whose first-word decision changes;
-- the yes-share is on failing actions, under the neutral task;
+- the score shift is in percentage points of the two-candidate score s;
+- the sign-change column is the share of items whose first-token log-odds changes sign between the aligned and swapped tasks, in either direction (`decision_flip`). It is not the one-direction flip on the full L (`flips_to_success`, also in `size_metrics.json`), which is smaller: 5.9% for Qwen3-8B;
+- the yes-share is the mean σ of the yes/no score on failing actions, under the neutral task, not the share of items answered Yes (that share is pending);
 - the AUC compares working with failing actions on the two-candidate score.
 
-| Size (parameters) | ΔL two-candidate | ΔL yes/no | Score shift | Flips | Yes-share on failures | AUC, neutral → aligned |
+| Size (parameters) | ΔL two-candidate | ΔL yes/no | Score shift | First-token sign changes, either direction | Yes-share on failures (mean σ) | AUC, neutral → aligned |
 |---|---|---|---|---|---|---|
 | 0.6B (0.75B) | 0.89 | 0.12 | 2.0 | 0.6% | 99.9% | 0.72 → 0.57 |
 | 1.7B (2.03B) | 2.49 | 2.08 | 15.6 | 24.8% | 99.9% | 0.81 → 0.79 |
@@ -165,10 +170,11 @@ Design and prediction were logged before any score. Scoring ran at 8bfd84c and t
 **Against the logged prediction:**
 - **The effect is positive at every size,** as predicted.
 - **"The slope against log parameters is not positive" fails.** The slope is +0.52 nats per e-fold of parameters [0.40, 0.63] on the two-candidate score, and +0.46 [0.36, 0.55] on yes/no. The bootstrap resamples games jointly across sizes.
+- **Caveat on the slope.** Its interval reflects only the sampling of games; the six sizes are treated as fixed, and with six points one model can move the slope a lot. The verdict depends on including 0.6B and 1.7B, which largely cannot do the task (below). Over 4B–32B alone the two-candidate effect falls with size.
 
 **Post hoc reading.** The two smallest models largely cannot do the task: they answer Yes to almost every yes/no question, working or failing. Among the competent sizes (4B–32B):
 - **The two-candidate effect falls steadily** (7.5, 6.1, 4.3, 2.4 nats). The yes/no effect does not fall steadily.
-- **The practical size does not fall.** Score shifts are 12.7, 5.8, 12.3 and 13.1 points, and flips 19%, 10%, 21% and 18%. Larger models are less extreme in log-odds, so a smaller effect in nats moves probabilities as much.
-- **The largest model is still clearly moved.** Qwen3-32B answers Yes to failing actions 15.0% of the time under the aligned task, against 5.8% under the swapped task.
+- **The practical size does not fall.** Score shifts are 12.7, 5.8, 12.3 and 13.1 points, and first-token sign changes 19%, 10%, 21% and 18%. Larger models are less extreme in log-odds, so a smaller effect in nats moves the scores as much.
+- **The largest model is still clearly moved.** On failing actions, Qwen3-32B's mean σ of the yes/no score (its average probability of "Yes" against "No") is 15.0% under the aligned task, against 5.8% under the swapped task. This is a mean probability, not the share of failing actions it answers Yes to; that share is pending.
 
 Scaling within Qwen3 does not remove the leak.

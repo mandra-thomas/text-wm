@@ -2,7 +2,11 @@
 
 Scoring: run `rq1_score`, 8 parts at de40795, on L40S, A40 and A100 GPUs. Every item's prompts for a model were scored in the same job. Analysis: run `rq1_analysis` at de40795, parser version `8639849027611cd2`. Full numbers are in `rq1_metrics.json` (a copy of the run's metrics.json). The design is in `deviations.md`, "Decided 2026-11-18, after the confirmatory RQ2 result". None of it is preregistered.
 
-**Provisional.** Every number based on written predictions (A, H1, the false-success rates) uses a parser that failed its fourth audit (see `deviations.md`). The parser leaves only 98 of the run's 68,340 predictions unreadable, and the patterns behind the misreadings occur in about 20, so large changes are not expected. Even so, these numbers stay provisional until a fixed parser passes a fresh audit. Scores (ΔL, Δp) do not depend on the parser.
+**Parser status (updated 2026-11-20).** Every number based on written predictions (A, H1, the false-success rates) depends on the parser that reads them. The parser went through six audit rounds against a blind rater: the first two samples were used to develop it, and rounds three to six each failed the rule fixed before the audits (at least 95% agreement on no effect against effect, and no row read in the opposite direction). Rounds five and six passed the agreement bar (95.5% and 96.6%) but each had rows read in the opposite direction. The audits were ended on 2026-11-19 without the parser passing its rule, and the written-prediction results are reported as validated at 95–97% agreement on stratified hard cases, with the no-opposite rule unmet (`deviations.md`, "Sixth parser audit").
+
+The numbers in this note use the parser version `8639849027611cd2`, the one the analysis ran with. The final version is `3c25d40cc71529e2`, the one in the code now. Re-reading this run's 68,340 predictions with it moves 110 of them to the other side (checked 2026-11-20 by re-parsing the saved predictions): 70 unreadable become failures, 6 unreadable become successes, and 34 change between success and failure. (The decision log's 93 is the fifth version's count against the same baseline.) So a rerun of `rq1_analysis` at the current commit will not reproduce this note to the last digit. The decision log reports A unchanged to two decimals at the final version (Qwen 0.19, Llama 0.77) and the H1 verdicts unchanged. Regenerating these metrics at the final parser is pending. Scores (ΔL, Δp) do not depend on the parser.
+
+L is the log-odds of the success text against "Nothing happens.", and the "P(success)" and "Δp" below are means of s = σ(L). s is not the model's probability that the action succeeds; see `rq2_results.md`.
 
 Items: written predictions on 6,527 true failures and 307 true successes from 132 unseen games. Scores on the same 4,666 main-test items as the confirmatory RQ2 run, from 125 games. No predictions or scores are missing.
 
@@ -21,7 +25,7 @@ A is the false-success rate minus the false-failure rate. The false-success rate
 
 A across example sets 1, 2 and 3: Qwen 0.19, 0.31 and 0.33 (SD 0.075); Llama 0.77, 0.77 and 0.88 (SD 0.068).
 
-Qwen's false-success rate depends strongly on why the action fails. It is 10% when the agent is away from the receptacle, 10% when the agent does not hold the object, 43% when its hands are full, and 68% when the agent never went to the receptacle. Llama's is 68% to 99% for every reason. With the full state, Qwen's rate for "agent is away from the receptacle" rises from 10% to 30%. The layout shows where the object is, and Qwen predicts the take works without checking that the agent is there.
+Qwen's false-success rate depends strongly on why the action fails. It is 10% when the agent is away from the receptacle, 10% when the agent does not hold the object, 43% when its hands are full, and 68% when the agent never went to the receptacle. Llama's is 68% to 99% for every reason except "already there" (going to the receptacle the agent is at, 41 items), where it is 100%. With the full state, Qwen's rate for "agent is away from the receptacle" rises from 10% to 30%. The layout shows where the object is, and Qwen predicts the take works without checking that the agent is there.
 
 ## H1
 
@@ -49,7 +53,7 @@ SD of ΔL across the three example sets: Qwen 1.48, Llama 0.33.
 
 The Word2World models, full state as trained, with aligned vs swapped goals: Llama −0.28 (−0.42 to −0.15, p 0.001); Qwen −0.03 (−0.21 to 0.15, p 0.74).
 
-Mean P(success) under each prompt, Qwen / Llama:
+Mean two-candidate score s = σ(L) (logged as "P(success)") under each prompt, Qwen / Llama:
 
 | prompt | Qwen | Llama |
 |---|---|---|
@@ -89,4 +93,5 @@ In Δp, the goal role is +1.2 pp for Qwen and +6.1 pp for Llama (+11.9 pp on tak
 - Both prompted models lean toward predicting success, Llama far more. It states an effect for 78% of actions that do nothing, so H1b holds by a wide margin. The fine-tuned Word2World models barely lean (Llama) or lean slightly the other way (Qwen).
 - Giving the hidden state reduces Llama's lean (H1a holds) but increases Qwen's. In both, it cuts the goal effect by about 70%, without removing it.
 - The RQ2 effect holds with every example set, and above the "strong" threshold each time. Telling the model to ignore the goal removes 9% of Qwen's effect and none of Llama's.
+- **Superseded (2026-11-19):** the next point's reading that the effect comes from the object being *named* was overturned by the object-free goals in `exploratory_results.md`, section 1. With the object only described, 61% (Qwen) and 92% (Llama) of the effect remains, so the task acts through the object's meaning. The point is kept as written at the time.
 - Most of the RQ2 effect comes from the action's object being named in the prompt. For Qwen, naming it in a plain sentence reproduces almost the whole effect. Once both objects are named, making it the goal lowers the log-odds, except on an episode's first step. For Llama, the goal role is about a third of the effect, concentrated on take actions, which the 2×2 could not cover. Both controls agree that mention dominates. They disagree on the sign of the small goal-specific part on move, heat, cool and clean items.
