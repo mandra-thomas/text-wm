@@ -1422,6 +1422,10 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "rq1v_analysis_v2": lambda cfg: _rq1v("run_rq1v_analysis")(cfg),
     "thinking_analysis_v2": lambda cfg: _thinking("run_thinking_analysis")(cfg),
     "size_analysis_v2": lambda cfg: _lazy("sizes", "run_size_analysis")(cfg),
+    # 2026-11-20, mechanism battery (wf/mech2.py, notes/mechanism2_design.md), logged before any of its scores.
+    "mech2_score": lambda cfg: _lazy("mech2", "run_mech2_score")(cfg),
+    "mech2_score_smoke": lambda cfg: _lazy("mech2", "run_mech2_score")(cfg),
+    "mech2_analysis": lambda cfg: _lazy("mech2", "run_mech2_analysis")(cfg),
 }
 
 

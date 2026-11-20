@@ -1,0 +1,9 @@
+run_id: mech2_analysis
+# Reads every shard of mech2_score; no GPU. The two analysis-only checks read earlier runs: rq1_score (few-shot task
+# overlap, example sets 1-3 on the same items) and mech_score (the knowledge split for H1).
+source: mech2_score
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+sample_n: 1000
+overlap_source: rq1_score
+mech_source: mech_score
