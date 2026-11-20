@@ -575,21 +575,25 @@ def test_flips_are_shares_of_argmax_answers():
     assert a["yes_share_failures"] == {"yn_aligned": 0.75, "yn_swapped": 0.5, "yn_absent": 0.0}
 
 
-def _gate_block(auc=0.8, share=0.4, mass=0.9):
+def _gate_block(auc=0.8, yes_f=0.4, yes_s=0.9, mass=0.9):
     return {"yes_no": {"auc": {"yn_absent": {"auc": auc}}},
-            "argmax_answers": {"yes_share_failures": {"yn_absent": share}},
-            "first_token_coverage": {c: {"median": mass if c == "yn_swapped" else 0.99} for c in sizes.YN_ARMS + ("aligned",)}}
+            "argmax_answers": {"yes_share_failures": {"yn_absent": yes_f, "yn_aligned": 0.99},
+                               "yes_share_successes": {"yn_absent": yes_s, "yn_aligned": 0.0}},
+            "first_token_coverage": {c: {"median": mass if c == "yn_absent" else 0.01} for c in sizes.YN_ARMS + ("aligned",)}}
 
 
-@pytest.mark.parametrize("kw, ok", [({}, True), ({"auc": 0.70}, True), ({"auc": 0.69}, False), ({"share": 0.05}, True),
-                                    ({"share": 0.049}, False), ({"share": 0.951}, False), ({"share": 0.95}, True),
-                                    ({"mass": 0.5}, True), ({"mass": 0.49}, False), ({"auc": float("nan")}, False)])
+@pytest.mark.parametrize("kw, ok", [
+    ({}, True), ({"auc": 0.70}, True), ({"auc": 0.69}, False), ({"auc": float("nan")}, False),
+    ({"yes_f": 0.0015}, True),  # No to nearly every failure is accuracy, not a defect (Qwen3-8B: 0.15%)
+    ({"yes_f": 0.95}, True), ({"yes_f": 0.951}, False),  # Yes to (nearly) everything
+    ({"yes_s": 0.05}, True), ({"yes_s": 0.049}, False),  # No to (nearly) everything
+    ({"mass": 0.5}, True), ({"mass": 0.49}, False), ({"yes_s": float("nan")}, False)])
 def test_competence_gate(kw, ok):
+    """Read under the neutral task only: the other tasks' shares and coverage (set to extremes here) do not count."""
     g = families.competence_gate(_gate_block(**kw))
     assert g["interpretable"] is ok
-    # the two-candidate coverage is not part of it
-    assert families.competence_gate({**_gate_block(), "first_token_coverage": {**_gate_block()["first_token_coverage"],
-                                                                                "aligned": {"median": 0.01}}})["interpretable"]
+    assert set(g["checks"]) == {"auc_neutral", "yes_share_neutral_failures", "yes_share_neutral_successes",
+                                "median_yes_no_mass_neutral"}
 
 
 @pytest.mark.parametrize("factor, matches, differs", [(1.0, True, False), (1.4, True, True), (1 / 1.4, True, True),

@@ -169,15 +169,26 @@ $$
 
 Multiplying every logit by one factor, as a different temperature or a softer output layer would, leaves both metrics unchanged, so they compare across families where raw ΔL does not. R says how far the goal moves the answer in units of how far real evidence moves it; it is undefined (reported as missing) when the evidence effect is not positive. Each metric gets a game-clustered 95% bootstrap CI (games resampled, failures and successes together) and a two-sided permutation p in which each game's items flip sign together. For R the p is that of its numerator: the denominator does not change under the flips, so R is zero exactly when the mean goal effect is. Both are computed for every wave A model and for the Qwen3-8B and Llama-3.1-8B reference blocks (`primary_metrics`).
 
-**Competence and coverage gate (fixed now, before data).** A model is interpretable only if all three hold:
+**Competence and coverage gate (fixed now, before data; revised by the second amendment below).** As first written, a model was interpretable only if all three held:
 
 - its neutral-task yes/no AUC (successes against failures) is at least 0.70;
 - under the neutral task it answers Yes (log-odds above zero) to between 5% and 95% of failures;
 - the median of P(Yes) + P(No) is at least 0.5 under every yes/no task.
 
+The rule in force is the second amendment's.
+
 A model that fails is reported as not interpretable, never as a null result: a model that cannot tell successes from failures, or answers one word to everything, or barely puts its mass on Yes and No, says nothing about goal sensitivity. This replaces the sentence in the prediction section that called such a restriction post hoc; it was post hoc only if made after the data. The analysis computes the gate per model (`competence_gate`), the reference models included.
 
-**Open issue in the gate, to settle before any wave A score is read.** Run on the archived reference scores (no wave A score involved), the gate as written passes Llama-3.1-8B (neutral AUC 0.97, Yes to 5.3% of failures, median Yes/No mass 0.996) but fails Qwen3-8B, the study's main model, on the second condition alone: under the neutral task Qwen3-8B answers Yes to only 0.15% of failures (AUC 0.99, mass 1.00). Answering No to nearly every failure is correct, not degenerate, so the lower bound on failures excludes the most accurate model rather than one that answers one word to everything. A rule that keeps the intent would bound the Yes share on failures above (at most 95%) and the Yes share on determined successes below (at least 5%), or bound the Yes share over failures and successes together. The code implements the rule as written above until this is decided.
+**Open issue in the gate, to settle before any wave A score is read.** Run on the archived reference scores (no wave A score involved), the gate as written passes Llama-3.1-8B (neutral AUC 0.97, Yes to 5.3% of failures, median Yes/No mass 0.996) but fails Qwen3-8B, the study's main model, on the second condition alone: under the neutral task Qwen3-8B answers Yes to only 0.15% of failures (AUC 0.99, mass 1.00). Answering No to nearly every failure is correct, not degenerate, so the lower bound on failures excludes the most accurate model rather than one that answers one word to everything. A rule that keeps the intent would bound the Yes share on failures above (at most 95%) and the Yes share on determined successes below (at least 5%). Settled by the second amendment (next paragraph).
+
+**Second amendment (2026-11-20, still before any wave A score was read): the competence gate.** The lower bound on the Yes share on failures was meant to exclude a model that answers No to everything. It cannot do that job: a model that answers No to failures is right, so the bound excludes accurate models, as it did Qwen3-8B. The problem was found on the archived reference scores alone; no wave A score had been opened, and none has been since. "No to everything" shows instead as a model that also answers No to the determined successes, so the lower bound moves there. The rule now in force: a model is interpretable only if all four of these hold on the yes/no format under the neutral task:
+
+- the AUC (determined successes against failures) is at least 0.70;
+- it answers Yes (log-odds above zero) to at most 95% of failures, which excludes "Yes to everything";
+- it answers Yes to at least 5% of determined successes, which excludes "No to everything";
+- the median P(Yes) + P(No) is at least 0.5.
+
+All four are read under the neutral task, so the coverage condition is now the neutral task's median rather than every yes/no task's. Rerun on the archived reference scores, both reference models pass. Llama-3.1-8B has AUC 0.97, answers Yes to 5.3% of failures and 85% of successes, and its median mass is 1.00. Qwen3-8B has AUC 0.99, answers Yes to 0.15% of failures and 59% of successes, and its median mass is 1.00. The code (`competence_gate`), its tests and its mutants follow this rule.
 
 **Flips.** Yes/no flips and yes-shares are read as the model's choice, Yes when its log-odds are above zero, not as the mean P(Yes): the share answering Yes per task, and the shares of failures that go from No under the swapped task to Yes under the aligned task, and back (`argmax_answers`, with game-clustered CIs). The two-candidate flip definitions stay as before, within model.
 

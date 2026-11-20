@@ -403,7 +403,10 @@ FLIP_DEFINITIONS = {
 # ---------------- primary cross-model metrics, competence gate, comparisons (amendment, 2026-11-20, pre-data) ----
 
 PRIMARY_METRICS = ("item_share_toward_yes", "goal_to_evidence_ratio")
-COMPETENCE = {"auc_neutral_min": 0.70, "yes_share_neutral_failures": (0.05, 0.95), "median_yes_no_mass_min": 0.5}
+# Amended 2026-11-20 (second amendment, still before any wave A score was read): the first version required 5% to
+# 95% Yes on failures, and its lower bound excluded Qwen3-8B for answering No to failures (notes/families_design.md).
+COMPETENCE = {"auc_neutral_min": 0.70, "yes_share_neutral_failures_max": 0.95, "yes_share_neutral_successes_min": 0.05,
+              "median_yes_no_mass_neutral_min": 0.5}
 EQUIVALENCE_FACTOR = 1.5  # "matches": R within a factor of 1.5, TOST on log R
 NOISE_FLOOR_NATS = 0.3  # yes/no ΔL differences between models below this are treated as noise
 ALPHA = 0.05
@@ -492,18 +495,19 @@ def argmax_answers(s: list[dict], primary: list[dict], successes: list[dict]) ->
 
 
 def competence_gate(block: dict[str, Any]) -> dict[str, Any]:
-    """Fixed before any wave A score: a model is interpretable only if, on the yes/no format, its neutral-task AUC is
-    at least 0.70, it answers Yes (argmax) to between 5% and 95% of failures under the neutral task, and the median
-    P(Yes) + P(No) is at least 0.5 under every yes/no task. A model that fails is reported as not interpretable,
-    never as a null result."""
+    """Fixed before any wave A score (second amendment, 2026-11-20). On the yes/no format under the neutral task, a
+    model is interpretable only if all four hold: AUC (successes against failures) at least 0.70; it answers Yes
+    (argmax) to at most 95% of failures, so not Yes to everything; it answers Yes to at least 5% of determined
+    successes, so not No to everything; and the median P(Yes) + P(No) is at least 0.5. A model that fails is
+    reported as not interpretable, never as a null result."""
     auc = block["yes_no"]["auc"]["yn_absent"]["auc"]
-    share = block["argmax_answers"]["yes_share_failures"]["yn_absent"]
-    medians = {c: v["median"] for c, v in block["first_token_coverage"].items() if c in sizes.YN_ARMS}
-    lo, hi = COMPETENCE["yes_share_neutral_failures"]
+    yes_f = block["argmax_answers"]["yes_share_failures"]["yn_absent"]
+    yes_s = block["argmax_answers"]["yes_share_successes"]["yn_absent"]
+    mass = block["first_token_coverage"].get("yn_absent", {}).get("median", float("nan"))
     checks = {"auc_neutral": {"value": auc, "pass": auc >= COMPETENCE["auc_neutral_min"]},
-              "yes_share_neutral_failures": {"value": share, "pass": lo <= share <= hi},
-              "median_yes_no_mass": {"value": min(medians.values()) if medians else float("nan"), "by_task": medians,
-                                     "pass": bool(medians) and all(m >= COMPETENCE["median_yes_no_mass_min"] for m in medians.values())}}
+              "yes_share_neutral_failures": {"value": yes_f, "pass": yes_f <= COMPETENCE["yes_share_neutral_failures_max"]},
+              "yes_share_neutral_successes": {"value": yes_s, "pass": yes_s >= COMPETENCE["yes_share_neutral_successes_min"]},
+              "median_yes_no_mass_neutral": {"value": mass, "pass": mass >= COMPETENCE["median_yes_no_mass_neutral_min"]}}
     return {"interpretable": all(c["pass"] for c in checks.values()), "checks": checks, "rule": COMPETENCE}
 
 
