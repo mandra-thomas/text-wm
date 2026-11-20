@@ -1,0 +1,29 @@
+{
+ "eligible": {
+  "empty_history|never_obtained|0": 1433,
+  "main|never_obtained|1-3": 20902,
+  "main|never_obtained|4-8": 28628,
+  "main|never_obtained|9-12": 19632,
+  "main|too_few|1-3": 1469,
+  "main|too_few|4-8": 3582,
+  "main|too_few|9-12": 2789,
+  "main|used_up|1-3": 179,
+  "main|used_up|4-8": 1455,
+  "main|used_up|9-12": 1731,
+  "secondary_get|get_craftable|0": 1131,
+  "secondary_get|get_craftable|1-3": 19508,
+  "secondary_get|get_craftable|4-8": 33926,
+  "secondary_get|get_craftable|9-12": 27144
+ },
+ "excluded": {
+  "duplicate": 14809,
+  "success": 22297
+ },
+ "fewshot_pairs": [
+  "p049",
+  "p119",
+  "p140"
+ ],
+ "pairs": 269,
+ "test_pairs": 266
+}

@@ -281,3 +281,15 @@ The design changes the feasibility probe (scratch `envprobe/textcraft/`) in the 
 - **Classes defined by peak holding.** The probe used "consumed at some time".
 - **Never-obtained items need a non-empty history** to be in the main test.
 - **Fixed quotas.**
+
+## 10. Clarifications written while building (2026-11-20, before any scoring)
+
+These clarifications were added after the design commit (2b4b16a). None changes a rule that affected which items were built.
+
+- **Order independence (section 2).** Reading the frozen files in reverse gives the same recipes, generic groups and items. Only the order of an item's alternative recipes follows the file order, and the frozen file fixes that order. The environment's craft step takes the first alternative that matches the inputs. That order could matter only if two alternatives took the same inputs with different output counts, and none do (sugar lists "craft 1 sugar using 1 sugar cane" twice, identically). A test checks both points.
+- **Splitting a quota (section 4).** When the remainder of a quota is smaller than the number of open classes or bins, one extra item goes to each of the first ones, in the order used in section 4 (classes used up, too few, never obtained; bins in ascending order). This is why the main cells hold 167, 167 and 166 items.
+- **Example walks (section 5).** If a prompt-example pair's walk with seed 0 had no craft (or get) at step 3 or later, the next seed would be used. It was not needed: examples 1 and 3 come from walk seed 0. Example 2 is an item from walk seed 3.
+- **Counts of the build.** The counts that fixed the sample:
+  - 269 depth-matched pairs (538 of the 541 eligible goals), of which three are prompt-example pairs: p049 (gold ingot, light gray dye), p119 (acacia sign, fire charge) and p140 (birch sign, granite). That leaves 266 test pairs.
+  - Every quota was filled.
+  - The eligible pool and the exclusions (22,297 successes, 14,809 duplicates, and no wrong-recipe or generic-name crafts) are in `wf/textcraft/data/build_stats.json`.

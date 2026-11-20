@@ -1,0 +1,6 @@
+run_id: textcraft_analysis
+# Reads every shard of textcraft_score; no GPU. Primary: ΔL (aligned - swapped) on the main population,
+# goal-pair clusters, Holm over the two models (notes/textcraft_design.md, section 6).
+source: textcraft_score
+manifest: wf/textcraft/data/manifest.json
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]

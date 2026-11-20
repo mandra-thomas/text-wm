@@ -1,0 +1,7 @@
+run_id: textcraft_score_smoke
+# Format and timing check for textcraft_score: 20 seeded items, both models, every arm, one shard.
+# Read for format only (prompts, first tokens, timing), never for results.
+manifest: wf/textcraft/data/manifest.json
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+max_items: 20
+n_shards: 1
