@@ -151,7 +151,7 @@ A scientific-validity review of the model comparisons followed, also before any 
 
 **The tokenization gate** now goes through the scorer's own encoding, and its Yes/No part covers every yes/no prompt (section "Tokenization gate"). **Every model is read on one population** (section "Measures"). **Mistral's system-text placement** gets a small check (next section).
 
-**Primary cross-model metrics.** Two metrics, both on the yes/no format, are primary for comparing models; ΔL in nats and the spread-standardised d are secondary. Write $L_c(i)$ for item $i$'s yes/no log-odds, $\log P(\text{Yes}) - \log P(\text{No})$, under task $c$, with $F$ the primary items (determined failures) and $S$ the determined successes.
+**Primary cross-model metrics (revised by the third amendment below: the item share is now the only primary metric, and R is secondary).** Two metrics, both on the yes/no format, are primary for comparing models; ΔL in nats and the spread-standardised d are secondary. Write $L_c(i)$ for item $i$'s yes/no log-odds, $\log P(\text{Yes}) - \log P(\text{No})$, under task $c$, with $F$ the primary items (determined failures) and $S$ the determined successes.
 
 The first is the item share moved toward Yes: the share of failures whose log-odds are higher under the aligned task than under the swapped task,
 
@@ -192,13 +192,13 @@ All four are read under the neutral task, so the coverage condition is now the n
 
 **Flips.** Yes/no flips and yes-shares are read as the model's choice, Yes when its log-odds are above zero, not as the mean P(Yes): the share answering Yes per task, and the shares of failures that go from No under the swapped task to Yes under the aligned task, and back (`argmax_answers`, with game-clustered CIs). The two-candidate flip definitions stay as before, within model.
 
-**One primary family.** The primary family is the item share and R for each of the four wave A models: eight tests, Holm-corrected within the family at α = 0.05. A test is supported when its Holm p is below 0.05, its estimate lies on the goal side (share above one half, R above zero) and the model passed the competence gate; a model that failed is "not interpretable" whatever its p. The family is fixed at eight tests, so a model that is not interpretable or still waiting leaves it incomplete, never smaller. Everything else is descriptive: ΔL, d, the two-candidate format, comparisons between models, the reference models, the placement check.
+**One primary family (replaced by the third amendment below).** The primary family is the item share and R for each of the four wave A models: eight tests, Holm-corrected within the family at α = 0.05. A test is supported when its Holm p is below 0.05, its estimate lies on the goal side (share above one half, R above zero) and the model passed the competence gate; a model that failed is "not interpretable" whatever its p. The family is fixed at eight tests, so a model that is not interpretable or still waiting leaves it incomplete, never smaller. Everything else is descriptive: ΔL, d, the two-candidate format, comparisons between models, the reference models, the placement check.
 
-**Comparing models.** Comparisons are made on the same items with a paired game-clustered bootstrap: games are resampled once and both models are read on the same resample. Each wave A model is compared with each reference model (`compare_models`). Two models' R "match" when R is within a factor of 1.5, tested as two one-sided tests (TOST) on the log of the ratio: the 90% paired interval of $\log(R_A / R_B)$ must lie inside $\pm \log 1.5$. They "differ" when the 95% interval excludes zero. An interval that does neither is inconclusive, which is not a match. Differences in yes/no ΔL under about 0.3 nats between models are treated as noise (the GPU variation above, with margin), and flagged as such; the item-share difference is reported with its 95% interval. All comparisons are descriptive.
+**Comparing models (revised by the third amendment below).** Comparisons are made on the same items with a paired game-clustered bootstrap: games are resampled once and both models are read on the same resample. Each wave A model is compared with each reference model (`compare_models`). Two models' R "match" when R is within a factor of 1.5, tested as two one-sided tests (TOST) on the log of the ratio: the 90% paired interval of $\log(R_A / R_B)$ must lie inside $\pm \log 1.5$. They "differ" when the 95% interval excludes zero. An interval that does neither is inconclusive, which is not a match. Differences in yes/no ΔL under about 0.3 nats between models are treated as noise (the GPU variation above, with margin), and flagged as such; the item-share difference is reported with its 95% interval. All comparisons are descriptive.
 
 **Distillation reframed as a descriptive comparison.** The Qwen3 small models were not trained independently of the flagships. The Qwen3 Technical Report (arXiv 2505.09388, section 4.5, "Strong-to-Weak Distillation") describes a distillation pipeline "specifically designed to optimize lightweight models", among them Qwen3-0.6B, 1.7B, 4B, 8B and 14B, with off-policy distillation from teacher outputs and on-policy logit alignment with Qwen3-32B or Qwen3-235B-A22B (checked 2026-11-20). Llama 3.2 1B and 3B took Llama 3.1 8B and 70B logits during pretraining, but were then post-trained in their own rounds of supervised fine-tuning, rejection sampling and DPO (Llama 3.2 model card, checked 2026-11-20). So both small-model lines carry distillation from their flagships and each has its own post-training: a Llama 3.2 effect like or unlike Llama 3.1's cannot separate inheritance from a shared recipe. The comparison is reported as a description of how the effect sizes line up, not as a causal test of hypothesis 4.
 
-**Outcome table (pre-data).** How each pattern on the primary metrics will be read. "Matches" and "differs" are the TOST and 95% rules above; "positive" means supported in the primary family.
+**Outcome table (pre-data; replaced by the third amendment's table below).** How each pattern on the primary metrics will be read. "Matches" and "differs" are the TOST and 95% rules above; "positive" means supported in the primary family.
 
 | Pattern | Reading |
 |---|---|
@@ -213,6 +213,80 @@ All four are read under the neutral task, so the coverage condition is now the n
 | Llama 3.2 differs from Llama 3.1 | Descriptive difference within the line; size, distillation and post-training all differ, so no cause is named. |
 | A comparison inconclusive, or a ΔL difference under 0.3 nats | "No difference detected", never "the same". |
 | Mistral's placement moves its effect (placement check rule) | Mistral's position in every comparison is reported as format-dependent, with both numbers. |
+
+## Third amendment (2026-11-20, still before any wave A score was read): the item share is the primary metric
+
+Made after a second review of the analysis code, the same day. No wave A score has been opened, summarised or looked at; everything below was found on the archived reference runs (Qwen3-8B from `size_score_qwen3-8b`, Llama-3.1-8B from `rq1_score`, `rq1x_score` and `rq1v_score`) and on synthetic data.
+
+**Why R cannot lead the comparison across families.** On the reference runs, R is 0.095 for Qwen3-8B and 0.358 for Llama-3.1-8B. Llama's R is 3.8 times Qwen's (paired 95% interval 3.4 to 4.2), so R would rank Llama 3.1 as far more goal-biased. The item shares say otherwise: 0.887 for Qwen3-8B and 0.896 for Llama-3.1-8B, a difference of 0.008 (paired 95% interval −0.017 to 0.034). The goal effects in nats are also close (2.80 and 2.21). What differs is R's denominator, the evidence effect: 29.6 nats for Qwen3-8B against 6.2 for Llama-3.1-8B. Qwen3-8B puts its failures at extreme log-odds of No, so any goal shift looks small beside that distance. R is unchanged when every logit is multiplied by one factor, but models do not differ only by one factor: how far a model pushes its log-odds on items it is sure about is a property of the model, not of its goal sensitivity. Gemma 2 adds a mechanical version of the same problem. Its final logits are tanh-capped at 30 (section "Precision and attention"), which compresses large log-odds most, so it shrinks the evidence effect, built from the most confident items, more than moderate goal shifts. That would raise Gemma's R through the capping alone. So comparisons of R across families mostly reflect how far each model pushes its log-odds, and R cannot carry a cross-family claim.
+
+The item share does not have this problem. It counts, for each failure, only whether the aligned task puts the answer closer to Yes than the swapped task does, not by how much against anything else.
+
+**What changes.**
+
+- **One primary metric.** The item share moved toward Yes is the single primary cross-model metric.
+- **R is secondary and descriptive.** It is still reported for every model with its within-model game-clustered 95% CI and its permutation p, and its between-model comparisons are still computed, but none of them is in the primary family. Every report of R carries the caveat above.
+- **The primary family** is redefined below.
+- **R comparisons that cannot be taken as a ratio** now fall back to a difference (below).
+- **The outcome table** is replaced by the one below.
+
+**The primary family.** It holds two kinds of test, Holm-corrected together at α = 0.05.
+
+- **The item share, per wave A model** (four tests). Each tests the share against one half with the game-clustered sign-flip permutation p, as before. A test is supported when its Holm p is below 0.05, the share is above one half and the model passed the competence gate.
+- **The planned comparisons of item share** (seven comparisons, two tests each). These are the comparisons the outcome table reads, fixed now: Gemma 2 against Llama-3.1-8B and against Qwen3-8B; Mistral against Llama-3.1-8B and against Qwen3-8B; Gemma 2 against Mistral; and Llama 3.2 1B and 3B each against Llama-3.1-8B (`PLANNED_COMPARISONS`).
+
+That makes 18 tests. The family's size is fixed by this plan. A test whose model is still waiting, or whose p is missing or not a number, enters the correction with p = 1, so every other test is corrected for all 18 and never for a smaller family. Before this fix the correction counted only the p-values present, so a missing model made the others' correction milder. A comparison involving a model that failed the competence gate is "not interpretable". Everything outside the family is descriptive: R, ΔL, d, the two-candidate format, the comparisons of wave A models with the reference models beyond the planned ones, the reference blocks and the placement check.
+
+**The two tests of a comparison.** Both use the same items for both models (the failures both have), with a paired game-clustered bootstrap: games are resampled once and both models are read on the same resample. For each failure $i$ write $m_A(i) = 1$ if model A's log-odds are higher under the aligned task than under the swapped task and 0 otherwise, and the same for B. The per-item difference is
+
+$$
+d(i) = m_A(i) - m_B(i),
+$$
+
+and the item-share difference is the mean of $d(i)$ over the shared failures.
+
+- **Does it differ from zero?** The p is a two-sided permutation p in which all of a game's items flip sign together. Flipping a game's signs is the same as swapping the two models' labels within that game, which leaves the distribution unchanged if the models do not differ.
+- **Is it within ±0.05?** This is the equivalence test, done as two one-sided tests (TOST). The lower p is the share of paired bootstrap draws at or below −0.05, the upper p the share at or above +0.05 (each with one added to the count and to the number of draws); the test's p is the larger of the two.
+
+A comparison reads as "differs" when only the first test is supported after Holm, "matches" when only the second is, "differs, within the margin" when both are (a real difference smaller than 5 points), and "inconclusive (no difference detected)" when neither is, which is never read as "the same". The record also gives the difference's 90% and 95% paired intervals and the unadjusted readings from them (95% interval off zero; 90% interval inside ±0.05).
+
+**Why the margin is ±0.05 (5 percentage points).** Three considerations, all from the reference runs.
+
+- **It is well above run-to-run noise.** The same Qwen3-8B yes/no prompts, scored in two runs on different GPUs (`rq1v_score` and `size_score_qwen3-8b`), give item shares that differ by −0.0004 (paired 95% interval −0.003 to 0.002). Their yes/no log-odds differ by 0.035 nats per score on average, and 91% of the 14,582 scores are identical. GPU numerics therefore move the share by well under a tenth of the margin.
+- **A real match can be shown.** The paired 95% interval of the Qwen3-8B against Llama-3.1-8B difference is about ±0.025 wide around its estimate, so two models whose shares truly agree can pass a ±0.05 equivalence test even after Holm's correction over 18 tests.
+- **It is small against the effect.** Both reference models sit about 0.39 above the null of one half; 5 points is about an eighth of that, roughly 230 of the 4,666 failures.
+
+A margin much narrower would make equivalence unreachable at this sample size. A much wider one would call models alike whose shares differ by a tenth of all items.
+
+**R comparisons when the ratio cannot be taken (fix to `compare_models`).** As first written, a comparison of R took the log of $R_A / R_B$. When either R was at or below zero the log was undefined, both "matches" and "differs" came out false, and the comparison read as "no difference detected". Bootstrap draws with R at or below zero were dropped without notice. That is exactly the case the wave is meant to find: a model without the bias, with R near zero. On synthetic data built like the review's (40 games of 8 failures, a reference model with R about 0.29), a model with no goal effect (R −0.01), one with a small positive effect (R 0.015, 340 of 2,000 draws dropped) and one with a negative effect (R −0.15, every draw dropped) were all reported as neither matching nor differing.
+
+The rule now: the ratio is used only when both point estimates of R are above zero and at most 2% of the paired bootstrap draws (40 of 2,000) have either R at or below zero or undefined. Dropped draws sit at the low end, where R is near zero, so dropping them moves the interval up; at 2% the reported 2.5th percentile is at most about the 4.5th percentile of all draws. Otherwise the ratio is reported as not estimable, with the number of dropped draws and the reason. "Differs" then comes from the paired difference $R_A - R_B$ and its 95% interval, and no equivalence is claimed. On the same synthetic data all three models now read as differing from the reference, with differences of −0.30, −0.27 and −0.43 and 95% intervals that exclude zero. On the reference runs the ratio is estimable: no draw is dropped.
+
+**Outcome table (third amendment, pre-data).** How each pattern will be read. "Supported", "differs", "matches" and "inconclusive" are the primary family's readings after Holm's correction.
+
+| Pattern | Reading |
+|---|---|
+| A model fails the competence gate | Not interpretable. No statement about its goal sensitivity, in either direction. |
+| Every interpretable wave A model's item share supported | The goal effect is not specific to Qwen3 and Llama 3.1: in every interpretable 2024 instruct model tested, the goal moves most failures toward Yes. |
+| A model's item share not supported, model interpretable | No detectable goal effect in that model: a family or generation without the bias, to be followed up in wave B. Its R is compared descriptively, as a difference when the ratio cannot be taken. |
+| Item share supported, R small (secondary) | Many items move, but by little next to that model's evidence effect. Described as such, with R's caveat; not a cross-family claim. |
+| Gemma 2 and Mistral each match both reference models | The share of failures the goal moves is alike across the four families, within 5 points. |
+| Gemma 2 and Mistral match Llama 3.1 and differ from Qwen3-8B | Consistent with a 2024-generation or post-training-style explanation; family, generation and recipe still cannot be separated. On the reference runs the two reference models' shares are within 0.01 of each other, so this pattern needs the reference models to separate in the test as well. |
+| Gemma 2 and Mistral differ from each other | Family matters more than generation. |
+| Llama 3.2 matches Llama 3.1 | Descriptive similarity within the Llama line; not evidence that the bias is inherited by distillation (see above). |
+| Llama 3.2 differs from Llama 3.1 | Descriptive difference within the line; size, distillation and post-training all differ, so no cause is named. |
+| A comparison "differs, within the margin" | A real but small difference, under 5 points; reported with its size. |
+| A comparison inconclusive, or a ΔL difference under 0.3 nats | "No difference detected", never "the same". |
+| Mistral's placement moves its effect (placement check rule) | Mistral's position in every comparison is reported as format-dependent, with both numbers. |
+
+**Checked on the archived reference runs (no wave A data).** The amended code was rerun on the two reference blocks (2026-11-20).
+
+- **Item share.** Qwen3-8B 0.887 (95% CI 0.859 to 0.911) and Llama-3.1-8B 0.896 (0.872 to 0.918). Both have permutation p 0.001, the smallest the 1,000 permutations allow.
+- **Llama-3.1-8B against Qwen3-8B, item share.** The difference is 0.008, with paired 90% interval −0.013 to 0.030 and 95% interval −0.017 to 0.034. The difference test gives p 0.54 and the equivalence test p 0.0015. Had these two been a planned comparison, they would read as "matches" even after a Holm factor of 18 (at most 0.027).
+- **The same pair, R (secondary).** The ratio is estimable, with no paired draw dropped: 3.78 (95% interval 3.39 to 4.24), as before the fix. The paired difference is 0.26 (0.24 to 0.29).
+- **Qwen3-8B against itself rescored on another GPU** (`rq1v_score`). The share difference is −0.0004, the R ratio 1.001 and the ΔL difference 0.003 nats: all three read as matches.
+
+No reference number from before this amendment changed: the per-model share and R and their intervals are the same as in the review's recomputation.
 
 ## Placement check: Mistral's system text (exploratory, logged before data)
 

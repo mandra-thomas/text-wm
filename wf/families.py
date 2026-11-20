@@ -31,6 +31,13 @@ toward Yes and the goal-to-evidence ratio R, both on the yes/no format (`primary
 family over the wave A models (`primary_family`); a model must pass a competence gate fixed before data
 (`competence_gate`); models are compared on the same items with a paired game bootstrap, "matching" when R is within
 a factor of 1.5 by TOST (`compare_models`); yes/no answers and flips are read as argmax choices (`argmax_answers`).
+
+Third amendment (2026-11-20, still before any wave A score was read; found on the archived reference runs only): the
+item share is the single primary cross-model metric. R is secondary and descriptive: across families it mostly
+reflects how far each model pushes its log-odds on failures (its denominator), not goal bias. The primary family is
+the item share per wave A model plus the planned paired comparisons of item share (difference and TOST equivalence
+within ±0.05), Holm-corrected at a fixed size (`primary_family`). An R comparison falls back to the paired
+difference R_A - R_B when the ratio is not estimable (`compare_models`).
 """
 from __future__ import annotations
 
@@ -112,9 +119,11 @@ PREDICTION = ("Logged before any family score (2026-11-20): the goal effect (ali
               "both formats, two-candidate and yes/no, for every wave A model; read as the 95% game-clustered CI "
               "lying above zero.")
 FORMATS = ("Amended 2026-11-20, before any wave A score was read: the yes/no format is the primary cross-family "
-           "comparison, read through the item share moved toward Yes and the goal-to-evidence ratio R (one primary "
-           "family, Holm-corrected; a model must pass the competence gate); ΔL and the standardised d are secondary, "
-           "and the two-candidate format is read within model only. The two-candidate score's validity was checked "
+           "comparison, read through the item share moved toward Yes (third amendment: the single primary metric, "
+           "per model and in the planned paired comparisons, one Holm-corrected family; a model must pass the "
+           "competence gate); the goal-to-evidence ratio R, ΔL and the standardised d are secondary, and the "
+           "two-candidate format is read within model only. Across families R mostly reflects how far each model "
+           "pushes its log-odds on failures, not goal bias. The two-candidate score's validity was checked "
            "for Qwen3 only; Llama-3.1-8B's sign of L agreed with its written predictions on 65% of pilot items "
            "(notes/deviations.md). The logged prediction is unchanged.")
 ARMS = sizes.PRED_ARMS + sizes.YN_ARMS
@@ -402,14 +411,27 @@ FLIP_DEFINITIONS = {
 
 # ---------------- primary cross-model metrics, competence gate, comparisons (amendment, 2026-11-20, pre-data) ----
 
-PRIMARY_METRICS = ("item_share_toward_yes", "goal_to_evidence_ratio")
+# Third amendment (2026-11-20, before any wave A score was read): the item share is the one primary cross-model
+# metric; R is secondary (on the reference runs R differs 3.8-fold between Qwen3-8B and Llama-3.1-8B while their
+# shares are equal, because R's denominator is each model's confidence on failures; notes/families_design.md).
+PRIMARY_METRICS = ("item_share_toward_yes",)
+SECONDARY_METRICS = ("goal_to_evidence_ratio",)
 # Amended 2026-11-20 (second amendment, still before any wave A score was read): the first version required 5% to
 # 95% Yes on failures, and its lower bound excluded Qwen3-8B for answering No to failures (notes/families_design.md).
 COMPETENCE = {"auc_neutral_min": 0.70, "yes_share_neutral_failures_max": 0.95, "yes_share_neutral_successes_min": 0.05,
               "median_yes_no_mass_neutral_min": 0.5}
-EQUIVALENCE_FACTOR = 1.5  # "matches": R within a factor of 1.5, TOST on log R
+EQUIVALENCE_FACTOR = 1.5  # "matches": R within a factor of 1.5, TOST on log R (secondary)
+SHARE_MARGIN = 0.05  # "matches": item shares within ±0.05 (5 points), TOST on the paired difference (primary)
+DROPPED_DRAWS_MAX = 0.02  # the R ratio is not estimable when more than 2% of paired draws have R <= 0 or undefined
 NOISE_FLOOR_NATS = 0.3  # yes/no ΔL differences between models below this are treated as noise
 ALPHA = 0.05
+REFERENCE_TAGS = ("qwen3-8b", "llama3.1-8b")
+# The comparisons the outcome table reads (notes/families_design.md), fixed before data: each is two tests in the
+# primary family, a difference in item share and its equivalence within ±SHARE_MARGIN.
+PLANNED_COMPARISONS = (("gemma2-9b-it", "llama3.1-8b"), ("gemma2-9b-it", "qwen3-8b"),
+                       ("mistral-7b-v0.3", "llama3.1-8b"), ("mistral-7b-v0.3", "qwen3-8b"),
+                       ("gemma2-9b-it", "mistral-7b-v0.3"),
+                       ("llama3.2-1b", "llama3.1-8b"), ("llama3.2-3b", "llama3.1-8b"))
 
 
 def _yes_no_rows(s: list[dict], primary: list[dict], successes: list[dict]) -> tuple[list[tuple], list[str], list[str]]:
@@ -447,13 +469,15 @@ def _ratio(rows: list[tuple]) -> float:
 
 
 def primary_metrics(s: list[dict], primary: list[dict], successes: list[dict]) -> dict[str, Any]:
-    """The two primary cross-model metrics, both on the yes/no format, each with a game-clustered 95% CI and a
-    two-sided game sign-flip permutation p (for R, the p of its numerator: R is zero exactly when the goal effect
-    is, and its denominator is fixed under the flips).
+    """The item share (primary) and R (secondary since the third amendment), both on the yes/no format, each with a
+    game-clustered 95% CI and a two-sided game sign-flip permutation p (for R, the p of its numerator: R is zero
+    exactly when the goal effect is, and its denominator is fixed under the flips).
 
     item_share_toward_yes: the share of failures with L(aligned) > L(swapped).
     goal_to_evidence_ratio: R, the mean goal effect over the evidence effect (determined successes against
-    failures, both under the neutral task). Rescaling every logit by one factor leaves R unchanged.
+    failures, both under the neutral task). Rescaling every logit by one factor leaves R unchanged, but across
+    families R mostly reflects how far each model pushes its log-odds on failures (the denominator), so it is
+    read within model only.
     """
     rows, games, _ = _yes_no_rows(s, primary, successes)
     f = [(r, g) for r, g in zip(rows, games) if r[0] == "f"]
@@ -465,8 +489,9 @@ def primary_metrics(s: list[dict], primary: list[dict], successes: list[dict]) -
     p_ratio = pair_permutation([r[1] for r, _ in f], seed=C.RNG_SEED, cluster_ids=fg) if f else float("nan")
     mean = lambda v: sum(v) / len(v) if v else float("nan")
     return {"item_share_toward_yes": {"estimate": share["estimate"], "ci": [share["ci_low"], share["ci_high"]],
-                                      "null": 0.5, "n_items": len(f), "p_two_sided": p_share},
+                                      "null": 0.5, "n_items": len(f), "p_two_sided": p_share, "role": "primary"},
             "goal_to_evidence_ratio": {"estimate": ratio["estimate"], "ci": [ratio["ci_low"], ratio["ci_high"]], "null": 0.0,
+                                       "role": "secondary (descriptive; across families mostly the evidence effect's size)",
                                        "goal_effect_nats": mean([r[1] for r, _ in f]),
                                        "evidence_effect_nats": mean([r[2] for r in sc]) - mean([r[2] for r, _ in f]),
                                        "n_failures": len(f), "n_successes": len(sc), "p_two_sided": p_ratio}}
@@ -511,7 +536,7 @@ def competence_gate(block: dict[str, Any]) -> dict[str, Any]:
     return {"interpretable": all(c["pass"] for c in checks.values()), "checks": checks, "rule": COMPETENCE}
 
 
-def _draws(stat: Callable[[list], float], rows: list, games: list[str], B: int = C.BOOTSTRAP_RESAMPLES) -> list[float]:
+def _draws(stat: Callable[[list], Any], rows: list, games: list[str], B: int = C.BOOTSTRAP_RESAMPLES) -> list:
     rng = random.Random(C.RNG_SEED)
     by: dict[str, list] = {}
     for r, g in zip(rows, games):
@@ -525,13 +550,85 @@ def _pct(v: list[float], q: float) -> float:
     return v[min(len(v) - 1, int(q * len(v)))] if v else float("nan")
 
 
+def _exp(x: float) -> float:
+    return math.exp(x) if x == x else float("nan")
+
+
+def _compare_R(rows: list[tuple], games: list[str]) -> dict[str, Any]:
+    """R_A against R_B on paired rows ((row A, row B) per item), secondary.
+
+    The ratio R_A / R_B is used when it is estimable: both point Rs above zero and at most DROPPED_DRAWS_MAX of the
+    paired draws with either R at or below zero (or undefined), since a log ratio cannot be taken there and dropping
+    those draws silently would bias the interval. Then "matches" is the TOST within a factor of EQUIVALENCE_FACTOR
+    (90% interval of log(R_A / R_B)) and "differs" is its 95% interval excluding zero. Otherwise the ratio is not
+    estimable (reported as such) and "differs" comes from the 95% interval of the paired difference R_A - R_B;
+    there is no equivalence statement then. A model without the bias (R near zero) is the case this is for.
+    """
+    pair = lambda v: (_ratio([x for x, _ in v]), _ratio([y for _, y in v]))
+    ra, rb = pair(rows)
+    draws = _draws(pair, rows, games)
+    B = len(draws)
+    ok_ratio = [math.log(a / b) for a, b in draws if a > 0 and b > 0]
+    dropped = B - len(ok_ratio)
+    diffs = [a - b for a, b in draws if a == a and b == b]
+    diff_est = ra - rb if ra == ra and rb == rb else float("nan")
+    diff = {"estimate": diff_est, "ci95": [_pct(diffs, 0.025), _pct(diffs, 0.975)],
+            "n_resamples_undefined": B - len(diffs)}
+    estimable = bool(ra > 0 and rb > 0 and dropped <= DROPPED_DRAWS_MAX * B)
+    out: dict[str, Any] = {"R_a": ra, "R_b": rb, "n_resamples": B, "n_resamples_dropped": dropped,
+                           "max_share_dropped": DROPPED_DRAWS_MAX, "ratio_estimable": estimable, "difference": diff}
+    if estimable:
+        bound = math.log(EQUIVALENCE_FACTOR)
+        est = math.log(ra / rb)
+        lo90, hi90, lo95, hi95 = (_pct(ok_ratio, q) for q in (0.05, 0.95, 0.025, 0.975))
+        matches = bool(-bound < lo90 and hi90 < bound)
+        differs = bool(lo95 > 0 or hi95 < 0)
+        out.update({"basis": "ratio", "estimate": math.exp(est), "ci90": [_exp(lo90), _exp(hi90)],
+                    "ci95": [_exp(lo95), _exp(hi95)], "matches": matches, "differs": differs})
+    else:
+        lo95, hi95 = diff["ci95"]
+        computable = diff_est == diff_est and lo95 == lo95
+        differs = bool(computable and (lo95 > 0 or hi95 < 0))
+        out.update({"basis": "difference" if computable else "not computable", "estimate": float("nan"),
+                    "ci90": [float("nan")] * 2, "ci95": [float("nan")] * 2, "matches": False, "differs": differs,
+                    "why_not_estimable": ("R at or below zero (or undefined) in the point estimate" if not (ra > 0 and rb > 0)
+                                          else f"{dropped} of {B} paired draws have R at or below zero")})
+    out["verdict"] = ("differs, within the margin" if out["differs"] and out["matches"] else "differs" if out["differs"]
+                      else "matches" if out["matches"] else "not computable" if out["basis"] == "not computable"
+                      else "inconclusive")
+    return out
+
+
+def _compare_share(rows: list[tuple], games: list[str]) -> dict[str, Any]:
+    """Item share A minus B on the failures both models have (primary): the paired difference with 90% and 95%
+    paired-bootstrap CIs; p_differs, a two-sided game sign-flip permutation p on the per-item differences
+    (1 if only A moved toward Yes, -1 if only B did; swapping the models within a game flips its signs); and
+    p_equivalent, the TOST p for a difference within ±SHARE_MARGIN, the larger of the two one-sided bootstrap ps."""
+    f = [(x, y, g) for (x, y), g in zip(rows, games) if x[0] == "f"]
+    d = [(x[1] > 0) - (y[1] > 0) for x, y, _ in f]
+    fg = [g for _, _, g in f]
+    stat = lambda v: sum(v) / len(v) if v else float("nan")
+    est = stat(d)
+    draws = [x for x in _draws(stat, d, fg) if x == x]
+    lo90, hi90, lo95, hi95 = (_pct(draws, q) for q in (0.05, 0.95, 0.025, 0.975))
+    B = len(draws)
+    p_low = (sum(x <= -SHARE_MARGIN for x in draws) + 1) / (B + 1) if B else float("nan")
+    p_high = (sum(x >= SHARE_MARGIN for x in draws) + 1) / (B + 1) if B else float("nan")
+    return {"estimate": est, "ci90": [lo90, hi90], "ci95": [lo95, hi95], "n_items": len(d), "margin": SHARE_MARGIN,
+            "p_differs": pair_permutation(d, seed=C.RNG_SEED, cluster_ids=fg) if d else float("nan"),
+            "p_equivalent": max(p_low, p_high),
+            "differs": bool(est == est and (lo95 > 0 or hi95 < 0)),
+            "matches": bool(est == est and -SHARE_MARGIN < lo90 and hi90 < SHARE_MARGIN)}
+
+
 def compare_models(sa: list[dict], sb: list[dict], primary: list[dict], successes: list[dict]) -> dict[str, Any]:
     """Model A against model B on the same items (yes/no format), with a paired game-clustered bootstrap: games are
     resampled once for both models.
 
-    R: the ratio R_A / R_B with 90% and 95% CIs; "matches" (TOST at 0.05) when the 90% CI of log(R_A / R_B) lies
-    within ±log 1.5. The item share and ΔL as differences (A minus B) with 95% CIs; a ΔL difference under 0.3 nats
-    is flagged as within the noise floor.
+    item_share_difference (primary): A minus B, see `_compare_share`; "differs" when its 95% CI excludes zero and
+    "matches" when its 90% CI lies within ±SHARE_MARGIN (descriptive; the primary family reads the Holm-adjusted
+    p_differs and p_equivalent). R (secondary): see `_compare_R`. ΔL as a difference (A minus B) with a 95% CI; a ΔL
+    difference under 0.3 nats is flagged as within the noise floor.
     """
     ra, ga, ia = _yes_no_rows(sa, primary, successes)
     rb, _, ib = _yes_no_rows(sb, primary, successes)
@@ -539,56 +636,104 @@ def compare_models(sa: list[dict], sb: list[dict], primary: list[dict], successe
     common = [(r, g, i) for r, g, i in zip(ra, ga, ia) if i in keyed_b]  # the items both models have
     rows = [(r, keyed_b[i]) for r, _, i in common]
     games = [g for _, g, _ in common]
-
-    def log_ratio(v: list) -> float:
-        a, b = _ratio([x for x, _ in v]), _ratio([y for _, y in v])
-        return math.log(a / b) if a > 0 and b > 0 else float("nan")
-
-    def diff(fn: Callable[[list], float]) -> Callable[[list], float]:
-        return lambda v: fn([x for x, _ in v]) - fn([y for _, y in v])
-
     mean_goal = lambda v: (lambda d: sum(d) / len(d) if d else float("nan"))([r[1] for r in v if r[0] == "f"])
-    out: dict[str, Any] = {"n_failures": sum(r[0] == "f" for r, _ in rows), "n_successes": sum(r[0] == "s" for r, _ in rows)}
-    est = log_ratio(rows)
-    draws = _draws(log_ratio, rows, games)
-    bound = math.log(EQUIVALENCE_FACTOR)
-    lo90, hi90, lo95, hi95 = (_pct(draws, q) for q in (0.05, 0.95, 0.025, 0.975))
-    out["R_ratio"] = {"estimate": math.exp(est) if est == est else float("nan"),
-                      "ci90": [math.exp(lo90) if lo90 == lo90 else float("nan"), math.exp(hi90) if hi90 == hi90 else float("nan")],
-                      "ci95": [math.exp(lo95) if lo95 == lo95 else float("nan"), math.exp(hi95) if hi95 == hi95 else float("nan")],
-                      "matches": bool(est == est and -bound < lo90 and hi90 < bound),
-                      "differs": bool(est == est and (lo95 > 0 or hi95 < 0)),
-                      "n_resamples_dropped": sum(1 for x in draws if x != x)}
-    for name, fn in (("item_share_difference", _share_toward_yes), ("delta_L_difference_nats", mean_goal)):
-        dfn = diff(fn)
-        d = _draws(dfn, rows, games)
-        out[name] = {"estimate": dfn(rows), "ci95": [_pct(d, 0.025), _pct(d, 0.975)]}
+    dfn = lambda v: mean_goal([x for x, _ in v]) - mean_goal([y for _, y in v])
+    d = _draws(dfn, rows, games)
+    out: dict[str, Any] = {"n_failures": sum(r[0] == "f" for r, _ in rows), "n_successes": sum(r[0] == "s" for r, _ in rows),
+                           "item_share_difference": _compare_share(rows, games), "R": _compare_R(rows, games),
+                           "delta_L_difference_nats": {"estimate": dfn(rows), "ci95": [_pct(d, 0.025), _pct(d, 0.975)]}}
     out["delta_L_difference_nats"]["within_noise_floor"] = abs(out["delta_L_difference_nats"]["estimate"]) < NOISE_FLOOR_NATS
     return out
 
 
-def primary_family(blocks: dict[str, dict[str, Any]], expected: list[str]) -> dict[str, Any]:
-    """The one primary family: item share and R for every wave A model (2 x 4 tests), Holm-corrected within it.
+def planned_comparisons(models: list[str], references: list[str]) -> list[tuple[str, str]]:
+    """The planned comparisons whose two models are both in the analysis's configuration (fixed before data)."""
+    have = set(models) | set(references)
+    return [(a, b) for a, b in PLANNED_COMPARISONS if a in have and b in have]
 
-    A test counts as supported when its Holm p < 0.05, the estimate lies on the goal side (share above 0.5, R above
-    0) and the model passed the competence gate; a model that failed the gate is "not interpretable". The family is
-    fixed at every wave A model, so a model still waiting leaves it incomplete rather than smaller.
+
+def primary_family(blocks: dict[str, dict[str, Any]], expected: list[str], comparisons: dict[str, dict] | None = None,
+                   planned: list[tuple[str, str]] | None = None) -> dict[str, Any]:
+    """The one primary family (third amendment), Holm-corrected within it at a fixed size:
+
+    - per wave A model in `expected`, the item share toward Yes against one half;
+    - per planned comparison (A, B), two tests on the paired item-share difference: that it differs from zero
+      (p_differs) and that it lies within ±SHARE_MARGIN (TOST, p_equivalent).
+
+    `blocks` holds the wave A and reference blocks by tag; `comparisons` holds compare_models results keyed
+    "A vs B". The family's size is fixed by `expected` and `planned`: a test whose model is still waiting, or whose p
+    is missing or NaN, enters with p = 1 so the others are corrected for the full family, never a smaller one.
+    A per-model test is supported when its Holm p < 0.05, the share is above one half and the model passed the
+    competence gate. A comparison involving a model that failed the gate is "not interpretable".
     """
-    p = {f"{tag}:{m}": blocks[tag]["primary_metrics"][m]["p_two_sided"] for tag in expected if tag in blocks
-         for m in PRIMARY_METRICS}
+    comparisons = comparisons or {}
+    planned = list(planned or [])
+    p: dict[str, float] = {}
+    info: dict[str, dict] = {}
+
+    def interpretable(tag: str) -> bool | None:
+        return blocks[tag]["competence"]["interpretable"] if tag in blocks else None
+
+    for tag in expected:
+        key = f"{tag}:item_share_toward_yes"
+        rec = blocks[tag]["primary_metrics"]["item_share_toward_yes"] if tag in blocks else None
+        pv = rec["p_two_sided"] if rec else float("nan")
+        p[key] = pv if pv == pv else 1.0
+        info[key] = {"kind": "share", "tag": tag, "rec": rec, "padded": pv != pv}
+    for a, b in planned:
+        c = comparisons.get(f"{a} vs {b}", {}).get("item_share_difference")
+        for test, field in (("differs", "p_differs"), ("equivalent", "p_equivalent")):
+            key = f"{a} vs {b}:share_{test}"
+            pv = c[field] if c else float("nan")
+            p[key] = pv if pv == pv else 1.0
+            info[key] = {"kind": test, "pair": (a, b), "rec": c, "padded": pv != pv}
     adj = holm(p)
-    tests = {}
+    tests: dict[str, dict] = {}
     for key, padj in adj.items():
-        tag, m = key.split(":")
-        rec = blocks[tag]["primary_metrics"][m]
-        side = rec["estimate"] > rec["null"]
-        if not blocks[tag]["competence"]["interpretable"]:
-            verdict = "not interpretable"
+        i = info[key]
+        rec = i["rec"]
+        if i["kind"] == "share":
+            ok = interpretable(i["tag"])
+            if rec is None:
+                verdict = "waiting"
+            elif not ok:
+                verdict = "not interpretable"
+            elif i["padded"]:
+                verdict = "not computable"
+            else:
+                side = rec["estimate"] > rec["null"]
+                verdict = "supported" if padj < ALPHA and side else "not supported"
+            tests[key] = {"estimate": rec["estimate"] if rec else float("nan"), "ci": rec["ci"] if rec else [float("nan")] * 2,
+                          "p": rec["p_two_sided"] if rec else float("nan"), "p_holm": padj, "verdict": verdict}
         else:
-            verdict = "supported" if padj < ALPHA and side else "not supported"
-        tests[key] = {"estimate": rec["estimate"], "ci": rec["ci"], "p": rec["p_two_sided"], "p_holm": padj, "verdict": verdict}
-    return {"tests": tests, "n_tests_planned": 2 * len(expected), "complete": all(t in blocks for t in expected),
-            "alpha": ALPHA, "correction": "Holm, within this family only; everything else is descriptive"}
+            oks = [interpretable(t) for t in i["pair"]]
+            if rec is None or None in oks:
+                verdict = "waiting"
+            elif not all(oks):
+                verdict = "not interpretable"
+            elif i["padded"]:
+                verdict = "not computable"
+            else:
+                verdict = "supported" if padj < ALPHA else "not supported"
+            field = "p_differs" if i["kind"] == "differs" else "p_equivalent"
+            tests[key] = {"estimate": rec["estimate"] if rec else float("nan"),
+                          "ci": (rec["ci95"] if i["kind"] == "differs" else rec["ci90"]) if rec else [float("nan")] * 2,
+                          "p": rec[field] if rec else float("nan"), "p_holm": padj, "verdict": verdict}
+    readings = {}
+    for a, b in planned:
+        dv, ev = tests[f"{a} vs {b}:share_differs"]["verdict"], tests[f"{a} vs {b}:share_equivalent"]["verdict"]
+        if dv not in ("supported", "not supported"):
+            readings[f"{a} vs {b}"] = dv  # waiting, not interpretable or not computable
+        elif dv == "supported":
+            readings[f"{a} vs {b}"] = "differs, within the margin" if ev == "supported" else "differs"
+        else:
+            readings[f"{a} vs {b}"] = "matches" if ev == "supported" else "inconclusive (no difference detected)"
+    return {"tests": tests, "comparison_readings": readings, "n_tests_planned": len(expected) + 2 * len(planned),
+            "n_tests_padded": sum(i["padded"] for i in info.values()),
+            "complete": all(t in blocks for t in expected) and all(f"{a} vs {b}" in comparisons for a, b in planned),
+            "share_margin": SHARE_MARGIN, "alpha": ALPHA,
+            "correction": "Holm over the full planned family (a missing or NaN p enters as 1); everything else is "
+                          "descriptive"}
 
 
 def family_block(s: list[dict], primary: list[dict], successes: list[dict], spec: ModelSpec) -> dict[str, Any]:
@@ -707,7 +852,10 @@ def run_families_analysis(cfg: dict) -> int:
                               "prediction": PREDICTION, "formats": FORMATS, "models": {}, "reference": {},
                               "prediction_check": {}, "placement": {}, "waiting": {},
                               "rules": {"competence": COMPETENCE, "equivalence_factor_R": EQUIVALENCE_FACTOR,
-                                        "noise_floor_delta_L_nats": NOISE_FLOOR_NATS, "alpha": ALPHA}}
+                                        "share_margin": SHARE_MARGIN, "R_ratio_max_share_dropped": DROPPED_DRAWS_MAX,
+                                        "noise_floor_delta_L_nats": NOISE_FLOOR_NATS, "alpha": ALPHA,
+                                        "primary_metrics": list(PRIMARY_METRICS),
+                                        "secondary_metrics": list(SECONDARY_METRICS)}}
     read: dict[str, list[Path]] = {}
     scores: dict[str, list[dict]] = {}
     ref_scores: dict[str, list[dict]] = {}
@@ -734,10 +882,15 @@ def run_families_analysis(cfg: dict) -> int:
         read.update({f"{tag}:{run}": f for run, f in got.items()})
         ref_scores[tag] = s
         report["reference"][tag] = {**family_block(s, primary, successes, REFERENCE[tag]), "read": info}
-    report["primary_family"] = primary_family(report["models"], list(cfg["models"]))
-    # descriptive: every wave A model against each reference model, paired on the same items
-    report["comparisons"] = {f"{tag} vs {ref}": compare_models(scores[tag], ref_scores[ref], primary, successes)
-                             for tag in scores for ref in ref_scores}
+    # every wave A model against each reference model, and the planned comparisons among wave A models, paired on
+    # the same items; the planned ones' item-share tests are in the primary family, the rest is descriptive
+    planned = planned_comparisons(list(cfg["models"]), list(cfg.get("reference") or {}))
+    both = {**scores, **ref_scores}
+    pairs = [(tag, ref) for tag in scores for ref in ref_scores]
+    pairs += [(a, b) for a, b in planned if (a, b) not in pairs and a in both and b in both]
+    report["comparisons"] = {f"{a} vs {b}": compare_models(both[a], both[b], primary, successes) for a, b in pairs}
+    report["primary_family"] = primary_family({**report["models"], **report["reference"]}, list(cfg["models"]),
+                                              report["comparisons"], planned)
     for tag, run in (cfg.get("placement") or {}).items():
         folders, problems = complete_shards(run)
         if problems or tag not in scores:
@@ -757,12 +910,14 @@ def run_families_analysis(cfg: dict) -> int:
     def head(m: dict) -> str:
         pm = m["primary_metrics"]
         return (f"{'interpretable' if m['competence']['interpretable'] else 'NOT INTERPRETABLE'}; share toward Yes "
-                f"{pm['item_share_toward_yes']['estimate']:.3f}, R {pm['goal_to_evidence_ratio']['estimate']:.3f}; "
+                f"{pm['item_share_toward_yes']['estimate']:.3f} (primary), R {pm['goal_to_evidence_ratio']['estimate']:.3f} "
+                f"(secondary); "
                 f"yn dL {m['yes_no']['goal_effect']['delta_L_nats']:.2f}, two-candidate dL {m['goal_effect']['delta_L_nats']:.2f}")
 
     lines = [f"{tag}: {head(m)}; prediction holds: {report['prediction_check'][tag]['holds']}" for tag, m in report["models"].items()]
     lines += [f"{tag} (reference): {head(m)}" for tag, m in report["reference"].items()]
     lines += [f"primary family {k}: {v['verdict']} (Holm p {v['p_holm']:.4f})" for k, v in report["primary_family"]["tests"].items()]
+    lines += [f"{k}: item share {v}" for k, v in report["primary_family"]["comparison_readings"].items()]
     lines += [f"{tag} placement, first turn minus native: yn {p['yes_no']['first_turn_minus_native']['delta_L_nats']:.2f}, "
               f"two-candidate {p['two_candidate']['first_turn_minus_native']['delta_L_nats']:.2f} ({p['n_items']} items)"
               for tag, p in report["placement"].items()]

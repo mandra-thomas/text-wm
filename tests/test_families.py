@@ -554,6 +554,8 @@ def test_goal_to_evidence_ratio_and_item_share():
     assert pm3["item_share_toward_yes"]["estimate"] == pytest.approx(0.8)
     # no evidence effect (successes no higher than failures): R undefined, not huge
     assert math.isnan(families.primary_metrics(*_yn_data(goal, succ_neutral=-3.0))["goal_to_evidence_ratio"]["estimate"])
+    # successes below failures (a negative evidence effect): undefined too, not a negative R
+    assert math.isnan(families.primary_metrics(*_yn_data(goal, succ_neutral=-4.0))["goal_to_evidence_ratio"]["estimate"])
 
 
 def test_primary_p_values_are_game_clustered_sign_flips():
@@ -562,6 +564,46 @@ def test_primary_p_values_are_game_clustered_sign_flips():
     assert pm["item_share_toward_yes"]["estimate"] == pytest.approx(0.5) and pm["item_share_toward_yes"]["p_two_sided"] > 0.5
     s, items, succ = _yn_data(tuple(1.0 + 0.1 * i for i in range(40)))
     assert families.primary_metrics(s, items, succ)["goal_to_evidence_ratio"]["p_two_sided"] < 0.1
+
+
+def _games_data(goals_by_game: list[list[float]]):
+    """Yes/no scores with explicit games: game g's failures have the goal effects goals_by_game[g]; each game has
+    one success (neutral L 2) and its failures neutral L -2."""
+    s, items, succ = [], [], []
+    for g, goals in enumerate(goals_by_game):
+        for k, goal in enumerate(goals):
+            t = {**_t(100 * g + k), "game_id": f"g{g}"}
+            items.append(t)
+            s += [_s(t["id"], "yn_swapped", 0.0, t["game_id"]), _s(t["id"], "yn_aligned", goal, t["game_id"]),
+                  _s(t["id"], "yn_absent", -2.0, t["game_id"])]
+        t = {**_t(100 * g + 99), "game_id": f"g{g}", "true_obs": "You pick up the mug 1."}
+        succ.append(t)
+        s.append(_s(t["id"], "yn_absent", 2.0, t["game_id"]))
+    return s, items, succ
+
+
+def test_share_p_flips_whole_games():
+    """Four games move every item toward Yes, two move every item away: 40 of 60 items, but only six independent
+    games. Flipping games together gives p about 0.69; flipping items alone would give p near 0.01."""
+    pm = families.primary_metrics(*_games_data([[1.0] * 10] * 4 + [[-1.0] * 10] * 2))
+    assert pm["item_share_toward_yes"]["estimate"] == pytest.approx(40 / 60)
+    assert pm["item_share_toward_yes"]["p_two_sided"] > 0.4
+
+
+def test_R_p_reads_the_effects_not_their_signs():
+    """In every game one item moves far toward Yes (+3) and one slightly away (-0.1): the share is exactly one half
+    (signs balance), but the mean goal effect is clearly positive."""
+    pm = families.primary_metrics(*_games_data([[3.0, -0.1]] * 10))
+    assert pm["item_share_toward_yes"]["estimate"] == pytest.approx(0.5) and pm["item_share_toward_yes"]["p_two_sided"] > 0.5
+    assert pm["goal_to_evidence_ratio"]["p_two_sided"] < 0.01
+
+
+def test_nan_scores_are_left_out_of_the_yes_no_rows():
+    s, items, succ = _yn_data((2.0,) * 10)
+    s = [{**x, "L": float("nan")} if (x["transition_id"], x["condition"]) == ("t3", "yn_aligned") else x for x in s]
+    pm = families.primary_metrics(s, items, succ)
+    assert pm["item_share_toward_yes"]["n_items"] == 9 and pm["item_share_toward_yes"]["estimate"] == pytest.approx(1.0)
+    assert pm["goal_to_evidence_ratio"]["n_failures"] == 9 and pm["goal_to_evidence_ratio"]["estimate"] == pytest.approx(0.5)
 
 
 def test_flips_are_shares_of_argmax_answers():
@@ -573,6 +615,12 @@ def test_flips_are_shares_of_argmax_answers():
     a = families.argmax_answers(s, items, [])
     assert a["flip_no_to_yes"]["share"] == pytest.approx(0.5) and a["flip_yes_to_no"]["share"] == pytest.approx(0.25)
     assert a["yes_share_failures"] == {"yn_aligned": 0.75, "yn_swapped": 0.5, "yn_absent": 0.0}
+    # log-odds exactly zero is not a Yes (P(Yes) = P(No)), nor a flip
+    tie = {**_t(9), "game_id": "g9"}
+    s0 = s + [_s(tie["id"], c, 0.0, tie["game_id"]) for c in ("yn_swapped", "yn_aligned", "yn_absent")]
+    a0 = families.argmax_answers(s0, items + [tie], [])
+    assert a0["yes_share_failures"] == {"yn_aligned": 0.6, "yn_swapped": 0.4, "yn_absent": 0.0}
+    assert a0["flip_no_to_yes"]["share"] == pytest.approx(0.4)
 
 
 def _gate_block(auc=0.8, yes_f=0.4, yes_s=0.9, mass=0.9):
@@ -604,30 +652,127 @@ def test_equivalence_of_R_is_a_tost_within_a_factor_of_1_5(factor, matches, diff
     sa, items, succ = _yn_data(goal)
     sb, _, _ = _yn_data(tuple(g * factor for g in goal), scale=3.0)
     c = families.compare_models(sb, sa, items, succ)
-    assert c["R_ratio"]["estimate"] == pytest.approx(factor)
-    assert c["R_ratio"]["matches"] is matches and c["R_ratio"]["differs"] is differs
+    assert c["R"]["basis"] == "ratio" and c["R"]["ratio_estimable"] and c["R"]["n_resamples_dropped"] == 0
+    assert c["R"]["estimate"] == pytest.approx(factor)
+    assert c["R"]["matches"] is matches and c["R"]["differs"] is differs
     assert c["n_failures"] == 15 and c["n_successes"] == 4
 
 
 def test_tost_needs_the_90_percent_interval_inside_the_margin():
     """Four games that disagree: a ratio of 1 with a wide paired interval is neither a match nor a difference."""
-    def model(goals):
-        s, items = [], []
-        for g, goal in enumerate(goals):
-            for k in range(3):
-                t = {**_t(10 * g + k), "game_id": f"g{g}"}
-                items.append(t)
-                s += [_s(t["id"], "yn_swapped", 0.0, t["game_id"]), _s(t["id"], "yn_aligned", goal, t["game_id"]),
-                      _s(t["id"], "yn_absent", -2.0, t["game_id"])]
-        succ = [{**_t(100 + g), "game_id": f"g{g}", "true_obs": "You pick up the mug 1."} for g in range(len(goals))]
-        return s + [_s(t["id"], "yn_absent", 2.0, t["game_id"]) for t in succ], items, succ
-
-    sa, items, succ = model([4.0, 0.2, 4.0, 0.2])
-    sb, _, _ = model([0.2, 4.0, 0.2, 4.0])
+    sa, items, succ = _games_data([[4.0] * 3, [0.2] * 3, [4.0] * 3, [0.2] * 3])
+    sb, _, _ = _games_data([[0.2] * 3, [4.0] * 3, [0.2] * 3, [4.0] * 3])
     c = families.compare_models(sa, sb, items, succ)
-    assert c["R_ratio"]["estimate"] == pytest.approx(1.0)
-    assert c["R_ratio"]["ci90"][0] < 1 / 1.5 and c["R_ratio"]["ci90"][1] > 1.5
-    assert not c["R_ratio"]["matches"] and not c["R_ratio"]["differs"]
+    assert c["R"]["estimate"] == pytest.approx(1.0)
+    assert c["R"]["ci90"][0] < 1 / 1.5 and c["R"]["ci90"][1] > 1.5
+    assert not c["R"]["matches"] and not c["R"]["differs"] and c["R"]["verdict"] == "inconclusive"
+
+
+def _noisy(goal_mean: float, goal_sd: float = 1.0, n_games: int = 40, per: int = 8, seed: int = 0):
+    """Review 2's synthetic data: 40 games of 8 failures and 3 successes, a goal effect drawn per item, failures'
+    neutral L about -3 and successes' about +1 (evidence effect about 4)."""
+    import random
+    rng = random.Random(seed)
+    s, items, succ = [], [], []
+    for g in range(n_games):
+        for k in range(per):
+            t = {**_t(1000 * g + k), "game_id": f"g{g}"}
+            items.append(t)
+            d, base = rng.gauss(goal_mean, goal_sd), rng.gauss(-3, 1)
+            s += [_s(t["id"], "yn_swapped", base, t["game_id"]), _s(t["id"], "yn_aligned", base + d, t["game_id"]),
+                  _s(t["id"], "yn_absent", base, t["game_id"])]
+        for k in range(3):
+            t = {**_t(1000 * g + 500 + k), "game_id": f"g{g}", "true_obs": "You pick up the mug 1."}
+            succ.append(t)
+            s.append(_s(t["id"], "yn_absent", 1.0 + rng.gauss(0, 1), t["game_id"]))
+    return s, items, succ
+
+
+@pytest.mark.parametrize("goal_mean, why", [(-0.05, "point R below zero"), (0.05, "17% of draws dropped"),
+                                            (-0.6, "R negative")])
+def test_R_comparison_falls_back_to_the_difference_when_the_ratio_is_not_estimable(goal_mean, why):
+    """A model without the bias against one with it (R about 0.3): the ratio cannot be taken (R_A at or below zero, or
+    too many draws with it), so "differs" comes from the paired difference R_A - R_B, which excludes zero. Before the
+    fix these read as neither matching nor differing, i.e. "no difference detected"."""
+    ref, items, succ = _noisy(1.2, seed=1)
+    a, _, _ = _noisy(goal_mean, seed=2)
+    c = families.compare_models(a, ref, items, succ)["R"]
+    assert not c["ratio_estimable"] and c["basis"] == "difference" and c["estimate"] != c["estimate"]
+    assert c["n_resamples_dropped"] > families.DROPPED_DRAWS_MAX * c["n_resamples"]
+    assert c["difference"]["estimate"] == pytest.approx(c["R_a"] - c["R_b"]) and c["difference"]["ci95"][1] < 0
+    assert c["differs"] and not c["matches"] and c["verdict"] == "differs"
+    # the same model against itself, both biased: the ratio is estimable and no draw is dropped
+    same = families.compare_models(ref, ref, items, succ)["R"]
+    assert same["basis"] == "ratio" and same["n_resamples_dropped"] == 0 and same["matches"] and not same["differs"]
+
+
+def test_R_ratio_is_not_estimable_beyond_two_percent_of_draws_dropped(monkeypatch):
+    rows = [(("f", 1.0, -1.0), ("f", 1.0, -1.0))]
+
+    def draws(n_bad):
+        return lambda stat, rows, games, B=2000: [(-0.1, 0.5)] * n_bad + [(0.5, 0.5)] * (2000 - n_bad)
+
+    for n_bad, estimable in ((40, True), (41, False)):
+        monkeypatch.setattr(families, "_draws", draws(n_bad))
+        monkeypatch.setattr(families, "_ratio", lambda v: 0.5)
+        c = families._compare_R(rows, ["g0"])
+        assert c["n_resamples_dropped"] == n_bad and c["ratio_estimable"] is estimable
+
+
+def _spread(lo: float, hi: float, n: int = 2000) -> list[float]:
+    return [lo + (hi - lo) * i / (n - 1) for i in range(n)]
+
+
+def test_R_differs_reads_the_95_and_matches_the_90_percent_interval(monkeypatch):
+    """Paired draws of log(R_A / R_B) set by hand: spread evenly over [-0.015, 0.385] the 90% interval excludes zero
+    but the 95% one does not (no difference); over [-0.44, 0.44] the 90% interval lies inside ±log 1.5 = ±0.405 but
+    the 95% one does not (a match)."""
+    monkeypatch.setattr(families, "_ratio", lambda v: 1.0)
+    for (lo, hi), differs, matches in (((-0.015, 0.385), False, True), ((-0.44, 0.44), False, True),
+                                       ((0.01, 0.6), True, False)):
+        monkeypatch.setattr(families, "_draws", lambda stat, rows, games, B=2000, lo=lo, hi=hi:
+                            [(math.exp(x), 1.0) for x in _spread(lo, hi)])
+        c = families._compare_R([(("f", 1.0, -1.0), ("f", 1.0, -1.0))], ["g0"])
+        assert c["basis"] == "ratio" and c["differs"] is differs and c["matches"] is matches, (lo, hi)
+
+
+def test_share_comparison_reads_the_95_and_90_percent_intervals_and_the_margin(monkeypatch):
+    """The item-share difference with its draws set by hand: "differs" needs the 95% interval off zero, "matches"
+    the 90% interval inside ±0.05; the TOST p is the larger one-sided p."""
+    rows = [(("f", 1.0, -1.0), ("f", -1.0, -1.0)), (("f", -1.0, -1.0), ("f", 1.0, -1.0))]  # difference 0 on two items
+    for (lo, hi), differs, matches in (((-0.0015, 0.0385), False, True), ((-0.054, 0.054), False, True),
+                                       ((-0.066, 0.066), False, False), ((0.001, 0.041), True, True)):
+        monkeypatch.setattr(families, "_draws", lambda stat, rows, games, B=2000, lo=lo, hi=hi: _spread(lo, hi))
+        c = families._compare_share(rows, ["g0", "g1"])
+        assert c["differs"] is differs and c["matches"] is matches and c["margin"] == 0.05, (lo, hi)
+        assert (c["p_equivalent"] < 0.05) is matches
+    monkeypatch.setattr(families, "_draws", lambda stat, rows, games, B=2000: [-0.06] * 30 + [0.0] * 1950 + [0.06] * 20)
+    c = families._compare_share(rows, ["g0", "g1"])
+    assert c["p_equivalent"] == pytest.approx(31 / 2001)  # the larger side (31), not the smaller (21) or their sum
+
+
+def test_R_comparison_is_paired_across_noisy_games():
+    """Model B is model A with every goal effect times 1.2, in 20 games whose effects differ widely (0.2 to 6 nats):
+    resampled together, every draw has R_B / R_A = 1.2 exactly, so the paired interval is a point; resampled apart
+    it would be wide."""
+    goals = [[0.2 + 0.3 * g + 0.05 * k for k in range(4)] for g in range(20)]
+    sa, items, succ = _games_data(goals)
+    sb, _, _ = _games_data([[1.2 * x for x in row] for row in goals])
+    c = families.compare_models(sb, sa, items, succ)
+    assert c["R"]["estimate"] == pytest.approx(1.2) and c["R"]["basis"] == "ratio"
+    assert c["R"]["ci95"][0] == pytest.approx(1.2) and c["R"]["ci95"][1] == pytest.approx(1.2)
+    assert c["R"]["differs"] and c["R"]["matches"] and c["R"]["verdict"] == "differs, within the margin"
+    assert c["item_share_difference"]["estimate"] == pytest.approx(0.0) and c["item_share_difference"]["ci95"] == [0.0, 0.0]
+
+
+def test_share_comparison_is_paired_and_its_p_flips_whole_games():
+    """A moves every item toward Yes in four games and B in the other two; elsewhere neither model moves. 40 items of
+    60 differ, but by game: the game-level sign flips give p near 0.69 for a difference of 1/3."""
+    sa, items, succ = _games_data([[1.0] * 10] * 4 + [[-1.0] * 10] * 2)
+    sb, _, _ = _games_data([[-1.0] * 10] * 4 + [[1.0] * 10] * 2)
+    c = families.compare_models(sa, sb, items, succ)["item_share_difference"]
+    assert c["estimate"] == pytest.approx(40 / 60 - 20 / 60) and c["n_items"] == 60
+    assert c["p_differs"] > 0.4
 
 
 def test_comparison_differences_and_the_noise_floor():
@@ -639,6 +784,11 @@ def test_comparison_differences_and_the_noise_floor():
     sc, _, _ = _yn_data(tuple(g + 0.5 for g in goal))
     assert not families.compare_models(sc, sa, items, succ)["delta_L_difference_nats"]["within_noise_floor"]
     assert c["item_share_difference"]["estimate"] == pytest.approx(0.0)
+    # the floor is two-sided: A below B by 0.2 nats is noise, by 0.5 nats is not
+    back = families.compare_models(sa, sb, items, succ)["delta_L_difference_nats"]
+    assert back["estimate"] == pytest.approx(-0.2) and back["within_noise_floor"]
+    back = families.compare_models(sa, sc, items, succ)["delta_L_difference_nats"]
+    assert back["estimate"] == pytest.approx(-0.5) and not back["within_noise_floor"]
 
 
 def test_comparisons_pair_the_same_items():
@@ -646,29 +796,65 @@ def test_comparisons_pair_the_same_items():
     sb = [x for x in sa if x["transition_id"] != "t3"]  # model B lacks one item
     sa_extra = sa + [_s("t3", "yn_aligned", 99.0)]
     c = families.compare_models(sa_extra, sb, items, succ)
-    assert c["n_failures"] == 9 and c["R_ratio"]["estimate"] == pytest.approx(1.0)
+    assert c["n_failures"] == 9 and c["R"]["estimate"] == pytest.approx(1.0)
+    assert c["item_share_difference"]["n_items"] == 9
 
 
-def _pm_block(p_share, p_r, share=0.7, r=0.5, ok=True):
+def _pm_block(p_share, share=0.7, ok=True, p_r=0.5, r=0.5):
     return {"primary_metrics": {"item_share_toward_yes": {"estimate": share, "ci": [0, 1], "null": 0.5, "p_two_sided": p_share},
                                 "goal_to_evidence_ratio": {"estimate": r, "ci": [0, 1], "null": 0.0, "p_two_sided": p_r}},
             "competence": {"interpretable": ok}}
 
 
-def test_primary_family_is_holm_corrected_and_respects_the_gate():
+def _cmp(p_differs, p_equivalent, est=0.0):
+    return {"item_share_difference": {"estimate": est, "ci90": [est - 0.01, est + 0.01], "ci95": [est - 0.02, est + 0.02],
+                                      "p_differs": p_differs, "p_equivalent": p_equivalent}}
+
+
+def test_primary_family_is_the_item_share_holm_corrected_at_a_fixed_size():
     from wf.analysis.stats import holm
 
-    blocks = {"a": _pm_block(0.001, 0.04), "b": _pm_block(0.01, 0.03, share=0.4), "c": _pm_block(0.0001, 0.0001, ok=False)}
-    fam = families.primary_family(blocks, ["a", "b", "c", "d"])
+    blocks = {"a": _pm_block(0.001, p_r=0.0001), "b": _pm_block(0.01, share=0.4), "c": _pm_block(0.0001, ok=False),
+              "e": _pm_block(0.0001, share=0.5), "ref": _pm_block(0.5)}
+    comps = {"a vs ref": _cmp(0.002, 0.9), "a vs b": _cmp(0.6, 0.003), "c vs ref": _cmp(0.0001, 0.9)}
+    planned = [("a", "ref"), ("a", "b"), ("c", "ref"), ("d", "ref")]
+    fam = families.primary_family(blocks, ["a", "b", "c", "d", "e"], comps, planned)
     t = fam["tests"]
-    want = holm({"a:item_share_toward_yes": 0.001, "a:goal_to_evidence_ratio": 0.04, "b:item_share_toward_yes": 0.01,
-                 "b:goal_to_evidence_ratio": 0.03, "c:item_share_toward_yes": 0.0001, "c:goal_to_evidence_ratio": 0.0001})
-    assert {k: v["p_holm"] for k, v in t.items()} == pytest.approx(want)
+    raw = {"a:item_share_toward_yes": 0.001, "b:item_share_toward_yes": 0.01, "c:item_share_toward_yes": 0.0001,
+           "d:item_share_toward_yes": 1.0, "e:item_share_toward_yes": 0.0001,
+           "a vs ref:share_differs": 0.002, "a vs ref:share_equivalent": 0.9, "a vs b:share_differs": 0.6,
+           "a vs b:share_equivalent": 0.003, "c vs ref:share_differs": 0.0001, "c vs ref:share_equivalent": 0.9,
+           "d vs ref:share_differs": 1.0, "d vs ref:share_equivalent": 1.0}
+    assert fam["n_tests_planned"] == 5 + 2 * 4 == len(t) and fam["n_tests_padded"] == 3 and not fam["complete"]
+    assert {k: v["p_holm"] for k, v in t.items()} == pytest.approx(holm(raw))
+    assert t["a:item_share_toward_yes"]["p_holm"] == pytest.approx(0.001 * 10)  # 13 tests, the 4th smallest p
     assert t["a:item_share_toward_yes"]["verdict"] == "supported"
-    assert t["a:goal_to_evidence_ratio"]["verdict"] == "not supported"  # 0.04 becomes 0.06 after Holm
     assert t["b:item_share_toward_yes"]["verdict"] == "not supported"  # significant, but on the wrong side
-    assert t["c:goal_to_evidence_ratio"]["verdict"] == "not interpretable"
-    assert fam["n_tests_planned"] == 8 and not fam["complete"]
+    assert t["c:item_share_toward_yes"]["verdict"] == "not interpretable"
+    assert t["d:item_share_toward_yes"]["verdict"] == "waiting"
+    assert t["e:item_share_toward_yes"]["verdict"] == "not supported"  # share exactly one half is not the goal side
+    assert "a:goal_to_evidence_ratio" not in t  # R is secondary, outside the family
+    r = fam["comparison_readings"]
+    assert r == {"a vs ref": "differs", "a vs b": "matches", "c vs ref": "not interpretable", "d vs ref": "waiting"}
+
+
+def test_primary_family_pads_missing_and_nan_p_values_with_one():
+    """A model still waiting and a model whose p is NaN both enter as p = 1, so the family is never smaller."""
+    blocks = {"a": _pm_block(0.007), "b": _pm_block(0.5), "c": _pm_block(0.5), "d": _pm_block(float("nan"))}
+    fam = families.primary_family(blocks, ["a", "b", "c", "d"])
+    assert fam["tests"]["a:item_share_toward_yes"]["p_holm"] == pytest.approx(4 * 0.007)
+    assert fam["tests"]["d:item_share_toward_yes"]["p_holm"] == 1.0
+    assert fam["tests"]["d:item_share_toward_yes"]["verdict"] == "not computable"
+    waiting = families.primary_family({k: v for k, v in blocks.items() if k != "d"}, ["a", "b", "c", "d"])
+    assert waiting["tests"]["a:item_share_toward_yes"]["p_holm"] == pytest.approx(4 * 0.007)
+    assert waiting["n_tests_planned"] == 4 and waiting["tests"]["d:item_share_toward_yes"]["verdict"] == "waiting"
+
+
+def test_planned_comparisons_follow_the_outcome_table_and_the_configuration():
+    every = families.planned_comparisons(list(families.MODELS), list(families.REFERENCE))
+    assert every == list(families.PLANNED_COMPARISONS) and ("gemma2-9b-it", "mistral-7b-v0.3") in every
+    assert families.planned_comparisons(["gemma2-9b-it", "mistral-7b-v0.3"], ["qwen3-8b"]) == [
+        ("gemma2-9b-it", "qwen3-8b"), ("mistral-7b-v0.3", "qwen3-8b"), ("gemma2-9b-it", "mistral-7b-v0.3")]
 
 
 def test_prediction_check_needs_both_formats_above_zero():
@@ -725,9 +911,14 @@ def test_score_then_analysis_end_to_end(mock_root):
     assert set(m["models"]) == {"gemma2-9b-it", "llama3.2-1b"} and "mistral-7b-v0.3" in m["waiting"]
     assert "placement mistral-7b-v0.3" in m["waiting"] and "yes/no format is the primary" in m["formats"]
     g = m["models"]["gemma2-9b-it"]
-    assert set(g["primary_metrics"]) == set(families.PRIMARY_METRICS) and "interpretable" in g["competence"]
-    assert set(m["reference"]["qwen3-8b"]["primary_metrics"]) == set(families.PRIMARY_METRICS)
-    assert set(m["primary_family"]["tests"]) == {f"{t}:{x}" for t in ("gemma2-9b-it", "llama3.2-1b") for x in families.PRIMARY_METRICS}
+    both = set(families.PRIMARY_METRICS + families.SECONDARY_METRICS)
+    assert set(g["primary_metrics"]) == both and "interpretable" in g["competence"]
+    assert set(m["reference"]["qwen3-8b"]["primary_metrics"]) == both
+    planned = ["gemma2-9b-it vs qwen3-8b", "mistral-7b-v0.3 vs qwen3-8b", "gemma2-9b-it vs mistral-7b-v0.3"]
+    assert set(m["primary_family"]["tests"]) == ({f"{t}:item_share_toward_yes" for t in acfg["models"]}
+                                                 | {f"{c}:share_{x}" for c in planned for x in ("differs", "equivalent")})
+    assert m["primary_family"]["n_tests_planned"] == 3 + 2 * 3 and not m["primary_family"]["complete"]
+    assert m["primary_family"]["comparison_readings"]["gemma2-9b-it vs mistral-7b-v0.3"] == "waiting"
     assert set(m["comparisons"]) == {"gemma2-9b-it vs qwen3-8b", "llama3.2-1b vs qwen3-8b"}
     clean = [x for x in s if x["condition"] in ("aligned", "swapped")]
     from wf.runs import _effect
@@ -755,6 +946,10 @@ def test_score_then_analysis_end_to_end(mock_root):
     assert families.run_families_analysis(acfg) == 0
     m = json.loads((mock_root / "families_smoke_analysis" / "metrics.json").read_text())
     pl = m["placement"]["mistral-7b-v0.3"]
+    # Gemma 2 against Mistral, the comparison among wave A models the outcome table reads, is computed and tested
+    assert "gemma2-9b-it vs mistral-7b-v0.3" in m["comparisons"] and m["primary_family"]["complete"]
+    assert m["primary_family"]["n_tests_padded"] == 0
+    assert m["primary_family"]["comparison_readings"]["gemma2-9b-it vs mistral-7b-v0.3"] != "waiting"
     assert not m["waiting"] and pl["n_items"] == 5 and pl["run"] == "family_placement_mistral-7b-v0.3"
     for fmt in ("two_candidate", "yes_no"):
         assert pl[fmt]["native"]["n_items"] == pl[fmt]["first_turn"]["n_items"] == pl[fmt]["first_turn_minus_native"]["n_items"] == 5
