@@ -1,10 +1,10 @@
 # RQ1, H1 and secondary RQ2 results (2026-11-18)
 
-Scoring: run `rq1_score`, 8 parts at de40795, on L40S, A40 and A100 GPUs. Every item's prompts for a model were scored in the same job. Analysis: run `rq1_analysis` at de40795, parser version `8639849027611cd2`. Full numbers are in `rq1_metrics.json` (a copy of the run's metrics.json). The design is in `deviations.md`, "Decided 2026-11-18, after the confirmatory RQ2 result". None of it is preregistered.
+Scoring: run `rq1_score`, 8 parts at de40795, on L40S, A40 and A100 GPUs. Every item's prompts for a model were scored in the same job. Analysis: run `rq1_analysis_v2` at 28b4d30, which re-reads the saved written predictions with the final parser version `3c25d40cc71529e2` (2026-11-20). Full numbers are in `rq1_v2_metrics.json` (a copy of that run's metrics.json, with a provenance block). The first analysis, `rq1_analysis` at de40795 with parser version `8639849027611cd2`, is kept as `rq1_metrics.json`; it is superseded for every number that depends on written predictions, and identical for every score. The design is in `deviations.md`, "Decided 2026-11-18, after the confirmatory RQ2 result". None of it is preregistered.
 
 **Parser status (updated 2026-11-20).** Every number based on written predictions (A, H1, the false-success rates) depends on the parser that reads them. The parser went through six audit rounds against a blind rater: the first two samples were used to develop it, and rounds three to six each failed the rule fixed before the audits (at least 95% agreement on no effect against effect, and no row read in the opposite direction). Rounds five and six passed the agreement bar (95.5% and 96.6%) but each had rows read in the opposite direction. The audits were ended on 2026-11-19 without the parser passing its rule, and the written-prediction results are reported as validated at 95–97% agreement on stratified hard cases, with the no-opposite rule unmet (`deviations.md`, "Sixth parser audit").
 
-The numbers in this note use the parser version `8639849027611cd2`, the one the analysis ran with. The final version is `3c25d40cc71529e2`, the one in the code now. Re-reading this run's 68,340 predictions with it moves 110 of them to the other side (checked 2026-11-20 by re-parsing the saved predictions): 70 unreadable become failures, 6 unreadable become successes, and 34 change between success and failure. (The decision log's 93 is the fifth version's count against the same baseline.) So a rerun of `rq1_analysis` at the current commit will not reproduce this note to the last digit. The decision log reports A unchanged to two decimals at the final version (Qwen 0.19, Llama 0.77) and the H1 verdicts unchanged. Regenerating these metrics at the final parser is pending. Scores (ΔL, Δp) do not depend on the parser.
+The numbers in this note use the final parser version `3c25d40cc71529e2` (updated 2026-11-20 from `rq1_v2_metrics.json`). Against the version the first analysis ran with (`8639849027611cd2`), it moves 110 of the 68,340 predictions to the other side: 70 unreadable become failures, 6 unreadable become successes, and 34 change between success and failure. (The decision log's 93 is the fifth version's count against the same baseline.) The effect on this note is small: no verdict changes, A from the history alone is unchanged to three decimals for both models, and the largest changes are in the full-state rows and the Qwen example sets 2 and 3. Every changed number is listed in `deviations.md`, "Changes from the 2026-11-20 audit". Scores (ΔL, Δp) do not depend on the parser and are unchanged.
 
 L is the log-odds of the success text against "Nothing happens.", and the "P(success)" and "Δp" below are means of s = σ(L). s is not the model's probability that the action succeeds; see `rq2_results.md`.
 
@@ -16,23 +16,25 @@ A is the false-success rate minus the false-failure rate. The false-success rate
 
 | model and prompt | A | 95% CI | false successes | false failures | A, partial effects excluded | A, partial effects as failures |
 |---|---|---|---|---|---|---|
-| Qwen3-8B, history only (set 1) | 0.193 | 0.167 to 0.218 | 22.6% | 3.3% | 0.187 | 0.185 |
-| Qwen3-8B, full state (set 1) | 0.285 | 0.259 to 0.312 | 31.5% | 3.0% | 0.269 | 0.259 |
+| Qwen3-8B, history only (set 1) | 0.193 | 0.168 to 0.218 | 22.6% | 3.3% | 0.187 | 0.186 |
+| Qwen3-8B, full state (set 1) | 0.284 | 0.258 to 0.312 | 31.4% | 3.0% | 0.268 | 0.259 |
 | Llama-3.1-8B, history only (set 1) | 0.767 | 0.734 to 0.797 | 77.7% | 1.0% | 0.678 | 0.401 |
-| Llama-3.1-8B, full state (set 1) | 0.668 | 0.640 to 0.696 | 69.1% | 2.3% | 0.587 | 0.420 |
+| Llama-3.1-8B, full state (set 1) | 0.666 | 0.639 to 0.695 | 68.9% | 2.3% | 0.586 | 0.421 |
 | Word2World Llama-3.1-8B, full state | 0.098 | 0.084 to 0.111 | 10.1% | 0.3% | 0.097 | 0.097 |
 | Word2World Qwen2.5-7B, full state | −0.032 | −0.061 to −0.004 | 3.7% | 6.8% | −0.032 | −0.032 |
 
-A across example sets 1, 2 and 3: Qwen 0.19, 0.31 and 0.33 (SD 0.075); Llama 0.77, 0.77 and 0.88 (SD 0.068).
+A across example sets 1, 2 and 3: Qwen 0.19, 0.30 and 0.32 (SD 0.066); Llama 0.77, 0.77 and 0.88 (SD 0.068).
 
 Qwen's false-success rate depends strongly on why the action fails. It is 10% when the agent is away from the receptacle, 10% when the agent does not hold the object, 43% when its hands are full, and 68% when the agent never went to the receptacle. Llama's is 68% to 99% for every reason except "already there" (going to the receptacle the agent is at, 41 items), where it is 100%. With the full state, Qwen's rate for "agent is away from the receptacle" rises from 10% to 30%. The layout shows where the object is, and Qwen predicts the take works without checking that the agent is there.
 
 ## H1
 
 - **H1a: |A| is larger from the history alone than with the full state.**
-  - Qwen: −0.092 (CI −0.120 to −0.065), so **not supported**, and reversed. The full state makes Qwen more optimistic.
-  - Llama: +0.099 (CI 0.057 to 0.140), so **supported**.
+  - Qwen: −0.091 (CI −0.119 to −0.064), so **not supported**, and reversed. The full state makes Qwen more optimistic.
+  - Llama: +0.101 (CI 0.058 to 0.141), so **supported**.
 - **H1b: A(Llama) − A(Qwen) > 0**, history only, set 1: +0.574 (CI 0.534 to 0.613), so **supported**.
+
+At the final parser every H1 verdict is the same as at the earlier version; the estimates moved by at most 0.002.
 
 ## Secondary RQ2 effects (scores, not provisional)
 
@@ -91,7 +93,7 @@ In Δp, the goal role is +1.2 pp for Qwen and +6.1 pp for Llama (+11.9 pp on tak
 ## Reading
 
 - Both prompted models lean toward predicting success, Llama far more. It states an effect for 78% of actions that do nothing, so H1b holds by a wide margin. The fine-tuned Word2World models barely lean (Llama) or lean slightly the other way (Qwen).
-- Giving the hidden state reduces Llama's lean (H1a holds) but increases Qwen's. In both, it cuts the goal effect by about 70%, without removing it.
-- The RQ2 effect holds with every example set, and above the "strong" threshold each time. Telling the model to ignore the goal removes 9% of Qwen's effect and none of Llama's.
+- Giving the hidden state reduces Llama's lean (H1a holds) but increases Qwen's. In both, it cuts the goal effect by about 70%, without removing it: by 66% for Qwen (CI 59% to 73%) and 71% for Llama (64% to 78%), from `audit_metrics.json`, `ratios.<model>.full_layout_share_removed`.
+- The RQ2 effect holds with every example set, and above the "strong" threshold each time. Telling the model to ignore the goal removes 9% of Qwen's effect (CI 7% to 12%) and none of Llama's (−3%, CI −6% to 1%), from `audit_metrics.json`, `ratios.<model>.ignore_note_share_removed`.
 - **Superseded (2026-11-19):** the next point's reading that the effect comes from the object being *named* was overturned by the object-free goals in `exploratory_results.md`, section 1. With the object only described, 61% (Qwen) and 92% (Llama) of the effect remains, so the task acts through the object's meaning. The point is kept as written at the time.
 - Most of the RQ2 effect comes from the action's object being named in the prompt. For Qwen, naming it in a plain sentence reproduces almost the whole effect. Once both objects are named, making it the goal lowers the log-odds, except on an episode's first step. For Llama, the goal role is about a third of the effect, concentrated on take actions, which the 2×2 could not cover. Both controls agree that mention dominates. They disagree on the sign of the small goal-specific part on move, heat, cool and clean items.

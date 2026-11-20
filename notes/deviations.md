@@ -4,21 +4,74 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 
 ## Still open (updated 2026-11-20)
 
-- **Shared-spot sensitivity on confirmatory data.** Promised on 2026-11-06 ("report both versions"), not yet done. A scoring run for the shared-spot items has been added; see 2026-11-20 below.
-- **Logged goal effect on working actions.** Came out empty (NaN) because of a bug, now fixed; the rerun is pending. See 2026-11-20 below.
-- **Metrics at the final parser.** `rq1_metrics.json` and `thinking_metrics.json` were made with parser version `8639849027611cd2`. Numbers re-read with the final version `3c25d40cc71529e2` are quoted in the notes as re-parses; regenerating the metrics files is pending.
-- **Exclusion flow.** A stage-by-stage count from the 12,987 collected items to the 4,666 scored ones is pending (`audit_analysis`).
+- **Closed 2026-11-20: shared-spot sensitivity on confirmatory data.** No item was excluded by the shared-spot rule alone, so the result with them is the confirmatory result (`rq2_results.md`, "Shared-spot sensitivity").
+- **Closed 2026-11-20: logged goal effect on working actions.** Computed after the fix (`rq1x_v2_metrics.json`, `rq1v_v2_metrics.json`); reported in `exploratory_results.md`, sections 1 and 4.
+- **Closed 2026-11-20: metrics at the final parser.** `rq1_v2_metrics.json` and `thinking_v2_metrics.json` were made with the final parser `3c25d40cc71529e2` and supersede `rq1_metrics.json` and `thinking_metrics.json` for written-prediction numbers.
+- **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
 ## Decided or found 2026-11-20 (documentation and rigor audit)
+
+### Changes from the 2026-11-20 audit
+
+On 2026-11-20 seven analyses ran on ICE at 28b4d30 (checkout `text-wm-fix20`, CPU only), and their metrics were copied into `notes/`:
+
+- `audit_metrics.json` (run `audit_analysis`): the exclusion flow, the 788 seen-without-object items with and without instance-number items, the share of failures answered Yes in the size series, intervals for the headline ratios, first-token coverage and ties, items per game and near-duplicates, and twins lost to a winning plan;
+- `rq2_shared_metrics.json` (run `rq2_shared_analysis`): the shared-spot sensitivity;
+- `rq1_v2_metrics.json` (run `rq1_analysis_v2`): supersedes `rq1_metrics.json`, because it reads the written predictions with the final parser `3c25d40cc71529e2`; scores are unchanged;
+- `rq1x_v2_metrics.json` and `rq1v_v2_metrics.json` (runs `rq1x_analysis_v2`, `rq1v_analysis_v2`): supersede `rq1x_metrics.json` and `rq1v_metrics.json`, because they compute the logged goal effect on working actions that the first analyses left empty; every other number is identical;
+- `thinking_v2_metrics.json` (run `thinking_analysis_v2`): supersedes `thinking_metrics.json`, because it reads the answers with the final parser; the scores (L) are unchanged;
+- `size_v2_metrics.json` (run `size_analysis_v2`): supersedes `size_metrics.json` after the NaN fix in the flips and the slope bootstrap; every number is identical.
+
+The old files are kept, so that the numbers quoted before 2026-11-20 can still be traced. Each new file has a provenance block (analysis commit, scoring-run commits, input hashes, parser version).
+
+Every number in the public notes that changed, old → new:
+
+| Number | Old | New | File (source) |
+| --- | --- | --- | --- |
+| RQ2 mean s, Qwen aligned / swapped | 0.076 / 0.017 (no source) | 0.075 / 0.017 | `rq2_results.md` (`rq1_v2_metrics.json`, `rq2_secondary.mean_p_success`) |
+| RQ2 mean s, Llama aligned / swapped | 0.407 / 0.243 (no source) | 0.408 / 0.244 | `rq2_results.md` (same) |
+| RQ1 Qwen history-only A, CI lower bound | 0.167 | 0.168 | `rq1_results.md` (`rq1_v2_metrics.json`) |
+| RQ1 Qwen history-only A, partial effects as failures | 0.185 | 0.186 | `rq1_results.md` |
+| RQ1 Qwen full-state A (CI) | 0.285 (0.259 to 0.312) | 0.284 (0.258 to 0.312) | `rq1_results.md` |
+| RQ1 Qwen full-state false-success rate | 31.5% | 31.4% | `rq1_results.md` |
+| RQ1 Qwen full-state A, partial effects excluded | 0.269 | 0.268 | `rq1_results.md` |
+| RQ1 Llama full-state A (CI) | 0.668 (0.640 to 0.696) | 0.666 (0.639 to 0.695) | `rq1_results.md` |
+| RQ1 Llama full-state false-success rate | 69.1% | 68.9% | `rq1_results.md` |
+| RQ1 Llama full-state A, partial excluded / as failures | 0.587 / 0.420 | 0.586 / 0.421 | `rq1_results.md` |
+| RQ1 Qwen A for example sets 2 and 3 (SD over sets) | 0.31 and 0.33 (0.075) | 0.30 and 0.32 (0.066) | `rq1_results.md` |
+| H1a, Qwen (CI) | −0.092 (−0.120 to −0.065) | −0.091 (−0.119 to −0.064); verdict unchanged | `rq1_results.md` |
+| H1a, Llama (CI) | +0.099 (0.057 to 0.140) | +0.101 (0.058 to 0.141); verdict unchanged | `rq1_results.md` |
+| Full state cuts the goal effect | "about 70%", no interval | 66% [59%, 73%] Qwen, 71% [64%, 78%] Llama (wording kept) | `rq1_results.md`, README (`audit_metrics.json`, `ratios`) |
+| Ignore-goal note removes | 9% / none | 9% [7%, 12%] / −3% [−6%, 1%] | `rq1_results.md`, `exploratory_results.md`, README (`audit_metrics.json`) |
+| Object-free goal keeps | 61% / 92% | 61% [54%, 68%] / 92% [83%, 103%] | `exploratory_results.md`, README (`audit_metrics.json`) |
+| Object-free goal keeps, check-passed items, Llama | 84% (no source) | 85% [76%, 95%] (84.5%) | `exploratory_results.md` (`audit_metrics.json`) |
+| Thinking mode removes | "a third" | 34% [16%, 52%] (keeps 66% [48%, 84%]) | `exploratory_results.md`, README (`audit_metrics.json`) |
+| Thinking written shift | 4.7 [1.6, 8.3] (one-off re-parse) | 4.7 [1.5, 7.8] | `exploratory_results.md` (`thinking_v2_metrics.json`) |
+| Goal effect on working actions, two-candidate | not computed (NaN) | Qwen 1.94 [1.34, 2.62], Llama 0.16 [0.01, 0.31] nats | `exploratory_results.md` (`rq1x_v2_metrics.json`) |
+| Goal effect on working actions, yes/no | not computed (NaN) | Qwen 2.44 [1.43, 3.52], Llama 0.98 [0.73, 1.24] nats | `exploratory_results.md` (`rq1v_v2_metrics.json`) |
+| 788 seen-without-object items, Qwen / Llama | 4.48 [3.57, 5.41] / 2.82 [2.47, 3.18] (post hoc) | 4.49 [3.60, 5.45] / 2.81 [2.46, 3.14] | `exploratory_results.md` (`audit_metrics.json`) |
+| Mechanism, Qwen plain CI lower bound | 5.51 | 5.50 | `exploratory_results.md` (`mech_metrics.json`, double rounding) |
+| Mechanism, Llama plain CI lower bound | 1.50 | 1.49 | same |
+| Mechanism, state question main − twin, Qwen estimate | −0.34 | −0.33 | same |
+| Mechanism, state question main − twin, Llama CI lower bound | 0.32 | 0.31 | same |
+| Mechanism, Spearman, Qwen | −0.08 | −0.07 | same |
+| Size slope, two-candidate | +0.52 | +0.51 | `exploratory_results.md` (`size_metrics.json`, double rounding) |
+| Size, 1.7B score shift | 15.6 | 15.5 | same |
+| Size, 1.7B AUC under the aligned task | 0.79 | 0.78 | same |
+| Qwen3-32B on failing actions, aligned / swapped | 15% / 6% "of the time" (a mean probability) | answers Yes on 11.6% / 3.8% (mean σ 15.0% / 5.8%) | `exploratory_results.md`, README (`audit_metrics.json`, `size_yes_share`) |
+| RQ3 false successes per episode | 2.4–2.5 | 2.3–2.5 | `rq3_results.md` (`rq3_metrics.json`) |
+
+**No verdict or claim changes meaning.** The H1 verdicts are the same at the final parser, and the confirmatory RQ2 result is the same with the shared-spot items. Two readings gain a qualifier. The goal effect on working actions exists but is much smaller than on failures (about a third for Qwen and a tenth for Llama in nats). Among the 788 seen-without-object items, Qwen shows almost no effect on the 83 that differ only by instance number.
+
 
 Five independent read-only reviews of the code and documents at e7ca63b, each covering one area: environment and items, scoring and prompts, statistics, staleness, and reproducibility. Nothing below changes a preregistered threshold or a reported confirmatory number. The entries record what the reviews found that was missing from this log.
 
 **The 12-step cap on item histories (not preregistered).** The agent that produced the RQ1 and RQ2 histories stopped after 12 steps (`step_cap: 12`), so every item's history holds at most 11 actions. Origin: `wf/config/pilotA_transitions.yaml` has had `step_cap: 12` since the first commit (`e2c1f1f`, 2026-10-28). The confirmatory collection used the Pilot A collector ("Confirmatory RQ1 and RQ2 item collection" below), and commit `425542e` (2026-11-17) set the same value in `rq12_transitions*.yaml`. The collector's own default is also 12. `STEP_CAP = 30` (decision 8) governs the RQ3, Pilot B and Tier 0 agents, not item collection, and `PILOT_PROTOCOL.md` gives only the 30. The preregistration names no cap, and no written reason for 12 was found; it was a Pilot A collection setting carried over. Effect: the items cover the first 12 steps of each episode only, so later-episode states are not represented, and the history-length breakdowns stop at 11.
 
-**Shared-spot rule: the "report both ways" commitment is not yet met.** The rule (2026-11-06, below) was applied to the confirmatory data: shared-spot items are left out of RQ2's population and RQ1's items. But they were never scored, so the promised result with them put back does not exist for any confirmatory run. A scoring run for these items has now been added; its result will be reported next to the main one in `rq2_results.md`, whichever way it falls.
+**Shared-spot rule: the "report both ways" commitment is not yet met.** The rule (2026-11-06, below) was applied to the confirmatory data: shared-spot items are left out of RQ2's population and RQ1's items. But they were never scored, so the promised result with them put back does not exist for any confirmatory run. A scoring run for these items has now been added; its result will be reported next to the main one in `rq2_results.md`, whichever way it falls. **Update, same day:** the analysis (`rq2_shared_metrics.json`) found that no item is excluded by this rule alone. Of the 6,528 determined failures with a twin and a swap, one is at a shared spot, and its history acts on a goal object, so it is outside the population for that reason too. The population with shared-spot items put back is the same 4,666 items, and ΔL is the same: 6.12 and 1.65 nats. The commitment is met.
 
-**Logged readouts that came out empty.** The goal effect on working actions, logged for `rq1x` (2026-11-19, "With the failures already scored, this gives the goal effect on actions that work") and computed as `goal_effect_on_successes` in `rq1x` and `yes_no.goal_effect_successes` in `rq1v`, is NaN with 0 items in both metrics files. Cause: the shared pairing function always keeps only items whose true reply is "Nothing happens.", so successes were silently dropped; `require_agnostic=False` did not lift that filter. The notes report instead a post hoc subset of 37 matched successes, marked post hoc. The bug is fixed in code; rerunning the two analyses (CPU only) is pending, and both readouts will be reported as logged.
+**Logged readouts that came out empty.** The goal effect on working actions, logged for `rq1x` (2026-11-19, "With the failures already scored, this gives the goal effect on actions that work") and computed as `goal_effect_on_successes` in `rq1x` and `yes_no.goal_effect_successes` in `rq1v`, is NaN with 0 items in both metrics files. Cause: the shared pairing function always keeps only items whose true reply is "Nothing happens.", so successes were silently dropped; `require_agnostic=False` did not lift that filter. The notes report instead a post hoc subset of 37 matched successes, marked post hoc. The bug is fixed in code; rerunning the two analyses (CPU only) is pending, and both readouts will be reported as logged. **Update, same day:** rerun as `rq1x_analysis_v2` and `rq1v_analysis_v2`. On the 292 determined successes, the two-candidate goal effect is 1.94 nats [1.34, 2.62] for Qwen and 0.16 [0.01, 0.31] for Llama; on the yes/no question it is 2.44 [1.43, 3.52] and 0.98 [0.73, 1.24]. Reported in `exploratory_results.md`, sections 1 and 4. Closed.
 
 **GPU types.** Three corrections to earlier entries.
 
@@ -44,7 +97,11 @@ The code now pins these revisions (a `REVISIONS` map, added 2026-11-20), so a ch
 
 **Parser change counts.** Re-reading the 68,340 `rq1_score` predictions on 2026-11-20 confirmed the counts in the fifth and sixth audit entries below, and that both are against the version the analysis used (`8639849027611cd2`): 93 change side at the fifth version (`e118530da85de6a0`) and 110 at the final one (`3c25d40cc71529e2`): 70 unreadable become failures, 6 unreadable become successes, and 34 move between success and failure.
 
-**Documentation.** The reviews also found stale or missing text in the public notes. Fixed on 2026-11-20: a methods section in `rq2_results.md` (what "ALFWorld" means here, how histories, alternatives, twins and swaps were made, the determination and shared-spot rules); the parser status in `rq1_results.md`; definitions of yes-share and of the two flip measures in `exploratory_results.md`; the item-verification results in `testing.md`; a new `reproducing.md` (versions, data, which run and commit produced each result, licences); and the README. Numbers that need reruns (stale metrics, rounding, ratio intervals) wait for those reruns. `docs/milestone_checkin.tex`, cited in two entries below, is a course document that is not in the public repository.
+**Documentation.** The reviews also found stale or missing text in the public notes. Fixed on 2026-11-20: a methods section in `rq2_results.md` (what "ALFWorld" means here, how histories, alternatives, twins and swaps were made, the determination and shared-spot rules); the parser status in `rq1_results.md`; definitions of yes-share and of the two flip measures in `exploratory_results.md`; the item-verification results in `testing.md`; a new `reproducing.md` (versions, data, which run and commit produced each result, licences); and the README. Numbers that needed reruns (stale metrics, rounding, ratio intervals) were updated after the reruns the same day; see "Changes from the 2026-11-20 audit" above.
+
+**Twins lost to a winning plan (limitation).** For tasks that only require one goal object at the target, the setup plan for `take <goal> from <target>` wins the game, so the action never runs and has no twin. Counted from the recorded fields (`audit_metrics.json`, `twin_plan_wins`): 164 such failures in 22 games, of which 127 would otherwise be in RQ2's population. RQ2 therefore contains no take of the goal object from the task's own target receptacle. The count is a signature match, not a replayed confirmation.
+
+**Instance-number items.** Of the 788 items whose receptacle was seen without the object, 83 were seen holding another instance of the same type (`audit_metrics.json`, `seen_without_object`). The effect without them is 4.97 nats for Qwen and 2.90 for Llama; on the 83 alone, 0.46 [−1.35, 1.91] and 2.09. `docs/milestone_checkin.tex`, cited in two entries below, is a course document that is not in the public repository.
 
 ## Closed 2026-11-20: items open after the pilots
 

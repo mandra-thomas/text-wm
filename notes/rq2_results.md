@@ -19,8 +19,10 @@ The p-values are at the floor set by 1,000 game-level permutations (raw p = 1/10
 
 | model | Δp, i.e. Δs (pp) | ΔL first token (nats) | mean s = σ(L), aligned / swapped | written success shift (pp) |
 |---|---|---|---|---|
-| Qwen3-8B | 5.9 (5.1 to 6.8) | 2.52 (2.26 to 2.79) | 0.076 / 0.017 | 8.8 (7.5 to 10.3) |
-| Llama-3.1-8B | 16.4 (14.6 to 18.3) | 0.68 (0.62 to 0.76) | 0.407 / 0.243 | 27.4 (24.6 to 30.1) |
+| Qwen3-8B | 5.9 (5.1 to 6.8) | 2.52 (2.26 to 2.79) | 0.075 / 0.017 | 8.8 (7.5 to 10.3) |
+| Llama-3.1-8B | 16.4 (14.6 to 18.3) | 0.68 (0.62 to 0.76) | 0.408 / 0.244 | 27.4 (24.6 to 30.1) |
+
+The mean-s column is not in `rq2_confirmatory_metrics.json`, which records only the differences. It comes from the secondary scoring of the same 4,666 items, run `rq1_score` (`rq1_v2_metrics.json`, `per_model.<model>.rq2_secondary.mean_p_success.aligned` and `.swapped`). That run scored the items in different jobs and on different GPUs, so its difference (5.8 and 16.4 points) is close to, but not exactly, the confirmatory Δp. The values quoted here before 2026-11-20 (0.076 / 0.017 and 0.407 / 0.243) had no source in any metrics file.
 
 By history length, Qwen's effect is concentrated where the agent has not acted yet. With history length 0 (514 items), ΔL is 11.0 nats and Δp is 42 pp. At lengths 1–3, 4–7 and 8+, ΔL is 5.2 to 6.0 nats but Δp is only about 1.4 pp. Llama's effect is flat across lengths: ΔL is 1.5 to 1.7 nats and Δp is 13 to 18 pp.
 
@@ -75,7 +77,7 @@ A success is determined only if its reply reveals nothing new (no "you see"), an
 
 ### Shared spots
 
-ALFWorld puts some receptacles at the same spot: from `cabinet 1` the agent can act on `cabinet 2`, and `go to cabinet 2` does nothing. There, "the agent is elsewhere" proves nothing, so an item is flagged `shared_location` when the action's receptacle shares a spot with the one the agent is at (from the scene scan, which the model never sees). Flagged items are left out of RQ2's population and RQ1's items. The rule was decided on 2026-11-06, before any scores (`deviations.md`, "Read before analysing or writing up: shared locations"), and the log promised the result both with and without these items. The confirmatory runs did not score them; a scoring run for them has now been added (`deviations.md`, 2026-11-20).
+ALFWorld puts some receptacles at the same spot: from `cabinet 1` the agent can act on `cabinet 2`, and `go to cabinet 2` does nothing. There, "the agent is elsewhere" proves nothing, so an item is flagged `shared_location` when the action's receptacle shares a spot with the one the agent is at (from the scene scan, which the model never sees). Flagged items are left out of RQ2's population and RQ1's items. The rule was decided on 2026-11-06, before any scores (`deviations.md`, "Read before analysing or writing up: shared locations"), and the log promised the result both with and without these items. The confirmatory runs did not score them. The check run on 2026-11-20 found that no item was excluded by this rule alone, so the result with them put back is the same result ("Shared-spot sensitivity" below).
 
 ### How success texts ("twins") were made
 
@@ -84,7 +86,7 @@ The success candidate for a failing action is the real server's reply to the sam
 - the twin comes from a state reached from reset, not from the item's own state, so it shows the world as the plan left it;
 - `take`, `move`, and `heat`/`cool`/`clean` replies do not depend on that state; `open` and `go to` replies list contents and open state, so those twins are dropped (`twin_contradicts_state`) once the agent has changed that receptacle;
 - an action with no setup plan (`slice`, or opening something open from the start) has no twin and leaves the study (`no_success_twin`);
-- a plan that wins the game ends it before the action can run, so that item gets no twin either; for tasks that only require putting one goal object at the target, this removes `take <goal> from <target>` when the goal is not already at the target, because the plan to set it up (carry the goal there and put it down) wins the game. How often this happens is not yet counted.
+- a plan that wins the game ends it before the action can run, so that item gets no twin either; for tasks that only require putting one goal object at the target, this removes `take <goal> from <target>` when the goal is not already at the target, because the plan to set it up (carry the goal there and put it down) wins the game. Counted on 2026-11-20 (`audit_metrics.json`, `twin_plan_wins`): 164 failing `take <goal> from <target>` actions in 22 games lost their twin this way, and 127 of them would otherwise have been in RQ2's population (78 decided by contents or open state, 21 by the agent being elsewhere, 8 by the agent never having moved, 20 by full hands). That is about 2.7% of the population's size, all from one action type. The count is read from the recorded fields (task, action, scene and exclusion reason); the collector did not record that the replay ended the game, so it counts items with exactly this signature, not replayed confirmations. It is a selection effect: RQ2 contains no `take` of the goal object from the task's own target receptacle.
 
 Full verification regenerated every twin exactly; that shows the twins are deterministic, not that they fit each item's state.
 
@@ -104,8 +106,34 @@ RQ2's preregistered population is every determined failure whose action names th
 
 ### Exclusion flow
 
-**Pending (run `audit_analysis`).** A table of how the 12,987 collected items reduce to the 4,666 scored ones, stage by stage: not a failure, not determined, no success twin, twin contradicts the state, no swap object, shared spot, action not on the goal object, history acts on a goal object.
+How the 12,987 collected items reduce to the 4,666 scored ones, from run `audit_analysis` at 28b4d30 (`audit_metrics.json`, `exclusion_flow`). Each stage applies one rule to the items that passed the stages above it, in this order; the counts would differ in another order, because some items fail several rules. "Games" is the number of games that still contribute items.
+
+| Stage: items kept if… | Dropped | Remaining | Games |
+| --- | --- | --- | --- |
+| collected (every alternative action proposed by the generators) | | 12,987 | 134 |
+| the true reply is "Nothing happens." (a real failure) | 3,120 | 9,867 | 134 |
+| the environment's reply could be parsed | 0 | 9,867 | 134 |
+| the history determines the failure | 41 | 9,826 | 134 |
+| a success twin exists and fits the state (2,132 had no twin; 508 had a twin that contradicts the state) | 2,640 | 7,186 | 134 |
+| a swapped goal object exists | 658 | 6,528 | 125 |
+| the action is not at a shared spot | 1 | 6,527 | 125 |
+| the action names the goal object | 861 | 5,666 | 125 |
+| the history does not act on the goal or swap object | 1,000 | 4,666 | 125 |
+
+The final count matches the scored population exactly (`flow_matches_primary_set`). The 3,120 true successes include the 307 determined successes not at a shared spot that RQ1 uses (309 before that rule); the 6,527 items left after the shared-spot stage are RQ1's true failures. The nine games with no swap object at all are `valid_unseen/100`, `101`, `102`, `135`, `136`, `137`, `165`, `166` and `167`.
+
+### Items per game and near-duplicates
+
+The 4,666 items are spread unevenly over the 125 games (`audit_metrics.json`, `items_per_game`): 37.3 per game on average (median 38, range 4 to 90), and the 10% of games with the most items hold 18.9% of them. Every test weighs items equally within the game-clustered bootstrap and permutation, so games with more items count for more; that defines the estimand as the item-weighted mean.
+
+No two items are exact duplicates. Because the agent can revisit a state, some items repeat the same question in practice: 238 groups of items share the game, action, swapped goal and every fact read from the history (location, held object, open and closed receptacles, last-seen contents), covering 542 items, or 304 more than one per group. Items sharing only the game and action are much more common (1,013 groups, 2,876 items beyond one per group), because the same failing action recurs at different states. Clustering by game already accounts for this dependence in the intervals and the permutation test.
+
+### The first-token term
+
+The first-token term ℓ_first compares the first token of the success text with the first token of "Nothing happens.". On every one of the 4,666 failing items, for every model and every prompt scored, the success text begins with the token "You" and the failure with "Nothing" (`audit_metrics.json`, `first_token`). Among the 292 determined successes used for working actions, 236 success texts begin with "You" and 56 with "The", "There" or "This", so the term means something slightly different there.
+
+How much of the model's next-token probability these two tokens cover (`first_mass`) differs by model. In the confirmatory scores (`rq2_score`) the median coverage is above 0.9999 for Qwen3-8B under both tasks. For Llama-3.1-8B it is 0.85 under the aligned task and 0.80 under the swapped task, and coverage falls below one half on 0.8% and 7.2% of items. The Word2World models are above 0.9999, and the Qwen3 size series is at 0.99 or above at every size. So for a typical Llama item 15–20% of the first-token probability goes to other words, and ℓ_first is a coarser reading of its preference than it is for Qwen.
 
 ### Shared-spot sensitivity
 
-**Pending (shared-spot scoring run, then `audit_analysis`).** ΔL with the shared-spot items put back, for both models, next to the result above.
+Run `rq2_shared_analysis` at 28b4d30 (`rq2_shared_metrics.json`). The flag is rare (`items.shared_flag_by_stage`): 19 of the 12,987 collected items carry it, 17 of them are real failures, 4 of those are determined by the history, and 1 has both a twin and a swapped goal; that is the one item the shared-spot stage of the flow above drops, out of 6,528. It would have been dropped anyway two stages later: its action names the goal object, but its history acts on a goal object. So **no item was excluded by the shared-spot rule alone**: `n_shared_spot_only` is 0, and the population with the shared-spot items put back is the same 4,666 items in 125 games. The result with them is therefore identical to the confirmatory result: ΔL is 6.12 nats (5.48 to 6.75) for Qwen3-8B and 1.65 nats (1.51 to 1.78) for Llama-3.1-8B, both with permutation p = 0.001 before Holm. The logged "report both ways" commitment is met, and the confirmatory result does not depend on the rule. No shared-spot scoring job was needed, because there was nothing to score.

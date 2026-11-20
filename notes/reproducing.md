@@ -78,12 +78,19 @@ Commits are read from each run folder's `git_sha`. Every metrics file in `notes/
 | Counterfactual task, yes/no question (§4) | `rq1v_score` (8 shards), `rq1v_analysis` | `2155b8d`, both | `rq1v_metrics.json` | fix17 | not recorded here |
 | Mechanism diagnostic (§5) | `mech_score` (8 shards), `mech_analysis` | `10a61a7`, both | `mech_metrics.json` | fix19 | any of L40S, A40, A100 |
 | Qwen3 size series (§6) | `size_score_qwen3-<size>` (1 shard for 0.6B, 1.7B, 4B; 2 for 8B, 14B and 32B), `size_analysis` | scoring `8bfd84c`, analysis `10a61a7` | `size_metrics.json` | fix18 | any for 0.6B–14B; 32B on A100-80GB only |
+| RQ1 and H1 at the final parser (supersedes `rq1_metrics.json` for written predictions) | `rq1_analysis_v2` (reads `rq1_score`) | analysis `28b4d30`; scores `de40795`; parser `3c25d40cc71529e2` | `rq1_v2_metrics.json` | fix20 | CPU |
+| Goal effect on working actions (`exploratory_results.md` §1, §4) | `rq1x_analysis_v2`, `rq1v_analysis_v2` (read `rq1_score`, `rq1x_score`, `rq1v_score`) | analysis `28b4d30`; scores `de40795`, `39722d6`, `2155b8d` | `rq1x_v2_metrics.json`, `rq1v_v2_metrics.json` | fix20 | CPU |
+| Thinking mode at the final parser (§2) | `thinking_analysis_v2` | analysis `28b4d30`; probe `adb6528`; parser `3c25d40cc71529e2` | `thinking_v2_metrics.json` | fix20 | CPU |
+| Size series after the NaN fix (§6; numbers identical) | `size_analysis_v2` | analysis `28b4d30`; scores `8bfd84c` | `size_v2_metrics.json` | fix20 | CPU |
+| Exclusion flow, items per game, first-token coverage, twins lost (`rq2_results.md`); ratio intervals, share answered Yes, instance-number items (`exploratory_results.md`) | `audit_analysis` (reads the collection, `rq2_score`, `rq1_score`, `rq1x_score`, `rq1v_score`, `size_score_*`) | `28b4d30` | `audit_metrics.json` | fix20 | CPU |
+| Shared-spot sensitivity (`rq2_results.md`) | `rq2_shared_analysis` (reads the collection and `rq2_score`; `rq2_shared_score` had no items to score) | `28b4d30` | `rq2_shared_metrics.json` | fix20 | CPU |
 | Numbers marked **post hoc** in the notes | none; one-off scripts on the scores above | unknown | none | — | — |
 
 Notes on the table:
 
-- **RQ1 at the final parser.** A second `rq1_analysis`, at `c3c4c3d` with the final parser `3c25d40cc71529e2`, exists in fix16. Its metrics were not copied into `notes/`. Re-reading the run's 68,340 predictions with the final parser moves 110 of them to the other side; see `rq1_results.md`, "Parser status".
-- **Thinking mode's written shift.** The 4.7-point written shift in `exploratory_results.md` is a re-parse with the final parser, recorded in `deviations.md`. `thinking_metrics.json` still holds the earlier 5.4.
+- **RQ1 at the final parser.** `rq1_results.md` now quotes `rq1_analysis_v2` (fix20, 28b4d30). An earlier second `rq1_analysis`, at `c3c4c3d` with the same final parser, exists in fix16; its metrics were never copied into `notes/`. Re-reading the run's 68,340 predictions with the final parser moves 110 of them to the other side; see `rq1_results.md`, "Parser status".
+- **Thinking mode's written shift.** The 4.7-point written shift in `exploratory_results.md` is from `thinking_v2_metrics.json`, at the final parser. `thinking_metrics.json` holds the earlier parser's 5.4.
+- **Superseded metrics files.** `rq1_metrics.json`, `rq1x_metrics.json`, `rq1v_metrics.json`, `thinking_metrics.json` and `size_metrics.json` are kept, byte-identical to their first analysis runs, so earlier quotes can be traced; the `_v2` files supersede them (`deviations.md`, "Changes from the 2026-11-20 audit"). The 2026-11-20 runs were also checked locally before ICE, with identical results.
 - **The 32B run** used 2 shards (`WF_N_SHARDS=2`), overriding its config's `n_shards: 4`.
 - **Post hoc numbers.** The scripts that made them are not in the repository; folding them into the pipeline is planned.
 

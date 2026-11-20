@@ -24,6 +24,8 @@ The goal effect **ΔL** is the mean of L(aligned) − L(swapped), in nats. A cor
 
 ## Results recorded in this repository
 
+**Audit and reruns (2026-11-20).** A documentation and rigor audit led to seven CPU analysis reruns at 28b4d30. No verdict changed. The RQ2 result is the same with the shared-spot items (none was excluded by that rule alone), the RQ1 numbers are now at the final parser, and the headline ratios have intervals. Every changed number, old and new, is listed in [notes/deviations.md](notes/deviations.md), "Changes from the 2026-11-20 audit".
+
 **RQ2, confirmatory.** Details are in [notes/rq2_results.md](notes/rq2_results.md). The test used 4,666 replay-verified failing actions from 125 of the 134 unseen games. Both models pass the preregistered test, whose threshold was 0.5 nats:
 
 | Model | ΔL | 95% CI | Holm p | Verdict |
@@ -42,10 +44,10 @@ The two models differ in where the effect lands:
 - **H1.** H1b holds. H1a holds for Llama and is reversed for Qwen.
 - **The goal effect under other conditions:**
   - it holds with each of three few-shot example sets;
-  - an instruction to ignore the goal removes 9% of Qwen's effect and none of Llama's;
-  - showing the hidden state cuts it by about 70% without removing it;
+  - an instruction to ignore the goal removes 9% of Qwen's effect (95% CI 7% to 12%) and none of Llama's;
+  - showing the hidden state cuts it by about 70% without removing it (66% for Qwen, 71% for Llama);
   - the fine-tuned Word2World Qwen model shows none, and the fine-tuned Llama model a small reversed effect (−0.28 nats, CI −0.42 to −0.15).
-- **Caveat.** The written-prediction numbers rest on a parser that never met its prespecified audit rule. The audits ended after six rounds with 95–97% agreement on hard cases, but with some replies read in the opposite direction. The note uses the parser version the analysis ran with; the final version reads 110 of the 68,340 predictions differently. See the note's "Parser status".
+- **Caveat.** The written-prediction numbers rest on a parser that never met its prespecified audit rule. The audits ended after six rounds with 95–97% agreement on hard cases, but with some replies read in the opposite direction. The note uses the final parser version, which reads 110 of the 68,340 predictions differently from the first analysis; no verdict changes. See the note's "Parser status".
 - **Superseded reading.** The note's reading that "most of the RQ2 effect comes from the action's object being named" was overturned by the exploratory runs below: with object-free task descriptions, 61% (Qwen) and 92% (Llama) of the effect remains.
 
 **RQ3, confirmatory.** Details are in [notes/rq3_results.md](notes/rq3_results.md). H3 is not supported: the interaction is +0.94 steps (95% CI −0.20 to 2.14), opposite in sign to the prediction. The experiment could not test the question well:
@@ -56,20 +58,20 @@ The two models differ in where the effect lands:
 
 **Exploratory follow-ups.** Details are in [notes/exploratory_results.md](notes/exploratory_results.md). None was preregistered; each design was logged before its data.
 
-- **Not only the object's name.** Most of the effect survives task descriptions that never name the object (61% for Qwen, 92% for Llama). But for Qwen, merely stating that the object is somewhere in the room reproduces nearly all of it.
+- **Not only the object's name.** Most of the effect survives task descriptions that never name the object (61% for Qwen, 95% CI 54% to 68%; 92% for Llama, 83% to 103%). But for Qwen, merely stating that the object is somewhere in the room reproduces nearly all of it.
 - **Other formats and tasks.** It replicates when the model answers a fixed yes/no question. It is unchanged when the aligned task is not the exact one the agent pursued.
 - **Discrimination.** On our candidates it lowers how well the models rank working actions above failing ones: a large drop for Llama, a small one for Qwen. All failing candidates act on the goal's object while most working ones do not, so this reflects the task promoting actions on its object over unrelated working actions.
 - **Practical size depends on model and format.**
   - Llama's predicted success moves by 13–40 points.
   - Qwen's moves by 42 points before the agent has acted, and little after, because Qwen stays confident that these actions fail.
 - **Instructions.** An instruction to ignore the goal barely helps.
-- **Reasoning.** Qwen3 thinking mode narrows the aligned-vs-swapped gap by a third, but does not reduce the lift over a neutral task.
+- **Reasoning.** Qwen3 thinking mode narrows the aligned-vs-swapped gap by a third (34%, 95% CI 16% to 52%), but does not reduce the lift over a neutral task.
 - **Mechanism.** The dissociation test of "the task as evidence that its object exists" gave mixed readouts and needs a confirmatory test.
 - **Not missing information.** In the mechanism diagnostic, stating the facts that decide the failure barely reduces the effect, and stating the environment's rules *increases* it. The effect is fully present where the model answers questions about the state correctly. The best-supported account is a task-relevance bias at answer time, not a failure to track the state.
 - **Model size (Qwen3 0.6B to 32B).**
   - The effect is present at every size.
   - The logged prediction that it would not grow with size failed over the full range, because the two smallest models can't do the task.
-  - Among the competent sizes, the log-odds effect shrinks with size but the practical size does not. Asked whether a failing action will succeed, Qwen3-32B gives "Yes" an average probability of 15% under the real task, against 6% under the swapped one. These are mean probabilities (mean σ of the yes/no score), not the share of actions it answers Yes to.
+  - Among the competent sizes, the log-odds effect shrinks with size but the practical size does not. Asked whether a failing action will succeed, Qwen3-32B answers "Yes" on 11.6% of them under the real task, against 3.8% under the swapped one (its mean probability of "Yes", mean σ of the yes/no score, is 0.150 against 0.058).
 
 ## Status (2026-11-20)
 
@@ -86,6 +88,7 @@ The two models differ in where the effect lands:
 | Counterfactual aligned task, yes/no feasibility | `rq1v_score`, `rq1v_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Mechanism diagnostic: state inference or judgement | `mech_score`, `mech_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Model-size series, Qwen3 0.6B to 32B | `size_score_<model>`, `size_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
+| Audit analyses and reruns (CPU) | `audit_analysis`, `rq2_shared_analysis`, `rq1_analysis_v2`, `rq1x_analysis_v2`, `rq1v_analysis_v2`, `thinking_analysis_v2`, `size_analysis_v2` | Done (2026-11-20); changes listed in `notes/deviations.md` |
 | Second environment (ScienceWorld) | not in this repository yet | In development; not yet merged. Its histories need redesign before it can replicate the main test |
 
 Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring shard reports `shard complete`. Run output is not tracked by git, so a fresh clone has none; the data live on ICE (see [notes/reproducing.md](notes/reproducing.md)). Real runs refuse mock files and work saved at another commit.
@@ -96,9 +99,9 @@ Two cautions for reading the numbers. The two-candidate score s = σ(L), sometim
 
 - [PILOT_PROTOCOL.md](PILOT_PROTOCOL.md): the implementation spec for the pilots.
 - [notes/deviations.md](notes/deviations.md): the dated decision log. It records every change since the study was filed, and each exploratory design, logged before its data. It also holds the parser audits and what the write-up must mention. Where it and the protocol disagree, it is current.
-- [notes/rq2_results.md](notes/rq2_results.md) and [notes/rq1_results.md](notes/rq1_results.md): confirmatory results, with metrics in [notes/rq2_confirmatory_metrics.json](notes/rq2_confirmatory_metrics.json) and [notes/rq1_metrics.json](notes/rq1_metrics.json).
+- [notes/rq2_results.md](notes/rq2_results.md) and [notes/rq1_results.md](notes/rq1_results.md): confirmatory results, with metrics in [notes/rq2_confirmatory_metrics.json](notes/rq2_confirmatory_metrics.json), [notes/rq2_shared_metrics.json](notes/rq2_shared_metrics.json) (shared-spot sensitivity) and [notes/rq1_v2_metrics.json](notes/rq1_v2_metrics.json) (RQ1 at the final parser; it supersedes `notes/rq1_metrics.json`).
 - [notes/rq3_results.md](notes/rq3_results.md): the agent experiment (RQ3), with metrics in [notes/rq3_metrics.json](notes/rq3_metrics.json).
-- [notes/exploratory_results.md](notes/exploratory_results.md): the exploratory follow-ups, with metrics in `notes/rq1x_metrics.json`, `notes/thinking_metrics.json`, `notes/rq1d_metrics.json`, `notes/rq1v_metrics.json`, `notes/mech_metrics.json` and `notes/size_metrics.json`.
+- [notes/exploratory_results.md](notes/exploratory_results.md): the exploratory follow-ups, with metrics in `notes/rq1x_v2_metrics.json`, `notes/thinking_v2_metrics.json`, `notes/rq1d_metrics.json`, `notes/rq1v_v2_metrics.json`, `notes/mech_metrics.json`, `notes/size_v2_metrics.json` and `notes/audit_metrics.json`. The `_v2` files are the 2026-11-20 reruns and supersede the files of the same name without it, which are kept.
 - [notes/testing.md](notes/testing.md): test suite, mutation check, item verification and calibration of the statistics.
 - [notes/reproducing.md](notes/reproducing.md): software and model versions, where the data are, which run, commit and GPU produced each result, how to rerun everything, and licences.
 - [notes/extensions.md](notes/extensions.md): the pre-pilot list of extensions, archived.
@@ -229,7 +232,7 @@ Logs are in `logs/`, named by job id.
 ## Things worth knowing
 
 - **What "ALFWorld" means here.** ALFWorld as served by the AgentGym server shipped with Word2World (`e8dc240`), with Word2World's renamed actions (`put` is `move`; there is a `help` action) and data download, and alfworld 0.3.3. Only solvable games are used, 134 of the 195 in AgentGym's `valid_unseen` list, and the environment ends every episode at 50 steps. Every inadmissible command gets "Nothing happens.". Details are in [notes/rq2_results.md](notes/rq2_results.md), "Methods".
-- **Some receptacles share a spot.** From `cabinet 1` the agent can act on `cabinet 2`, and `go to cabinet 2` does nothing. Items affected by this carry `shared_location` and are left out of the main tests: Pilot A's, and RQ1's and RQ2's on the confirmatory data. Pilot A also scored them for a sensitivity check; the confirmatory runs did not, and that check is pending. Read that section of [notes/deviations.md](notes/deviations.md) before analysing or writing up results.
+- **Some receptacles share a spot.** From `cabinet 1` the agent can act on `cabinet 2`, and `go to cabinet 2` does nothing. Items affected by this carry `shared_location` and are left out of the main tests: Pilot A's, and RQ1's and RQ2's on the confirmatory data. Pilot A also scored them for a sensitivity check. On the confirmatory data no item was excluded by this rule alone, so the result with them is the same ([notes/rq2_results.md](notes/rq2_results.md), "Shared-spot sensitivity"). Read that section of [notes/deviations.md](notes/deviations.md) before analysing or writing up results.
 - **Solvable games only.** The split sizes are 2,179 train, 140 `valid_seen` and 134 `valid_unseen`. AgentGym's mappings also list unsolvable games that crash on reset, and `wf/env/server.py` filters them out. See protocol §5.1.
 - **The server keeps one live game per id.** Finished games refuse further steps, and ALFWorld ends every episode at 50 steps. Counterfactual replays run on a separate sandbox id, so they never touch the live episode.
 - **Steps are slow by design.** Every step replays the game from a reset, in every condition, which costs about 1.7 s before any model time.
