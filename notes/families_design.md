@@ -6,7 +6,7 @@ Amended the same day, before any wave A score was read (section "Amendment" belo
 
 ## Why
 
-The tracker's section 13 asks whether post-training explains the goal effect. The confirmatory comparison of Qwen3-8B (April 2025) and Llama-3.1-8B (July 2024) can't separate family, generation and post-training. The Qwen3 size series showed that the effect stays positive at every size within one family. Wave A adds models from other families and from Llama's next release. All four load in the study's environment (transformers 4.51.3).
+A planned follow-up asks whether post-training explains the goal effect. The confirmatory comparison of Qwen3-8B (April 2025) and Llama-3.1-8B (July 2024) can't separate family, generation and post-training. The Qwen3 size series showed that the effect stays positive at every size within one family. Wave A adds models from other families and from Llama's next release. All four load in the study's environment (transformers 4.51.3).
 
 This wave serves two of the section 13 hypotheses:
 
@@ -330,5 +330,5 @@ Gemma-4-E4B-it (March 2026) and Ministral-3-8B-Instruct-2512 (December 2025) nee
 
 - **Pretraining contamination.** ALFWorld text is public, and newer models may have seen more of it. That would affect overall accuracy more than the aligned-minus-swapped difference, but it is a confound for any generation trend.
 - **Different prompt formats.** Each model sees its developers' chat format, so family and format can't be separated. Gemma's fold and Mistral's system-message position are the main differences.
-- **Single runs.** Wave A is one scoring run per model, so differences between models carry no estimate of run-to-run variation (tracker section 12). With greedy, teacher-forced scoring that variation is GPU numerics only: about 0.02 nats in ΔL across GPU types on the archived Qwen3-8B runs (section "Amendment").
+- **Single runs.** Wave A is one scoring run per model, so differences between models carry no estimate of run-to-run variation. With greedy, teacher-forced scoring that variation is GPU numerics only: about 0.02 nats in ΔL across GPU types on the archived Qwen3-8B runs (section "Amendment").
 - **Two-candidate validity unchecked outside Qwen3.** Hence the yes/no format leads (section "Amendment").
