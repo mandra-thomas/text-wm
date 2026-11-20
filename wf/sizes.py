@@ -60,11 +60,15 @@ def run_size_score(cfg: dict) -> int:
 
 def score_shard(cfg: dict, tag: str, open_scorer: Callable[[], LogoddsScorer],
                 messages: Callable[[dict, str], list[dict[str, str]] | None],
-                gate: Callable[[Path, LogoddsScorer, list[dict], list[dict]], None] | None = None) -> int:
+                gate: Callable[[Path, LogoddsScorer, list[dict], list[dict]], None] | None = None,
+                select: Callable[[list[dict], list[dict]], tuple[list[dict], list[dict]]] | None = None,
+                arms: tuple[str, ...] | None = None) -> int:
     """One shard of one model's scoring, shared by size_score_<tag> and family_score_<tag> (wf/families.py).
 
     `messages(item, arm)` builds each prompt; `gate(folder, scorer, primary, successes)` runs once the model is
-    loaded and before any score, and stops the job by raising. Every score is saved as it finishes.
+    loaded and before any score, on every item of the shard (on a resume too), and stops the job by raising.
+    `select(primary, successes)` narrows the items before sharding and `arms` the conditions (the families
+    placement check); left out, every item and arm is scored, as before. Every score is saved as it finishes.
     """
     run_id = cfg["run_id"]
     require_filed(run_id)
@@ -80,8 +84,9 @@ def score_shard(cfg: dict, tag: str, open_scorer: Callable[[], LogoddsScorer],
     cfg = {**cfg, "run_id": run_id, "shard": i, "n_shards": n}
     d = _init_run(run_id, cfg, inputs=())
     sets = rq1x.rq1x_sets(load_items(sources))
-    primary, successes = shard_items(sets["primary"], i, n), shard_items(sets["successes"], i, n)
-    jobs = size_jobs(primary, successes)
+    primary, successes = (select or (lambda p, s: (p, s)))(sets["primary"], sets["successes"])
+    primary, successes = shard_items(primary, i, n), shard_items(successes, i, n)
+    jobs = [(t, a) for t, a in size_jobs(primary, successes) if arms is None or a in arms]
     hashes = {t["id"]: _item_hash(t) for t, _ in jobs}
     saved = read_jsonl(d / "scoring.jsonl") if cfg.get("resume") else []
     if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):

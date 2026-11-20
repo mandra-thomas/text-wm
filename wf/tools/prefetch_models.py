@@ -70,11 +70,13 @@ def check_tokenizer(spec: Any, cache_dir: str | None) -> dict[str, Any]:
     from transformers import AutoTokenizer
 
     from wf import families
+    from wf.scoring.logodds import LogoddsScorer
 
     item = json.loads(GOLDEN.read_text(encoding="utf-8"))["item"]
     tok = AutoTokenizer.from_pretrained(spec.hf_id, revision=REVISIONS[spec.hf_id], cache_dir=cache_dir,
                                         local_files_only=True)
-    rec = families.tokenization_checks(tok, spec, [item], [])
+    scorer = LogoddsScorer.for_tokenizer(spec.hf_id, tok, model_tag=spec.tag, template_kwargs=spec.template_kwargs)
+    rec = families.tokenization_checks(scorer, spec, [item], [])
     return {k: rec[k] for k in ("ok", "n_problems", "problems", "first_token_pairs", "max_prompt_tokens")} | {
         "yes_no_tokens": {w: v["alone"] for w, v in rec["yes_no"].items()}, "tokenizer_class": type(tok).__name__}
 

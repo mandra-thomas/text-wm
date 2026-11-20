@@ -15,3 +15,6 @@ reference:
       rq1_score: [aligned, swapped, absent]
       rq1x_score: [aligned, swapped, absent]
       rq1v_score: [yn_aligned, yn_swapped, yn_absent]
+# Exploratory placement check (2026-11-20): {model: its first-turn run}; compared on the same items.
+placement:
+  mistral-7b-v0.3: family_placement_mistral-7b-v0.3

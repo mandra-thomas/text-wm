@@ -9,32 +9,46 @@ the Qwen3 series did not need:
    turn (`fold_system`), the same way in every condition. Llama 3.2's template writes today's date into the system
    header unless given one, so it gets the fixed date its own template falls back to (and Llama 3.1's template
    uses): the prompt cannot change with the day a shard runs.
-2. A tokenization gate (audit C9). Before any score, every candidate text in the shard must tokenize alone exactly
-   as the chat template tokenizes it as the assistant's reply; "Yes" and "No" must each be one token, the one the
-   template gives; and the two candidates' first tokens must differ. The results go to tokenization_checks.json in
-   the shard's folder, and a failure stops the job before it scores anything.
+2. A tokenization gate (audit C9). Before any score (on a resume too), through the scorer's own encoding: every
+   candidate text in the shard (primary items and successes) must tokenize alone exactly as the chat template
+   tokenizes it as the assistant's reply; "Yes" and "No" must each be one token, equal to the template's rendering
+   of that word as the reply after every yes/no prompt of every item; and the two candidates' first tokens must
+   differ. The results go to tokenization_checks.json in the shard's folder, and a failure stops the job before it
+   scores anything.
 3. Attention. Gemma 2 is loaded with eager attention: transformers 4.51.3 defaults it to SDPA, which silently drops
    Gemma 2's attention-logit soft-capping, so the logits would not be the trained model's. The scorer refuses to
    continue if the loaded model reports another implementation.
 
 `families_analysis` reads every family run and, for comparison, Qwen3-8B (size_score_qwen3-8b) and Llama-3.1-8B
 (rq1_score, rq1x_score and rq1v_score, which hold the same prompts), and gives each the size series' block plus a
-spread-standardised effect, both flip definitions by name, and first-token coverage.
+spread-standardised effect, both flip definitions by name, and first-token coverage, every model on the same
+(item, condition) population. `family_placement_<tag>` (added 2026-11-20, before any wave A score was read) rescores
+300 seeded primary items with Mistral's system text in the first user turn instead of its template's last-turn
+placement; the analysis sets the goal effect under both placements side by side on those items.
+
+Amendment (2026-11-20, before any wave A score was read): the primary cross-model metrics are the item share moved
+toward Yes and the goal-to-evidence ratio R, both on the yes/no format (`primary_metrics`), in one Holm-corrected
+family over the wave A models (`primary_family`); a model must pass a competence gate fixed before data
+(`competence_gate`); models are compared on the same items with a paired game bootstrap, "matching" when R is within
+a factor of 1.5 by TOST (`compare_models`); yes/no answers and flips are read as argmax choices (`argmax_answers`).
 """
 from __future__ import annotations
 
+import json
+import math
+import random
 import statistics
 from collections import Counter
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
 from wf import constants as C
 from wf import rq1x, sizes
 from wf.analysis.report import write_run_report
-from wf.analysis.stats import cluster_bootstrap, paired_conditions
+from wf.analysis.stats import cluster_bootstrap, holm, pair_permutation, paired_conditions
 from wf.rq2 import SOURCES, complete_shards, load_items
-from wf.runs import _init_run
+from wf.runs import _effect, _init_run
 from wf.scoring.logodds import LogoddsScorer
 from wf.util import read_jsonl, require_filed, runs_root, write_json, write_status
 
@@ -97,6 +111,12 @@ FOLD_SEPARATOR = "\n\n"
 PREDICTION = ("Logged before any family score (2026-11-20): the goal effect (aligned minus swapped) is positive under "
               "both formats, two-candidate and yes/no, for every wave A model; read as the 95% game-clustered CI "
               "lying above zero.")
+FORMATS = ("Amended 2026-11-20, before any wave A score was read: the yes/no format is the primary cross-family "
+           "comparison, read through the item share moved toward Yes and the goal-to-evidence ratio R (one primary "
+           "family, Holm-corrected; a model must pass the competence gate); ΔL and the standardised d are secondary, "
+           "and the two-candidate format is read within model only. The two-candidate score's validity was checked "
+           "for Qwen3 only; Llama-3.1-8B's sign of L agreed with its written predictions on 65% of pilot items "
+           "(notes/deviations.md). The logged prediction is unchanged.")
 ARMS = sizes.PRED_ARMS + sizes.YN_ARMS
 
 
@@ -148,45 +168,57 @@ def _special_ids(tok: Any) -> set[int]:
     return ids
 
 
-def template_reply(tok: Any, messages: list[dict], reply: str, kwargs: dict) -> list[int]:
+def template_reply(scorer: LogoddsScorer, messages: list[dict], reply: str) -> list[int]:
     """The ids the chat template gives `reply` as the assistant's turn after `messages`, up to its end-of-turn token.
 
-    The conversation with the reply must begin with exactly the prompt the template gives before a reply
-    (generation prompt included); otherwise a candidate scored after that prompt is not the reply as the template
-    writes it. A system message is left out of this check: Mistral's template writes it into the last user turn,
-    which is no longer last once a reply follows, so the two renders would differ for that reason alone. Where the
-    prompt ends and the reply begins does not depend on the system message.
+    Rendered by the scorer's own encoding (`_encode`, with its template settings), so the gate sees the prompt
+    exactly as scoring does. The conversation with the reply must begin with exactly the prompt the template gives
+    before a reply (generation prompt included); otherwise a candidate scored after that prompt is not the reply as
+    the template writes it. A system message is left out of this check: Mistral's template writes it into the last
+    user turn, which is no longer last once a reply follows, so the two renders would differ for that reason alone.
+    Where the prompt ends and the reply begins does not depend on the system message.
     """
     convo = [m for m in messages if m["role"] != "system"]
-    prompt = _ids(tok.apply_chat_template(convo, tokenize=True, add_generation_prompt=True, **kwargs))
-    full = _ids(tok.apply_chat_template(convo + [{"role": "assistant", "content": reply}], tokenize=True,
-                                        add_generation_prompt=False, **kwargs))
+    prompt = _ids(scorer._encode(convo))
+    full = _ids(scorer._encode(convo + [{"role": "assistant", "content": reply}], add_generation_prompt=False))
     if full[:len(prompt)] != prompt:
         raise TokenizationMismatch("the conversation with the reply does not begin with the prompt before it")
     tail = full[len(prompt):]
-    special = _special_ids(tok)
+    special = _special_ids(scorer._tok)
     end = next((i for i, x in enumerate(tail) if x in special), len(tail))
     return tail[:end]
 
 
-def check_candidate(tok: Any, messages: list[dict], text: str, kwargs: dict) -> dict[str, Any]:
-    """Does `text`, tokenized alone (as the scorer does), equal the template's tokens for it as the reply?
+def check_candidate(scorer: LogoddsScorer, messages: list[dict], text: str) -> dict[str, Any]:
+    """Does `text`, tokenized alone as the scorer tokenizes a candidate, equal the template's tokens for it as the
+    reply?
 
     Also the verify_models check: the prompt's text and the candidate joined as plain text, tokenized together.
     That one is informative only: a template that puts a space before a reply (Mistral) fails it by design.
     """
-    reply = template_reply(tok, messages, text, kwargs)
-    alone = _ids(tok(text, add_special_tokens=False))
-    prompt = _ids(tok.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, **kwargs))
-    prompt_text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **kwargs)
+    tok = scorer._tok
+    reply = template_reply(scorer, messages, text)
+    alone = _ids(scorer._encode_candidate(text))
+    prompt = _ids(scorer._encode(messages))
+    prompt_text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **scorer.template_settings())
     joined = _ids(tok(prompt_text + text, add_special_tokens=False))
     return {"alone_equals_template_reply": alone == reply, "joined_plain_text_equal": prompt + alone == joined,
             "alone": alone, "template_reply": reply, "prompt_tokens": len(prompt)}
 
 
-def tokenization_checks(tok: Any, spec: ModelSpec, primary: list[dict], successes: list[dict]) -> dict[str, Any]:
-    """The gate, on every item of a shard. Returns the record; its "ok" says whether scoring may start."""
-    kw = {"enable_thinking": False, **spec.template_kwargs}
+YES_NO = ("Yes", "No")
+
+
+def tokenization_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[dict], successes: list[dict]) -> dict[str, Any]:
+    """The gate, on every item of a shard, through the scorer's own encoding. Returns the record; its "ok" says
+    whether scoring may start.
+
+    Candidates: both texts of every item (primary items and successes), as the reply after the aligned prompt.
+    Yes/No: the scored token of each word (tokenized alone, as score_one_token_pair does) must be one token and
+    equal the template's rendering of that word as a real reply, after every yes/no prompt the shard scores
+    (sizes.size_jobs: three per primary item, two per success).
+    """
+    tok = scorer._tok
     problems: list[str] = []
     first_pairs: Counter = Counter()
     joined_mismatch = 0
@@ -197,7 +229,7 @@ def tokenization_checks(tok: Any, spec: ModelSpec, primary: list[dict], successe
         ids = {}
         for name in ("o_plus", "o_minus"):
             try:
-                r = check_candidate(tok, msgs, t["candidates"][name], kw)
+                r = check_candidate(scorer, msgs, t["candidates"][name])
             except TokenizationMismatch as e:  # recorded with the rest, so the record says what failed
                 problems.append(f"{t['id']} {name}: {e}")
                 ids[name] = []
@@ -212,27 +244,41 @@ def tokenization_checks(tok: Any, spec: ModelSpec, primary: list[dict], successe
             problems.append(f"{t['id']}: the candidates share their first token")
         else:
             first_pairs[(tok.decode(ids["o_plus"][:1]), tok.decode(ids["o_minus"][:1]))] += 1
-    yes_no: dict[str, Any] = {}
-    sample = (primary + successes)[:1]
-    for t in sample:
-        msgs = family_messages(spec, t, "yn_aligned")
-        for word in ("Yes", "No"):
+    scored = {word: _ids(scorer._encode_candidate(word)) for word in YES_NO}
+    yes_no: dict[str, Any] = {word: {"alone": scored[word], "decoded": tok.decode(scored[word]), "template_reply": None,
+                                     "n_checked": 0, "n_mismatched": 0} for word in YES_NO}
+    for word in YES_NO:
+        if len(scored[word]) != 1:
+            problems.append(f"{word!r} is not one token: alone {scored[word]}")
+    n_yes_no = 0
+    for t, arm in sizes.size_jobs(primary, successes):  # every yes/no prompt a shard of these items scores
+        if arm not in sizes.YN_ARMS:
+            continue
+        msgs = family_messages(spec, t, arm)
+        n_yes_no += 1
+        for word in YES_NO:
+            rec = yes_no[word]
             try:
-                reply = template_reply(tok, msgs, word, kw)
+                reply = template_reply(scorer, msgs, word)
             except TokenizationMismatch as e:
-                problems.append(f"{word!r}: {e}")
-                reply = []
-            alone = _ids(tok(word, add_special_tokens=False))
-            yes_no[word] = {"alone": alone, "template_reply": reply, "decoded": tok.decode(alone)}
-            if len(alone) != 1 or alone != reply:
-                problems.append(f"{word!r} is not the template's single token: alone {alone}, template {reply}")
-    if yes_no and yes_no["Yes"]["alone"] == yes_no["No"]["alone"]:
+                problems.append(f"{t['id']} {arm} {word!r}: {e}")
+                continue
+            rec["n_checked"] += 1
+            if rec["template_reply"] is None:
+                rec["template_reply"] = reply
+            if reply != scored[word]:
+                rec["n_mismatched"] += 1
+                problems.append(f"{t['id']} {arm}: {word!r} is not the template's single token: alone "
+                                f"{scored[word]}, template {reply}")
+    if n_yes_no == 0:
+        problems.append("no yes/no prompt checked")
+    if scored["Yes"] == scored["No"]:
         problems.append("'Yes' and 'No' are the same token")
     return {"ok": not problems and n > 0, "n_candidates_checked": n, "problems": problems[:50],
-            "n_problems": len(problems), "yes_no": yes_no,
+            "n_problems": len(problems), "yes_no": yes_no, "n_yes_no_prompts_checked": n_yes_no,
             "first_token_pairs": {f"{a!r} vs {b!r}": c for (a, b), c in first_pairs.most_common(10)},
             "joined_plain_text_mismatches": joined_mismatch, "max_prompt_tokens": max_prompt,
-            "template_kwargs": kw, "system_handling": spec.system}
+            "template_kwargs": scorer.template_settings(), "system_handling": spec.system}
 
 
 def _gate(spec: ModelSpec) -> Callable[[Path, LogoddsScorer, list[dict], list[dict]], None]:
@@ -240,7 +286,7 @@ def _gate(spec: ModelSpec) -> Callable[[Path, LogoddsScorer, list[dict], list[di
         if scorer.mock:
             write_json(d / "tokenization_checks.json", {"ok": None, "skipped": "mock"})
             return
-        rec = tokenization_checks(scorer._tok, spec, primary, successes)
+        rec = tokenization_checks(scorer, spec, primary, successes)
         rec["attn_implementation_loaded"] = getattr(scorer._model.config, "_attn_implementation", None)
         rec["dtype_loaded"] = str(getattr(scorer._model, "dtype", ""))
         write_json(d / "tokenization_checks.json", rec)
@@ -265,6 +311,47 @@ def run_family_score(cfg: dict) -> int:
                              template_kwargs=spec.template_kwargs)
 
     return sizes.score_shard(cfg, tag, open_scorer, lambda t, arm: family_messages(spec, t, arm), gate=_gate(spec))
+
+
+# ---------------- Mistral's system-text placement (exploratory check, logged 2026-11-20 before any score was read) ----
+
+PLACEMENT_ARMS = ("aligned", "swapped", "yn_aligned", "yn_swapped")
+PLACEMENT_ITEMS = 300
+FIRST_TURN = "-firstturn"  # suffix of the model tag the first-turn scores are saved under
+
+
+def placement_items(primary: list[dict], k: int = PLACEMENT_ITEMS) -> list[dict]:
+    """A seeded sample of `k` primary items, in id order; the same for any order the items arrive in."""
+    pool = sorted(primary, key=lambda t: t["id"])
+    picked = random.Random(f"{C.RNG_SEED}|family_placement").sample(pool, min(k, len(pool)))
+    return sorted(picked, key=lambda t: t["id"])
+
+
+def first_turn_spec(spec: ModelSpec) -> ModelSpec:
+    """`spec` with the system text folded into the first user turn (Gemma's handling), under its own tag."""
+    if spec.system != "native":
+        raise ValueError(f"{spec.tag} already folds its system text")
+    return replace(spec, tag=spec.tag + FIRST_TURN, system="fold",
+                   template_notes="Placement check: the system text opens the first user turn, not the last.")
+
+
+def run_family_placement(cfg: dict) -> int:
+    """`family_placement_<tag>`: the native model, its system text folded into the first user turn, on
+    PLACEMENT_ITEMS seeded primary items under the aligned and swapped tasks in both formats. Scores are saved
+    under the tag `<tag>-firstturn`, so they never mix with the model's own run."""
+    tag = cfg["model"]
+    if tag not in MODELS:
+        raise SystemExit(f"unknown model {tag!r}; known: {sorted(MODELS)}")
+    spec = first_turn_spec(MODELS[tag])
+    k = int(cfg.get("n_items", PLACEMENT_ITEMS))
+    cfg = {**cfg, "model_spec": spec.record(), "n_items": k, "arms": list(PLACEMENT_ARMS)}
+
+    def open_scorer() -> LogoddsScorer:
+        return LogoddsScorer(spec.hf_id, model_tag=spec.tag, attn_implementation=spec.attn_implementation,
+                             template_kwargs=spec.template_kwargs)
+
+    return sizes.score_shard(cfg, spec.tag, open_scorer, lambda t, arm: family_messages(spec, t, arm), gate=_gate(spec),
+                             select=lambda p, s: (placement_items(p, k), []), arms=PLACEMENT_ARMS)
 
 
 # ---------------- analysis ----------------
@@ -313,20 +400,250 @@ FLIP_DEFINITIONS = {
 }
 
 
+# ---------------- primary cross-model metrics, competence gate, comparisons (amendment, 2026-11-20, pre-data) ----
+
+PRIMARY_METRICS = ("item_share_toward_yes", "goal_to_evidence_ratio")
+COMPETENCE = {"auc_neutral_min": 0.70, "yes_share_neutral_failures": (0.05, 0.95), "median_yes_no_mass_min": 0.5}
+EQUIVALENCE_FACTOR = 1.5  # "matches": R within a factor of 1.5, TOST on log R
+NOISE_FLOOR_NATS = 0.3  # yes/no ΔL differences between models below this are treated as noise
+ALPHA = 0.05
+
+
+def _yes_no_rows(s: list[dict], primary: list[dict], successes: list[dict]) -> tuple[list[tuple], list[str], list[str]]:
+    """Per item, on the yes/no format: ("f", L aligned - L swapped, L neutral) for a failure with all three tasks
+    scored, ("s", nan, L neutral) for a success scored under the neutral task; each item's game; each item's id."""
+    by = {(x["transition_id"], x["condition"]): x["L"] for x in s if x["L"] == x["L"]}
+    rows, games, ids = [], [], []
+    for t in primary:
+        k = [(t["id"], a) for a in ("yn_aligned", "yn_swapped", "yn_absent")]
+        if all(x in by for x in k):
+            rows.append(("f", by[k[0]] - by[k[1]], by[k[2]]))
+            games.append(t["game_id"])
+            ids.append(t["id"])
+    for t in successes:
+        if (t["id"], "yn_absent") in by:
+            rows.append(("s", float("nan"), by[(t["id"], "yn_absent")]))
+            games.append(t["game_id"])
+            ids.append(t["id"])
+    return rows, games, ids
+
+
+def _share_toward_yes(rows: list[tuple]) -> float:
+    d = [r[1] for r in rows if r[0] == "f"]
+    return sum(x > 0 for x in d) / len(d) if d else float("nan")
+
+
+def _ratio(rows: list[tuple]) -> float:
+    """R = mean goal effect on failures / (mean neutral L on successes - mean neutral L on failures)."""
+    f = [r for r in rows if r[0] == "f"]
+    sc = [r[2] for r in rows if r[0] == "s"]
+    if not f or not sc:
+        return float("nan")
+    evidence = sum(sc) / len(sc) - sum(r[2] for r in f) / len(f)
+    return (sum(r[1] for r in f) / len(f)) / evidence if evidence > 0 else float("nan")
+
+
+def primary_metrics(s: list[dict], primary: list[dict], successes: list[dict]) -> dict[str, Any]:
+    """The two primary cross-model metrics, both on the yes/no format, each with a game-clustered 95% CI and a
+    two-sided game sign-flip permutation p (for R, the p of its numerator: R is zero exactly when the goal effect
+    is, and its denominator is fixed under the flips).
+
+    item_share_toward_yes: the share of failures with L(aligned) > L(swapped).
+    goal_to_evidence_ratio: R, the mean goal effect over the evidence effect (determined successes against
+    failures, both under the neutral task). Rescaling every logit by one factor leaves R unchanged.
+    """
+    rows, games, _ = _yes_no_rows(s, primary, successes)
+    f = [(r, g) for r, g in zip(rows, games) if r[0] == "f"]
+    sc = [r for r in rows if r[0] == "s"]
+    share = cluster_bootstrap(_share_toward_yes, rows, games, seed=C.RNG_SEED)
+    ratio = cluster_bootstrap(_ratio, rows, games, seed=C.RNG_SEED)
+    fg = [g for _, g in f]
+    p_share = pair_permutation([(r[1] > 0) - (r[1] < 0) for r, _ in f], seed=C.RNG_SEED, cluster_ids=fg) if f else float("nan")
+    p_ratio = pair_permutation([r[1] for r, _ in f], seed=C.RNG_SEED, cluster_ids=fg) if f else float("nan")
+    mean = lambda v: sum(v) / len(v) if v else float("nan")
+    return {"item_share_toward_yes": {"estimate": share["estimate"], "ci": [share["ci_low"], share["ci_high"]],
+                                      "null": 0.5, "n_items": len(f), "p_two_sided": p_share},
+            "goal_to_evidence_ratio": {"estimate": ratio["estimate"], "ci": [ratio["ci_low"], ratio["ci_high"]], "null": 0.0,
+                                       "goal_effect_nats": mean([r[1] for r, _ in f]),
+                                       "evidence_effect_nats": mean([r[2] for r in sc]) - mean([r[2] for r, _ in f]),
+                                       "n_failures": len(f), "n_successes": len(sc), "p_two_sided": p_ratio}}
+
+
+def argmax_answers(s: list[dict], primary: list[dict], successes: list[dict]) -> dict[str, Any]:
+    """Yes/no answers read as the model's choice (Yes when L > 0), not as mean P(Yes): the share answering Yes per
+    task, and the flips between the swapped and the aligned task on failures, with game-clustered CIs."""
+    by = {(x["transition_id"], x["condition"]): x["L"] for x in s if x["L"] == x["L"]}
+
+    def yes_share(items: list[dict], arm: str) -> float:
+        v = [by[(t["id"], arm)] > 0 for t in items if (t["id"], arm) in by]
+        return sum(v) / len(v) if v else float("nan")
+
+    pairs = [((by[(t["id"], "yn_swapped")] > 0, by[(t["id"], "yn_aligned")] > 0), t["game_id"]) for t in primary
+             if (t["id"], "yn_swapped") in by and (t["id"], "yn_aligned") in by]
+    to_yes = lambda v: sum(1 for sw, al in v if al and not sw) / len(v) if v else float("nan")
+    to_no = lambda v: sum(1 for sw, al in v if sw and not al) / len(v) if v else float("nan")
+    out: dict[str, Any] = {"yes_share_failures": {a: yes_share(primary, a) for a in sizes.YN_ARMS},
+                           "yes_share_successes": {a: yes_share(successes, a) for a in ("yn_aligned", "yn_absent")},
+                           "n_failure_pairs": len(pairs)}
+    for name, fn in (("flip_no_to_yes", to_yes), ("flip_yes_to_no", to_no)):
+        b = cluster_bootstrap(fn, [p for p, _ in pairs], [g for _, g in pairs], seed=C.RNG_SEED)
+        out[name] = {"share": b["estimate"], "ci": [b["ci_low"], b["ci_high"]]}
+    return out
+
+
+def competence_gate(block: dict[str, Any]) -> dict[str, Any]:
+    """Fixed before any wave A score: a model is interpretable only if, on the yes/no format, its neutral-task AUC is
+    at least 0.70, it answers Yes (argmax) to between 5% and 95% of failures under the neutral task, and the median
+    P(Yes) + P(No) is at least 0.5 under every yes/no task. A model that fails is reported as not interpretable,
+    never as a null result."""
+    auc = block["yes_no"]["auc"]["yn_absent"]["auc"]
+    share = block["argmax_answers"]["yes_share_failures"]["yn_absent"]
+    medians = {c: v["median"] for c, v in block["first_token_coverage"].items() if c in sizes.YN_ARMS}
+    lo, hi = COMPETENCE["yes_share_neutral_failures"]
+    checks = {"auc_neutral": {"value": auc, "pass": auc >= COMPETENCE["auc_neutral_min"]},
+              "yes_share_neutral_failures": {"value": share, "pass": lo <= share <= hi},
+              "median_yes_no_mass": {"value": min(medians.values()) if medians else float("nan"), "by_task": medians,
+                                     "pass": bool(medians) and all(m >= COMPETENCE["median_yes_no_mass_min"] for m in medians.values())}}
+    return {"interpretable": all(c["pass"] for c in checks.values()), "checks": checks, "rule": COMPETENCE}
+
+
+def _draws(stat: Callable[[list], float], rows: list, games: list[str], B: int = C.BOOTSTRAP_RESAMPLES) -> list[float]:
+    rng = random.Random(C.RNG_SEED)
+    by: dict[str, list] = {}
+    for r, g in zip(rows, games):
+        by.setdefault(g, []).append(r)
+    keys = sorted(by)
+    return [stat([r for g in rng.choices(keys, k=len(keys)) for r in by[g]]) for _ in range(B)]
+
+
+def _pct(v: list[float], q: float) -> float:
+    v = sorted(x for x in v if x == x)
+    return v[min(len(v) - 1, int(q * len(v)))] if v else float("nan")
+
+
+def compare_models(sa: list[dict], sb: list[dict], primary: list[dict], successes: list[dict]) -> dict[str, Any]:
+    """Model A against model B on the same items (yes/no format), with a paired game-clustered bootstrap: games are
+    resampled once for both models.
+
+    R: the ratio R_A / R_B with 90% and 95% CIs; "matches" (TOST at 0.05) when the 90% CI of log(R_A / R_B) lies
+    within ±log 1.5. The item share and ΔL as differences (A minus B) with 95% CIs; a ΔL difference under 0.3 nats
+    is flagged as within the noise floor.
+    """
+    ra, ga, ia = _yes_no_rows(sa, primary, successes)
+    rb, _, ib = _yes_no_rows(sb, primary, successes)
+    keyed_b = dict(zip(ib, rb))
+    common = [(r, g, i) for r, g, i in zip(ra, ga, ia) if i in keyed_b]  # the items both models have
+    rows = [(r, keyed_b[i]) for r, _, i in common]
+    games = [g for _, g, _ in common]
+
+    def log_ratio(v: list) -> float:
+        a, b = _ratio([x for x, _ in v]), _ratio([y for _, y in v])
+        return math.log(a / b) if a > 0 and b > 0 else float("nan")
+
+    def diff(fn: Callable[[list], float]) -> Callable[[list], float]:
+        return lambda v: fn([x for x, _ in v]) - fn([y for _, y in v])
+
+    mean_goal = lambda v: (lambda d: sum(d) / len(d) if d else float("nan"))([r[1] for r in v if r[0] == "f"])
+    out: dict[str, Any] = {"n_failures": sum(r[0] == "f" for r, _ in rows), "n_successes": sum(r[0] == "s" for r, _ in rows)}
+    est = log_ratio(rows)
+    draws = _draws(log_ratio, rows, games)
+    bound = math.log(EQUIVALENCE_FACTOR)
+    lo90, hi90, lo95, hi95 = (_pct(draws, q) for q in (0.05, 0.95, 0.025, 0.975))
+    out["R_ratio"] = {"estimate": math.exp(est) if est == est else float("nan"),
+                      "ci90": [math.exp(lo90) if lo90 == lo90 else float("nan"), math.exp(hi90) if hi90 == hi90 else float("nan")],
+                      "ci95": [math.exp(lo95) if lo95 == lo95 else float("nan"), math.exp(hi95) if hi95 == hi95 else float("nan")],
+                      "matches": bool(est == est and -bound < lo90 and hi90 < bound),
+                      "differs": bool(est == est and (lo95 > 0 or hi95 < 0)),
+                      "n_resamples_dropped": sum(1 for x in draws if x != x)}
+    for name, fn in (("item_share_difference", _share_toward_yes), ("delta_L_difference_nats", mean_goal)):
+        dfn = diff(fn)
+        d = _draws(dfn, rows, games)
+        out[name] = {"estimate": dfn(rows), "ci95": [_pct(d, 0.025), _pct(d, 0.975)]}
+    out["delta_L_difference_nats"]["within_noise_floor"] = abs(out["delta_L_difference_nats"]["estimate"]) < NOISE_FLOOR_NATS
+    return out
+
+
+def primary_family(blocks: dict[str, dict[str, Any]], expected: list[str]) -> dict[str, Any]:
+    """The one primary family: item share and R for every wave A model (2 x 4 tests), Holm-corrected within it.
+
+    A test counts as supported when its Holm p < 0.05, the estimate lies on the goal side (share above 0.5, R above
+    0) and the model passed the competence gate; a model that failed the gate is "not interpretable". The family is
+    fixed at every wave A model, so a model still waiting leaves it incomplete rather than smaller.
+    """
+    p = {f"{tag}:{m}": blocks[tag]["primary_metrics"][m]["p_two_sided"] for tag in expected if tag in blocks
+         for m in PRIMARY_METRICS}
+    adj = holm(p)
+    tests = {}
+    for key, padj in adj.items():
+        tag, m = key.split(":")
+        rec = blocks[tag]["primary_metrics"][m]
+        side = rec["estimate"] > rec["null"]
+        if not blocks[tag]["competence"]["interpretable"]:
+            verdict = "not interpretable"
+        else:
+            verdict = "supported" if padj < ALPHA and side else "not supported"
+        tests[key] = {"estimate": rec["estimate"], "ci": rec["ci"], "p": rec["p_two_sided"], "p_holm": padj, "verdict": verdict}
+    return {"tests": tests, "n_tests_planned": 2 * len(expected), "complete": all(t in blocks for t in expected),
+            "alpha": ALPHA, "correction": "Holm, within this family only; everything else is descriptive"}
+
+
 def family_block(s: list[dict], primary: list[dict], successes: list[dict], spec: ModelSpec) -> dict[str, Any]:
     block = sizes.model_block(s, primary, successes)
-    return {"spec": spec.record(), **block,
-            "flips": {"flip_full_L_toward_success": block["flips_to_success"],
-                      "flip_first_token_sign_change": block["decision_flip"], "definitions": FLIP_DEFINITIONS},
-            "standardised_effect": {"two_candidate": standardised_effect(s, primary, "aligned", "swapped"),
-                                    "yes_no": standardised_effect(s, primary, "yn_aligned", "yn_swapped")},
-            "first_token_coverage": first_token_coverage(s)}
+    out = {"spec": spec.record(), "primary_metrics": primary_metrics(s, primary, successes),
+           "argmax_answers": argmax_answers(s, primary, successes), **block,
+           "flips": {"flip_full_L_toward_success": block["flips_to_success"],
+                     "flip_first_token_sign_change": block["decision_flip"], "definitions": FLIP_DEFINITIONS},
+           "standardised_effect": {"two_candidate": standardised_effect(s, primary, "aligned", "swapped"),
+                                   "yes_no": standardised_effect(s, primary, "yn_aligned", "yn_swapped")},
+           "first_token_coverage": first_token_coverage(s)}
+    out["competence"] = competence_gate(out)
+    return out
 
 
 def prediction_check(block: dict[str, Any]) -> dict[str, Any]:
     two, yn = block["goal_effect"]["delta_L_ci"], block["yes_no"]["goal_effect"]["delta_L_ci"]
     out = {"two_candidate_ci_above_0": two[0] > 0, "yes_no_ci_above_0": yn[0] > 0}
     return {**out, "holds": all(out.values())}
+
+
+def same_population(s: list[dict], primary: list[dict], successes: list[dict]) -> tuple[list[dict], int]:
+    """The records whose (item, condition) a family run scores (sizes.size_jobs), and how many others were dropped.
+
+    Every model's block is read on this one population. The reference runs hold more: rq1_score scored the
+    successes under the swapped task too, which the family runs do not, so Llama-3.1-8B's first-token coverage
+    under the swapped task mixed successes into what is failures only for every other model (review, 2026-11-20).
+    """
+    wanted = {(t["id"], a) for t, a in sizes.size_jobs(primary, successes)}
+    kept = [x for x in s if (x["transition_id"], x["condition"]) in wanted]
+    return kept, len(s) - len(kept)
+
+
+def placement_block(native: list[dict], first_turn: list[dict], primary: list[dict]) -> dict[str, Any]:
+    """The goal effect (aligned minus swapped) under the native and the first-turn placement, on the items both
+    scored, in both formats, and the per-item difference between the two (first turn minus native), with
+    game-clustered CIs."""
+    ids = {x["transition_id"] for x in first_turn} & {x["transition_id"] for x in native}
+    items = [t for t in primary if t["id"] in ids]
+    out: dict[str, Any] = {"n_items": len(items)}
+    for fmt, (a, b) in (("two_candidate", ("aligned", "swapped")), ("yes_no", ("yn_aligned", "yn_swapped"))):
+        nat = _item_effects(native, items, a, b)
+        alt = _item_effects(first_turn, items, a, b)
+        both = sorted(set(nat) & set(alt))
+        rows = [alt[k] - nat[k] for k in both]
+        boot = cluster_bootstrap(lambda v: sum(v) / len(v) if v else float("nan"), rows, [g for g, _ in both],
+                                 seed=C.RNG_SEED)
+        out[fmt] = {"native": _effect(native, items, primary=a, control=b),
+                    "first_turn": _effect(first_turn, items, primary=a, control=b),
+                    "first_turn_minus_native": {"delta_L_nats": boot["estimate"], "ci": [boot["ci_low"], boot["ci_high"]],
+                                                "n_items": len(rows)}}
+    return out
+
+
+def _item_effects(s: list[dict], items: list[dict], a: str, b: str) -> dict[tuple[str, str], float]:
+    """{(game, item): L under `a` minus L under `b`} on the items given (NaN scores left out)."""
+    by = {(x["transition_id"], x["condition"]): x["L"] for x in s if x["L"] == x["L"]}
+    return {(t["game_id"], t["id"]): by[(t["id"], a)] - by[(t["id"], b)] for t in items
+            if (t["id"], a) in by and (t["id"], b) in by}
 
 
 def _resolve(ref: str) -> Path:
@@ -368,10 +685,8 @@ def _gate_records(folders: list[Path]) -> dict[str, Any]:
     for p in folders:
         f = p / "tokenization_checks.json"
         if f.exists():
-            import json
-
             r = json.loads(f.read_text(encoding="utf-8"))
-            out[p.name] = {k: r.get(k) for k in ("ok", "skipped", "n_candidates_checked", "first_token_pairs",
+            out[p.name] = {k: r.get(k) for k in ("ok", "skipped", "n_candidates_checked", "n_yes_no_prompts_checked", "first_token_pairs",
                                                   "joined_plain_text_mismatches", "max_prompt_tokens",
                                                   "attn_implementation_loaded", "dtype_loaded")}
     return out
@@ -385,18 +700,25 @@ def run_families_analysis(cfg: dict) -> int:
     sets = rq1x.rq1x_sets(load_items(sources))
     primary, successes = sets["primary"], sets["successes"]
     report: dict[str, Any] = {"items": {"n_primary": len(primary), "n_successes": len(successes)},
-                              "prediction": PREDICTION, "models": {}, "reference": {}, "prediction_check": {},
-                              "waiting": {}}
+                              "prediction": PREDICTION, "formats": FORMATS, "models": {}, "reference": {},
+                              "prediction_check": {}, "placement": {}, "waiting": {},
+                              "rules": {"competence": COMPETENCE, "equivalence_factor_R": EQUIVALENCE_FACTOR,
+                                        "noise_floor_delta_L_nats": NOISE_FLOOR_NATS, "alpha": ALPHA}}
     read: dict[str, list[Path]] = {}
+    scores: dict[str, list[dict]] = {}
+    ref_scores: dict[str, list[dict]] = {}
     for tag in cfg["models"]:
         folders, problems = complete_shards(f"family_score_{tag}")
         if problems:
             report["waiting"][tag] = problems
             continue
         read[f"family_score_{tag}"] = folders
-        s = [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag]
+        s, dropped = same_population([x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag],
+                                     primary, successes)
+        scores[tag] = s
         block = family_block(s, primary, successes, MODELS[tag])
         block["tokenization_gate"] = _gate_records(folders)
+        block["records_outside_population"] = dropped
         report["models"][tag] = block
         report["prediction_check"][tag] = prediction_check(block)
     for tag, ref in (cfg.get("reference") or {}).items():
@@ -404,8 +726,23 @@ def run_families_analysis(cfg: dict) -> int:
         if info["problems"]:
             report["waiting"][f"reference {tag}"] = info["problems"]
             continue
+        s, info["records_outside_population"] = same_population(s, primary, successes)
         read.update({f"{tag}:{run}": f for run, f in got.items()})
+        ref_scores[tag] = s
         report["reference"][tag] = {**family_block(s, primary, successes, REFERENCE[tag]), "read": info}
+    report["primary_family"] = primary_family(report["models"], list(cfg["models"]))
+    # descriptive: every wave A model against each reference model, paired on the same items
+    report["comparisons"] = {f"{tag} vs {ref}": compare_models(scores[tag], ref_scores[ref], primary, successes)
+                             for tag in scores for ref in ref_scores}
+    for tag, run in (cfg.get("placement") or {}).items():
+        folders, problems = complete_shards(run)
+        if problems or tag not in scores:
+            report["waiting"][f"placement {tag}"] = problems or [f"family_score_{tag} not read"]
+            continue
+        read[run] = folders
+        alt = [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag + FIRST_TURN]
+        report["placement"][tag] = {**placement_block(scores[tag], alt, primary), "run": run,
+                                    "tokenization_gate": _gate_records(folders)}
     from wf.provenance import provenance, shard_inputs
 
     report["provenance"] = provenance(
@@ -413,11 +750,18 @@ def run_families_analysis(cfg: dict) -> int:
         inputs=[Path(s) / "transitions.jsonl" for s in sources] + shard_inputs([p for fs in read.values() for p in fs]))
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Model families, wave A (exploratory)", report)
-    lines = [f"{tag}: dL {m['goal_effect']['delta_L_nats']:.2f} {m['goal_effect']['delta_L_ci']}, "
-             f"yn dL {m['yes_no']['goal_effect']['delta_L_nats']:.2f}, prediction holds: {report['prediction_check'][tag]['holds']}"
-             for tag, m in report["models"].items()]
-    lines += [f"{tag} (reference): dL {m['goal_effect']['delta_L_nats']:.2f}, yn dL {m['yes_no']['goal_effect']['delta_L_nats']:.2f}"
-              for tag, m in report["reference"].items()]
+    def head(m: dict) -> str:
+        pm = m["primary_metrics"]
+        return (f"{'interpretable' if m['competence']['interpretable'] else 'NOT INTERPRETABLE'}; share toward Yes "
+                f"{pm['item_share_toward_yes']['estimate']:.3f}, R {pm['goal_to_evidence_ratio']['estimate']:.3f}; "
+                f"yn dL {m['yes_no']['goal_effect']['delta_L_nats']:.2f}, two-candidate dL {m['goal_effect']['delta_L_nats']:.2f}")
+
+    lines = [f"{tag}: {head(m)}; prediction holds: {report['prediction_check'][tag]['holds']}" for tag, m in report["models"].items()]
+    lines += [f"{tag} (reference): {head(m)}" for tag, m in report["reference"].items()]
+    lines += [f"primary family {k}: {v['verdict']} (Holm p {v['p_holm']:.4f})" for k, v in report["primary_family"]["tests"].items()]
+    lines += [f"{tag} placement, first turn minus native: yn {p['yes_no']['first_turn_minus_native']['delta_L_nats']:.2f}, "
+              f"two-candidate {p['two_candidate']['first_turn_minus_native']['delta_L_nats']:.2f} ({p['n_items']} items)"
+              for tag, p in report["placement"].items()]
     ok = not report["waiting"]
     write_status(run_id, "\n".join(lines) + (f"\nwaiting: {sorted(report['waiting'])}" if not ok else ""), ok=False,
                  reported="families report" if ok else "partial families report")
