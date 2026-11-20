@@ -65,8 +65,13 @@ The two models differ in where the effect lands:
 - **Instructions.** An instruction to ignore the goal barely helps.
 - **Reasoning.** Qwen3 thinking mode narrows the aligned-vs-swapped gap by a third, but does not reduce the lift over a neutral task.
 - **Mechanism.** The dissociation test of "the task as evidence that its object exists" gave mixed readouts and needs a confirmatory test.
+- **Not missing information.** In the mechanism diagnostic, stating the facts that decide the failure barely reduces the effect, and stating the environment's rules *increases* it. The effect is fully present where the model answers questions about the state correctly. The best-supported account is a task-relevance bias at answer time, not a failure to track the state.
+- **Model size (Qwen3 0.6B to 32B).**
+  - The effect is present at every size.
+  - The logged prediction that it would not grow with size failed over the full range, because the two smallest models can't do the task.
+  - Among the competent sizes, the log-odds effect shrinks with size but the practical size does not. Qwen3-32B calls a failing action a success 15% of the time under the real task, against 6% under the swapped one.
 
-## Status (2026-11-19)
+## Status (2026-11-20)
 
 | Stage | Run(s) | State |
 | --- | --- | --- |
@@ -79,6 +84,9 @@ The two models differ in where the effect lands:
 | Qwen3 thinking mode | `thinking_probe`, `thinking_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Dissociation: object exists / located / absent | `rq1d_score`, `rq1d_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
 | Counterfactual aligned task, yes/no feasibility | `rq1v_score`, `rq1v_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
+| Mechanism diagnostic: state inference or judgement | `mech_score`, `mech_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
+| Model-size series, Qwen3 0.6B to 32B | `size_score_<model>`, `size_analysis` | Done (exploratory); results in `notes/exploratory_results.md` |
+| Second environment (ScienceWorld) | not in this repository yet | In development; not yet merged. Its histories need redesign before it can replicate the main test |
 
 Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring shard reports `shard complete`. Run output is not tracked by git, so a fresh clone has none. Real runs refuse mock files and work saved at another commit.
 
@@ -88,7 +96,7 @@ Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring 
 - [notes/deviations.md](notes/deviations.md): the dated decision log. It records every change since the study was filed, and each exploratory design, logged before its data. It also holds the parser audits and what the write-up must mention. Where it and the protocol disagree, it is current.
 - [notes/rq2_results.md](notes/rq2_results.md) and [notes/rq1_results.md](notes/rq1_results.md): confirmatory results, with metrics in [notes/rq2_confirmatory_metrics.json](notes/rq2_confirmatory_metrics.json) and [notes/rq1_metrics.json](notes/rq1_metrics.json).
 - [notes/rq3_results.md](notes/rq3_results.md): the agent experiment (RQ3), with metrics in [notes/rq3_metrics.json](notes/rq3_metrics.json).
-- [notes/exploratory_results.md](notes/exploratory_results.md): the exploratory follow-ups, with metrics in `notes/rq1x_metrics.json`, `notes/thinking_metrics.json`, `notes/rq1d_metrics.json` and `notes/rq1v_metrics.json`.
+- [notes/exploratory_results.md](notes/exploratory_results.md): the exploratory follow-ups, with metrics in `notes/rq1x_metrics.json`, `notes/thinking_metrics.json`, `notes/rq1d_metrics.json`, `notes/rq1v_metrics.json`, `notes/mech_metrics.json` and `notes/size_metrics.json`.
 - [notes/testing.md](notes/testing.md): test suite, mutation check and calibration of the statistics.
 
 The filed proposal and preregistration are not in this repository.

@@ -96,3 +96,79 @@ The readouts are mixed. They need a confirmatory test with a design that separat
   - receptacle closed: 3.6 / 2.0;
   - hands full: 5.5 / 1.3;
   - object not held: 5.9 / 0.8.
+
+## 5. Mechanism diagnostic: state inference or judgement? (`mech_score`, `mech_analysis`)
+
+Design and readouts were logged in `deviations.md` before any score existed, and corrected after an independent code check, also before any score. Scored at 10a61a7, on the 4,666 primary items with both models. Metrics are in `mech_metrics.json`.
+
+**The two accounts.**
+- **(a) State inference:** the model doesn't recover the facts that decide the failure, and falls back on the task.
+- **(b) Judgement:** it recovers them, but judges the outcome by the task.
+
+**The design.**
+- **Four versions of the prediction,** each under the aligned and the swapped task:
+  - plain;
+  - with the deciding facts stated, taken from the history (location, held object, open and closed receptacles, contents seen);
+  - with the environment's rules stated;
+  - with both.
+- **Yes/no questions** under the aligned, swapped and neutral tasks:
+  - about the deciding fact, each with a twin question whose correct answer is Yes;
+  - about whether the action's conditions are met;
+  - about the rule (on 1,000 items), with a twin.
+- **The agent's own preference for the action:** the ReAct agent's prompt, scoring the action against "look".
+
+| Readout (logged before data) | Qwen3-8B | Llama-3.1-8B |
+|---|---|---|
+| Goal effect, plain prompt (nats) | 6.12 [5.51, 6.74] | 1.64 [1.50, 1.79] |
+| With the deciding facts stated | 4.60; share removed 25% [21%, 29%] | 1.60; share removed 2% [−3%, 8%] |
+| With the rules stated | 10.06 (64% larger) | 2.10 (28% larger) |
+| With facts and rules | 8.59 | 2.18 |
+| Effect on items whose state question and twin are both answered correctly (neutral task), as a share of the overall effect | 1.11 [1.07, 1.16] | 1.01 [0.92, 1.10] |
+| Goal effect on "Yes" to the state question, minus the effect on its twin (nats) | −0.34 [−0.72, 0.05] | +0.38 [0.32, 0.45] |
+| Spearman correlation between the shift in the agent's preference and ΔL | −0.08 [−0.14, −0.01] | +0.06 [0.01, 0.11] |
+
+**Readings against the logged thresholds:**
+- **Stating the facts.** It removes less than 25% for Llama, which favours (b). For Qwen it removes 25%, right at the threshold.
+- **The rules arm.** Stating the rules *increases* the effect. This was not anticipated. The rules make both models much more confident of failure overall, yet the gap between the aligned and swapped tasks grows: Qwen's first-word term rises from 2.52 to 5.41 nats. On the success-score scale, Qwen's shift falls from 5.8 to 3.8 points, because the scores are at the floor. Llama's rises from 16.3 to 17.6.
+- **Where the state is known.** The effect is fully present on items where the model answers the state question correctly. This favours (b) for both models.
+- **Does the goal change the state belief?** For Qwen, the task raises "Yes" equally on the state question and its twin. That is a general shift toward "Yes", not a specific change in its belief about the state. For Llama there is a small specific shift toward the fact that would let the action work.
+- **The agent's own preference.** The task raises it enormously (Qwen 14.4 nats, Llama 6.5). But the correlation with the world-model shift is far below the logged 0.3, so item-by-item variation in the agent's own preference does not explain the effect.
+- **Precondition question.** Both models answer No on 97–100% of items under every task, yet the aligned task still shifts its log-odds toward Yes (Qwen 3.5 nats, Llama 1.6).
+
+**Interpretation (exploratory):**
+- The leak is not caused by missing information about the state, which goes against (a).
+- What remains is best described as a task-relevance bias applied at answer time.
+- **Caveat:** the yes/no questions are weak measures of knowledge. Both models lean toward No, and rule knowledge is poor: Qwen answers the rule question and its twin correctly on only 9% of items, under the neutral task.
+
+**Earlier post hoc looks.** Two analyses of the confirmatory scores came before this design (history length, room size, receptacles not yet observed, actions that advance the task). An independent check showed their conclusions depend on the specification, so they are recorded in `deviations.md` as inconclusive.
+
+## 6. Model-size series, Qwen3 dense (`size_score_<model>`, `size_analysis`)
+
+Design and prediction were logged before any score. Scoring ran at 8bfd84c and the analysis at 10a61a7, on the 4,666 primary items and 292 determined successes. Metrics are in `size_metrics.json`. The rescored Qwen3-8B reproduces the confirmatory results exactly: 6.12 nats two-candidate, 2.80 yes/no.
+
+**The columns:**
+- the two ΔL columns are the aligned-minus-swapped effect in nats;
+- the score shift is in percentage points of the two-candidate success score;
+- flips are the share of items whose first-word decision changes;
+- the yes-share is on failing actions, under the neutral task;
+- the AUC compares working with failing actions on the two-candidate score.
+
+| Size (parameters) | ΔL two-candidate | ΔL yes/no | Score shift | Flips | Yes-share on failures | AUC, neutral → aligned |
+|---|---|---|---|---|---|---|
+| 0.6B (0.75B) | 0.89 | 0.12 | 2.0 | 0.6% | 99.9% | 0.72 → 0.57 |
+| 1.7B (2.03B) | 2.49 | 2.08 | 15.6 | 24.8% | 99.9% | 0.81 → 0.79 |
+| 4B (4.02B) | 7.49 | 2.27 | 12.7 | 19.2% | 2.3% | 0.93 → 0.89 |
+| 8B (8.19B) | 6.12 | 2.80 | 5.8 | 9.7% | 0.2% | 0.93 → 0.91 |
+| 14B (14.77B) | 4.33 | 3.18 | 12.3 | 21.3% | 0.6% | 0.90 → 0.89 |
+| 32B (32.76B) | 2.35 | 1.55 | 13.1 | 17.8% | 4.7% | 0.91 → 0.88 |
+
+**Against the logged prediction:**
+- **The effect is positive at every size,** as predicted.
+- **"The slope against log parameters is not positive" fails.** The slope is +0.52 nats per e-fold of parameters [0.40, 0.63] on the two-candidate score, and +0.46 [0.36, 0.55] on yes/no. The bootstrap resamples games jointly across sizes.
+
+**Post hoc reading.** The two smallest models largely cannot do the task: they answer Yes to almost every yes/no question, working or failing. Among the competent sizes (4B–32B):
+- **The two-candidate effect falls steadily** (7.5, 6.1, 4.3, 2.4 nats). The yes/no effect does not fall steadily.
+- **The practical size does not fall.** Score shifts are 12.7, 5.8, 12.3 and 13.1 points, and flips 19%, 10%, 21% and 18%. Larger models are less extreme in log-odds, so a smaller effect in nats moves probabilities as much.
+- **The largest model is still clearly moved.** Qwen3-32B answers Yes to failing actions 15.0% of the time under the aligned task, against 5.8% under the swapped task.
+
+Scaling within Qwen3 does not remove the leak.
