@@ -14,7 +14,9 @@ audited.
 Four groups: the original 29; review 1's 27 (prefixed R1-, adapted where the code they hit was rewritten in the
 amendments of 2026-11-20: A1 now hits the user cluster in cluster_of, A3 the Holm-adjusted p in verdicts, A5 the
 missing-score set, A8 the identifier regex, G1 the pass-flag check); 30 for the amended code (N1-N30); and, after
-review 2, review 2's 24 (R2-M1 to R2-M24, adapted to the code of this round) and 23 for this round's code (N31-N53).
+review 2, review 2's 24 (R2-M1 to R2-M24, adapted to the code of this round) and 23 for this round's code (N31-N53);
+and 22 for fix round 3 after review 3 (R3-1 to R3-22: the yes/no question, the instruction, "and nothing else", the
+witness-aware null reading, the authorization wording, the matched reading and the matched arm's witness).
 Review 2's adapted copies of R1-A3, A5, A8 and G1 are the R1- entries themselves.
 
 Equivalence arguments (review 1 marked B3, B5 and G1 as candidates; each now has a killing test, so none is argued
@@ -292,6 +294,63 @@ MUTANTS = [
      '            v = tau_verdict(sens[m]["estimate"], sens[m]["ci"], adj_s[m])', '            v = tau_verdict(sens[m]["estimate"], sens[m]["ci"], sens[m]["perm_p"])'),
     ("N52 arm contrast ignores the arms", "wf/tau/pipeline.py",
      'for arm, (act, a, b) in zip(arms, (first, second))', 'for arm, (act, a, b) in zip(("main", "main"), (first, second))'),
+    # ---- fix round 3 (review 3 and the task-invariance gate) ----
+    ("R3-1 yes/no question asks whether the call succeeds", "wf/tau/prompts.py",
+     'YN_QUESTION = ("Question: will the backend execute this call without returning an error? Answer Yes if its output is "\n               "JSON and No if its output is a line starting with \\"Error: \\".\\nAnswer:")',
+     'YN_QUESTION = ("Question: will this tool call succeed, or will it return an error? Answer Yes if it succeeds and No "\n               "if it returns an error.\\nAnswer:")'),
+    ("R3-2 yes/no question without the output shapes", "wf/tau/prompts.py",
+     'Answer Yes if its output is "\n               "JSON and No if its output is a line starting with \\"Error: \\".\\nAnswer:")',
+     'Answer Yes if it does "\n               "and No if it does not.\\nAnswer:")'),
+    ("R3-3 instruction gives the task as an input to the prediction", "wf/tau/prompts.py",
+     '"calls the backend\'s tools. Each turn shows the user\'s task,', '"calls the backend\'s tools. Given the user\'s task,'),
+    ("R3-4 instruction predicts 'the output of the tool call'", "wf/tau/prompts.py",
+     'Predict the exact output the backend returns for that call.', 'Predict the exact output of the tool call.'),
+    ("R3-5 main lead without 'and nothing else'", "wf/tau/prompts.py",
+     '"(authentication, confirmation with the user). It does check the following and nothing else: a write call "',
+     '"(authentication, confirmation with the user). It does check the following: a write call "'),
+    ("R3-6 matched lead without 'and nothing else' (arms differ in more than the lead)", "wf/tau/prompts.py",
+     '"(authentication, confirmation with the user). It does check the following and nothing else: a write "',
+     '"(authentication, confirmation with the user). It does check the following: a write "'),
+    ("R3-7 a null ignores the witness", "wf/tau/pipeline.py",
+     '        out["reading"] = (WITNESS_SHIFT_NULL if _ci_above(witness_effect) else',
+     '        out["reading"] = (WITNESS_SHIFT_NULL if False else'),
+    ("R3-8 a null reads any witness block as a shift", "wf/tau/pipeline.py",
+     '        out["reading"] = (WITNESS_SHIFT_NULL if _ci_above(witness_effect) else',
+     '        out["reading"] = (WITNESS_SHIFT_NULL if witness_effect is not None else'),
+    ("R3-9 the analysis passes no witness effect", "wf/tau/pipeline.py",
+     '            "witness_effect": ctl["witness"]["first"]["aligned_minus_swapped"]}',
+     '            "witness_effect": None}'),
+    ("R3-10 the analysis passes the witness's aligned minus neutral", "wf/tau/pipeline.py",
+     '            "witness_effect": ctl["witness"]["first"]["aligned_minus_swapped"]}',
+     '            "witness_effect": ctl["witness"]["first"]["aligned_minus_neutral"]}'),
+    ("R3-11 verdicts drop the witness", "wf/tau/pipeline.py",
+     'c.get("write_minus_mention"), c.get("witness_effect"))', 'c.get("write_minus_mention"))'),
+    ("R3-12 joint null without the witness note", "wf/tau/pipeline.py",
+     '    if overall.startswith("no effect") and shifted:', '    if False:'),
+    ("R3-13 null witness reading reworded", "wf/tau/pipeline.py",
+     'but the task shifts predictions for working "\n                      "calls (an authorization or task-consistency reading)")',
+     'but the task shifts predictions for working "\n                      "calls")'),
+    ("R3-14 task-consistency row without the authorization belief", "wf/tau/pipeline.py",
+     '"A general task-consistency bias, or a belief that the backend checks calls against the "\n                              "request: naming',
+     '"A general task-consistency bias: naming'),
+    ("R3-15 write minus mention without the authorization note", "wf/tau/pipeline.py",
+     '(write minus mention above 0; an authorization "\n                          "reading predicts this too)"',
+     '(write minus mention above 0)"'),
+    ("R3-16 matched reading for a main null: the old 'suppresses' text", "wf/tau/pipeline.py",
+     '        return MATCHED_NULL_MAIN_EFFECT',
+     '        return ("null under the main prompt but an effect under the matched prompt: an explicit statement that the "\n                "backend does not see the task suppresses the effect here")'),
+    ("R3-17 matched witness never scheduled", "wf/tau/pipeline.py",
+     '            if arm == "matched" and cfg.get("matched_witness", True)', '            if False and cfg.get("matched_witness", True)'),
+    ("R3-18 matched witness under the aligned task only", "wf/tau/pipeline.py",
+     '                jobs += [("matched", "witness", "first", c) for c in conds]', '                jobs += [("matched", "witness", "first", "aligned")]'),
+    ("R3-19 matched witness scored in the main arm", "wf/tau/pipeline.py",
+     '                jobs += [("matched", "witness", "first", c) for c in conds]', '                jobs += [("main", "witness", "first", c) for c in conds]'),
+    ("R3-20 matched witness also in the rules-only arm", "wf/tau/pipeline.py",
+     '            if arm == "matched" and cfg.get("matched_witness", True)', '            if cfg.get("matched_witness", True)'),
+    ("R3-21 matched witness readout reads the main arm", "wf/tau/pipeline.py",
+     '"matched": effects(by, items, "first", action="witness", arm="matched")', '"matched": effects(by, items, "first", action="witness")'),
+    ("R3-22 matched fail minus witness computed in the main arm", "wf/tau/pipeline.py",
+     'contrast_of_effects(by, items, "first", fail, wit, arms=("matched", "matched"))', 'contrast_of_effects(by, items, "first", fail, wit)'),
 ]
 
 

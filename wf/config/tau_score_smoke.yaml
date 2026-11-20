@@ -12,6 +12,7 @@ mention: true
 target_check: true
 rules_arm_items: 20
 matched_arm_items: 20
+matched_witness: true  # fix round 3: the witness's first token in the matched arm (aligned, swapped, neutral)
 score_natural: false
 score_unachievable: false
 limit_items: 20

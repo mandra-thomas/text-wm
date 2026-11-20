@@ -79,17 +79,18 @@ def test_score_then_analysis(runs, monkeypatch):
     recs = [r for i in (0, 1) for r in read_jsonl(runs / "tau_score" / f"shard_{i:02d}_of_02" / "scoring.jsonl")]
     # every main item x model x job, once; shards split by user. Per item: failing call 3 conditions x (first, yn,
     # full) = 9, mention pair x (first, yn) = 4, manipulation check 2, witness 9; the rules-only and the matched arm
-    # 6 each on every primary item here (fewer than their 500).
+    # 6 each on every primary item here (fewer than their 500), and the matched arm's witness 3 (first token, fix round 3).
     assert all(t["task_swapped"] and t["aligned_witness"] for t in main)
     n_primary = sum(t["status_matched"] for t in main)
     assert 0 < n_primary < 500
-    assert len(recs) == 2 * (len(main) * (9 + 4 + 2 + 9) + n_primary * 12)
+    assert len(recs) == 2 * (len(main) * (9 + 4 + 2 + 9) + n_primary * 15)
     keys = [P.score_key(r) for r in recs]
     assert len(keys) == len(set(keys)) and all(r["seconds"] >= 0 for r in recs)
     assert {(r["arm"], r["action"], r["readout"]) for r in recs} == {
         ("main", "fail", "first"), ("main", "fail", "yn"), ("main", "fail", "full"), ("main", "fail", "target"),
         ("main", "witness", "first"), ("main", "witness", "yn"), ("main", "witness", "full"),
-        ("rules_only", "fail", "first"), ("rules_only", "fail", "yn"), ("matched", "fail", "first"), ("matched", "fail", "yn")}
+        ("rules_only", "fail", "first"), ("rules_only", "fail", "yn"), ("matched", "fail", "first"), ("matched", "fail", "yn"),
+        ("matched", "witness", "first")}
     users = [{r["user_id"] for r in read_jsonl(runs / "tau_score" / f"shard_{i:02d}_of_02" / "scoring.jsonl")} for i in (0, 1)]
     assert not users[0] & users[1]
     assert P.run_tau_analysis(load_config("tau_analysis")) == 0
@@ -111,6 +112,11 @@ def test_score_then_analysis(runs, monkeypatch):
     assert q["rules_only_arm"]["first"]["rules_only"]["aligned_minus_swapped"]["n_items"] == len(primary)
     assert q["matched_arm"]["first"]["matched"]["aligned_minus_swapped"]["n_items"] == len(primary)
     assert q["matched_arm"]["yn"]["main_minus_matched"]["n_items"] == len(primary)
+    mw = q["matched_arm"]["witness_first"]
+    assert mw["descriptive"] and mw["matched"]["aligned_minus_swapped"]["n_items"] == len(primary)
+    assert mw["fail_minus_witness_matched"]["n_items"] == mw["fail_minus_witness_main_same_items"]["n_items"] == len(primary)
+    assert "witness_first" not in q["rules_only_arm"]
+    assert "witness" in m["verdicts"]["per_model"]["qwen3-8b-fewshot"]["outcome_table"]
     assert set(m["matched_arm_verdicts"]) == set(P.CO_PRIMARY) and all("reading" in v for v in m["matched_arm_verdicts"].values())
     assert q["primary"]["first_without_fewshot_tool_classes"]["aligned_minus_swapped"]["n_items"] == sum(
         t["cls"] not in ("wrong_return_pm", "gc_balance") for t in primary)
@@ -378,7 +384,7 @@ def test_verdict_reading_uses_the_controls_passed_in():
 
 @pytest.mark.parametrize("main,matched,want", [
     ("replicates (ALFWorld direction)", "replicates (ALFWorld direction)", "effect under both prompts"),
-    ("no effect larger than 0.5 nats", "small effect, direction positive", "suppresses the effect here"),
+    ("no effect larger than 0.5 nats", "small effect, direction positive", "cannot be separated from a belief that the backend checks"),
     ("no effect larger than 0.5 nats", "no effect larger than 0.5 nats", "under either prompt"),
     ("replicates (ALFWorld direction)", "no effect larger than 0.5 nats", "main prompt only"),
     ("inconclusive (null, but the task line is not shown to be read)", "replicates (ALFWorld direction)", "inconclusive"),
@@ -701,3 +707,106 @@ def test_sensitivity_population_leaves_out_exactly_the_fewshot_tool_classes():
     sens = blk["first_without_fewshot_tool_classes"]["aligned_minus_swapped"]
     assert sens["n_items"] == 6 and blk["first"]["aligned_minus_swapped"]["n_items"] == 12
     assert sens["estimate"] == pytest.approx(2.0) and blk["first"]["aligned_minus_swapped"]["estimate"] < 0
+
+
+# ---------------- fix round 3 (review 3 and the task-invariance gate) ----------------
+
+
+@pytest.mark.parametrize("witness,want", [
+    (_blk(0.2, 1.4), P.WITNESS_SHIFT_NULL),
+    (_blk(-0.3, 0.6), "No leak of more than 0.5 nats, with the task line read and the visible record used"),
+    (_blk(-1.4, -0.2), "No leak of more than 0.5 nats, with the task line read and the visible record used"),
+    (None, "No leak of more than 0.5 nats, with the task line read and the visible record used"),
+])
+def test_a_null_reads_the_witness(witness, want):
+    """A null on the failing call is "no leak" only if the working call does not move with the task; a witness
+    aligned - swapped with a CI above 0 makes it an authorization or task-consistency reading (review 3)."""
+    r = P.outcome_reading("no effect larger than 0.5 nats", True, _blk(-0.2, 0.2), None, witness)
+    assert r["reading"] == want
+    assert P.WITNESS_SHIFT_NULL == ("No leak for failing calls with a visible failure, but the task shifts predictions for "
+                                    "working calls (an authorization or task-consistency reading)")
+    # the witness never changes a non-null reading's category
+    assert "overrides a visible fact" in P.outcome_reading("replicates (ALFWorld direction)", True, _blk(0.4, 1.2), None, witness)["reading"]
+
+
+def test_null_verdicts_read_the_witness_and_the_joint_line_says_so():
+    shift = P.verdicts({m: NULL for m in P.CO_PRIMARY}, _checks(witness_effect=_blk(0.2, 1.4)))
+    assert shift["overall"] == "no effect larger than 0.5 nats (both models)"  # the category is about failing calls
+    assert all(x["verdict"] == "no effect larger than 0.5 nats" and x["reading"] == P.WITNESS_SHIFT_NULL
+               for x in shift["per_model"].values())
+    assert "for failing calls with a visible failure only" in shift["overall_note"]
+    assert all(m in shift["overall_note"] for m in P.CO_PRIMARY)
+    flat = P.verdicts({m: NULL for m in P.CO_PRIMARY}, _checks(witness_effect=_blk(-0.3, 0.6)))
+    assert "overall_note" not in flat and all(x["reading"].startswith("No leak of more") for x in flat["per_model"].values())
+    one = P.verdicts({m: NULL for m in P.CO_PRIMARY}, {"qwen3-8b-fewshot": {**OK, "witness_effect": _blk(0.2, 1.4)},
+                                                       "llama3.1-8b-fewshot": {**OK, "witness_effect": _blk(-0.3, 0.6)}})
+    assert one["overall_note"].endswith("in qwen3-8b-fewshot (an authorization or task-consistency reading)")
+    # a gated null (inconclusive) keeps its inconclusive reading whatever the witness does
+    gated = P.verdicts({m: NULL for m in P.CO_PRIMARY}, _checks(manipulation_check_passed=False, witness_effect=_blk(0.2, 1.4)))
+    assert "overall_note" not in gated and gated["per_model"]["qwen3-8b-fewshot"]["reading"].startswith("Inconclusive")
+
+
+def test_task_consistency_row_and_mention_reading_name_the_authorization_reading():
+    r = P.outcome_reading("replicates (ALFWorld direction)", True, _blk(-0.2, 0.2), _blk(0.3, 0.9))
+    assert "or a belief that the backend checks calls against the request" in r["reading"]
+    assert "an authorization reading predicts this too" in r["mention"]
+    assert "authorization" not in P.outcome_reading("replicates (ALFWorld direction)", True, _blk(-0.2, 0.2), _blk(-0.2, 0.2))["mention"]
+
+
+def test_matched_reading_for_a_main_null_is_the_prestated_text():
+    want = ("null under the main prompt but an effect under the matched prompt: the effect appears when the prompt does not "
+            "state that the backend ignores the task; it cannot be separated from a belief that the backend checks calls "
+            "against the user's request, so it is not read as goal leakage into the backend's state.")
+    assert P.matched_reading("no effect larger than 0.5 nats", "replicates (ALFWorld direction)") == want
+    assert P.matched_reading("no effect larger than 0.5 nats", "small effect, direction positive") == want
+    assert P.matched_reading("replicates (ALFWorld direction)", "replicates (ALFWorld direction)") != want
+
+
+def test_matched_arm_scores_the_witness_first_token_under_three_task_lines(runs):
+    cfg = _score_cfg()
+    gen, _, _ = P.load_built({"build_run": "tau_build"})
+    every = P.scoring_sets(cfg)
+    arms = P.extra_arm_ids(every, cfg)
+    t = next(x for x in every if x["id"] in arms["matched"])
+    jobs = P.jobs_for(t, cfg, arms)
+    assert sorted(j for j in jobs if j[:2] == ("matched", "witness")) == sorted(
+        ("matched", "witness", "first", c) for c in ("aligned", "swapped", "neutral"))
+    assert not [j for j in jobs if j[:2] == ("rules_only", "witness")]
+    assert not [j for j in P.jobs_for(t, {**cfg, "matched_witness": False}, arms) if j[:2] == ("matched", "witness")]
+    assert not [j for j in P.jobs_for({**t, "aligned_witness": None}, cfg, arms) if j[1] == "witness"]
+    outside = next(x for x in every if x["id"] not in arms["matched"])
+    assert not [j for j in P.jobs_for(outside, cfg, arms) if j[0] == "matched"]
+    rec = _Recorder()
+    P._score_job(rec, t, P.load_built({"build_run": "tau_build"})[2], ("matched", "witness", "first", "swapped"))
+    (k, cond, ms, a, b), = rec.calls
+    from wf.tau.prompts import system_message
+    assert (k, cond, a, b) == ("one", "swapped", '{"', "Error") and ms[0]["content"] == system_message("matched")
+    assert f"Next call: {json.dumps({'name': t['aligned_witness']['name'], 'arguments': t['aligned_witness']['arguments']})}\n" in ms[-1]["content"]
+
+
+def test_matched_arm_witness_readout_reads_the_matched_arm():
+    items, by = _control_scores()
+    for t in items:
+        for (act, c), v in {("fail", "aligned"): 1.0, ("fail", "swapped"): 0.75, ("fail", "neutral"): 0.0,
+                            ("witness", "aligned"): 2.0, ("witness", "swapped"): 1.25, ("witness", "neutral"): 0.5}.items():
+            by[(t["id"], "matched", act, "first", c)] = {"L": v}
+            if act == "fail":
+                by[(t["id"], "matched", act, "yn", c)] = {"L": v}
+    blk = P.arm_block(by, items, "matched")["witness_first"]
+    assert blk["descriptive"] is True
+    assert blk["matched"]["aligned_minus_swapped"]["estimate"] == pytest.approx(0.75)
+    assert blk["matched"]["swapped_minus_neutral"]["estimate"] == pytest.approx(0.75)
+    assert blk["main_same_items"]["aligned_minus_swapped"]["estimate"] == pytest.approx(0.5)  # main: 4.0 - 3.5
+    assert blk["fail_minus_witness_matched"]["estimate"] == pytest.approx(0.25 - 0.75)
+    assert blk["fail_minus_witness_main_same_items"]["estimate"] == pytest.approx(2.0 - 0.5)
+    assert "witness_first" not in P.arm_block(by, items, "rules_only")
+
+
+def test_checks_pass_the_witness_aligned_minus_swapped_to_the_reading():
+    """The analysis hands the outcome table the witness's first-token aligned - swapped (4.0 - 3.5 here), not its
+    aligned - neutral (1.5) nor the failing call's (2.0)."""
+    items, by = _control_scores()
+    c = P.checks_of(P.controls_block(by, items))
+    assert c["witness_effect"]["estimate"] == pytest.approx(0.5)
+    assert c["fail_minus_witness"]["estimate"] == pytest.approx(1.5) and c["write_minus_mention"]["estimate"] == pytest.approx(1.75)
+    assert c["manipulation_check_passed"] and c["discrimination_holds"]

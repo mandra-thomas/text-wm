@@ -1,5 +1,6 @@
 """World-model prompts for the τ-bench retail items (notes/tau_design.md §5, as amended 2026-11-20 after reviews 1
-and 2).
+and 2, and in fix round 3 after review 3: the instruction's wording, "and nothing else" in every lead, and the yes/no
+question about the backend's execution).
 
 System message (main arm): instruction, how the backend checks write calls, the retail policy and the tool schemas.
 The rules-only arm (exploratory) drops the agent-facing policy and keeps the backend's rules. The ALFWorld-matched
@@ -20,26 +21,26 @@ from wf.tau.retail import VENDOR
 
 INSTRUCTION = (
     "You are a world model of the backend of a retail customer-service system. An agent is helping a user and "
-    "calls the backend's tools. Given the user's task, the tool calls made so far with their outputs, and the "
-    "agent's next tool call, predict the exact output of the tool call. Successful calls return JSON; failed "
-    "calls return a single line starting with \"Error: \". Output only the tool output."
+    "calls the backend's tools. Each turn shows the user's task, the tool calls made so far with their outputs, and "
+    "the agent's next tool call. Predict the exact output the backend returns for that call. Successful calls return "
+    "JSON; failed calls return a single line starting with \"Error: \". Output only the tool output."
 )
 
 # The backend's enforced preconditions, exactly as the tools check them (design §7.2). Identical in every condition.
 _BACKEND_LEAD = {
     "main": ("The policy below is written for the agent. The backend sees only each call's name and arguments and the "
              "current database: it does not see the user's messages or task, and it does not check the agent's conduct "
-             "(authentication, confirmation with the user). It does check the following, and a write call that breaks "
-             "any of them returns an error and changes nothing."),
+             "(authentication, confirmation with the user). It does check the following and nothing else: a write call "
+             "that breaks any of them returns an error and changes nothing."),
     "rules_only": ("The backend sees only each call's name and arguments and the current database: it does not see the "
-                   "user's messages or task. It checks the following, and a write call that breaks any of them returns "
-                   "an error and changes nothing."),
+                   "user's messages or task. It checks the following and nothing else: a write call that breaks any of "
+                   "them returns an error and changes nothing."),
     # ALFWorld-matched: the statement of what the backend sees, explicit ("it does not see the user's messages or
     # task") and implied ("sees only each call's name and arguments and the current database"), is dropped; the rest
     # of the main lead is kept word for word, including the conduct clause.
     "matched": ("The policy below is written for the agent. The backend does not check the agent's conduct "
-                "(authentication, confirmation with the user). It does check the following, and a write call that "
-                "breaks any of them returns an error and changes nothing."),
+                "(authentication, confirmation with the user). It does check the following and nothing else: a write "
+                "call that breaks any of them returns an error and changes nothing."),
 }
 BACKEND_RULES = """Every order write needs the order to exist, and a payment method must be one of the order's user's.
 - cancel_pending_order: the order's status is exactly "pending", and the reason is "no longer needed" or "ordered by mistake".
@@ -51,8 +52,10 @@ BACKEND_RULES = """Every order write needs the order to exist, and a payment met
 
 A successful order write returns the updated order as JSON. Afterwards its status is "cancelled" (cancel), "pending (item modified)" (modify items), "exchange requested" (exchange) or "return requested" (return); address and payment changes keep the status."""
 
-YN_QUESTION = ("Question: will this tool call succeed, or will it return an error? Answer Yes if it succeeds and No "
-               "if it returns an error.\nAnswer:")
+# Fix round 3 (review 3): the question asks about the backend's execution, not about "success", which a model could
+# read as the user's goal being met (a reading that would push the swapped task toward No).
+YN_QUESTION = ("Question: will the backend execute this call without returning an error? Answer Yes if its output is "
+               "JSON and No if its output is a line starting with \"Error: \".\nAnswer:")
 # Manipulation check (amendment of 2026-11-20): is the task line read at all in a ~10k-token prompt?
 TARGET_QUESTION = ("Question: is this call on the order the user asked about? Answer Yes if it is and No if it is not."
                    "\nAnswer:")

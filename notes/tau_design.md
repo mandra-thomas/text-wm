@@ -984,10 +984,10 @@ within the arm). Its reading combines that verdict with the confirmatory main-ar
 
 - an effect in the ALFWorld direction under both prompts: the statement that the backend does not see the task
   does not remove it;
-- a null under the main prompt (with its gates passed) but an effect under the matched prompt: an explicit
-  statement that the backend does not see the task, together with the other-order examples, suppresses the effect
-  here; τ-bench is then read as showing the leak is removable by stating the system's blindness, not as showing no
-  leak;
+- null under the main prompt but an effect under the matched prompt: the effect appears when the prompt does not
+  state that the backend ignores the task; it cannot be separated from a belief that the backend checks calls against
+  the user's request, so it is not read as goal leakage into the backend's state. (Replaced in fix round 3, C3; the
+  earlier bullet read this pattern as the statement of the system's blindness suppressing a leak.)
 - a null under both: the null does not rest on the debiasing statement;
 - an effect under the main prompt only: not predicted; reported, not interpreted;
 - anything else: inconclusive.
@@ -1022,19 +1022,23 @@ the other a small negative effect" also one model only instead of mixed. Per mod
 | Verdict on ΔL1 | Discrimination | Fail minus witness | Reading |
 | --- | --- | --- | --- |
 | replicates or small positive | holds | CI above 0 | The task overrides a visible fact about the named object, more for failing calls than working ones (the ALFWorld effect in its stronger form) |
-| replicates or small positive | holds | about 0, negative, or a CI that includes 0 | A general task-consistency bias: naming the order raises the success belief of calls on it whether they fail or not; goal leakage, not an override specific to failures |
+| replicates or small positive | holds | about 0, negative, or a CI that includes 0 | A general task-consistency bias, or a belief that the backend checks calls against the request (fix round 3, C2): naming the order raises the success belief of calls on it whether they fail or not; goal leakage, not an override specific to failures |
 | replicates or small positive | fails | any | The task shifts predictions, but the model is not shown to use the visible record; not read as overriding evidence |
 | reversed | holds | any | Naming the object sharpens failure prediction |
 | reversed | fails | any | Verdict becomes "inconclusive (reversed, but the model is not shown to discriminate ...)" |
 | small negative | fails | any | A shift toward failure without shown use of the record: inconclusive |
-| CI inside ±0.5 | holds (and the manipulation check passes) | any | No leak of more than 0.5 nats |
+| CI inside ±0.5 | holds (and the manipulation check passes) | any, and the witness's own aligned − swapped CI does not lie above 0 | No leak of more than 0.5 nats |
+| CI inside ±0.5 | holds (and the manipulation check passes) | any, and the witness's own aligned − swapped CI lies above 0 (fix round 3, C2) | No leak for failing calls with a visible failure, but the task shifts predictions for working calls (an authorization or task-consistency reading) |
 | CI inside ±0.5 | fails | any | Verdict becomes "inconclusive (null, but the model is not shown to discriminate ...)" |
 | CI inside ±0.5, manipulation check fails | any | any | Verdict becomes "inconclusive (null, but the task line is not shown to be read)" |
 
 "Small" means the rule's CI and Holm conditions hold but the estimate is under 0.5 nats in absolute value; its
 reading carries "(below the 0.5-nat size)". The mention pair is read beside every non-null verdict: write minus
 mention with a CI above 0 means the request to act adds to naming the order; a CI inside ±0.5 means naming the
-order is enough; otherwise uncertain.
+order is enough; otherwise uncertain. An authorization reading (the model believes the backend checks a write
+against the user's request) also predicts write minus mention above 0, since only the write request asks for an
+action that such a check would refuse; so a positive write minus mention does not by itself separate a leak from an
+authorization belief (fix round 3, C2).
 
 **Joint verdict.** Mixed if one model replicates and the other is reversed or a small negative effect, or one is
 reversed and the other a small positive effect; "replicates (both models)" and "reversed (both models)" as before;
@@ -1163,7 +1167,8 @@ entries), with 23 more for this round's code (N31-N53).
 Per model: about 30 passes per main item, 18 per natural item, plus 6 for each of the 500 rules-only items and 6
 for each of the 500 matched-arm items (the same items): about 48,000 passes per model and 96,000 in all, about
 6,000 per shard over 16 shards. At about 1.5 s a pass a shard takes about 2.5 hours (about 5 on an A40), under the
-8-hour limit. The smoke projection (B5) decides.
+8-hour limit. The smoke projection (B5) decides. (Fix round 3 adds 1,500 passes per model for the matched arm's
+witness; the counts are updated in C6.)
 
 ### A16, additions
 
@@ -1217,3 +1222,164 @@ All run at commit f389f97, which holds the amendments B1–B12 and their code, b
   survivors and review 1's Holm mutant are now killed, each by a test aimed at it (listed in the fix-round report).
 - **Tests.** The full suite passes (752 passed, 1 skipped, before the N44 test was added; the four τ test files
   pass with it, 184 tests).
+
+## Fix round 3, after review 3 and the task-invariance gate, before any score (2026-11-20)
+
+Review 3 (independent) reread the code at b153a6b. It passed the engineering fixes of round 2: it reran 15 of the
+earlier mutants, each against the test logged as its killer, after checking that those tests pass unmutated, and all
+15 were killed. It also ran a task-invariance gate: is the label of every scored call fixed by the backend's state,
+whatever the task line says? The port's call takes only a tool name and its arguments (no task). On 13 rendered items
+(4 `status`, 4 `unavailable`, 2 `wrong_return_pm`, 2 `gc_balance`, one natural item with a swapped line, half with
+the reversed few-shot order), replaying each history in a fresh environment regenerated the failure reply, the twin
+and the witness output exactly. The matched arm's final turn was identical to the main arm's. Its verdict was "pass
+with wording changes": the labels are task-invariant, but some wording could make a model read the task as
+something the backend checks, and three readings did not allow for that. Everything below was decided and
+committed before any GPU run; no score of any model on these items exists. Where this round changes an earlier
+section, that section was edited in place (B1, B3, B12, each marked "fix round 3") or stands as a record (§5.1,
+§5.4).
+
+### C1. The yes/no question (must-fix)
+
+**Problem.** The question read "will this tool call succeed, or will it return an error? Answer Yes if it succeeds
+and No if it returns an error." "Succeed" can be read as "achieve what the user wants". Under the swapped task the
+call is on an order the user did not ask about, so on that reading it does not succeed, whatever the backend does.
+That pushes the swapped condition toward No, and the yes/no ΔL upward, for a reason that has nothing to do with
+predicting the backend.
+
+**Now** (`YN_QUESTION`, pinned as exact text in a test):
+
+"Question: will the backend execute this call without returning an error? Answer Yes if its output is JSON and No if
+its output is a line starting with "Error: ".
+Answer:"
+
+The question is about the backend's execution, and Yes and No are tied to the two output shapes that the instruction
+already names. The first-token readout has no question and is unchanged. The witness's yes/no readout uses the same
+question.
+
+### C2. A null reads the witness; the authorization reading is named (must-fix)
+
+**Problem.** A null on the failing call was read as "no leak" whatever the witness did. Suppose instead that the
+witness, a call that works on the same state, has an aligned − swapped effect above 0. Then the task does move the
+model's predictions, just not where the history shows the failure. One explanation is that the model thinks the
+backend authorizes calls that match the user's request (an authorization reading), and the visible failure outweighs
+that belief only for failing calls. Another is a general task-consistency bias. Either way, "no leak" would overstate
+the result.
+
+**Now.** When a model's verdict is the null "no effect larger than 0.5 nats" (after both gates), the outcome table
+also reads the witness's first-token aligned − swapped on the primary population. If its 95% CI lies above 0, the
+reading becomes "No leak for failing calls with a visible failure, but the task shifts predictions for working calls
+(an authorization or task-consistency reading)". Otherwise it stays "No leak of more than 0.5 nats". The verdict
+category does not change, because the confirmatory rule is about failing calls. The joint category does not change
+either. But when the joint verdict is the null and either model's witness moves, the analysis adds an overall note
+("for failing calls with a visible failure only: the task shifts predictions for working calls in <models> ...").
+The status line prints that note. The outcome table now also records, for every verdict, whether the witness moves.
+
+Two related wordings changed (B3 edited in place):
+
+- The task-consistency row (a positive effect, discrimination holds, fail minus witness not above 0) now reads "a
+  general task-consistency bias, or a belief that the backend checks calls against the request". A witness that
+  moves as much as the failing call fits both explanations.
+- Next to "the request to act adds to naming the order" (write minus mention above 0), the reading now says that an
+  authorization reading predicts this too. Only the write request asks for an action that such a check would refuse;
+  a question about the order does not. So write minus mention above 0 cannot tell a leak from an authorization
+  belief.
+
+### C3. The matched arm's prestated reading (must-fix)
+
+**Problem.** B1 read "null under the main prompt, effect under the matched prompt" as the statement of the system's
+blindness suppressing a leak. Without that statement, though, a model can reasonably believe that a
+customer-service backend checks each call against the user's request. If it does, predicting an error for a call on
+another order is a sensible belief about such systems, not the task leaking into the predicted database state.
+
+**Now** (`matched_reading`, and the B1 bullet, replaced word for word): "null under the main prompt but an effect
+under the matched prompt: the effect appears when the prompt does not state that the backend ignores the task; it
+cannot be separated from a belief that the backend checks calls against the user's request, so it is not read as goal
+leakage into the backend's state." The other four readings of B1 are unchanged. C6 gives the matched arm a witness,
+which helps describe this case without changing the reading.
+
+### C4. The instruction's wording (adopted from review 3)
+
+**Old.** "Given the user's task, the tool calls made so far with their outputs, and the agent's next tool call,
+predict the exact output of the tool call." This lists the task as one of the inputs to the prediction.
+
+**New** (the second and third sentences; the first, fourth and fifth are unchanged): "An agent is helping a user and
+calls the backend's tools. Each turn shows the user's task, the tool calls made so far with their outputs, and the
+agent's next tool call. Predict the exact output the backend returns for that call." The task is described as part
+of what each turn shows, not as an input to the prediction, and the output to predict is the backend's. The
+instruction is the same in every arm.
+
+The main and matched arms still differ only as designed in B1. The matched lead is the main lead with the statement
+of what the backend sees ("sees only each call's name and arguments and the current database: it does not see the
+user's messages or task, and it") taken out. The rest of the system message is byte-identical. A new test checks
+this on the leads, on the whole system message, and on every rendered message of six items: few-shot outputs and
+the final turn are identical, and few-shot user turns differ only in the task line of the examples that name another
+order.
+
+### C5. "and nothing else" (adopted; optional in review 3)
+
+The lead's last sentence now reads "It does check the following and nothing else: a write call that breaks any of
+them returns an error and changes nothing." The rules-only lead reads "It checks the following and nothing else:
+..." The list of rules is now stated as complete, so the prompt says that the backend makes no other check, such as
+matching a call against the user's request. The sentence is in all three leads, so the arms still differ only as
+designed (A7, B1). One consequence should be kept in mind when reading the matched arm. That arm keeps this sentence,
+which says implicitly that the backend checks nothing beyond the rules. What the arm still lacks is the explicit
+statement that the backend does not see the task, which is the cue B1 removes. So the matched arm now has one
+indirect debiasing cue that it did not have before. If anything, this makes a matched-arm effect harder to obtain.
+
+### C6. The witness in the matched arm (adopted; optional in review 3)
+
+Each of the matched arm's 500 items now also scores its witness under the matched prompt: first token only, under
+the aligned, swapped and neutral task lines (`matched_witness: true` in `tau_score` and `tau_score_smoke`). That is
+1,500 more passes per model. The analysis reports, under `matched_arm.witness_first`:
+
+- the witness's three effects in the matched arm;
+- the main arm's witness effects on the same items;
+- fail minus witness within the matched arm;
+- fail minus witness within the main arm on the same items.
+
+Each has a user-clustered CI and sign-flip p. The readout is descriptive. It belongs to no Holm family, has no
+verdict, and leaves `matched_reading` unchanged. How it will be read, stated now: in the matched arm, a fail minus
+witness with a CI above 0 means the matched effect is larger for failing calls, which points to the task overriding
+the visible fact. A fail minus witness about 0 while the witness also moves means the matched effect moves working
+calls as much, which points to an authorization or task-consistency reading.
+
+**GPU time** (replacing B13's count). Scored jobs per model rise from 39,744 to 41,244. Forward passes per model
+rise from 48,175 to 49,675, about 99,350 for both models. Over 16 shards, a shard averages about 3,100 passes per
+model (6,210 for both models). The largest shard has 4,053 per model (it was 3,924), so 8,106 for both models. At
+about 1.5 s a pass, the largest shard takes about 3.4 hours for both models, under the 8-hour limit. It would be
+close to the limit on an A40 at half that speed. The smoke projection (B5) decides, as before. The sizing comment in
+`pace/tau_score.sbatch` is updated.
+
+### C7. Pins and checks
+
+- **Item files unchanged.** No item, natural item or few-shot example depends on the prompt text. A rebuild at this
+  round's code, into a scratch folder, is byte-identical: items `2c8ffeac…`, natural `9bd6c3f7…`, few-shot
+  `231607f7…`, the pins already in `tau_score`, `tau_score_smoke` and `tau_contamination`, which stay as they are.
+- **Golden system messages, re-pinned** (sha256 of the rendered system message): main `7cc04248…`, rules-only
+  `1573950d…`, matched `aa33f5c3…`. The yes/no question and the instruction are pinned as exact text. The
+  manipulation question and the output cue are unchanged.
+- **Prompts whose text changed.** Every rendered prompt in every arm changed, because the instruction is in all three
+  system messages and "and nothing else" is in all three leads. The final user turn changed only for the yes/no cue.
+  The manipulation-question and output-cue final turns, the few-shot turns and the contamination prompts are
+  unchanged. So the full token check (`python -m wf.tau.token_check`, B13) must be run on these final prompts for both
+  tokenizers before any GPU run. Its inputs (the three build files) are unchanged.
+- **Verification** (`tau_verify` on the scratch rebuild, at this round's code): PASS, 0 of 3,391 items with a
+  problem. That includes every prompt variant of the three arms differing only in the task line, now with the new
+  text.
+- **Tests.** There are new tests for each change: the exact yes/no question and instruction; "and nothing else" in
+  every lead; the matched arm differing from the main arm only by the statement of what the backend sees (leads,
+  system message and every rendered turn); the witness-aware null reading, on constructed inputs both ways (witness
+  CI above 0, straddling 0, below 0, absent), and through `verdicts` with the overall note (both models, one model,
+  none, and a gated null); the task-consistency and write − mention wordings; the matched reading's exact text; the
+  matched arm's witness jobs (exactly aligned, swapped and neutral, first token, in that arm only, switched off by the
+  config, absent without a witness); the readout on constructed scores where the main and matched arms differ; and
+  `checks_of` passing the witness's aligned − swapped. The four τ test files pass (197 tests); the full suite passes
+  (894 passed, 7 skipped).
+- **Mutation testing** (`scripts/tau_mutation_check.py`, 8 deterministic shards, the unmutated copy passing first in
+  every shard): 155 mutants, 155 killed, each with its killing test logged. There are 22 new ones (R3-1 to R3-22),
+  for the question, the instruction, "and nothing else" in the main and the matched lead, the null reading (ignoring
+  the witness, reading any witness block as a shift, the witness not passed, its aligned − neutral passed instead,
+  the joint note dropped, the reading reworded), the two authorization wordings, the matched reading, and the matched
+  arm's witness (never scheduled, aligned only, scheduled in the main arm, also in the rules-only arm, its readout
+  reading the main arm, fail − witness computed in the main arm). The 133 earlier mutants all still apply and are all
+  killed.

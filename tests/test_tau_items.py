@@ -208,7 +208,7 @@ def test_prompt_layout(built):
     ms = build_messages(it, "aligned", few)
     assert [m["role"] for m in ms] == ["system"] + ["user", "assistant"] * 4 + ["user"]
     sysm = system_message()
-    assert "predict the exact output of the tool call" in sysm and "# Retail agent policy" in sysm
+    assert "Predict the exact output the backend returns for that call." in sysm and "# Retail agent policy" in sysm
     assert sysm.count('{"type": "function"') == 16
     # the backend's rules come before the policy, identically in both arms; the rules-only arm drops the policy
     assert sysm.index(BACKEND_RULES) < sysm.index("# Retail agent policy")
@@ -395,11 +395,18 @@ def test_witnesses_are_real_successes_with_class_failure_texts(built):
 
 # ---------------- review 2: golden system messages, each backend rule against the port, matched arm, order ----------------
 
-GOLDEN_SYSTEM_SHA256 = {  # sha256 of the rendered system message per arm (amendments after review 2)
-    "main": "b5dbd6acc23d6ffdb59f9b3d96cd86a6b434ebd163cc5913fcb821a24f871c46",
-    "rules_only": "50f15ceb6e847c196d2f1b5307cbae478907d5ab3ea9525edd6d030a5f26e1c6",
-    "matched": "291bcbf2b0ef1516f1e8d3000ce723f53b1fc0e985f995afec474c364b857352",
+GOLDEN_SYSTEM_SHA256 = {  # sha256 of the rendered system message per arm (re-pinned in fix round 3, after review 3)
+    "main": "7cc042481b3dcfa2668954e13c984dcec5a70da8c3ffce0bcc9a575878974a17",
+    "rules_only": "1573950da367c05733cde4b9f2fac4164d7f2dbf2ddc4a4b01f50e56596649de",
+    "matched": "aa33f5c3cbbd0f30f943daf4596891a38e726c58ed4ca82e5a77674fd6b10b9c",
 }
+GOLDEN_YN_QUESTION = ('Question: will the backend execute this call without returning an error? Answer Yes if its output is '
+                      'JSON and No if its output is a line starting with "Error: ".\nAnswer:')
+GOLDEN_INSTRUCTION = ("You are a world model of the backend of a retail customer-service system. An agent is helping a user "
+                      "and calls the backend's tools. Each turn shows the user's task, the tool calls made so far with their "
+                      "outputs, and the agent's next tool call. Predict the exact output the backend returns for that call. "
+                      'Successful calls return JSON; failed calls return a single line starting with "Error: ". Output only '
+                      "the tool output.")
 
 
 def test_system_messages_and_questions_are_golden():
@@ -407,8 +414,7 @@ def test_system_messages_and_questions_are_golden():
     assert set(ARMS) == set(GOLDEN_SYSTEM_SHA256)
     for arm, want in GOLDEN_SYSTEM_SHA256.items():
         assert hashlib.sha256(system_message(arm).encode()).hexdigest() == want, arm
-    assert YN_QUESTION == ("Question: will this tool call succeed, or will it return an error? Answer Yes if it succeeds "
-                           "and No if it returns an error.\nAnswer:")
+    assert YN_QUESTION == GOLDEN_YN_QUESTION
     assert TARGET_QUESTION == ("Question: is this call on the order the user asked about? Answer Yes if it is and No if "
                                "it is not.\nAnswer:")
     assert OUTPUT_CUE == "Tool output:"
@@ -420,6 +426,49 @@ def test_system_messages_and_questions_are_golden():
     assert "does not check the agent's conduct (authentication, confirmation with the user)" in matched
     assert matched == system_message("main").replace(_BACKEND_LEAD["main"], _BACKEND_LEAD["matched"], 1)
     assert BACKEND_RULES in matched and "# Retail agent policy" in matched
+
+
+def test_fix_round_3_question_and_instruction_are_exact():
+    """Review 3: the yes/no question asks about the backend's execution and names both output shapes, never
+    "succeed"; the instruction's middle sentences say what each turn shows and that the backend's output is predicted.
+    Every arm's system message opens with the instruction."""
+    from wf.tau.prompts import ARMS, INSTRUCTION
+    assert YN_QUESTION == GOLDEN_YN_QUESTION and "succeed" not in YN_QUESTION
+    assert INSTRUCTION == GOLDEN_INSTRUCTION and "Given the user's task" not in INSTRUCTION
+    for arm in ARMS:
+        assert system_message(arm).startswith(GOLDEN_INSTRUCTION + "\n\n# How the backend checks write calls\n\n")
+
+
+def test_every_lead_says_the_backend_checks_the_rules_and_nothing_else():
+    from wf.tau.prompts import ARMS, _BACKEND_LEAD
+    for arm in ARMS:
+        assert "the following and nothing else: a write call that breaks any of them returns an error and changes nothing." in _BACKEND_LEAD[arm], arm
+
+
+def test_matched_arm_differs_from_main_only_by_the_statement_of_what_the_backend_sees(built):
+    """The matched lead is the main lead with only the statement of what the backend sees removed (B1); the rest of
+    the system message, the few-shot outputs, the calls and the final turn are the main arm's, and the few-shot task
+    lines differ only where an example names another order (examples 2 and 3)."""
+    from wf.tau.prompts import _BACKEND_LEAD, fewshot_for
+    seen = ("The backend sees only each call's name and arguments and the current database: it does not see the user's "
+            "messages or task, and it does not check")
+    assert _BACKEND_LEAD["main"].replace(seen, "The backend does not check", 1) == _BACKEND_LEAD["matched"]
+    assert system_message("main").replace(_BACKEND_LEAD["main"], _BACKEND_LEAD["matched"], 1) == system_message("matched")
+    few = built["fewshot"]
+    for it in [t for t in built["generated"] if t["main_pool"]][:6]:
+        for action in ("fail", "witness"):
+            for cue in ("output", "yn"):
+                for c in CONDITIONS:
+                    mn = build_messages(it, c, few, cue=cue, action=action)
+                    mm = build_messages(it, c, few, cue=cue, action=action, arm="matched")
+                    assert len(mn) == len(mm) and mn[-1] == mm[-1]
+                    own = {ex["task"]: ex["task_own"] for ex in fewshot_for(it, few)}
+                    for x, y in zip(mn[1:-1], mm[1:-1]):
+                        if x["role"] == "assistant":
+                            assert x == y
+                        else:
+                            task = x["content"].split("\n", 1)[0][len("Task: "):]
+                            assert y["content"] == x["content"].replace(f"Task: {task}\n", f"Task: {own[task]}\n", 1)
 
 
 def _rule(tool):

@@ -6,8 +6,9 @@
 # Sizing (notes/tau_design.md, amendments of 2026-11-20 after reviews 1 and 2). Per item and model the full run
 # scores about 30 forward passes of a ~10.5k-token prompt (Qwen3; ~9.6k for Llama): the failing call under 3 task
 # lines x (first token, yes/no, 2 full replies) = 12, the mention pair 4, the manipulation check 2, the witness 12;
-# plus 6 each for the 500 items of the rules-only and the ALFWorld-matched arm (the same items). About 48k passes per
-# model, 96k in all; with 16 shards about 6k passes per shard. At ~1.5 s a pass (A100/L40S, 8B in bf16 at ~10k
+# plus 6 each for the 500 items of the rules-only and the ALFWorld-matched arm (the same items), and 3 more for the
+# matched arm's witness (first token; fix round 3). About 49.7k passes per model, 99k in all; with 16 shards about
+# 6.2k passes per shard on average. At ~1.5 s a pass (A100/L40S, 8B in bf16 at ~10k
 # tokens) that is ~2.5 h a shard, ~5 h on an A40. The limit is 8 h (tau_smoke_analysis.yaml time_limit_hours must
 # equal it; a test checks), and every score is saved as it finishes, so a shard cut off by the limit resumes:
 #   sbatch --dependency=afternotok:<job> ... --export=ALL,WF_RESUME=1,RQ2_RUN=tau_score,WF_SHARD=<i>,WF_N_SHARDS=16 pace/tau_score.sbatch

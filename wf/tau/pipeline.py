@@ -257,6 +257,10 @@ def jobs_for(t: dict, cfg: dict, arms: dict[str, set[str]] | None = None) -> lis
     for arm in EXTRA_ARMS:
         if t["id"] in (arms or {}).get(arm, ()):
             jobs += [(arm, "fail", r, c) for r in single for c in conds]
+            # fix round 3 (review 3): the witness in the ALFWorld-matched arm, first token only, so that fail minus
+            # witness can be read there too (descriptive, no Holm family)
+            if arm == "matched" and cfg.get("matched_witness", True) and t.get("aligned_witness") and "first" in readouts:
+                jobs += [("matched", "witness", "first", c) for c in conds]
     return jobs
 
 
@@ -478,16 +482,25 @@ def _ci_inside(block: dict | None) -> bool:
     return bool(block) and block.get("n_items", 0) > 0 and -SUPPORT < block["ci"][0] and block["ci"][1] < SUPPORT
 
 
+WITNESS_SHIFT_NULL = ("No leak for failing calls with a visible failure, but the task shifts predictions for working "
+                      "calls (an authorization or task-consistency reading)")
+
+
 def outcome_reading(verdict: str, disc: bool | None, fail_minus_witness: dict | None = None,
-                    write_minus_mention: dict | None = None) -> dict[str, Any]:
-    """The outcome table of design A9 (as amended after review 2), applied to one model's primary results:
-    discrimination, specificity to failing calls (fail minus witness) and the mention pair (write minus mention)."""
+                    write_minus_mention: dict | None = None, witness_effect: dict | None = None) -> dict[str, Any]:
+    """The outcome table of design A9 (as amended after review 2 and in fix round 3), applied to one model's primary
+    results: discrimination, specificity to failing calls (fail minus witness), the mention pair (write minus
+    mention) and, for a null, the witness's own aligned - swapped effect."""
     out: dict[str, Any] = {"discrimination_holds": disc}
+    if witness_effect is not None:
+        out["witness"] = ("the task shifts predictions for the working call (witness aligned minus swapped, CI above 0)"
+                          if _ci_above(witness_effect) else "the working call is not shown to shift with the task")
     if fail_minus_witness is not None:
         out["specificity"] = ("specific to failing calls (fail minus witness above 0)" if _ci_above(fail_minus_witness)
                               else "not specific to failing calls (fail minus witness about 0, negative or uncertain)")
     if write_minus_mention is not None:
-        out["mention"] = ("the request to act adds to naming the order (write minus mention above 0)" if _ci_above(write_minus_mention)
+        out["mention"] = ("the request to act adds to naming the order (write minus mention above 0; an authorization "
+                          "reading predicts this too)" if _ci_above(write_minus_mention)
                           else "naming the order is enough; the request to act adds nothing (write minus mention inside ±0.5)"
                           if _ci_inside(write_minus_mention) else "uncertain")
     if verdict.startswith(POSITIVE):
@@ -499,16 +512,18 @@ def outcome_reading(verdict: str, disc: bool | None, fail_minus_witness: dict | 
             out["reading"] = ("The task overrides a visible fact about the named object, more for failing calls than "
                               "for working ones: the ALFWorld effect in its stronger form" + size)
         else:
-            out["reading"] = ("A general task-consistency bias: naming the order raises the success belief of calls on it "
-                              "whether they fail or not; reported as goal leakage, not as an override specific to "
-                              "failures" + size)
+            out["reading"] = ("A general task-consistency bias, or a belief that the backend checks calls against the "
+                              "request: naming the order raises the success belief of calls on it whether they fail or "
+                              "not; reported as goal leakage, not as an override specific to failures" + size)
     elif verdict.startswith(NEGATIVE):
         size = "" if verdict.startswith("reversed") else " (below the 0.5-nat size)"
         out["reading"] = ("Naming the object sharpens failure prediction (attention to its record); the ALFWorld effect "
                           "would then need the deciding fact to lie outside the named object" + size if disc else
                           "A shift toward failure, but the model is not shown to use the visible record: inconclusive" + size)
     elif verdict.startswith("no effect"):
-        out["reading"] = "No leak of more than 0.5 nats, with the task line read and the visible record used"
+        # fix round 3 (review 3): a null on the failing call does not mean the task is ignored if the working call moves
+        out["reading"] = (WITNESS_SHIFT_NULL if _ci_above(witness_effect) else
+                          "No leak of more than 0.5 nats, with the task line read and the visible record used")
     else:
         out["reading"] = "Inconclusive: " + verdict
     return out
@@ -533,10 +548,18 @@ def verdicts(primary: dict[str, dict], checks: dict[str, dict] | None = None) ->
         elif v.startswith(("no effect", "reversed")) and not disc:
             v = (f"inconclusive ({'null' if v.startswith('no effect') else 'reversed'}, but the model is not shown to "
                  "discriminate failing from working calls)")
-        reading = outcome_reading(v, disc, c.get("fail_minus_witness"), c.get("write_minus_mention"))
+        reading = outcome_reading(v, disc, c.get("fail_minus_witness"), c.get("write_minus_mention"), c.get("witness_effect"))
         per[m] = {"verdict": v, "holm_p": adjusted[m], "manipulation_check_passed": manip, "discrimination_holds": disc,
                   "reading": reading["reading"], "outcome_table": reading}
-    return {"per_model": per, "overall": joint_verdict({m: x["verdict"] for m, x in per.items()})}
+    overall = joint_verdict({m: x["verdict"] for m, x in per.items()})
+    out = {"per_model": per, "overall": overall}
+    # fix round 3: the joint null is a statement about failing calls; if a model's working call moves with the task,
+    # the overall line says so (the joint category itself is unchanged)
+    shifted = [m for m, x in per.items() if x.get("reading") == WITNESS_SHIFT_NULL]
+    if overall.startswith("no effect") and shifted:
+        out["overall_note"] = ("for failing calls with a visible failure only: the task shifts predictions for working calls "
+                               f"in {', '.join(shifted)} (an authorization or task-consistency reading)")
+    return out
 
 
 def sensitivity_verdicts(sens: dict[str, dict], primary: dict[str, dict]) -> dict[str, Any]:
@@ -554,6 +577,12 @@ def sensitivity_verdicts(sens: dict[str, dict], primary: dict[str, dict]) -> dic
     return out
 
 
+MATCHED_NULL_MAIN_EFFECT = (  # fix round 3 (review 3), replacing "... suppresses the effect here"
+    "null under the main prompt but an effect under the matched prompt: the effect appears when the prompt does not "
+    "state that the backend ignores the task; it cannot be separated from a belief that the backend checks calls "
+    "against the user's request, so it is not read as goal leakage into the backend's state.")
+
+
 def matched_reading(main_verdict: str, matched_verdict: str) -> str:
     """The ALFWorld-matched arm's prestated reading (amendment after review 2), from the confirmatory main-arm verdict
     and the matched arm's own verdict under the same rule."""
@@ -562,8 +591,7 @@ def matched_reading(main_verdict: str, matched_verdict: str) -> str:
     if eff(main_verdict) and eff(matched_verdict):
         return "effect under both prompts: stating that the backend does not see the task does not remove it"
     if null(main_verdict) and eff(matched_verdict):
-        return ("null under the main prompt but an effect under the matched prompt: an explicit statement that the backend "
-                "does not see the task (with the other-order few-shot examples) suppresses the effect here")
+        return MATCHED_NULL_MAIN_EFFECT
     if null(main_verdict) and null(matched_verdict):
         return "no effect larger than 0.5 nats under either prompt: the null does not rest on the debiasing statement"
     if eff(main_verdict) and null(matched_verdict):
@@ -697,13 +725,23 @@ def format_block(by: dict) -> dict[str, Any]:
 
 
 def arm_block(by: dict, items: list[dict], arm: str) -> dict[str, Any] | None:
-    """An exploratory arm beside the main arm on the same items, and per item main minus that arm's effect."""
+    """An exploratory arm beside the main arm on the same items, and per item main minus that arm's effect. For the
+    ALFWorld-matched arm also the witness (first token, fix round 3): its effects and fail minus witness within the
+    arm, beside the main arm's on the same items; descriptive, in no Holm family and with no verdict."""
     if not items:
         return None
-    return {r: {arm: effects(by, items, r, arm=arm), "main_same_items": effects(by, items, r),
-                f"main_minus_{arm}": contrast_of_effects(by, items, r, ("fail", "aligned", "swapped"), ("fail", "aligned", "swapped"),
-                                                         arms=("main", arm))}
-            for r in ("first", "yn")}
+    out: dict[str, Any] = {
+        r: {arm: effects(by, items, r, arm=arm), "main_same_items": effects(by, items, r),
+            f"main_minus_{arm}": contrast_of_effects(by, items, r, ("fail", "aligned", "swapped"), ("fail", "aligned", "swapped"),
+                                                     arms=("main", arm))}
+        for r in ("first", "yn")}
+    if arm == "matched":
+        fail, wit = ("fail", "aligned", "swapped"), ("witness", "aligned", "swapped")
+        out["witness_first"] = {"descriptive": True, "matched": effects(by, items, "first", action="witness", arm="matched"),
+                                "main_same_items": effects(by, items, "first", action="witness"),
+                                "fail_minus_witness_matched": contrast_of_effects(by, items, "first", fail, wit, arms=("matched", "matched")),
+                                "fail_minus_witness_main_same_items": contrast_of_effects(by, items, "first", fail, wit)}
+    return out
 
 
 def model_block(by: dict, primary: list[dict], main: list[dict], natural: list[dict], unach: list[dict],
@@ -735,6 +773,16 @@ def sd_of_differences(by: dict, items: list[dict], readout: str) -> dict[str, An
         if a and b:
             diffs.append(value(a, readout) - value(b, readout))
     return {"n": len(diffs), "sd": statistics.stdev(diffs) if len(diffs) > 1 else float("nan")}
+
+
+def checks_of(ctl: dict) -> dict[str, Any]:
+    """One model's gates and outcome-table inputs from its primary controls (first token): the manipulation check,
+    discrimination, fail minus witness, write minus mention, and the witness's own aligned - swapped (fix round 3)."""
+    return {"manipulation_check_passed": check_passes(ctl["manipulation"]),
+            "discrimination_holds": check_passes(ctl["discrimination"]["first"]),
+            "fail_minus_witness": ctl["fail_minus_witness_effect"]["first"],
+            "write_minus_mention": ctl["write_minus_mention_effect"]["first"],
+            "witness_effect": ctl["witness"]["first"]["aligned_minus_swapped"]}
 
 
 def run_tau_analysis(cfg: dict) -> int:
@@ -794,11 +842,7 @@ def run_tau_analysis(cfg: dict) -> int:
         blk = model_block(by, primary_items, main, natural, unach, arm_items)
         report["models"][m] = blk
         primary[m] = blk["primary"]["first"]["aligned_minus_swapped"]
-        ctl = blk["primary_controls"]
-        checks[m] = {"manipulation_check_passed": check_passes(ctl["manipulation"]),
-                     "discrimination_holds": check_passes(ctl["discrimination"]["first"]),
-                     "fail_minus_witness": ctl["fail_minus_witness_effect"]["first"],
-                     "write_minus_mention": ctl["write_minus_mention_effect"]["first"]}
+        checks[m] = checks_of(blk["primary_controls"])
         if blk["matched_arm"]:
             matched[m] = blk["matched_arm"]["first"]["matched"]["aligned_minus_swapped"]
     report["verdicts"] = verdicts(primary, checks)
@@ -810,7 +854,8 @@ def run_tau_analysis(cfg: dict) -> int:
     lines = [f"{m}: ΔL1 {primary[m]['estimate']:.3f} CI {primary[m]['ci']} -> {report['verdicts']['per_model'][m]['verdict']}"
              for m in models]
     write_status(run_id, f"items={report['items']} missing={missing} stale={stale}\n" + "\n".join(lines)
-                 + f"\noverall: {report['verdicts']['overall']}", ok=False,
+                 + f"\noverall: {report['verdicts']['overall']}"
+                 + (f" ({report['verdicts']['overall_note']})" if report["verdicts"].get("overall_note") else ""), ok=False,
                  reported="τ-bench verdict" if ok else None)
     return 0 if ok else 1
 
