@@ -291,14 +291,14 @@ def test_check_threshold(est, ci, want):
 
 def test_flip_shares_count_both_directions_and_product_clusters():
     items = [{"id": f"i{k}", "user_id": "u", "target_product_id": f"p{k % 2}"} for k in range(4)]
-    L = {"i0": (1.0, -1.0), "i1": (-1.0, 1.0), "i2": (1.0, 2.0), "i3": (-2.0, -1.0)}
+    L = {"i0": (1.0, -1.0), "i1": (-1.0, 1.0), "i2": (1.0, -2.0), "i3": (-2.0, -1.0)}  # two toward success, one toward failure
     by = {}
     for t in items:
         a, s = L[t["id"]]
         by[(t["id"], "main", "fail", "first", "aligned")] = {"L": a}
         by[(t["id"], "main", "fail", "first", "swapped")] = {"L": s}
     f = P.flip_shares(by, items)
-    assert (f["toward_success"], f["toward_failure"], f["either"]) == (0.25, 0.25, 0.5)
+    assert (f["toward_success"], f["toward_failure"], f["either"]) == (0.5, 0.25, 0.75)
     blk = P.paired(by, items, "first", "aligned", "swapped", cluster="product")
     assert blk["n_clusters"] == 2 and blk["n_users"] == 1
     assert P.cluster_of({"id": "x", "user_id": "u", "target_product_id": None}, "product") == "no-product:x"
