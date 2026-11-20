@@ -1,0 +1,76 @@
+    @classmethod
+    def to_json_str(cls, resp: Any) -> str:
+        """
+        Convert a response to a JSON string.
+        """
+
+        def _process(resp: Any) -> str:
+            if isinstance(resp, BaseModel):
+                return resp.model_dump()
+            elif isinstance(resp, str):
+                return resp
+            elif resp is None:
+                return resp
+            elif isinstance(resp, (int, float, bool)):
+                return str(resp)
+            elif isinstance(resp, list):
+                return [_process(item) for item in resp]
+            elif isinstance(resp, tuple):
+                return tuple(_process(item) for item in resp)
+            elif isinstance(resp, dict):
+                return {k: _process(v) for k, v in resp.items()}
+            elif isinstance(resp, (datetime, date)):
+                # TODO: this did not fix the error: Object of type date is not JSON serializable
+                return resp.isoformat()
+            else:
+                raise ValueError(f"Unsupported type: {type(resp)}")
+
+        if not isinstance(resp, str):
+            return json.dumps(_process(resp), default=str)  # FIXME: add default=str
+        return resp
+
+    def set_solo_mode(self, solo_mode: bool):
+        """
+        Set the solo mode of the environment.
+        """
+        self.solo_mode = solo_mode
+        if solo_mode:
+            self.validate_solo_mode()
+
+    def validate_solo_mode(self) -> None:
+        """
+        Validate the tool call in solo mode.
+        """
+        assistant_tool_names = set(self.tools.get_tools().keys())
+        user_tool_names = (
+            set(self.user_tools.get_tools().keys())
+            if self.user_tools is not None
+            else set()
+        )
+        overlap = assistant_tool_names & user_tool_names
+        if len(overlap) > 0:
+            raise ValueError(f"Tool names overlap: {overlap}")
+
+    def get_response(self, message: ToolCall) -> ToolMessage:
+        """
+        Get the response of the domain. This also calls sync_tools.
+        Args:
+            message: The message to get the response for.
+        Returns:
+            The response of the tool call.
+        """
+        error = False
+        try:
+            resp = self.make_tool_call(
+                message.name, requestor=message.requestor, **message.arguments
+            )
+            self.sync_tools()
+        except Exception as e:
+            resp = f"Error: {e}"
+            error = True
+        logger.debug(f"Response: {resp}")
+        resp = self.to_json_str(resp)
+        return ToolMessage(
+            id=message.id,
+            content=resp,
+            requestor=message.requestor,

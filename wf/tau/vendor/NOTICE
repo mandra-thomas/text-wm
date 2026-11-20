@@ -1,0 +1,14 @@
+Files in this directory come from tau2-bench (https://github.com/sierra-research/tau2-bench),
+commit c06b07dd7c4d4ec61ba6ff9bcdf0b15dd7ef36d4, retail domain, under the MIT licence in LICENSE
+(Copyright (c) 2025 Sierra Research).
+
+- db.json.gz: gzip (mtime 0) of data/tau2/domains/retail/db.json, unmodified.
+- policy.md: data/tau2/domains/retail/policy.md, unmodified.
+- tools_openai.json: the OpenAI schemas of the retail agent tools, exported from the upstream
+  environment at that commit (get_environment().get_tools(), Tool.openai_schema).
+- upstream/*.txt: upstream source files kept as reference text (not imported):
+  src/tau2/domains/retail/tools.py, src/tau2/domains/retail/data_model.py,
+  src/tau2/utils/text_match.py, and lines 420-495 of src/tau2/environment/environment.py.
+
+wf/tau/retail.py is a port of upstream's retail toolkit; it is checked byte for byte against upstream
+by scripts/tau_upstream_equivalence.py. MANIFEST.json lists the sha256 of every file here.
