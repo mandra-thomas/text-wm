@@ -85,6 +85,10 @@ def test_score_every_arm_both_models_then_resume(mock_runs):
             and A.not_used_up_goal(it) for it in items)
         assert m["per_model"][tag]["competence"]["neutral"]["all"]["auc"] == m["per_model"][tag]["competence"]["neutral"]["all"]["auc"]
         assert "perm_p" not in json.dumps(m["per_model"][tag]["descriptive"])  # descriptive readouts carry no p-values
+        assert m["per_model"][tag]["descriptive"]["needs_arithmetic_as_logged_in_A2"]["n_items"] == sum(
+            it["population"] == "main" and it["needs_arithmetic"] for it in items) < m["items"]["main"]
+        assert m["per_model"][tag]["descriptive"]["primary_without_used_up_on_goal"]["n_items"] == sum(
+            it["population"] == "main" and A.not_used_up_goal(it) for it in items)
     assert set(m["verdicts"]) == set(S.CO_PRIMARY) | {"replicates"}
 
 
@@ -215,6 +219,12 @@ def test_analysis_flags_missing_scores_and_refuses_stale_ones(mock_runs):
     assert A.run_textcraft_analysis(acfg) == 1
     m = json.loads((mock_runs / "runs" / "textcraft_analysis" / "metrics.json").read_text())
     assert m["items"]["missing_primary_scores"] == 1
+    # a missing score on a non-primary arm withholds the verdict too (design 12, B3)
+    path.write_text("\n".join(l for l in full if not (json.loads(l)["transition_id"] == main_id
+                                                    and json.loads(l)["condition"] == "prefix_swapped")) + "\n")
+    assert A.run_textcraft_analysis(acfg) == 1
+    m = json.loads((mock_runs / "runs" / "textcraft_analysis" / "metrics.json").read_text())
+    assert m["items"]["missing_primary_scores"] == 0 and m["items"]["missing_scores_any_arm"] == 1
     stale = [json.loads(l) for l in full]
     stale[0]["item_hash"] = "0" * 16
     path.write_text("".join(json.dumps(r) + "\n" for r in stale))

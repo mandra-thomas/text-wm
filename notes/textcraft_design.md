@@ -482,7 +482,7 @@ The database holds 11 pairs of items whose names differ by a final "s": acacia l
 
 ### B6. The inventory shown after its last change
 
-When a history ends with an inventory look-up after its last get or craft, the prompt shows the inventory before the action verbatim, so the failure can be read off without counting. Every item now stores `inventory_shown_after_last_change` (true when an "Inventory:" reply comes after the last reply that got or crafted something). The counting readout of section 11, A2 is narrowed to the main items that need arithmetic and do not show the inventory after its last change (835; 51 items that need arithmetic show the inventory after its last change items); the readout as logged in A2 is kept as descriptive.
+When a history ends with an inventory look-up after its last get or craft, the prompt shows the inventory before the action verbatim, so the failure can be read off without counting. Every item now stores `inventory_shown_after_last_change` (true when an "Inventory:" reply comes after the last reply that got or crafted something). The counting readout of section 11, A2 is narrowed to the main items that need arithmetic and do not show the inventory after its last change (835 items; of the 886 main items that need arithmetic, 51 show the inventory after its last change; without used up on the goal, the named readout has 833); the readout as logged in A2 is kept as descriptive.
 
 ### B7. Tokenization and golden chat prompts (validation standard, step 7)
 

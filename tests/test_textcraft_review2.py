@@ -284,7 +284,9 @@ def test_tokcheck_passes_a_clean_tokenizer_and_catches_merges(items):
     # a token that spans the end of the prompt and the start of a candidate breaks joined == alone
     assert any("after the prompt than alone" in p for p in T.item_problems(_CharTok(merge=">C"), it, shots))
     # a token that spans the end of the prefix and the object name breaks the prefix split
-    assert any("not a token prefix" in p for p in T.item_problems(_CharTok(merge="craft minecraft"), it, shots))
+    merged = T.item_problems(_CharTok(merge="craft minecraft"), it, shots)
+    assert any("not a token prefix" in p and not p.endswith("after the prompt") for p in merged)  # alone
+    assert any("not a token prefix" in p and p.endswith("after the prompt") for p in merged)  # after the prompt
     assert any("single token" in p for p in T.item_problems(_CharTok(), it, shots, arms=("yn_aligned",)))  # 'Yes' is 3 chars
 
 
@@ -400,10 +402,14 @@ def test_named_readouts_and_competence():
         add(k, "never_obtained", "ingredient", True, False, "aligned", False, False, 3.0); add(k + 1, "never_obtained", "ingredient", True, False, "swapped", False, False, 3.0); k += 2
         add(k, "never_obtained", "ingredient", False, False, "tie", False, False, 1.0); add(k + 1, "never_obtained", "ingredient", False, False, "tie", False, False, 1.0); k += 2
         add(k, "used_up", "goal", True, False, "tie", False, True, 100.0); add(k + 1, "used_up", "goal", True, False, "tie", False, True, 100.0); k += 2
-    r = A.named_readouts(scores, items, [])
+    extra = [{"id": f"u{i}", "pair_id": f"q{i}", "couple_id": f"m{i // 2}", "failure_class": "never_obtained",
+              "role": "ingredient", "object_goal_overlap": False, "object_partner_overlap": False, "population": "usefulness"}
+             for i in range(20)]
+    scores += [{"transition_id": t["id"], "condition": c, "L": v} for t in extra for c, v in (("aligned", 3.0), ("swapped", 0.0))]
+    r = A.named_readouts(scores, items, extra)
     assert r["goal_role"]["estimate"] == pytest.approx(6.0)  # used up on the goal left out
     assert r["ingredient_with_overlap"]["estimate"] == pytest.approx(3.0)
-    assert r["usefulness_only"]["estimate"] == pytest.approx(1.0)
+    assert r["usefulness_only"]["estimate"] == pytest.approx((20 * 1.0 + 20 * 3.0) / 40)  # main couples and the extras
     assert r["history_agreement"]["estimate"] == pytest.approx(((8.0 + 3.0) / 2 - (4.0 + 3.0) / 2) / 2)
     assert r["yes_no"]["estimate"] == pytest.approx(sum([0.8, 0.4, 0.3, 0.3, 0.1, 0.1]) / 6)
     assert r["counting"]["estimate"] == pytest.approx(6.0)
@@ -460,3 +466,108 @@ def test_golden_check_catches_a_different_rendering(items):
     assert G.problems(tok, "x", items, shots, golden) == []
     assert G.problems(_CharTok(merge="Goal"), "x", items, shots, golden)
     assert G.problems(tok, "x", items[1:], shots, {**golden, "item_id": "tc-gone"})
+
+
+def test_populations_by_history_length_and_outcome():
+    """Crafts at the empty history are the empty-history stratum, never main; successes are their own population."""
+    p = next(p for p in B.all_pairs() if p.pair_id not in B.fewshot_pair_ids())
+    states = list(B.states_of(p, B.walk(p, 0)))
+    made0 = B.items_at(p, 0, 0, states[0][1], Counter())
+    assert made0 and {t["population"] for t in made0 if t["action_kind"] == "craft"} == {"empty_history"}
+    later = [t for k, st in states[1:] for t in B.items_at(p, 0, k, st, Counter())]
+    assert {t["population"] for t in later if t["action_kind"] == "craft"} <= {"main", "success"}
+    assert all((t["population"] == "success") == t["reply"].startswith("Crafted ") for t in later)
+
+
+def _uncoupled_pool():
+    """More secondary-get and empty-history items than their quotas, so the seeded round-robin decides."""
+    pool = []
+    for pop, (_t, classes, bins) in B.QUOTAS.items():
+        if pop in ("secondary_get", "empty_history"):
+            for c in classes:
+                for b in bins:
+                    pool += [{"id": f"{pop}-{b}-{k:03d}", "pair_id": f"p{k % 12:03d}", "population": pop, "failure_class": c,
+                              "length_bin": b} for k in range(300)]
+    return pool
+
+
+def test_uncoupled_selection_golden():
+    """Kills a seed that drops the bin and a round-robin that never shuffles: the draw binds here."""
+    import hashlib
+    chosen = B.select(_uncoupled_pool())
+    assert Counter(t["population"] for t in chosen) == Counter({"secondary_get": 400, "empty_history": 100})
+    digest = hashlib.sha256(json.dumps([t["id"] for t in chosen]).encode()).hexdigest()
+    assert digest == GOLDEN_UNCOUPLED, digest
+
+
+GOLDEN_UNCOUPLED = "e7def9625db116269ad3b6d54bc168c8d3ad51b3086feb610670675414d35c02"
+
+
+def test_couple_check_needs_mirrored_measures(items, monkeypatch):
+    """A fit measure that does not change sign with the goals would leave a couple unbalanced: verify reports it."""
+    main = [t for t in items if t["population"] == "main"]
+    a = main[0]
+    b = next(t for t in main if t["couple_id"] == a["couple_id"] and t is not a)
+    assert V.couple_problems([a, b]) == []
+    monkeypatch.setattr(F, "measures", lambda *args: {m: [1, 0] for m in F.MEASURES})
+    assert V.couple_problems([a, b]) == [f"couple {a['couple_id']}: fit measures not mirrored"]
+
+
+def test_regression_interval_is_the_intercepts():
+    assert A.ols_intercept([(2.0 + 1.5 * s, (s,)) for s in (-1, 0, 1, 1, 0)]) == pytest.approx(2.0)
+    items, scores = [], []
+    for i in range(60):
+        s = (-1, 0, 1)[i % 3]
+        fm = {m: [0, 0] for m in F.MEASURES}
+        fm["crafts"] = [1, 0] if s > 0 else [0, 1] if s < 0 else [0, 0]
+        items.append({"id": f"t{i}", "pair_id": f"p{i % 10}", "fit_measures": fm})
+        scores += [{"transition_id": f"t{i}", "condition": "aligned", "L": 2.0 + 5.0 * s},
+                   {"transition_id": f"t{i}", "condition": "swapped", "L": 0.0}]
+    r = A.fit_regression(scores, items)
+    assert r["ci"] == pytest.approx([2.0, 2.0]) and r["slopes"]["crafts"] == pytest.approx(5.0)
+
+
+def test_builder_drops_a_plural_reading_item():
+    """p071 after "get 4 nether brick": the fence needs 4 nether bricks (none held) while 4 nether brick are held."""
+    p = {x.pair_id: x for x in B.all_pairs()}["p071"]
+    st = B.State(W.new_env(p.lines, None)[0], [], {})
+    B.apply(st, "get 4 nether brick")
+    excluded = Counter()
+    made = {t["action"] for t in B.items_at(p, 0, 1, st, excluded)}
+    assert excluded["plural_reading"] == 1
+    assert "craft 6 nether brick fence using 4 nether bricks, 2 nether brick" not in made
+    assert "craft 1 red nether bricks using 2 nether wart, 2 nether brick" in made  # nether brick is not short here
+
+
+def test_verify_reports_a_broken_mirrored_couple(items):
+    use = [t for t in items if t["population"] == "usefulness"]
+    by = {}
+    for t in use:
+        by.setdefault(t["couple_id"], []).append(t)
+    a, b = next(v for v in by.values() if any(B.fit_profile(v[0])))
+    assert V.couple_problems([a, b]) == []
+    assert V.couple_problems([a, {**b, "fit_measures": a["fit_measures"]}]) == [f"couple {a['couple_id']}"]
+    assert V.couple_problems([a, {**b, "length_bin": "0"}]) and V.couple_problems([a, {**b, "couple_id": a["couple_id"], "id": "x"}])
+
+
+def test_equivalence_reads_the_90_percent_interval():
+    rng = random.Random(11)
+    items = [{"id": f"t{i}", "pair_id": f"p{i % 30}"} for i in range(300)]
+    scores = []
+    for t in items:
+        scores += [{"transition_id": t["id"], "condition": "aligned", "L": rng.gauss(0.3, 2.0)},
+                   {"transition_id": t["id"], "condition": "swapped", "L": 0.0}]
+    by = {s["transition_id"]: s["L"] for s in scores if s["condition"] == "aligned"}
+    boots = A._cluster_boots(lambda xs: sum(xs) / len(xs), [by[t["id"]] for t in items], [t["pair_id"] for t in items])
+    hi90, hi95 = A._pct(boots, 0.95), A._pct(boots, 0.975)
+    assert hi90 < hi95 and -A._pct(boots, 0.05) < hi90
+    margin = (hi90 + hi95) / 2  # inside the 95% upper end, outside the 90% one
+    eq = A.equivalence(scores, items, margin)
+    assert eq["equivalent"] and eq["ci90"] == pytest.approx([A._pct(boots, 0.05), hi90])
+
+
+def test_verify_reports_a_success_label_on_a_failure(items):
+    fail = next(t for t in items if t["population"] == "main")
+    assert "reply and class disagree on success" in V.replay_problems({**fail, "failure_class": "success"})
+    succ = next(t for t in items if t["population"] == "success")
+    assert "reply and class disagree on success" in V.replay_problems({**succ, "failure_class": "too_few"})
