@@ -248,6 +248,35 @@ MUTANTS = [
     ("submit.sh overrides a script's GPU request", "pace/submit.sh",
      'if [[ -n "${PACE_GRES:-}" ]] && ! script_sets gres && ! script_sets partition; then',
      'if [[ -n "${PACE_GRES:-}" ]]; then'),
+    # Mechanism battery (wf/mech2.py, 2026-11-20): templates, positions, items, contrasts, categories, gate, resume.
+    ('mech2 desire_keep not reversed', 'wf/mech2.py', 'is not {pp}; leave it where it is."', 'is {pp}; leave it where it is."'),
+    ('mech2 desire_check presupposes the object', 'wf/mech2.py', 'find out whether {a} {obj} can be', 'find out whether the {obj} can be'),
+    ('mech2 ignore sentence on the real task', 'wf/mech2.py', 'MENTION_IGNORE.format(swapped=t["swapped_task_line"], obj=obj)', 'MENTION_IGNORE.format(swapped=t["task_line"], obj=obj)'),
+    ('mech2 done quotes the swapped task', 'wf/mech2.py', 'return DONE.format(task=_task_text(t["task_line"]))', 'return DONE.format(task=_task_text(t["swapped_task_line"]))'),
+    ('mech2 described arm keeps the name', 'wf/mech2.py', 'rq1x.describe_line(t["task_line"], obj) if base == "described"', 't["task_line"] if base == "described"'),
+    ('mech2 start puts the task line last', 'wf/mech2.py', 'return "\\n".join([line] + lines)', 'return "\\n".join(lines + [line])'),
+    ('mech2 end arms skipped at every step', 'wf/mech2.py', 'if alias_of(t, arm) or task_line(t, arm) is None:', 'if arm.endswith("_end") or task_line(t, arm) is None:'),
+    ('mech2 alias reads the aligned score', 'wf/mech2.py', '        return arm.rsplit("_", 1)[0]\n    return None', '        return "aligned"\n    return None'),
+    ('mech2 alias fallback at every step', 'wf/mech2.py', '        base = alias_of(t, arm)\n', '        base = arm.rsplit("_", 1)[0] if arm in POSITION_ARMS else None\n'),
+    ('mech2 yes/no keeps the observation cue', 'wf/mech2.py', 'last["content"][: -len("Next observation:")] + rq1v.YN_QUESTION', 'last["content"] + "\\n" + rq1v.YN_QUESTION'),
+    ('mech2 sample allocated equally', 'wf/mech2.py', 'exact = {k: len(v) * n / total for k, v in strata.items()}', 'exact = {k: n / len(strata) for k, v in strata.items()}'),
+    ('mech2 sample follows input order', 'wf/mech2.py', 'chosen |= {t["id"] for t in sorted(ts, key=lambda t: _rank(t["id"]))[:quota[k]]}', 'chosen |= {t["id"] for t in ts[:quota[k]]}'),
+    ('mech2 step-0 items not added', 'wf/mech2.py', '"union": [t for t in primary if t["id"] in sample | step0]', '"union": [t for t in primary if t["id"] in sample]'),
+    ('mech2 contrast sign flipped', 'wf/mech2.py', 'return sum(c * v for (c, _), v in zip(terms, vals))', 'return -sum(c * v for (c, _), v in zip(terms, vals))'),
+    ('mech2 ratio over its own size', 'wf/mech2.py', '            den = _mean([r for _, r in xs])\n', '            den = _mean([abs(d) for d, _ in xs])\n'),
+    ('mech2 Holm skipped', 'wf/mech2.py', 'r["holm_p"] = adj[name]', 'r["holm_p"] = r["p"]'),
+    ('mech2 null band widened', 'wf/mech2.py', 'NULL_BAND = 0.25', 'NULL_BAND = 0.5'),
+    ('mech2 large threshold lowered', 'wf/mech2.py', 'LARGE = 0.5  #', 'LARGE = 0.25  #'),
+    ('mech2 P5 against swapped', 'wf/mech2.py', '"P5_done_vs_cancelled": {"terms": ((1, "done"), (-1, "cancelled")), "population": "sample_placement"', '"P5_done_vs_cancelled": {"terms": ((1, "done"), (-1, "swapped")), "population": "sample_placement"'),
+    ('mech2 P5 includes examine tasks', 'wf/mech2.py', '(-1, "cancelled")), "population": "sample_placement"', '(-1, "cancelled")), "population": "sample"'),
+    ('mech2 item share counts ties toward Yes', 'wf/mech2.py', 'lambda xs: sum(x > 0 for x in xs) / len(xs)', 'lambda xs: sum(x >= 0 for x in xs) / len(xs)'),
+    ('mech2 gate failure ignored', 'wf/mech2.py', '    if not rec["ok"]:\n        raise TokenizationMismatch', '    if False:\n        raise TokenizationMismatch'),
+    ('mech2 gate accepts any revision', 'wf/mech2.py', 'if not scorer.revision or scorer.revision != C.REVISIONS.get(model_name):', 'if not scorer.revision:'),
+    ('mech2 gate accepts a multi-token answer', 'wf/mech2.py', '        if len(ids) != 1:\n', '        if len(ids) < 1:\n'),
+    ('mech2 resume rescores saved work', 'wf/mech2.py', 'todo = [(t, a, f) for t, a, f in work if (tag, t["id"], condition(a, f)) not in done]', 'todo = list(work)'),
+    ('mech2 done contradicted with a target unseen', 'wf/mech2.py', 'if not targets or any(r not in facts.contents for r in targets):', 'if not targets or all(r not in facts.contents for r in targets):'),
+    ('mech2 overlap read against set 1 only', 'wf/mech2.py', 'kind = ("aligned" if t["task_line"].strip() in lines[k] else', 'kind = ("aligned" if t["task_line"].strip() in lines[1] else'),
+    ('mech2 knowledge split reversed', 'wf/mech2.py', 'return None if a is None or b is None else a < 0 < b', 'return None if a is None or b is None else a > 0'),
 ]
 
 
@@ -263,12 +292,17 @@ def _covering_tests(work: Path, rel: str) -> list[str]:
     return found or ["tests"]
 
 
+KILLERS: dict[str, str] = {}  # mutant -> the first test that failed on it, printed with the outcome
+
+
 def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900) -> str:
     try:
-        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", *targets],
+        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", "-rf", *targets],
                                 cwd=work, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return "timeout"
+    failed = [ln.split(" ", 1)[1].split(" - ", 1)[0] for ln in result.stdout.splitlines() if ln.startswith("FAILED ")]
+    KILLERS["last"] = failed[0] if failed else ""
     return "killed" if result.returncode != 0 else "survived"
 
 
@@ -308,7 +342,8 @@ def main() -> int:
                 outcome = _run_tests(python, work, ["tests"], timeout)
             path.write_text(source, encoding="utf-8")
             label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]
-            print(f"{label}  {name}", flush=True)
+            killer = KILLERS.get("last", "") if outcome == "killed" else ""
+            print(f"{label}  {name}" + (f"  [{killer}]" if killer else ""), flush=True)
             if outcome == "survived":
                 survivors.append(name)
             elif outcome == "timeout":

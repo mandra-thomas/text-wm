@@ -40,6 +40,51 @@ These were planned on 2026-11-17 and were all in use before any confirmatory ite
   - ICE's automatic `&cuda13` made the any-GPU constraint invalid.
 - **Part-wise verification.** A shard's items can be replayed in parts, each a separate job with a fresh server, because the server leaks memory per reset. The RQ2 gate accepts a complete set of passing parts made on the same file, with every item replayed once.
 
+## Mechanism battery (added 2026-11-20, before any of its scores)
+
+`tests/test_mech2.py` covers `wf/mech2.py` (design: `mechanism2_design.md`):
+
+- **Templates.** Every arm builds for every ALFWorld task template (two wordings per type where the data have two) and every verb (take, move, heat, cool, clean), at step 0 and after; the exact text of each template; existence presupposed only by desire_keep and mention_ignore; no instance named except the action's receptacle in desire_check; the described arms name no object.
+- **Prompts differ only where intended.** Every content arm's prompt equals the aligned prompt with only the task line replaced, in both formats; only the aligned, done and cancelled arms show the real task; a position arm changes only the task line's position, and the line is first (start) or last (end); the step-0 `_end` arms repeat the plain prompt and are not scored; the yes/no prompt equals the two-candidate prompt up to rq1v's question; the reused arms equal `rq1_score`'s, `rq1x_score`'s and `rq1v_score`'s prompts message for message. `scripts/check_mech2_prompts.py` runs the same checks on every real item of the battery (no problems found on 2026-11-20; 20,017 prompts per format per model).
+- **Items.** The sample is proportional by (game, failure reason), seeded and independent of input order; every step-0 item is added; the "done" contradiction flag.
+- **Analysis on synthetic data.** Each account's fingerprint (H2, H3, H4, H5) is planted in synthetic scores (40 games, 12 items each); the readout finds the planted account with no contradicted contrast and every other account contradicted at least once. A planted position effect is read as H6 and contradicts H2, H4 and H5 on P6. Also: contrast signs and the size ratio, Holm within the family, the category rules, P5 restricted to placement tasks, the item share counting ties against Yes, the alias lookup, the few-shot overlap and knowledge-split checks.
+- **Gate and runner.** The tokenization gate passes a clean template, stops on a space before the reply or a multi-token "Yes", and refuses an unpinned revision; a failed gate stops the run before any score; two shards then the analysis end to end on mock data (every job scored once, pinned revision on every record); a resume scores nothing twice.
+
+**Deliberate bugs.** 28 mutants of `wf/mech2.py` were added to `scripts/mutation_check.py`, which now prints the first failing test for each. Run on 2026-11-20 (`MUTANTS_MATCHING=mech2`): all 28 killed, none timed out.
+
+| Mutant | Killed by (`tests/test_mech2.py::`) |
+| --- | --- |
+| desire_keep not reversed | `test_templates_read_as_written` |
+| desire_check presupposes the object | `test_templates_read_as_written` |
+| ignore sentence on the real task | `test_templates_read_as_written` |
+| done quotes the swapped task | `test_templates_read_as_written` |
+| described arm keeps the name | `test_described_arms_name_no_object` |
+| start puts the task line last | `test_position_arms_move_only_the_task_line` |
+| end arms skipped at every step | `test_jobs_cover_every_arm_and_skip_aliases` |
+| alias reads the aligned score | `test_usual_position_and_aliases` |
+| alias fallback at every step | `test_alias_reads_the_plain_score` |
+| yes/no keeps the observation cue | `test_yes_no_differs_only_in_the_question` |
+| sample allocated equally | `test_sample_is_stratified_seeded_and_order_free` |
+| sample follows input order | `test_sample_is_stratified_seeded_and_order_free` |
+| step-0 items not added | `test_battery_items_add_every_step0_item` |
+| contrast sign flipped | `test_each_planted_fingerprint_is_read_as_its_own_account[H2_evidence]` |
+| ratio over its own size | `test_a_planted_position_effect_is_read_as_an_artefact` |
+| Holm skipped | `test_holm_is_applied_within_the_family` |
+| null band widened | `test_categories_follow_the_rules` |
+| large threshold lowered | `test_categories_follow_the_rules` |
+| P5 against swapped | `test_each_planted_fingerprint_is_read_as_its_own_account[H3_salience]` |
+| P5 includes examine tasks | `test_p5_reads_placement_tasks_only` |
+| item share counts ties toward Yes | `test_item_share_counts_ties_against` |
+| gate failure ignored | `test_gate_stops_on_a_space_before_the_reply_or_a_split_word` |
+| gate accepts any revision | `test_gate_refuses_an_unpinned_revision` |
+| gate accepts a multi-token answer | `test_gate_stops_on_a_space_before_the_reply_or_a_split_word` |
+| resume rescores saved work | `test_resume_scores_nothing_twice` |
+| done contradicted with a target unseen | `test_done_contradicted_only_when_every_target_was_seen_without_the_object` |
+| overlap read against set 1 only | `test_fewshot_overlap_finds_a_planted_overlap_boost` |
+| knowledge split reversed | `test_knowledge_split_reads_mech_state_questions` |
+
+The gate's tests use a stand-in tokenizer and template: the laptop has no transformers, so the gate meets the real Qwen3 and Llama 3.1 templates first in `mech2_score_smoke` on ICE.
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:
