@@ -69,3 +69,47 @@ def test_examples_use_their_own_goal_lines():
     m = P.messages(V.read_items()[0], "aligned")
     for ex, user in zip(P.fewshot_examples(), m[1:-1:2]):
         assert f"\n\nGoal: craft {ex['goal']}.\n" in user["content"]
+
+
+def test_each_condition_shows_its_own_goal_line(items):
+    """The goal line is read off the rendered query, not through P.task_line (a wrong map would pass a diff test)."""
+    for it in items[::50]:
+        for arm, field in (("aligned", "task_line"), ("swapped", "swapped_task_line"), ("neutral", "neutral_task_line")):
+            query = P.messages(it, arm)[-1]["content"]
+            assert [ln for ln in query.split("\n") if ln.startswith("Goal: ")] == [it[field]]
+        neutral = P.messages(it, "neutral")[-1]["content"]
+        assert "Goal: craft" not in neutral and "Goal: explore the crafting commands." in neutral
+
+
+def test_prefix_arms_share_the_prompt_and_drop_the_object_name(items):
+    it = next(t for t in items if t["action_kind"] == "craft")
+    for c in ("aligned", "swapped"):
+        assert P.messages(it, f"prefix_{c}") == P.messages(it, c)
+    assert P.candidates(it, "prefix_aligned") == (it["prefix_candidates"]["o_plus"], it["prefix_candidates"]["o_minus"])
+    plus, minus = P.candidates(it, "prefix_swapped")
+    assert minus == "Could not find enough items to craft" and plus.startswith("Crafted ") and len(plus.split()) == 2
+    assert it["object"] not in plus + minus and W.item_id(it["object"]) not in plus + minus
+    get = next(t for t in items if t["action_kind"] == "get")
+    assert P.candidates(get, "prefix_aligned") == ("Got 1", "Could not find")
+    assert set(P.ARMS) == {"aligned", "swapped", "neutral", "yn_aligned", "yn_swapped", "yn_neutral",
+                           "prefix_aligned", "prefix_swapped"}
+
+
+def test_verify_reports_a_broken_prompt(items, monkeypatch):
+    """Negative test: a prompt that differs beyond the goal line must be reported."""
+    shots = P.fewshot_examples()
+    it = items[0]
+    real = P.messages
+
+    def broken(item, arm, fewshot=None):
+        out = real(item, arm, fewshot)
+        if arm == "swapped":
+            out[-1] = {**out[-1], "content": out[-1]["content"].replace("Action: ", "Action:  ", 1)}
+        return out
+    monkeypatch.setattr(P, "messages", broken)
+    assert any("swapped" in p for p in V.prompt_problems(it, shots))
+    # every arm rendering the aligned line (questions and prefixes kept consistent) is caught by the goal-line check
+    monkeypatch.setattr(P, "messages", lambda item, arm, fewshot=None: real(
+        item, arm.replace("swapped", "aligned").replace("neutral", "aligned"), fewshot))
+    assert V.prompt_problems(it, shots) == ["swapped: the query's goal line is not the item's swapped_task_line",
+                                            "neutral: the query's goal line is not the item's neutral_task_line"]

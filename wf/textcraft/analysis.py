@@ -3,7 +3,9 @@
 Primary: ΔL = mean of L(aligned) - L(swapped) on the main population, per model, with a 95% percentile bootstrap
 that resamples goal pairs and a sign-flip permutation p that flips whole goal pairs, Holm-adjusted over the two
 models. The prediction is confirmed for a model when ΔL > 0, the interval excludes zero and the Holm p < 0.01.
-Everything else is exploratory.
+Named secondary readouts, logged before any score (design section 11): ΔL on the main items that need arithmetic
+(A2), and the prefix-only ΔL with its name-token remainder (A4). Everything else is exploratory. Scores are joined
+to items by id and item hash; a score whose item has changed stops the analysis.
 """
 from __future__ import annotations
 
@@ -16,27 +18,43 @@ from wf.analysis.report import write_run_report
 from wf.analysis.stats import cluster_bootstrap, holm, pair_permutation, prereg_rq2_verdict
 from wf.rq2 import complete_shards
 from wf.runs import _init_run
-from wf.textcraft.score import CO_PRIMARY, load_items, verified_files
+from wf.textcraft.score import CO_PRIMARY, item_hash, load_items, verified_files
 from wf.util import read_jsonl, require_filed, sigmoid, write_json, write_status
 
 P_MAX = 0.01
 
 
+def _value(s: dict | None, value: str) -> float | None:
+    if not s:
+        return None
+    v = sigmoid(s["L"]) * 100.0 if value == "p" else s.get(value)
+    return None if v is None or v != v else v
+
+
 def effect(scores: list[dict], items: list[dict], a: str, b: str, value: str = "L") -> dict[str, Any]:
     """Mean of value(a) - value(b) over items with both, clustered by goal pair."""
+    def diff(by, tid):
+        u, v = _value(by.get((tid, a)), value), _value(by.get((tid, b)), value)
+        return None if u is None or v is None else u - v
+    return effect_of(scores, items, diff)
+
+
+def name_remainder(by: dict, tid: str) -> float | None:
+    """[L(aligned) - L(prefix_aligned)] - [L(swapped) - L(prefix_swapped)]: the part of ΔL carried by the object
+    name's tokens after each reply's prefix (design section 11, A4)."""
+    v = [_value(by.get((tid, arm)), "L") for arm in ("aligned", "prefix_aligned", "swapped", "prefix_swapped")]
+    return None if None in v else (v[0] - v[1]) - (v[2] - v[3])
+
+
+def effect_of(scores: list[dict], items: list[dict], diff) -> dict[str, Any]:
+    """Mean over items of diff(scores by (item, arm), item id), skipping None, clustered by goal pair."""
     by = {(s["transition_id"], s["condition"]): s for s in scores}
     diffs, pairs = [], []
     for t in items:
-        x, y = by.get((t["id"], a)), by.get((t["id"], b))
-        if not x or not y:
+        d = diff(by, t["id"])
+        if d is None:
             continue
-        if value == "p":
-            u, v = sigmoid(x["L"]) * 100.0, sigmoid(y["L"]) * 100.0
-        else:
-            u, v = x.get(value), y.get(value)
-        if u is None or v is None or u != u or v != v:
-            continue
-        diffs.append(u - v)
+        diffs.append(d)
         pairs.append(t["pair_id"])
     mean = lambda xs: sum(xs) / len(xs) if xs else float("nan")
     boot = cluster_bootstrap(mean, diffs, pairs, seed=C.RNG_SEED)
@@ -58,24 +76,45 @@ def readouts(scores: list[dict], items: list[dict]) -> dict[str, Any]:
         "delta_L": effect(scores, items, "aligned", "swapped"),
         "delta_L_first": effect(scores, items, "aligned", "swapped", "L_first"),
         "delta_p_pp": effect(scores, items, "aligned", "swapped", "p"),
+        "delta_L_prefix": effect(scores, items, "prefix_aligned", "prefix_swapped"),
+        "delta_L_name_remainder": effect_of(scores, items, name_remainder),
         "aligned_minus_neutral": effect(scores, items, "aligned", "neutral"),
         "swapped_minus_neutral": effect(scores, items, "swapped", "neutral"),
         "yes_no_aligned_minus_swapped": effect(scores, items, "yn_aligned", "yn_swapped"),
         "yes_no_aligned_minus_neutral": effect(scores, items, "yn_aligned", "yn_neutral"),
-        "levels": {arm: level(scores, items, arm) for arm in ("aligned", "swapped", "neutral", "yn_aligned", "yn_swapped", "yn_neutral")},
+        "levels": {arm: level(scores, items, arm) for arm in ("aligned", "swapped", "neutral", "yn_aligned", "yn_swapped",
+                                                             "yn_neutral", "prefix_aligned", "prefix_swapped")},
     }
+
+
+STRATA = {  # name -> the item fields whose values define the stratum (design sections 6 and 11)
+    "failure_class": ("failure_class",), "length_bin": ("length_bin",), "role": ("role",),
+    "role_x_class": ("role", "failure_class"), "history_fit": ("history_fit",),
+    "class_x_history_fit": ("failure_class", "history_fit"), "pure_class": ("pure_class",),
+    "needs_arithmetic": ("needs_arithmetic",), "role_x_object_goal_overlap": ("role", "object_goal_overlap"),
+    "object_partner_overlap": ("object_partner_overlap",),
+}
 
 
 def strata(scores: list[dict], items: list[dict]) -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for field in ("failure_class", "length_bin", "role"):
+    for name, fields in STRATA.items():
         groups = defaultdict(list)
         for t in items:
-            groups[t[field]].append(t)
-        out[field] = {k: {"delta_L": effect(scores, v, "aligned", "swapped"),
-                          "aligned_minus_neutral": effect(scores, v, "aligned", "neutral"),
-                          "yes_no": effect(scores, v, "yn_aligned", "yn_swapped")} for k, v in sorted(groups.items())}
+            groups["|".join(str(t[f]) for f in fields)].append(t)
+        out[name] = {k: {"delta_L": effect(scores, v, "aligned", "swapped"),
+                         "aligned_minus_neutral": effect(scores, v, "aligned", "neutral"),
+                         "yes_no": effect(scores, v, "yn_aligned", "yn_swapped"),
+                         "delta_L_prefix": effect(scores, v, "prefix_aligned", "prefix_swapped")}
+                     for k, v in sorted(groups.items())}
     return out
+
+
+def stale_scores(scores: list[dict], items: list[dict]) -> list[str]:
+    """Scores that do not belong to the current items: unknown id, or an item hash other than the item's now."""
+    hashes = {t["id"]: item_hash(t) for t in items}
+    return sorted({f"{s['transition_id']} ({'unknown item' if s['transition_id'] not in hashes else 'item changed'})"
+                   for s in scores if hashes.get(s["transition_id"]) != s.get("item_hash")})
 
 
 def verdicts(primary: dict[str, dict]) -> dict[str, Any]:
@@ -105,6 +144,11 @@ def run_textcraft_analysis(cfg: dict) -> int:
         return 1
     items = load_items(files[0])
     scores = [s for p in folders for s in read_jsonl(p / "scoring.jsonl")]
+    stale = stale_scores(scores, items)
+    if stale:
+        write_status(run_id, f"{len(stale)} scored items do not match the verified items (rescore them):\n"
+                     + "\n".join(stale[:20]), ok=False)
+        return 1
     pops = {pop: [t for t in items if t["population"] == pop] for pop in ("main", "secondary_get", "empty_history")}
     models = [m for m in CO_PRIMARY if m in cfg.get("models", CO_PRIMARY)]
     wanted = {(m, t["id"], a) for m in models for t in pops["main"] for a in ("aligned", "swapped")}
@@ -114,6 +158,8 @@ def run_textcraft_analysis(cfg: dict) -> int:
         mine = [s for s in scores if s["model"] == m]
         primary[m] = effect(mine, pops["main"], "aligned", "swapped")
         per_model[m] = {"primary_delta_L": primary[m],
+                        "secondary_delta_L_needs_arithmetic": effect(
+                            mine, [t for t in pops["main"] if t["needs_arithmetic"]], "aligned", "swapped"),
                         "main": {**readouts(mine, pops["main"]), "strata": strata(mine, pops["main"])},
                         "secondary_get": readouts(mine, pops["secondary_get"]),
                         "empty_history": readouts(mine, pops["empty_history"])}

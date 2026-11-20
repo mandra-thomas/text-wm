@@ -93,8 +93,13 @@ def test_check_item_reports_each_disagreement():
     item = {"recipe_lines": LINES, "history": USED_UP, "action": "craft 4 stick using 2 oak planks", "action_kind": "craft",
             "reply": "Could not find enough items to craft minecraft:stick", "failure_class": "used_up",
             "twin": "Crafted 4 minecraft:stick", "topup": {"oak planks": 2},
-            "short_inputs": [{"name": "oak planks", "need": 2, "held": 0, "peak": 4, "kind": "used_up"}]}
+            "short_inputs": [{"name": "oak planks", "need": 2, "held": 0, "peak": 4, "kind": "used_up"}],
+            "pure_class": True, "needs_arithmetic": True, "goal": "ladder", "partner": "minecart",
+            "history_fit": "aligned", "history_fit_counts": {"aligned": 4, "swapped": 0}}
     assert K.check_item(item) == []
+    assert K.check_item({**item, "needs_arithmetic": False})
+    assert K.check_item({**item, "pure_class": False})
+    assert K.check_item({**item, "history_fit": "swapped"})
     assert K.check_item({**item, "failure_class": "too_few"})
     assert K.check_item({**item, "topup": {"oak planks": 4}})
     assert K.check_item({**item, "reply": "Could not find enough items to craft stick"})

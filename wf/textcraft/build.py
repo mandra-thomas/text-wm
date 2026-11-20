@@ -38,6 +38,26 @@ QUOTAS = {  # population -> (total, classes, bins)
     "empty_history": (100, ("never_obtained",), ("0",)),
 }
 NEUTRAL_LINE = "Goal: explore the crafting commands."
+FITS = ("aligned", "swapped", "tie")
+
+_WOODS = ("oak", "spruce", "birch", "jungle", "acacia", "dark oak")
+_PER_WOOD = {**{f"{w} logs": (f"{w} log", f"{w} wood", f"stripped {w} log", f"stripped {w} wood") for w in _WOODS},
+             **{f"{s} stems": (f"{s} stem", f"{s} hyphae", f"stripped {s} stem", f"stripped {s} hyphae")
+                for s in ("crimson", "warped")}}
+# The 14 JSON tags that upstream's clean_up_recipes turns into plain, fetchable items (design section 2), each with
+# the items of the frozen database that belong to the same Minecraft tag. A reader who knows Minecraft may take a
+# held member to fill the name, so a test action whose short input is one of these names while a member is held
+# is excluded (design section 11, A1). Members absent from the database (charcoal, soul sand, soul soil, cobbled
+# deepslate) are left out; a test checks that every listed member is a valid item.
+TAG_READING: dict[str, tuple[str, ...]] = {
+    **_PER_WOOD,
+    "logs": tuple(sorted(set(_PER_WOOD) | {m for ms in _PER_WOOD.values() for m in ms})),
+    "coals": ("coal",),
+    "stone crafting materials": ("blackstone", "cobblestone"),
+    "stone tool materials": ("blackstone", "cobblestone"),
+    "wooden slabs": tuple(f"{w} slab" for w in _WOODS + ("crimson", "warped")),
+    "soul fire base blocks": (),
+}
 
 
 def goal_line(goal: str) -> str:
@@ -276,6 +296,52 @@ def classify(state: State, inputs: list[tuple[int, str]]) -> tuple[str | None, l
     return next((k for k in CLASSES if k in kinds), None), short
 
 
+def tag_reading_ambiguous(state: State, short: list[dict]) -> bool:
+    """A short input is one of the 14 tag-derived names while a Minecraft member of it is held (design 11, A1)."""
+    return any(state.held(m) > 0 for s in short for m in TAG_READING.get(s["name"], ()))
+
+
+@lru_cache(maxsize=None)
+def tree_names(goal: str) -> frozenset[str]:
+    """Every name on the lines of the goal's recipe tree: outputs and inputs (design section 11, A3)."""
+    idx = line_index()
+    out: set[str] = set()
+    for text in W.recipe_tree(W.item_id(goal)):
+        ln = idx[text]
+        out.add(ln.out)
+        out |= {n for _c, n, _g in ln.inputs}
+    return frozenset(out)
+
+
+def step_object(reply: str) -> str | None:
+    """The item a successful history step produced: the fetched item, or the crafted output."""
+    if reply.startswith("Got "):
+        return reply.split(" ", 2)[2]
+    if reply.startswith("Crafted "):
+        return W.name_of(reply.split(" ", 2)[2])
+    return None
+
+
+def history_fit(history: list, goal: str, partner: str) -> tuple[str, dict[str, int]]:
+    """Which goal the history works toward: steps whose object is in only that goal's tree names (design 11, A3)."""
+    a, p = tree_names(goal), tree_names(partner)
+    objs = [step_object(o) for _a, o in history]
+    n = {"aligned": sum(o in a - p for o in objs), "swapped": sum(o in p - a for o in objs)}
+    fit = "aligned" if n["aligned"] > n["swapped"] else "swapped" if n["swapped"] > n["aligned"] else "tie"
+    return fit, n
+
+
+def shares_word(a: str, b: str) -> bool:
+    return bool(set(a.split(" ")) & set(b.split(" ")))
+
+
+def prefix_candidates(action_kind: str, twin: str) -> dict[str, str]:
+    """The two replies with the object name removed (design section 11, A4)."""
+    if action_kind == "craft":
+        return {"o_plus": " ".join(twin.split(" ")[:2]), "o_minus": "Could not find enough items to craft"}
+    return {"o_plus": " ".join(twin.split(" ")[:2]), "o_minus": "Could not find"}
+
+
 def topped_up_reply(state: State, short: list[dict], action: str) -> str:
     env = W.clone(state.env)
     for s in short:
@@ -325,11 +391,22 @@ def items_at(pair: Pair, seed: int, t: int, state: State, excluded: Counter) -> 
                 if not twin.startswith("Crafted "):
                     excluded["wrong_recipe"] += 1
                     continue
+                if tag_reading_ambiguous(state, short):
+                    excluded["tag_reading"] += 1
+                    continue
                 item = {**base, "action_kind": "craft", "failure_class": cls, "short_inputs": short,
                         "twin": twin, "twin_source": "env_topup",
                         "topup": {s["name"]: s["need"] - s["held"] for s in short},
-                        "population": "main" if t >= 1 else "empty_history"}
+                        "population": "main" if t >= 1 else "empty_history",
+                        "pure_class": len({s["kind"] for s in short}) == 1,
+                        "needs_arithmetic": all(s["peak"] > 0 for s in short)}
+            if line is None:
+                item["pure_class"] = item["needs_arithmetic"] = None
             item["candidates"] = {"o_plus": item["twin"], "o_minus": item["reply"]}
+            item["prefix_candidates"] = prefix_candidates(item["action_kind"], item["twin"])
+            item["history_fit"], item["history_fit_counts"] = history_fit(state.history, goal, partner)
+            item["object_goal_overlap"] = shares_word(obj, goal)
+            item["object_partner_overlap"] = shares_word(obj, partner)
             item["id"] = item_id_for(pair.pair_id, item["history"], action)
             out.append(item)
     return out
@@ -385,9 +462,37 @@ def _round_robin(items: list[dict], n: int, rng: random.Random) -> list[dict]:
     return chosen
 
 
+ROLES = ("goal", "ingredient")
+COUPLE_FITS = ("aligned", "swapped")
+
+
+def select_main(pool: list[dict], total: int, classes: tuple[str, ...], bins: tuple[str, ...]) -> list[dict]:
+    """Main items in couples: within each class x bin x role cell, as many items whose history favours the aligned
+    goal as items whose history favours the partner; ties are not drawn (design section 11, A3)."""
+    cells = {(c, b, r, f): [] for c in classes for b in bins for r in ROLES for f in FITS}
+    for it in pool:
+        if it["population"] == "main":
+            cells[(it["failure_class"], it["length_bin"], it["role"], it["history_fit"])].append(it)
+    cap = {(c, b, r): min(len(cells[(c, b, r, f)]) for f in COUPLE_FITS) for c in classes for b in bins for r in ROLES}
+    chosen = []
+    per_class = _split(total // 2, {c: sum(cap[(c, b, r)] for b in bins for r in ROLES) for c in classes})
+    for c in classes:
+        per_bin = _split(per_class[c], {b: sum(cap[(c, b, r)] for r in ROLES) for b in bins})
+        for b in bins:
+            per_role = _split(per_bin[b], {r: cap[(c, b, r)] for r in ROLES})
+            for r in ROLES:
+                for f in COUPLE_FITS:
+                    rng = random.Random(f"{SEED}|textcraft|select|main|{c}|{b}|{r}|{f}")
+                    chosen += _round_robin(cells[(c, b, r, f)], per_role[r], rng)
+    return chosen
+
+
 def select(pool: list[dict]) -> list[dict]:
     chosen = []
     for population, (total, classes, bins) in QUOTAS.items():
+        if population == "main":
+            chosen += select_main(pool, total, classes, bins)
+            continue
         cells = {(c, b): [it for it in pool if it["population"] == population and it["failure_class"] == c
                           and it["length_bin"] == b] for c in classes for b in bins}
         per_class = _split(total, {c: sum(len(cells[(c, b)]) for b in bins) for c in classes})
@@ -453,6 +558,9 @@ def build() -> tuple[list[dict], list[dict], dict]:
         "excluded": dict(sorted(excluded.items())),
         "eligible": {f"{k[0]}|{k[1]}|{k[2]}": v for k, v in sorted(Counter(
             (it["population"], it["failure_class"], it["length_bin"]) for it in pool).items())},
+        "eligible_main_by_role_and_fit": {"|".join(k): v for k, v in sorted(Counter(
+            (it["failure_class"], it["length_bin"], it["role"], it["history_fit"]) for it in pool
+            if it["population"] == "main").items())},
     }
     return items, shots, stats
 

@@ -19,7 +19,7 @@ A world model that reads the history correctly gives a ΔL of zero, because the 
 ## 2. Environment
 
 - **Code.** AgentGym's TextCraft (`agentenv-textcraft`) at commit `3ef9235d23e68e7c2920c5422ad957dc8ced5c6c`. Its three source files are vendored in `wf/textcraft/upstream/`. Two of them carry patches, each listed at the top of its file: unused imports removed; no gymnasium base class (its reset only seeds a generator the class never uses); and the recipe loader reads the frozen file instead of listing a folder. Upstream sha256: `environment.py` 541d2f23…071e570, `crafting_tree.py` 6d688cfc…ec36d60, `utils.py` ee8528d1…14d14e4 (full hashes are in the file headers). A one-off check runs every item through the unmodified upstream package as well (section 7).
-- **Frozen recipe database** (`wf/textcraft/data/recipes_frozen.json`, built by `wf/textcraft/freeze.py`). Upstream reads its 860 recipe files in the order the filesystem lists them. Two things depend on that order:
+- **Frozen recipe database** (`wf/textcraft/data/recipes_frozen.json`, built by `wf/textcraft/freeze.py`; no longer committed, see section 11, A6). Upstream reads its 860 recipe files in the order the filesystem lists them. Two things depend on that order:
   - *Three two-way loops.* The loader keeps whichever direction it reads first: iron ingot and iron nuggets, gold ingot and gold nuggets, honey block and honey bottles.
   - *The bed group mapping.* The coloured beds' group is "bed" or "dyed_bed" depending on order. No recipe takes a bed group as an input, so this has no effect on any reply.
 - **Loop rule.** Keep the direction that AgentGym's own released TextCraft data uses (AgentTraj-L training trajectories and the evaluation set), and drop the other file:
@@ -47,7 +47,7 @@ The environment's only state is the inventory, a map from item to count. It star
    - Otherwise the listed inputs are removed, the recipe's output count K of Y is added, and the reply is `Crafted K minecraft:Y_`.
 3. **`inventory`.** The reply is `Inventory: You are not carrying anything.` when the inventory is empty. Otherwise it is `Inventory: ` followed by `[name] (count) ` for each held item, with a trailing space, in the order the items were first added; an item whose count reached zero is removed and goes to the end if added again. It changes nothing.
 
-Names in replies that begin `minecraft:` use underscores, and the checker turns them back into spaces. A generic ingredient on a recipe line (for example "planks") must be replaced by a specific kind in the action (for example "oak planks"). Every action in our histories and items uses specific kinds only.
+Names in replies that begin `minecraft:` use underscores, and the checker turns them back into spaces. A generic ingredient on a recipe line (for example "planks") must be replaced by a specific kind in the action (for example "oak planks"). Every action in our histories and items uses specific kinds only. *(Corrected in section 11, A1: only planks and wool are generic inputs; 14 tag-like names such as "logs" are plain items. A1 also fixes the exact reply texts and the order of a craft's inventory changes.)*
 
 ## 3. Items: the union design
 
@@ -93,7 +93,7 @@ Each candidate runs on a copy of the game, and the reply sorts it:
 - `Could not find enough items to craft minecraft:Y_`: a craft failure item.
 - `Could not find Y` for a get: a fetch-a-craftable item.
 
-**Failure classes** (craft failures). Let inv be the inventory before the action and peak[n] the largest count of n held at any point in the history, the start included. An input (c, n) is short when inv[n] < c. Each short input is classified as follows:
+**Failure classes** (craft failures; stored names and the meaning of `kind` and peak are fixed in section 11, A1). Let inv be the inventory before the action and peak[n] the largest count of n held at any point in the history, the start included. An input (c, n) is short when inv[n] < c. Each short input is classified as follows:
 
 - **used up** when peak[n] ≥ c: the agent once held enough, and an earlier craft took it below;
 - **too few** when 0 < peak[n] < c: obtained, but never as many as needed at once;
@@ -115,7 +115,7 @@ The item's class is used up if any short input is used up, else too few if any i
 
 **Duplicates.** Two items with the same pair, the same visible history and the same action are duplicates, and only the first, in walk order (seed, then prefix length), is kept. The action's object lies in one tree only, so the aligned goal is fixed by the action.
 
-**Exclusions** (counted). The exclusions are:
+**Exclusions** (counted; section 11, A1 adds the tag-reading exclusion). The exclusions are:
 
 - wrong-recipe crafts;
 - crafts that name a generic group literally, which our candidates never do, so the count should be zero;
@@ -125,6 +125,8 @@ The item's class is used up if any short input is used up, else too few if any i
 ## 4. Sample
 
 Selection is by a fixed rule with seeded draws, applied after deduplication.
+
+*(The main population's rule is replaced by section 11, A3: couples balanced on history fit within class, length bin and role.)*
 
 - **Main population: 1,500 items, 500 per failure class.** If a class has fewer than its quota, all of its items are taken, and the remainder is split equally among the classes that still have spare items, repeated until the quota is filled or nothing is left.
 - **Within a class,** the quota is split equally over the length bins 1–3, 4–8 and 9–12, with the same redistribution rule.
@@ -229,7 +231,7 @@ The models are Qwen3-8B (thinking off) and Llama-3.1-8B-Instruct, through `Logod
 5. **Known-answer tests.** Hand-worked games, with replies and classes computed by hand.
 6. **No duplicates.** No two items share a pair, a visible history and an action.
 7. **Prompts.** The aligned, swapped and neutral prompts differ only in the goal line, and the yes/no prompts only in the final question.
-8. **Mutation tests.** At least 15 deliberate bugs in the builder, the checker and the prompts, each of which the TextCraft tests must catch (`python -m wf.textcraft.mutation_check`).
+8. **Mutation tests** (scope and results in section 11, A5). At least 15 deliberate bugs in the builder, the checker and the prompts, each of which the TextCraft tests must catch (`python -m wf.textcraft.mutation_check`).
 9. **Manifest.** `wf/textcraft/data/manifest.json` records:
    - the sha256 of the items file, the few-shot file and the frozen database;
    - the upstream commit;
@@ -239,7 +241,7 @@ The models are Qwen3-8B (thinking off) and Llama-3.1-8B-Instruct, through `Logod
    The scoring run refuses an items file whose hash is not in a manifest marked verified.
 10. **Blind second checker.** A second checker will be written later, from this note only, by someone who has not seen our code. It must agree with the stored failure reply and class on every item.
 
-## 8. What is stored per item (`wf/textcraft/data/items.jsonl`)
+## 8. What is stored per item (`wf/textcraft/data/items.jsonl`; fields added in section 11 are listed there)
 
 | Field | What it holds |
 |---|---|
@@ -293,3 +295,124 @@ These clarifications were added after the design commit (2b4b16a). None changes 
   - 269 depth-matched pairs (538 of the 541 eligible goals), of which three are prompt-example pairs: p049 (gold ingot, light gray dye), p119 (acacia sign, fire charge) and p140 (birch sign, granite). That leaves 266 test pairs.
   - Every quota was filled.
   - The eligible pool and the exclusions (22,297 successes, 14,809 duplicates, and no wrong-recipe or generic-name crafts) are in `wf/textcraft/data/build_stats.json`.
+
+## 11. Amendments after review 1, before any score (2026-11-20)
+
+An adversarial review of the built items (review 1) found the labels trustworthy but the selection confounded, and parts of sections 2 and 3 wrong or underspecified. Every change below was made before any model scored any TextCraft item; nothing has been scored. The items were rebuilt under the amended rules and every safeguard of section 7 was rerun (results at the end of this section). The primary test of section 1 is unchanged: ΔL (aligned minus swapped) on the main population, per model, with the same bootstrap, permutation and Holm rule.
+
+### A1. Generic groups, tag-derived names, and the rules a checker needs (corrects sections 2 and 3)
+
+**Correction.** Sections 2 and 3 implied that recipe lines use many generic groups. In fact only two groups ever appear as an input on a recipe line:
+
+- *planks*, whose members are acacia, birch, crimson, dark oak, jungle, oak, spruce and warped planks;
+- *wool*, whose members are the fifteen coloured wools (black, blue, brown, cyan, gray, green, light blue, light gray, lime, magenta, orange, pink, purple, red, yellow). White wool is **not** a member, because its recipe carries no "wool" group, so "white wool" never fills a "wool" input.
+
+Upstream's `clean_up_recipes` turns every JSON tag none of whose members has a recipe into a plain item. Fourteen tags are converted this way: logs, coals, stone crafting materials, stone tool materials, wooden slabs, soul fire base blocks, and the eight per-wood names oak logs, spruce logs, birch logs, jungle logs, acacia logs, dark oak logs, crimson stems and warped stems. Each is an ordinary fetchable item ("get 3 logs" replies "Got 3 logs"), and a craft input "3 logs" is filled only by holding 3 of the item "logs" itself. The database also holds 21 other group names that come from recipes' output "group" field (bed, boat, sign, wooden slab, sticks and so on). A get of any of these 23 group names fails, but no recipe line takes one of them as an input. The "generic-name crafts" exclusion of section 3 therefore concerns planks and wool only, and it stays at zero.
+
+**Tag-reading exclusion (new).** The fixed instruction tells the agent that a generic ingredient such as "planks" may be filled by a specific kind. A reader who knows Minecraft may then take a held "warped stems" to fill a "logs" input, although in TextCraft it does not. For such an item the failure is not determined under a reading the prompt itself invites. We **exclude** these items rather than flag them as a stratum, because the main test needs failures that are determined for every reasonable reader. The rule: a craft item is excluded when one of its short inputs is one of the 14 tag-derived names and the inventory just before the action holds a positive amount of an item of the database that belongs to the same Minecraft tag. The member lists (in `build.TAG_READING`) are:
+
+- each per-wood name: that wood's log, wood, stripped log and stripped wood (for the stems: stem, hyphae, stripped stem, stripped hyphae);
+- logs: the eight per-wood names and all their members;
+- coals: coal;
+- stone crafting materials and stone tool materials: cobblestone and blackstone;
+- wooden slabs: the eight wooden slabs (oak, spruce, birch, jungle, acacia, dark oak, crimson, warped);
+- soul fire base blocks: none (soul sand and soul soil are not in the database).
+
+Charcoal and cobbled deepslate belong to these Minecraft tags but are not items of the database. The rule excluded 154 candidate items before deduplication, among them the review's three examples (tc-p168-4a03744afe67, tc-p168-614ce24f7fb8 and tc-p133-0af517e8c19e). A test rebuilds the review's first example and checks that it is excluded.
+
+**Rules left open in sections 2 and 3, now fixed** (the blind checker's list of ambiguities):
+
+1. *The count in a success reply.* "Crafted K minecraft:Y_" carries the matched recipe's output count K, whatever count the action states ("craft 3 stick using 2 oak planks" replies "Crafted 4 minecraft:stick"). Every craft in our histories and items copies its line's count, so the action's count and K are the same number, which is what section 7 meant by "the action's count".
+2. *Stored class names.* `failure_class` is one of `used_up`, `too_few`, `never_obtained`; get failures are stored as `get_craftable`.
+3. *`kind` in `short_inputs`.* It is that input's own class (`used_up`, `too_few` or `never_obtained`), never a member of a group.
+4. *Peak.* For a name, exactly as written in the action, the peak is the largest count held after any history step, with 0 at the start. Only gets and craft outputs raise a count. The state just before the action is the state after the last history step, so it is included.
+5. *Order of a craft's changes.* The inputs are removed first, and an entry whose count reaches 0 is deleted. Then the output is added. An output already held keeps its place in the inventory listing; a new or re-added item goes to the end.
+6. *The wrong-recipe reply.* Its exact text is the Python form of the recipe's output, for example `Could not find a valid recipe for ItemTagWithCount(item_tag=ItemTag(tag=None, item_id='minecraft:stick'), count=4)`. It occurs in no item.
+7. *A get's failure.* `Could not find X` is the reply when X is the output of any recipe in the database, one of the 23 group names, or not an item. Every test get names an output of a displayed line.
+8. *Matching an action to a recipe.* The environment matches the action's inputs to a recipe's inputs by name, in any order, and each count must be equal; the first matching alternative wins (section 10).
+9. *The twin's top-up.* The top-up adds the missing amounts to the inventory directly; it is not a history step and does not change peaks.
+
+### A2. Failures that can be decided without counting
+
+Review 1 found that 660 of the 1,500 main items could be decided from names alone: an input that never appears in the history cannot be held. The class precedence (used up before too few before never obtained) also hid 163 too-few items that had a never-obtained input. Two flags are now stored with every craft item (both are `null` for gets):
+
+- `pure_class` is true when all short inputs have the same class;
+- `needs_arithmetic` is true when every short input was obtained at some point in the history (peak above 0). For such an item the names alone do not decide the failure: the reader has to count what was obtained and what was used.
+
+**Named secondary readout (logged now).** ΔL on the main items with `needs_arithmetic` true, per model, with the same pair-clustered bootstrap and pair-level sign-flip permutation as the primary test. It is reported whatever the primary result, and it is not part of the Holm family of the primary test. The primary population still holds all three classes. A failure decided by a missing name is still a determined failure, which is what the primary test is about. The secondary readout asks whether the effect survives when the failure can only be seen by counting.
+
+On the rebuilt main sample, 847 items need arithmetic (used up 488, too few 359) and 653 do not (never obtained 500, too few 141, used up 12). 1,343 items are pure; the 157 mixed items are too few (141) and used up (16).
+
+### A3. The history favours one goal: balanced selection
+
+The walks are goal-blind, but selection made the history track the real goal. Review 1 asked which goal's tree the history fetches or crafts more of, and that guess picked the real goal for 63% of main items. Used-up items were the most extreme (89–100%), because a used-up input was usually consumed by crafting something in the real goal's tree. Never-obtained items on the goal went the other way (33%). If the aligned goal line agrees with what the history visibly works toward, ΔL could reflect that agreement rather than the goal naming the action's object.
+
+**History fit (definition).** For a goal G, its *tree names* are every name on the lines of G's recipe tree (section 3), outputs and inputs alike. A history step's *object* is the item it produced: X for a reply "Got N X", and Y for a reply "Crafted K minecraft:Y_". Inventory steps have no object. Let the aligned count be the number of history steps whose object is in the aligned goal's tree names and not in the partner's, and the swapped count the same with the roles exchanged. The item's `history_fit` is `aligned` when the aligned count is larger, `swapped` when the swapped count is larger, and `tie` otherwise; both counts are stored in `history_fit_counts`. A text-only version computes the trees from the displayed lines: start from G, take every displayed line whose output is the current name (or, for planks and wool, one of the members listed in A1), and continue from each of its inputs. The checker recomputes every item's fit this way, and verify compares it with the builder's, which uses the environment's own tree.
+
+**Selection (replaces section 4's rule for the main population).** The main population is drawn in couples: one item whose history favours the aligned goal and one whose history favours the partner.
+
+1. 750 couples (1,500 items), split over the three classes, then over length bins within a class, then over the two roles within a class and bin, each split equal with the redistribution rule of section 4. A cell's capacity is the smaller of its numbers of aligned-favouring and swapped-favouring items.
+2. Within a class, bin and role cell with k couples, k aligned-favouring and k swapped-favouring items are drawn, each side round-robin over goal pairs with `random.Random(f"{SEED}|textcraft|select|main|{class}|{bin}|{role}|{fit}")`.
+3. Items whose history favours neither goal (ties) are not drawn for the main population.
+
+We rebalanced the sample rather than pre-logging a balanced subset, because the eligible pool allowed full balance at the full 1,500 items. The only cost is in the used-up class. Its 1–3 step bin has just two swapped-favouring items, so used-up items now sit almost entirely at 4–12 steps. Used up on the goal has only 7 swapped-favouring items, all from one pair, so that cell holds 14 items from 7 pairs. (Pairs in the table are distinct goal pairs per row.) The secondary (get) stratum was not rebalanced (its fit is 147 aligned, 124 swapped, 129 tie), and the empty-history stratum is all ties by definition.
+
+**Class and role are confounded.** Before this amendment, 492 of the 500 used-up items had an ingredient as the action's object, and 335 of the 500 too-few items had the goal. The equal role split now gives too few and never obtained 252 goal and 248 ingredient items each, but used up remains 486 ingredient against 14 goal. An input is used up because an earlier craft consumed it, and the walk never crafts a goal, so used-up failures on the goal itself are rare. A difference between classes is therefore partly a difference between roles. We report role × class, and class × fit, as strata.
+
+**Rebuilt main sample.** Each cell shows aligned-favouring / swapped-favouring items.
+
+| Class, role | 1–3 steps | 4–8 steps | 9–12 steps | Items | Pairs |
+|---|---|---|---|---|---|
+| used up, goal | 0 / 0 | 3 / 3 | 4 / 4 | 14 | 7 |
+| used up, ingredient | 2 / 2 | 121 / 121 | 120 / 120 | 486 | 168 |
+| too few, goal | 42 / 42 | 42 / 42 | 42 / 42 | 252 | 148 |
+| too few, ingredient | 42 / 42 | 41 / 41 | 41 / 41 | 248 | 109 |
+| never obtained, goal | 42 / 42 | 42 / 42 | 42 / 42 | 252 | 165 |
+| never obtained, ingredient | 42 / 42 | 41 / 41 | 41 / 41 | 248 | 155 |
+
+The main population spans 257 goal pairs (514 goals); before this amendment it spanned 266. Review 1's heuristic now picks the real goal for exactly 50.0% of items in every class × role cell (50.6% overall, counting the craft inputs as the review's population-level version does).
+
+### A4. Word priming: a prefix-only control and overlap strata
+
+The success and failure replies both end in the object's name, and the aligned goal line often shares words with it (for a goal-role item it is the same name). A goal line could raise the name's probability and so move L without any belief about success. Two pre-logged controls separate the two.
+
+**Prefix-only arms.** Two more arms, `prefix_aligned` and `prefix_swapped`, use exactly the prompt of the aligned and swapped conditions. Each scores the two replies with the object name removed from both: "Crafted K" against "Could not find enough items to craft" for crafts, and "Got 1" against "Could not find" for gets. They are stored per item as `prefix_candidates`, which the item hash covers. Writing $L^{\text{pre}}$ for this arm's log-odds,
+
+$$\Delta L_{\text{prefix}} = \frac{1}{n}\sum_{i=1}^{n}\left[L^{\text{pre}}_i(\text{aligned}) - L^{\text{pre}}_i(\text{swapped})\right].$$
+
+Because each full reply is its prefix followed by the name, L splits into the prefix part and a remainder: the log-probability of the name after the success prefix minus that after the failure prefix. The name-token remainder of the goal effect is
+
+$$\Delta L_{\text{name}} = \frac{1}{n}\sum_{i=1}^{n}\left(\left[L_i(\text{aligned}) - L^{\text{pre}}_i(\text{aligned})\right] - \left[L_i(\text{swapped}) - L^{\text{pre}}_i(\text{swapped})\right]\right) = \Delta L - \Delta L_{\text{prefix}}.$$
+
+Both are reported per model on every population with the primary test's statistics, as named controls rather than tests. If the prefix part carries ΔL, the goal line moves the predicted outcome. If the remainder carries it, the effect is word priming of the name. The split is exact only when a prefix's tokens are a leading part of the full reply's tokens. The GPU smoke run checks this for each model's tokenizer (validation standard, step 7) before full scoring. Where it fails, the remainder will be reported as approximate.
+
+**Overlap flags and strata.** `object_goal_overlap` is true when the object's name shares a word (split on spaces) with the aligned goal's name, and `object_partner_overlap` the same for the partner. On the rebuilt main sample, 635 of the 982 ingredient-role items share a word with their aligned goal and 18 with the partner; 46 main items in all share a word with the partner. Before this amendment the counts were 641 of 869, and 50. Strata: role × goal overlap, and partner overlap.
+
+### A5. Tests, mutation testing, and the scope of the earlier claim
+
+The commit that added the mutation check said "31 deliberate bugs … all caught". That covered only our own 31 mutants. Review 1's 18 mutants left 12 alive, so the claim overstated how strong the tests were. The mutants that survived were seed changes, the round-robin shuffle, verify's partner-goal and prompt checks, the few-shot hash gate, the resume hash gate, the item hash, the missing-score count, and three readout wirings. Tests added:
+
+- negative tests for verify: broken histories, replies, twins and top-ups, an environment whose replies depend on the goal, prompts that differ beyond the goal line, and broken structure fields must all be reported;
+- the analysis joins scores to items by id and item hash, and stops when a score's item has changed (a stale score), with a test;
+- a test that missing primary scores are counted and fail the run;
+- readout wiring tests with a different known value on every arm and field: the first-token readout reads `L_first`, the yes/no effect keeps its sign (aligned minus swapped), strata use aligned minus swapped (never neutral), and the prefix and remainder readouts read their own arms;
+- golden tests for seeded draws: selection on a fixed fake pool, the smoke subset, and a rebuild of the prompt examples, so that a changed seed or a lost shuffle fails the test suite and not only verify's full rebuild;
+- the few-shot hash gate at scoring, and the resume refusal of saved scores whose item hash changed;
+- known-answer tests for history fit, the flags, the tag-reading exclusion, the 14 tag-derived names, the generic members, the reply count and the wrong-recipe text.
+
+`python -m wf.textcraft.mutation_check` now runs 75 mutants: our 31, review 1's 18 (two rewritten for the amended code), 6 more seed changes, and 20 for the amendments. Results are below.
+
+### A6. The recipe database is rebuilt, not committed
+
+The recipe JSON is Minecraft game data, which AgentGym's MIT licence does not cover. On the owner's decision, `wf/textcraft/data/recipes_frozen.json` is not committed and is listed in `.gitignore`. The branch's unpushed commits were rewritten so that none contains it. `python -m wf.textcraft.freeze --fetch` (a shallow, sparse git fetch of AgentGym at 3ef9235) or `--from <checkout>` rebuilds it with the rule of section 2: the 860 files in Python's sorted file-name order, minus the three loop losers, each recipe's key order kept, written as indented JSON. The script refuses a checkout at another commit, and it writes nothing unless the result's sha256 is the pinned `5216d3a5…d26d65f`, which the manifest records too. Both routes were run and gave that hash. Code that needs the database stops with these instructions when the file is missing. The vendored upstream Python files stay, with their MIT notice.
+
+### Results of the rerun safeguards (rebuilt items, 2026-11-20)
+
+- **Counts.** 2,000 items: 1,500 main (500 per class), 400 secondary gets (100 per bin), 100 empty-history items. Build exclusions: 22,297 successes, 14,807 duplicates, 154 tag-reading items, no wrong-recipe or generic-name crafts. 640 item ids carry over from the first build, 140 of them main.
+- **Replay and the text-only checker** in three fresh processes (hash seeds 0, 1 and 2): no replay, checker, structure or prompt failures, no duplicates, no prompt-example goal in any item, and no main cell unbalanced on fit.
+- **Determinism.** Two fresh builds (hash seeds 0 and 1) wrote the items and prompt-example files byte for byte. The prompt-example file did not change from the first build.
+- **Upstream equivalence.** The unmodified AgentGym package at 3ef9235, given the frozen listing, builds the same database and reproduces every item's history, reply and twin (0 mismatches of 2,000).
+- **Prompt diff.** On every item, the aligned, swapped and neutral prompts differ only in the goal line, each query's goal line is the item's own field, the yes/no prompts differ only in the question, and the prefix arms share their condition's prompt.
+- **Blind checker.** The blind checker written from the pre-amendment note, rerun unchanged on the rebuilt items, agrees on every reply, class, short input, top-up and twin (2,000 of 2,000). A blind checker written from this amended note, covering history fit and the flags, is left for review 2.
+- **Manifest.** `wf/textcraft/data/manifest.json` is marked verified for items sha256 `8f7de347…50ee6bc` and prompt examples `29e9f14d…1b34804f`.
+- **Mutation check.** The first run of the 75 mutants killed 73. Two verify-side mutants survived. One switched off the balance condition in verify's gate, which no test reached because the gate sat inside the full verification run. The other switched off the goal-line check, which the negative prompt test failed to isolate because other checks also caught its broken prompt. The gate was moved into a tested function (`verify.replay_passes`), the negative test was narrowed so that only the goal-line check can catch it, and verify was rerun (verified, same hashes). The second run killed all 75. The scope of this claim: these are the 75 listed mutants, against `tests/test_textcraft_*.py`. It is not a claim that every possible bug would be caught.

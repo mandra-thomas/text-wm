@@ -40,7 +40,10 @@ YN_QUESTION = "Question: Will this action succeed? Answer Yes or No.\nAnswer:"
 NEXT = "Next observation:"
 CONDITIONS = ("aligned", "swapped", "neutral")
 YN_ARMS = tuple(f"yn_{c}" for c in CONDITIONS)
-ARMS = CONDITIONS + YN_ARMS
+# Prefix-only control (design section 11, A4): the same prompt as the condition, the two replies without the object
+# name ("Crafted K" against "Could not find enough items to craft"; "Got 1" against "Could not find").
+PREFIX_ARMS = ("prefix_aligned", "prefix_swapped")
+ARMS = CONDITIONS + YN_ARMS + PREFIX_ARMS
 
 
 def first_observation(recipe_lines: list[str], goal_line: str) -> str:
@@ -71,9 +74,10 @@ def fewshot_examples(path: Path = FEWSHOT) -> tuple[dict, ...]:
 
 
 def messages(item: dict, arm: str, fewshot: tuple[dict, ...] | list[dict] | None = None) -> list[dict[str, str]]:
-    """The chat for one item under one arm: a condition (two-candidate prediction) or yn_<condition> (question)."""
+    """The chat for one item under one arm: a condition or prefix_<condition> (two-candidate prediction; the prefix
+    arm shares the condition's prompt) or yn_<condition> (question)."""
     question = arm.startswith("yn_")
-    condition = arm[3:] if question else arm
+    condition = arm[3:] if question else arm.removeprefix("prefix_") if arm in PREFIX_ARMS else arm
     if condition not in CONDITIONS:
         raise ValueError(arm)
     shots = fewshot_examples() if fewshot is None else fewshot
@@ -90,7 +94,10 @@ def messages(item: dict, arm: str, fewshot: tuple[dict, ...] | list[dict] | None
 
 
 def candidates(item: dict, arm: str) -> tuple[str, str]:
-    """(o+, o-): the success twin and the failure reply, or "Yes" and "No" for a question."""
+    """(o+, o-): the success twin and the failure reply, those without the object name for a prefix arm, or "Yes"
+    and "No" for a question."""
     if arm.startswith("yn_"):
         return "Yes", "No"
+    if arm in PREFIX_ARMS:
+        return item["prefix_candidates"]["o_plus"], item["prefix_candidates"]["o_minus"]
     return item["candidates"]["o_plus"], item["candidates"]["o_minus"]

@@ -64,6 +64,9 @@ def replay_problems(item: dict) -> list[str]:
             problems.append("craft twin not from the environment")
     elif item["twin"] != f"Got 1 {item['object']}" or item["twin_source"] != "template":
         problems.append("get twin is not the template")
+    held = {W.name_of(k) for k, v in env.inventory.items() if v > 0}
+    if any(held & set(B.TAG_READING.get(s["name"], ())) for s in item["short_inputs"]):
+        problems.append("a short input is a tag-derived name while a Minecraft member of it is held")
     goal_ids = {W.item_id(item["goal"]), W.item_id(item["partner"])}
     if any(o.startswith("Crafted ") and o.split(" ", 2)[2] in goal_ids for _a, o in item["history"]):
         problems.append("history crafts a goal")
@@ -90,6 +93,19 @@ def structure_problems(item: dict) -> list[str]:
         problems.append("role wrong")
     if item["candidates"] != {"o_plus": item["twin"], "o_minus": item["reply"]}:
         problems.append("candidates are not twin and reply")
+    pre = item["prefix_candidates"]
+    if pre != B.prefix_candidates(item["action_kind"], item["twin"]) or not all(
+            full.startswith(pre[k]) and full[len(pre[k]):] == " " + (W.item_id(item["object"]) if item["action_kind"] == "craft"
+                                                                       else item["object"])
+            for k, full in (("o_plus", item["twin"]), ("o_minus", item["reply"]))):
+        problems.append("prefix candidates are not the replies without the object name")
+    if item["object_goal_overlap"] != B.shares_word(item["object"], item["goal"]) or \
+            item["object_partner_overlap"] != B.shares_word(item["object"], item["partner"]):
+        problems.append("word-overlap flags wrong")
+    if item["population"] == "main" and item["history_fit"] not in B.COUPLE_FITS:
+        problems.append("a main item whose history favours neither goal")
+    if [item["history_fit"], item["history_fit_counts"]] != list(B.history_fit(item["history"], item["goal"], item["partner"])):
+        problems.append("history fit does not recompute from the environment's trees")
     return problems
 
 
@@ -103,6 +119,15 @@ def prompt_problems(item: dict, shots) -> list[str]:
             problems.append(f"{arm}: examples or system differ")
         if other[-1]["content"].replace(P.task_line(item, arm), P.task_line(item, "aligned"), 1) != base[-1]["content"]:
             problems.append(f"{arm}: query differs beyond the goal line")
+    for arm, field in (("aligned", "task_line"), ("swapped", "swapped_task_line"), ("neutral", "neutral_task_line")):
+        query = P.messages(item, arm, shots)[-1]["content"]
+        if [line for line in query.split("\n") if line.startswith("Goal: ")] != [item[field]]:
+            problems.append(f"{arm}: the query's goal line is not the item's {field}")
+    for arm in P.PREFIX_ARMS:
+        if P.messages(item, arm, shots) != P.messages(item, arm.removeprefix("prefix_"), shots):
+            problems.append(f"{arm}: prompt differs from its condition's")
+        if P.candidates(item, arm) != (item["prefix_candidates"]["o_plus"], item["prefix_candidates"]["o_minus"]):
+            problems.append(f"{arm}: candidates are not the prefixes")
     for arm in P.CONDITIONS:
         plain, yn = P.messages(item, arm, shots), P.messages(item, f"yn_{arm}", shots)
         if yn[:-1] != plain[:-1] or yn[-1]["content"] != plain[-1]["content"][: -len(P.NEXT)] + P.YN_QUESTION:
@@ -118,6 +143,9 @@ def check_items(items: list[dict], shots) -> dict:
                             ("structure", structure_problems(it)), ("prompt", prompt_problems(it, shots))):
             if probs:
                 fails[name].append((it["id"], probs))
+    fit = Counter((it["failure_class"], it["length_bin"], it["role"], it["history_fit"]) for it in items
+                  if it["population"] == "main")
+    unbalanced = sorted("|".join(k[:3]) for k in fit if fit[k] != fit[(*k[:3], {"aligned": "swapped", "swapped": "aligned"}.get(k[3], k[3]))])
     keys = Counter((it["pair_id"], json.dumps(it["history"]), it["action"]) for it in items)
     ids = Counter(it["id"] for it in items)
     shot_goals = {g for ex in shots for p in B.all_pairs() if p.pair_id == ex["pair_id"] for g in p.goals}
@@ -130,16 +158,31 @@ def check_items(items: list[dict], shots) -> dict:
         "duplicate_history_action": sum(n - 1 for n in keys.values() if n > 1),
         "duplicate_ids": sum(n - 1 for n in ids.values() if n > 1),
         "fewshot_goals_in_items": sorted(shot_goals & item_goals),
+        "main_fit_unbalanced_cells": unbalanced,
     }
 
 
 def counts(items: list[dict]) -> dict:
-    c = lambda f: dict(sorted(Counter("|".join(str(it[k]) for k in f) for it in items).items()))
+    c = lambda f, xs=items: dict(sorted(Counter("|".join(str(it[k]) for k in f) for it in xs).items()))
+    c_main = lambda f: c(f, [it for it in items if it["population"] == "main"])
     return {"population": c(("population",)), "population_class": c(("population", "failure_class")),
             "population_class_bin": c(("population", "failure_class", "length_bin")),
             "population_role": c(("population", "role")),
+            "main_class_role_fit_bin": c_main(("failure_class", "role", "history_fit", "length_bin")),
+            "main_class_needs_arithmetic": c_main(("failure_class", "needs_arithmetic")),
+            "main_class_pure": c_main(("failure_class", "pure_class")),
+            "main_role_overlap_goal_partner": c_main(("role", "object_goal_overlap", "object_partner_overlap")),
+            "population_fit": c(("population", "history_fit")),
             "pairs": len({it["pair_id"] for it in items}),
             "goals": len({g for it in items for g in (it["goal"], it["partner"])})}
+
+
+def replay_passes(r: dict, n_items: int) -> bool:
+    """One fresh process's check_items report passes: every item checked, nothing failed, nothing duplicated,
+    no prompt-example goal in an item, and every main class x bin x role cell balanced on history fit."""
+    return (r["n_items"] == n_items and not any(r[f"{k}_failures"] for k in ("replay", "checker", "structure", "prompt"))
+            and r["duplicate_history_action"] == 0 and r["duplicate_ids"] == 0 and not r["fewshot_goals_in_items"]
+            and not r["main_fit_unbalanced_cells"])
 
 
 # ---------------- whole-run checks ----------------
@@ -174,9 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     upstream = json.loads(UPSTREAM_CHECK.read_text()) if UPSTREAM_CHECK.exists() else None
     upstream_ok = bool(upstream and upstream.get("items_sha256") == items_sha and upstream.get("frozen_sha256") == sha256(FROZEN)
                        and upstream.get("mismatches") == 0 and upstream.get("tree_identical") is True)
-    replay_ok = all(r["n_items"] == len(items) and not any(r[f"{k}_failures"] for k in ("replay", "checker", "structure", "prompt"))
-                    and r["duplicate_history_action"] == 0 and r["duplicate_ids"] == 0 and not r["fewshot_goals_in_items"]
-                    for r in replays.values())
+    replay_ok = len(replays) == 3 and all(replay_passes(r, len(items)) for r in replays.values())
     det_ok = all(all(v.values()) for v in det.values())
     manifest = {
         "items_file": str(B.ITEMS.relative_to(REPO)), "items_sha256": items_sha,

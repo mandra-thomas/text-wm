@@ -79,7 +79,9 @@ def test_score_every_arm_both_models_then_resume(mock_runs):
     for tag in S.CO_PRIMARY:
         prim = m["per_model"][tag]["primary_delta_L"]
         assert prim["n_pairs"] == 4 and prim["n_items"] == m["items"]["main"]
-        assert set(m["per_model"][tag]["main"]["strata"]) == {"failure_class", "length_bin", "role"}
+        assert set(m["per_model"][tag]["main"]["strata"]) == set(A.STRATA)
+        assert m["per_model"][tag]["secondary_delta_L_needs_arithmetic"]["n_items"] == sum(
+            it["population"] == "main" and it["needs_arithmetic"] for it in items)
     assert set(m["verdicts"]) == set(S.CO_PRIMARY) | {"replicates"}
 
 
@@ -125,3 +127,108 @@ def test_item_hash_changes_with_the_prompt_inputs():
     it = V.read_items()[0]
     assert S.item_hash(it) != S.item_hash({**it, "swapped_task_line": "Goal: craft x."})
     assert S.item_hash(it) != S.item_hash({**it, "history": it["history"] + [["inventory", "Inventory: x"]]})
+
+
+# ---------------- gates and readout wiring (review 1, finding 5) ----------------
+
+def test_refuses_a_changed_fewshot_file(mock_runs, tmp_path):
+    items = _small_items()
+    m = json.loads(open(_manifest(mock_runs, items)).read())
+    shots = tmp_path / "fewshot.json"
+    shots.write_text(P.FEWSHOT.read_text().replace("Got", "Got ", 1))
+    m["fewshot_file"] = str(shots)
+    (mock_runs / "manifest.json").write_text(json.dumps(m))
+    reason = S.verified_files({"manifest": str(mock_runs / "manifest.json")})
+    assert isinstance(reason, str) and "fewshot" in reason
+
+
+def test_resume_refuses_saved_scores_of_changed_items(mock_runs):
+    items = _small_items()
+    cfg = {"run_id": "textcraft_score", "manifest": _manifest(mock_runs, items), "n_shards": 1, "arms": ["aligned"],
+           "models": [S.CO_PRIMARY[0]]}
+    assert S.run_textcraft_score(cfg) == 0
+    path = mock_runs / "runs" / "textcraft_score" / "shard_00_of_01" / "scoring.jsonl"
+    recs = [json.loads(line) for line in path.read_text().splitlines()]
+    recs[0]["item_hash"] = "0" * 16  # a saved score made for an item that has since changed
+    path.write_text("".join(json.dumps(r) + "\n" for r in recs))
+    with pytest.raises(SystemExit, match="different items"):
+        S.run_textcraft_score({**cfg, "resume": True})
+
+
+def test_item_hash_covers_both_candidate_sets():
+    it = V.read_items()[0]
+    assert S.item_hash(it) != S.item_hash({**it, "candidates": {**it["candidates"], "o_plus": "x"}})
+    assert S.item_hash(it) != S.item_hash({**it, "prefix_candidates": {**it["prefix_candidates"], "o_plus": "x"}})
+
+
+def test_smoke_subset_golden():
+    ids = [t["id"] for t in S.smoke_subset([{"id": f"x{k:03d}"} for k in range(200)], 5)]
+    assert ids == SMOKE_GOLDEN, ids
+
+
+SMOKE_GOLDEN = ["x083", "x110", "x133", "x162", "x166"]
+
+
+def _wired(items):
+    """Scores with a different known value on every arm and field, so each readout can be traced to its inputs."""
+    vals = {"aligned": (5.0, 50.0), "swapped": (2.0, 20.0), "neutral": (1.0, 10.0), "yn_aligned": (0.5, 0.5),
+            "yn_swapped": (1.5, 1.5), "yn_neutral": (0.0, 0.0), "prefix_aligned": (4.0, 40.0), "prefix_swapped": (3.5, 35.0)}
+    return [{"transition_id": t["id"], "condition": arm, "L": L, "L_first": Lf, "model": S.CO_PRIMARY[0],
+             "item_hash": S.item_hash(t)} for t in items for arm, (L, Lf) in vals.items()]
+
+
+def test_readouts_are_wired_to_their_arms():
+    items = _small_items()
+    r = A.readouts(_wired(items), items)
+    assert r["delta_L"]["estimate"] == pytest.approx(3.0)
+    assert r["delta_L_first"]["estimate"] == pytest.approx(30.0)  # L_first, not L
+    assert r["aligned_minus_neutral"]["estimate"] == pytest.approx(4.0)
+    assert r["swapped_minus_neutral"]["estimate"] == pytest.approx(1.0)
+    assert r["yes_no_aligned_minus_swapped"]["estimate"] == pytest.approx(-1.0)  # aligned minus swapped, sign kept
+    assert r["yes_no_aligned_minus_neutral"]["estimate"] == pytest.approx(0.5)
+    assert r["delta_L_prefix"]["estimate"] == pytest.approx(0.5)
+    assert r["delta_L_name_remainder"]["estimate"] == pytest.approx((5.0 - 4.0) - (2.0 - 3.5))
+    st = A.strata(_wired(items), items)
+    assert set(st) == set(A.STRATA)
+    for groups in st.values():
+        for g in groups.values():
+            assert g["delta_L"]["estimate"] == pytest.approx(3.0)  # aligned minus swapped, never neutral
+            assert g["aligned_minus_neutral"]["estimate"] == pytest.approx(4.0)
+            assert g["yes_no"]["estimate"] == pytest.approx(-1.0) and g["delta_L_prefix"]["estimate"] == pytest.approx(0.5)
+
+
+def test_analysis_flags_missing_scores_and_refuses_stale_ones(mock_runs):
+    items = _small_items()
+    cfg = {"run_id": "textcraft_score", "manifest": _manifest(mock_runs, items), "n_shards": 1,
+           "models": [S.CO_PRIMARY[0]]}
+    assert S.run_textcraft_score(cfg) == 0
+    path = mock_runs / "runs" / "textcraft_score" / "shard_00_of_01" / "scoring.jsonl"
+    full = path.read_text().splitlines()
+    acfg = {"run_id": "textcraft_analysis", "source": "textcraft_score", "manifest": cfg["manifest"], "models": [S.CO_PRIMARY[0]]}
+    assert A.run_textcraft_analysis(acfg) == 0
+    main_id = next(it["id"] for it in items if it["population"] == "main")
+    path.write_text("\n".join(l for l in full if not (json.loads(l)["transition_id"] == main_id
+                                                    and json.loads(l)["condition"] == "aligned")) + "\n")
+    assert A.run_textcraft_analysis(acfg) == 1
+    m = json.loads((mock_runs / "runs" / "textcraft_analysis" / "metrics.json").read_text())
+    assert m["items"]["missing_primary_scores"] == 1
+    stale = [json.loads(l) for l in full]
+    stale[0]["item_hash"] = "0" * 16
+    path.write_text("".join(json.dumps(r) + "\n" for r in stale))
+    assert A.run_textcraft_analysis(acfg) == 1
+    assert "do not match" in (mock_runs / "runs" / "textcraft_analysis" / "STATUS.md").read_text()
+
+
+def test_primary_and_secondary_read_only_their_items():
+    items = V.read_items()
+    pick = [it for it in items if it["population"] == "main"][:30] + [it for it in items if it["population"] != "main"][:30]
+    scores = []
+    for t in pick:
+        big = 0.0 if t["population"] == "main" else 100.0
+        bump = 1.0 if t["needs_arithmetic"] else 0.0
+        scores += [{"transition_id": t["id"], "condition": "aligned", "L": 2.0 + big + bump, "L_first": 0.0},
+                   {"transition_id": t["id"], "condition": "swapped", "L": 1.0, "L_first": 0.0}]
+    main = [t for t in pick if t["population"] == "main"]
+    assert A.effect(scores, main, "aligned", "swapped")["estimate"] < 3.0
+    arith = [t for t in main if t["needs_arithmetic"]]
+    assert arith and A.effect(scores, arith, "aligned", "swapped")["estimate"] == pytest.approx(2.0)

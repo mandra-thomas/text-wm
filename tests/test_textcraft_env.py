@@ -132,3 +132,105 @@ def test_pairs_and_lists_do_not_depend_on_the_hash_seed():
     outs = {subprocess.run([sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True, check=True,
                            env={**os.environ, "PYTHONHASHSEED": s}).stdout for s in ("0", "7")}
     assert len(outs) == 1
+
+
+def _json_tags() -> set[str]:
+    tags = set()
+
+    def walk(x):
+        if isinstance(x, dict):
+            if "tag" in x:
+                tags.add(x["tag"])
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    for _n, d in load_frozen():
+        walk(d.get("key", {}))
+        walk(d.get("ingredients", []))
+    return tags
+
+
+def test_only_planks_and_wool_stay_generic_and_fourteen_tags_become_items():
+    """Design section 2 and 11 (A1): clean_up_recipes turns 14 JSON tags into plain items; planks and wool stay."""
+    from wf.textcraft import checker as K
+    tags = _json_tags()
+    kept = {t for t in tags if W.tree().is_tag(t)}
+    converted = {W.name_of(t) for t in tags - kept}
+    assert kept == {"minecraft:planks", "minecraft:wool"}
+    assert converted == set(B.TAG_READING) and len(converted) == 14
+    assert all(W.gettable(n) for n in converted)  # fetchable, like any base item
+    generic_inputs = {n for ln in B.line_index().values() for _c, n, g in ln.inputs if g}
+    assert generic_inputs == {"planks", "wool"}
+    assert {n: tuple(W.tag_members(n)) for n in generic_inputs} == K.GENERIC_MEMBERS
+    assert "white wool" not in K.GENERIC_MEMBERS["wool"] and W.tree().is_valid_item("minecraft:white_wool")
+
+
+def test_tag_reading_members_are_items_of_the_database():
+    for name, members in B.TAG_READING.items():
+        assert name not in members
+        for m in members:
+            assert W.tree().is_valid_item(W.item_id(m)), m
+    assert set(B.TAG_READING["logs"]) >= {"warped stems", "jungle logs", "oak log", "stripped crimson hyphae"}
+    assert B.TAG_READING["soul fire base blocks"] == () and B.TAG_READING["coals"] == ("coal",)
+
+
+def test_reply_count_is_the_recipes_and_wrong_recipe_text():
+    """K in "Crafted K" is the matched recipe's output count, not the action's; the wrong-recipe reply names the
+    recipe object's repr (design section 11, A1)."""
+    _env, replies = _play(STICKS, ["get 1 oak logs", "craft 4 oak planks using 1 oak logs", "craft 3 stick using 2 oak planks",
+                                   "craft 4 stick using 1 oak planks"])
+    assert replies[2] == "Crafted 4 minecraft:stick"
+    assert replies[3] == ("Could not find a valid recipe for ItemTagWithCount(item_tag=ItemTag(tag=None, "
+                          "item_id='minecraft:stick'), count=4)")
+
+
+def test_craft_removes_inputs_before_adding_the_output():
+    _env, replies = _play(["craft 4 oak planks using 1 oak logs"],
+                          ["get 1 oak logs", "get 1 coal", "craft 4 oak planks using 1 oak logs", "get 1 oak logs", "inventory"])
+    assert replies[-1] == "Inventory: [coal] (1) [oak planks] (4) [oak logs] (1) "
+
+
+# ---------------- the frozen file is rebuilt, never committed (design section 11, A6) ----------------
+
+def _fake_checkout(tmp_path, files, extra=()):
+    folder = tmp_path / "ag" / "agentenv-textcraft" / "agentenv_textcraft" / "recipes"
+    folder.mkdir(parents=True)
+    for name, data in files:
+        (folder / name).write_text(json.dumps(data))
+    for name in extra:
+        (folder / name).write_text("{}")
+    return tmp_path / "ag"
+
+
+def test_rebuild_reproduces_the_pinned_bytes(tmp_path):
+    from wf.textcraft import freeze as F
+    root = _fake_checkout(tmp_path, load_frozen(), [d for d, _, _ in LOOP_DROPS])
+    out = tmp_path / "frozen.json"
+    assert F.rebuild(root, out) == F.FROZEN_SHA256
+    assert out.read_bytes() == FROZEN.read_bytes()
+    m = json.loads((REPO / "wf/textcraft/data/manifest.json").read_text())
+    assert m["frozen_db_sha256"] == F.FROZEN_SHA256 == F.sha256_text(FROZEN.read_text(encoding="utf-8"))
+
+
+def test_rebuild_refuses_other_content(tmp_path):
+    import pytest
+    from wf.textcraft import freeze as F
+    files = load_frozen()
+    files = files[:1] + [(files[1][0], {**files[1][1], "type": "minecraft:crafting_shapeless_x"})] + files[2:]
+    root = _fake_checkout(tmp_path, files, [d for d, _, _ in LOOP_DROPS])
+    out = tmp_path / "frozen.json"
+    with pytest.raises(SystemExit):
+        F.rebuild(root, out)
+    assert not out.exists()
+    with pytest.raises(FileNotFoundError, match="wf.textcraft.freeze"):
+        load_frozen(tmp_path / "absent.json")
+
+
+def test_frozen_file_is_ignored_by_git():
+    rel = str(FROZEN.relative_to(REPO))
+    assert rel in (REPO / ".gitignore").read_text().splitlines()
+    if (REPO / ".git").exists():  # the mutation check runs on a copy without git
+        tracked = subprocess.run(["git", "ls-files", rel], cwd=REPO, capture_output=True, text=True, check=True)
+        assert tracked.stdout.strip() == ""

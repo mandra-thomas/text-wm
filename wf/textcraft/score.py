@@ -51,7 +51,7 @@ def load_items(path: Path) -> list[dict]:
 def item_hash(t: dict) -> str:
     """What a score depends on, so a saved score can never attach to a changed item with the same id."""
     fields = {k: t.get(k) for k in ("recipe_lines", "history", "action", "task_line", "swapped_task_line",
-                                    "neutral_task_line", "candidates")}
+                                    "neutral_task_line", "candidates", "prefix_candidates")}
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()[:16]
 
 
