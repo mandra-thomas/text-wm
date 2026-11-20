@@ -158,3 +158,9 @@ def test_manifest_hashes_the_committed_files():
     up = m["checks"]["upstream_equivalence"]
     assert up["mismatches"] == 0 and up["tree_identical"] and up["items_sha256"] == m["items_sha256"]
     assert set(m["checks"]["full_replay_and_checker_in_fresh_processes"]) == {"0", "1", "2"}
+
+
+def test_candidate_pool_drops_the_prompt_example_pairs(pairs):
+    fake = {pid: [{"pair_id": pid}] for pid in pairs}
+    kept = {it["pair_id"] for it in B.candidate_pool(fake)}
+    assert kept == set(pairs) - set(B.fewshot_pair_ids()) and len(kept) == 266

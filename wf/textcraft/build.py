@@ -435,11 +435,17 @@ def fewshot_examples(pool_by_pair: dict[str, list[dict]]) -> list[dict]:
 # ---------------- main ----------------
 
 
+def candidate_pool(pool_by_pair: dict[str, list[dict]]) -> list[dict]:
+    """Eligible items of every pair except the prompt-example pairs, whose goals must never appear in a test item."""
+    held_out = set(fewshot_pair_ids())
+    return [it for p in all_pairs() if p.pair_id not in held_out for it in pool_by_pair[p.pair_id]]
+
+
 def build() -> tuple[list[dict], list[dict], dict]:
     excluded: Counter = Counter()
     held_out = set(fewshot_pair_ids())
     pool_by_pair = {p.pair_id: eligible(p, excluded) for p in all_pairs()}
-    pool = [it for p in all_pairs() if p.pair_id not in held_out for it in pool_by_pair[p.pair_id]]
+    pool = candidate_pool(pool_by_pair)
     items = select(pool)
     shots = fewshot_examples(pool_by_pair)
     stats = {
