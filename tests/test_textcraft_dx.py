@@ -72,14 +72,14 @@ def test_outcome_of():
 
 def test_configs_registered_and_selection_sizes():
     items = V.read_items()
-    for run, n in (("textcraft_dx_zeroshot", 2 * (150 + 100)), ("textcraft_dx_generate", 2 * (60 + 30 + 30)),
-                   ("textcraft_dx_objectgoal", 2 * (150 + 100))):
+    for run, n in (("textcraft_dx_zeroshot", 2 * (150 + 100)), ("textcraft_dx_generate", 2 * (60 + 30 + 30 + 30)),
+                   ("textcraft_dx_objectgoal", 2 * (150 + 100)), ("textcraft_dx_prompts", 2 * (150 + 100))):
         assert run in RUNNERS
         cfg = load_config(run)
         assert len(X.selection(cfg, items)) == n
 
 
-@pytest.mark.parametrize("mode", ["zeroshot", "generate", "objectgoal"])
+@pytest.mark.parametrize("mode", ["zeroshot", "generate", "objectgoal", "prompts"])
 def test_run_mock_writes_every_record_and_resumes(mock_runs, mode):
     items = _small_items()
     role = "ingredient" if mode == "objectgoal" else None
@@ -91,17 +91,23 @@ def test_run_mock_writes_every_record_and_resumes(mock_runs, mode):
     chosen = X.selection(cfg, items)
     assert len(chosen) == 6
     arms = X.arms_of(mode)
-    assert len(recs) == len(chosen) * len(arms) and len(arms) == (2 if mode == "objectgoal" else 3)
+    assert len(recs) == len(chosen) * len(arms) and len(arms) == {"objectgoal": 2, "prompts": 9}.get(mode, 3)
     assert {(r["transition_id"], r["condition"]) for r in recs} == {(t["id"], c) for t in chosen for c in arms}
     shots = () if mode == "zeroshot" else P.fewshot_examples()
     prep = X.object_goal_item if mode == "objectgoal" else (lambda t: t)
-    assert all(r["item_hash"] == S.item_hash(prep(next(t for t in chosen if t["id"] == r["transition_id"])), shots, P.SYSTEM)
-               for r in recs)
+    for r in recs:
+        t = next(t for t in chosen if t["id"] == r["transition_id"])
+        if mode == "prompts":
+            v = r["condition"].split("|")[0]
+            assert r["prompt_variant"] == v and r["item_hash"] == S.item_hash(X.variant_item(t, v), shots, X.variant_system(v))
+        else:
+            assert r["item_hash"] == S.item_hash(prep(t), shots, P.SYSTEM)
     if mode == "objectgoal":
         assert all(r["task_line"] == f"Goal: craft {next(t for t in chosen if t['id'] == r['transition_id'])['object']}."
                    for r in recs)
     if mode == "generate":
         assert all(r["outcome"] in ("success", "failure", "other_failure", "other") and r["top_first"] for r in recs)
+        assert all(r["yn_answer"] in ("Yes", "No", "other") and r["truth"] == "failure" for r in recs)
     # resume: nothing is scored twice
     assert X.run_textcraft_dx({**cfg, "resume": True}) == 0
     assert len(read_jsonl(out)) == len(recs)
@@ -172,3 +178,47 @@ def test_object_goal_arms_score_the_right_candidates(mock_runs, monkeypatch):
         else:
             assert cond == "object_goal" and query.endswith(P.NEXT) and plus.startswith("Crafted ")
             assert minus.startswith("Could not find enough items")
+
+
+def test_answer_of():
+    assert X.answer_of(" Yes.") == "Yes" and X.answer_of("no") == "No" and X.answer_of("Maybe") == "other"
+    assert X.answer_of("") == "other"
+
+
+def test_inventory_reply_matches_every_stored_inventory_reply():
+    n = 0
+    for t in V.read_items():
+        h = t["history"]
+        for k, (action, reply) in enumerate(h):
+            if action == "inventory":
+                assert X.inventory_reply(h[:k]) == reply, (t["id"], k)
+                n += 1
+    assert n > 500
+    assert X.inventory_reply([]) == "Inventory: You are not carrying anything."
+
+
+def test_inventory_reply_matches_the_environment():
+    from wf.textcraft import world
+    if not (REPO / "wf" / "textcraft" / "data" / "recipes_frozen.json").exists():
+        pytest.skip("recipe database not built (python -m wf.textcraft.freeze --fetch)")
+    items = [t for t in V.read_items() if t["population"] in ("main", "success")][::25]
+    for t in items:
+        _env, steps = world.replay(t["recipe_lines"], t["env_goal"], [a for a, _o in t["history"]] + ["inventory"])
+        assert steps[-1][1] == X.inventory_reply(t["history"]), t["id"]
+
+
+def test_clean_system_has_no_agent_instructions_and_variants_change_only_their_part():
+    for phrase in ("respond an action", "Your output", "Reminder", "from the inventory or the environment", "empty"):
+        assert phrase not in X.CLEAN_SYSTEM
+    assert X.CLEAN_SYSTEM.startswith(P.SYSTEM.split("\n\n")[0])
+    t = next(it for it in V.read_items() if it["population"] == "main")
+    for c in X.CONDITIONS:
+        base = P.messages(t, c)
+        clean = P.messages(X.variant_item(t, "clean"), c, None, X.variant_system("clean"))
+        assert clean[1:] == base[1:] and clean[0]["content"] == X.CLEAN_SYSTEM
+        inv = P.messages(X.variant_item(t, "inventory"), c, None, X.variant_system("inventory"))
+        assert inv[:-1] == base[:-1]
+        added = f"\n> inventory\n{X.inventory_reply(t['history'])}\n\nAction: "
+        assert inv[-1]["content"] == base[-1]["content"].replace("\n\nAction: ", added, 1)
+        both = P.messages(X.variant_item(t, "clean_inventory"), c, None, X.variant_system("clean_inventory"))
+        assert both[0]["content"] == X.CLEAN_SYSTEM and both[1:] == inv[1:]

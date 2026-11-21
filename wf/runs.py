@@ -1422,6 +1422,7 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "textcraft_dx_zeroshot": lambda cfg: _lazy("textcraft.dx", "run_textcraft_dx")(cfg),
     "textcraft_dx_generate": lambda cfg: _lazy("textcraft.dx", "run_textcraft_dx")(cfg),
     "textcraft_dx_objectgoal": lambda cfg: _lazy("textcraft.dx", "run_textcraft_dx")(cfg),
+    "textcraft_dx_prompts": lambda cfg: _lazy("textcraft.dx", "run_textcraft_dx")(cfg),
     # 2026-11-20, documentation audit: the shared-spot sensitivity (A2), the audit analyses (C) and re-runs of
     # analyses under new run ids, so the original runs stay as they were (A3, B1, B4).
     "rq2_shared_score": lambda cfg: _lazy("rq2_shared", "run_rq2_shared_score")(cfg),

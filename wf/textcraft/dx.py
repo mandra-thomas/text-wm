@@ -9,7 +9,11 @@ action's own object ("Goal: craft Y."), as the two-candidate score (`object_goal
 `textcraft_dx_generate`: under the verified prompt (examples included), greedy free generation and the most probable
 first tokens, Llama only by default, on seeded whole couples of given roles. One record per item and line.
 
-Both save every record as it is made (scoring.jsonl, generations.jsonl) and, with --resume, skip what is saved.
+`textcraft_dx_prompts`: three system-text and history variants (PROMPT_VARIANTS: a world-model-only system text, an
+explicit inventory step before the action, both), aligned, swapped and neutral lines, both models; conditions are
+"<variant>|<line>".
+
+All save every record as it is made (scoring.jsonl, generations.jsonl) and, with --resume, skip what is saved.
 """
 from __future__ import annotations
 
@@ -21,6 +25,7 @@ from wf import constants as C
 from wf.runs import _init_run
 from wf.scoring.logodds import LogoddsScorer
 from wf.textcraft import prompts as P
+from wf.textcraft.checker import account
 from wf.textcraft.score import MODELS, item_hash, load_items, verified_files
 from wf.util import append_jsonl, read_jsonl, require_filed, write_status
 
@@ -51,6 +56,38 @@ def selection(cfg: dict, items: list[dict]) -> list[dict]:
 
 
 OBJECT_GOAL_ARMS = ("object_goal", "yn_object_goal")
+# Run 4 (notes/textcraft_llama_dx.md): a world-model-only system text. It keeps the framing and states only the
+# environment's rules and the output format; every agent-directed sentence of AgentGym's instruction is gone, and so
+# is "from the inventory or the environment". It does not state that the inventory starts empty.
+CLEAN_SYSTEM = (
+    "You are a text world model for TextCraft, a Minecraft crafting game. Given the interaction history and the next "
+    "action, predict the environment's next observation exactly in TextCraft style. Output only the observation "
+    "text.\n\nThe environment's rules: crafting commands are of the format \"craft [target object] using [input "
+    "ingredients]\". Each action is \"get\" with a quantity and an object, \"inventory\" to look up the inventory, or "
+    "\"craft\" with a quantity and one of the crafting commands shown. If a crafting command uses a generic ingredient "
+    "like \"planks\", a special type of the same ingredient, e.g. \"dark oak planks\", can be used instead."
+)
+PROMPT_VARIANTS = ("clean", "inventory", "clean_inventory")
+
+
+def inventory_reply(history: list) -> str:
+    """The environment's reply to "inventory" after the history (design section 2, rule 3; section 11, A1 rule 5),
+    from the text-only checker's accounting, whose held map keeps the environment's listing order."""
+    held = {n: c for n, c in account(history).held.items() if c}
+    if not held:
+        return "Inventory: You are not carrying anything."
+    return "Inventory: " + "".join(f"[{n}] ({c}) " for n, c in held.items())
+
+
+def variant_item(item: dict, variant: str) -> dict:
+    """The item as a run-4 variant shows it: with an inventory step appended to the history, or unchanged."""
+    if "inventory" in variant:
+        return {**item, "history": list(item["history"]) + [["inventory", inventory_reply(item["history"])]]}
+    return item
+
+
+def variant_system(variant: str) -> str:
+    return CLEAN_SYSTEM if variant.startswith("clean") else P.SYSTEM
 
 
 def object_goal_item(item: dict) -> dict:
@@ -59,7 +96,15 @@ def object_goal_item(item: dict) -> dict:
 
 
 def arms_of(mode: str) -> tuple[str, ...]:
+    if mode == "prompts":
+        return tuple(f"{v}|{c}" for v in PROMPT_VARIANTS for c in CONDITIONS)
     return OBJECT_GOAL_ARMS if mode == "objectgoal" else CONDITIONS
+
+
+def answer_of(text: str) -> str:
+    """A free yes/no answer: Yes, No or other, from its first word."""
+    w = text.strip().split()[0].strip(".,:;!").lower() if text.strip() else ""
+    return {"yes": "Yes", "no": "No"}.get(w, "other")
 
 
 def zero_shot_messages(item: dict, condition: str) -> list[dict[str, str]]:
@@ -112,15 +157,19 @@ def run_textcraft_dx(cfg: dict) -> int:
     mode = cfg["mode"]
     if mode == "zeroshot":
         hashes = {t["id"]: item_hash(t, (), P.SYSTEM) for t in items}
-    elif mode == "generate":
+    elif mode == "generate":  # the observation prompt's hash; the yes/no prompt differs only in its last line
         hashes = {t["id"]: item_hash(t, shots, P.SYSTEM) for t in items}
     elif mode == "objectgoal":
         hashes = {t["id"]: item_hash(object_goal_item(t), shots, P.SYSTEM) for t in items}
+    elif mode == "prompts":  # one hash per item and variant; a record keeps its variant's
+        hashes = {(t["id"], v): item_hash(variant_item(t, v), shots, variant_system(v)) for t in items
+                  for v in PROMPT_VARIANTS}
     else:
         raise ValueError(mode)
     out = d / ("generations.jsonl" if mode == "generate" else "scoring.jsonl")  # both in RUN_OUTPUTS: wiped or repaired
     saved = read_jsonl(out) if cfg.get("resume") and out.exists() else []
-    if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):
+    key = (lambda tid, cond: (tid, cond.split("|")[0])) if mode == "prompts" else (lambda tid, _c: tid)
+    if any(hashes.get(key(s["transition_id"], s["condition"])) != s.get("item_hash") for s in saved):
         raise SystemExit(f"{run_id}: saved records belong to different items or prompts; rerun without --resume.")
     done = {(s["model"], s["transition_id"], s["condition"]) for s in saved}
     for model_name, tag in _models(cfg):
@@ -130,7 +179,7 @@ def run_textcraft_dx(cfg: dict) -> int:
         scorer = LogoddsScorer(model_name, model_tag=tag)
         for t, c in todo:
             base = {"game_id": t["pair_id"], "pair_id": t["pair_id"], "population": t["population"],
-                    "role": t["role"], "item_hash": hashes[t["id"]], "variant": mode}
+                    "role": t["role"], "item_hash": hashes[key(t["id"], c)], "variant": mode}
             if mode == "zeroshot":
                 plus, minus = P.candidates(t, c)
                 sc = scorer.score_pair(transition_id=t["id"], condition=c, messages=zero_shot_messages(t, c),
@@ -143,12 +192,22 @@ def run_textcraft_dx(cfg: dict) -> int:
                 sc = scorer.score_pair(transition_id=t["id"], condition=c, messages=P.messages(obj, arm, shots),
                                        o_plus=plus, o_minus=minus)
                 rec = {**sc.to_dict(), **base, "task_line": obj["task_line"]}
+            elif mode == "prompts":
+                v, cond = c.split("|")
+                shown = variant_item(t, v)
+                plus, minus = P.candidates(shown, cond)
+                sc = scorer.score_pair(transition_id=t["id"], condition=c,
+                                       messages=P.messages(shown, cond, shots, variant_system(v)),
+                                       o_plus=plus, o_minus=minus)
+                rec = {**sc.to_dict(), **base, "prompt_variant": v, "line": cond}
             else:
                 msgs = P.messages(t, c, shots)
                 text = scorer.free_generate(msgs, max_new_tokens=int(cfg.get("max_new_tokens", 40)))
                 top = top_first_tokens(scorer, msgs, int(cfg.get("top_k", 10)))
+                yn = scorer.free_generate(P.messages(t, f"yn_{c}", shots), max_new_tokens=int(cfg.get("yn_tokens", 4)))
                 rec = {**base, "model": tag, "model_revision": scorer.revision, "transition_id": t["id"],
                        "condition": c, "generation": text, "outcome": outcome_of(text), "top_first": top,
+                       "yn_generation": yn, "yn_answer": answer_of(yn), "truth": "failure" if t["population"] == "main" else "success",
                        "o_plus": t["candidates"]["o_plus"], "o_minus": t["candidates"]["o_minus"],
                        "exact_plus": text.strip() == t["candidates"]["o_plus"],
                        "exact_minus": text.strip() == t["candidates"]["o_minus"]}
