@@ -1394,3 +1394,41 @@ Review 4 passed fix round 3 with no must-fix. Its wording fixes, none of which c
 - **The job script's sizing comment** now quotes the largest shard (C6).
 
 The full token check on the final prompts (C7) runs on ICE before the smoke run.
+
+## Smoke run: format, timing and precision, recorded before the full run (2026-11-21)
+
+Smoke scoring `tau_score_smoke` (ICE job 7206303) and `tau_smoke_analysis` (job 7218797), both at `d44b149`, after a fresh build and verification at that commit (jobs 7206140 and 7206141; the rebuild reproduces the pinned item, natural and few-shot hashes, and verification passes on 3,391 items). The smoke run covers 21 main items from 20 users, the longest natural item, and 12 items in each exploratory arm. It is read for format, timing and precision only. No effect estimate was computed or displayed.
+
+**Format.** Both models pass the token checks.
+
+| Readout | Qwen3-8B median mass | Llama-3.1-8B median mass |
+|---|---|---|
+| First token (`{"` against `Error`) | 0.99996 | 0.996 |
+| Target check | 1.0000 | 0.9996 |
+| Yes/no | 0.999996 | 0.978 |
+
+No item has mass below 0.5 on any readout, and there are no missing or stale scores.
+
+**Timing.** Mean seconds per job, by readout:
+
+| Model | first | yes/no | full | target |
+|---|---|---|---|---|
+| Qwen | 1.50 | 1.48 | 3.15 | 1.53 |
+| Llama | 1.20 | 1.20 | 2.54 | 1.24 |
+
+The projected full run takes 21.0 GPU-hours for Qwen and 16.9 for Llama. With 16 shards, the largest shard needs 3.1 hours for both models, inside the 8-hour limit.
+
+**Precision.** Projected 95% half-widths on the 856-item primary population run from no clustering to full clustering by user. They come from the smoke run's 21 paired differences, so they are rough.
+
+| Readout | Qwen | Llama |
+|---|---|---|
+| First token (smoke SD of differences) | ±0.39 to ±0.93 (5.84) | ±0.08 to ±0.18 (1.16) |
+| Yes/no | ±0.40 to ±0.96 (6.04) | ±0.02 to ±0.04 (0.27) |
+| Full reply | ±0.75 to ±1.79 (11.24) | ±0.30 to ±0.72 (4.54) |
+
+**What this implies for reading the result, fixed now:**
+
+- **An ALFWorld-sized effect would be detected in both models.** With full clustering, the probability of an interval above zero together with an estimate of at least 0.5 is 0.9996 for Qwen at ALFWorld's first-token size (2.52) and 0.97 for Llama (0.68).
+- **For Llama, a true effect of zero would very likely give the null verdict** (probability 0.999).
+- **For Qwen it could not.** Its projected half-width exceeds the 0.5-nat margin, so the probability of a null verdict at a true zero is 0.0. A Qwen result that is not positive will be reported as inconclusive, as the outcome table already requires when equivalence is not shown, and not as evidence of no effect.
+- **Qwen's large spread is a property of its scores here.** Its differences are about five times Llama's, and the smoke run cannot say whether that spread is item noise or real heterogeneity between items. The population is not enlarged.
