@@ -1,0 +1,13 @@
+run_id: textcraft_dx_generate
+# Exploratory, post hoc (notes/textcraft_llama_dx.md): Llama greedy free generation (40 new tokens at most) and its
+# ten most probable first tokens under the verified prompt, aligned, swapped and neutral lines, on 60 seeded goal-role
+# main couples, 30 ingredient main couples and 30 goal-role success couples.
+manifest: wf/textcraft/data/manifest.json
+mode: generate
+models: [llama3.1-8b-fewshot]
+max_new_tokens: 40
+top_k: 10
+blocks:
+  - {population: main, couples: 60, role: goal}
+  - {population: main, couples: 30, role: ingredient}
+  - {population: success, couples: 30, role: goal}
