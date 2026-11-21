@@ -2918,7 +2918,183 @@
       }
     }
   },
-  "placement": {},
+  "placement": {
+    "mistral-7b-v0.3": {
+      "n_items": 300,
+      "run": "family_placement_mistral-7b-v0.3",
+      "tokenization_gate": {
+        "shard_00_of_01": {
+          "attn_implementation_loaded": "sdpa",
+          "dtype_loaded": "torch.bfloat16",
+          "first_token_pairs": {
+            "'You' vs 'Nothing'": 300
+          },
+          "joined_plain_text_mismatches": 600,
+          "max_prompt_tokens": 1161,
+          "n_candidates_checked": 600,
+          "n_yes_no_prompts_checked": 900,
+          "ok": true,
+          "skipped": null
+        }
+      },
+      "two_candidate": {
+        "first_turn": {
+          "delta_L_ci": [
+            0.6059366454529047,
+            1.152428046941089
+          ],
+          "delta_L_first_ci": [
+            0.942548251654657,
+            1.4170180476139094
+          ],
+          "delta_L_first_nats": 1.1714504551709009,
+          "delta_L_first_perm_p": 0.000999000999000999,
+          "delta_L_nats": 0.8725251963823742,
+          "delta_L_perm_p": 0.000999000999000999,
+          "delta_c_ci": [
+            0.12301949009553462,
+            0.49476745284562673
+          ],
+          "delta_c_nats": 0.2989252587885268,
+          "delta_p_ci": [
+            7.029604345930294,
+            14.030669817116602
+          ],
+          "delta_p_perm_p": 0.000999000999000999,
+          "delta_p_pp": 10.594219428788284,
+          "first_mass_median": 0.8957902591024232,
+          "icc_L": 0.18633002773761098,
+          "icc_L_first": 0.3543434829858556,
+          "icc_p": 0.2609655935244607,
+          "n_games": 102,
+          "n_items": 300,
+          "sd_L": 2.1256378632647226,
+          "sd_L_first": 1.636569304848582,
+          "sd_p": 25.88786946481948
+        },
+        "first_turn_minus_native": {
+          "ci": [
+            -0.15106016580930406,
+            0.19654634672179178
+          ],
+          "delta_L_nats": 0.019098318709513458,
+          "n_items": 300
+        },
+        "native": {
+          "delta_L_ci": [
+            0.583086856286037,
+            1.1252298848156777
+          ],
+          "delta_L_first_ci": [
+            0.78230184086491,
+            1.2874699432560701
+          ],
+          "delta_L_first_nats": 1.0341715901065618,
+          "delta_L_first_perm_p": 0.000999000999000999,
+          "delta_L_nats": 0.8534268776728603,
+          "delta_L_perm_p": 0.000999000999000999,
+          "delta_c_ci": [
+            0.037677927005295285,
+            0.3399995614267752
+          ],
+          "delta_c_nats": 0.18074471243370133,
+          "delta_p_ci": [
+            4.250069782718869,
+            10.552362601963601
+          ],
+          "delta_p_perm_p": 0.000999000999000999,
+          "delta_p_pp": 7.301626174053686,
+          "first_mass_median": 0.8140097232306799,
+          "icc_L": 0.24876094926068876,
+          "icc_L_first": 0.37816946110464333,
+          "icc_p": 0.28640148622106965,
+          "n_games": 102,
+          "n_items": 300,
+          "sd_L": 1.9917764410877044,
+          "sd_L_first": 1.7202133389207688,
+          "sd_p": 23.720605021716572
+        }
+      },
+      "yes_no": {
+        "first_turn": {
+          "delta_L_ci": [
+            2.2690311388601176,
+            3.2687895470256
+          ],
+          "delta_L_first_ci": [
+            2.2690311388601176,
+            3.2687895470256
+          ],
+          "delta_L_first_nats": 2.7635416563542092,
+          "delta_L_first_perm_p": 0.000999000999000999,
+          "delta_L_nats": 2.7635416563542092,
+          "delta_L_perm_p": 0.000999000999000999,
+          "delta_c_ci": [
+            0.0,
+            0.0
+          ],
+          "delta_c_nats": 0.0,
+          "delta_p_ci": [
+            20.6464464177835,
+            30.53307680125662
+          ],
+          "delta_p_perm_p": 0.000999000999000999,
+          "delta_p_pp": 25.45405086745297,
+          "first_mass_median": 0.9916112411649096,
+          "icc_L": 0.32741148660505537,
+          "icc_L_first": 0.32741148660505537,
+          "icc_p": 0.2962436703544552,
+          "n_games": 102,
+          "n_items": 300,
+          "sd_L": 3.591728478735942,
+          "sd_L_first": 3.591728478735942,
+          "sd_p": 34.63003332742739
+        },
+        "first_turn_minus_native": {
+          "ci": [
+            0.1346672626698315,
+            0.4811872661782056
+          ],
+          "delta_L_nats": 0.3031249888663782,
+          "n_items": 300
+        },
+        "native": {
+          "delta_L_ci": [
+            2.0623040824742542,
+            2.8759025313233955
+          ],
+          "delta_L_first_ci": [
+            2.0623040824742542,
+            2.8759025313233955
+          ],
+          "delta_L_first_nats": 2.460416667487831,
+          "delta_L_first_perm_p": 0.000999000999000999,
+          "delta_L_nats": 2.460416667487831,
+          "delta_L_perm_p": 0.000999000999000999,
+          "delta_c_ci": [
+            0.0,
+            0.0
+          ],
+          "delta_c_nats": 0.0,
+          "delta_p_ci": [
+            22.019429807148722,
+            31.396285348621852
+          ],
+          "delta_p_perm_p": 0.000999000999000999,
+          "delta_p_pp": 26.6796155039401,
+          "first_mass_median": 0.9944074662078455,
+          "icc_L": 0.3251516312956621,
+          "icc_L_first": 0.3251516312956621,
+          "icc_p": 0.3158225026356053,
+          "n_games": 102,
+          "n_items": 300,
+          "sd_L": 2.900501405212739,
+          "sd_L_first": 2.900501405212739,
+          "sd_p": 32.95410353274681
+        }
+      }
+    }
+  },
   "prediction": "Logged before any family score (2026-11-20): the goal effect (aligned minus swapped) is positive under both formats, two-candidate and yes/no, for every wave A model; read as the 95% game-clustered CI lying above zero.",
   "prediction_check": {
     "gemma2-9b-it": {
@@ -3147,11 +3323,12 @@
     "analysis_job": {
       "git_sha": "ca76bb953b4289d9cb07833d2c6cf9bcc5f98ca7",
       "gpu": null,
-      "host": "atl1-1-01-005-2-2.pace.gatech.edu",
-      "slurm_job_id": "7201550",
-      "time": "2026-11-20T15:27:16-0500"
+      "host": "atl1-1-01-005-2-1.pace.gatech.edu",
+      "slurm_job_id": "7204329",
+      "time": "2026-11-20T17:57:54-0500"
     },
     "input_sha256": {
+      "/storage/ice1/2/1/gmat3/text-wm-fix23/runs/family_placement_mistral-7b-v0.3/shard_00_of_01/scoring.jsonl": "38eb7b2434a382ca7eb81b1b9ab673d2a6e364a7cd0ec67eb5c5c041f5861dbc",
       "/storage/ice1/2/1/gmat3/text-wm-fix23/runs/family_score_gemma2-9b-it/shard_00_of_01/scoring.jsonl": "43a4305cd95e209b74c197ea24db7f0beb6ebb65bafa9c25820ae145c859cfdb",
       "/storage/ice1/2/1/gmat3/text-wm-fix23/runs/family_score_llama3.2-1b/shard_00_of_01/scoring.jsonl": "e98ea10aa714ed67382f0399a418b5e825e4acb535d10daa4347e78ca0ca4f66",
       "/storage/ice1/2/1/gmat3/text-wm-fix23/runs/family_score_llama3.2-3b/shard_00_of_01/scoring.jsonl": "1a51a0f4b90fec6f77597e64409f93acf2c0c92e837283bd5a3e6e38771a1c6a",
@@ -3216,6 +3393,25 @@
         "path": "/storage/ice1/2/1/gmat3/text-wm-fix23/runs/rq12_transitions_s2",
         "slurm_job_ids": null,
         "status": "# STATUS \u2014 rq12_transitions_s2 \u2014 PASS"
+      },
+      "family_placement_mistral-7b-v0.3": {
+        "commits": [
+          "9e3afd971f64a2f545fda77a841994bb718bad1b"
+        ],
+        "path": "/storage/ice1/2/1/gmat3/text-wm-fix23/runs/family_placement_mistral-7b-v0.3",
+        "shards": {
+          "shard_00_of_01": {
+            "commit": "9e3afd971f64a2f545fda77a841994bb718bad1b",
+            "gpu": [
+              "NVIDIA A40"
+            ],
+            "path": "/storage/ice1/2/1/gmat3/text-wm-fix23/runs/family_placement_mistral-7b-v0.3/shard_00_of_01",
+            "slurm_job_ids": [
+              "7199733"
+            ],
+            "status": "# STATUS \u2014 family_placement_mistral-7b-v0.3/shard_00_of_01 \u2014 REPORTED (shard complete)"
+          }
+        }
       },
       "family_score_gemma2-9b-it": {
         "commits": [
@@ -4698,9 +4894,5 @@
     ],
     "share_margin": 0.05
   },
-  "waiting": {
-    "placement mistral-7b-v0.3": [
-      "shards missing or from different splits: []"
-    ]
-  }
+  "waiting": {}
 }
