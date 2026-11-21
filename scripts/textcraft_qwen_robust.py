@@ -990,6 +990,89 @@ def check_generation(recs, rows_by_model):
     return out
 
 
+def wls_line_shift(rows, bt, lines=("a", "s", "n")) -> dict:
+    """Yes/no L regressed on first-token L with one intercept per goal line (pooled item x line observations):
+    Y = c_line + b * F. The intercept differences are the yes/no shifts between lines that the observation readout's
+    own shift does not account for. Pair-bootstrap intervals (weighted least squares per resample)."""
+    Ys, Fs, D, cl = [], [], [], []
+    for r in rows:
+        for j, k in enumerate(lines):
+            Ys.append(r["Y" + k])
+            Fs.append(r["F" + k])
+            d = [0.0] * len(lines)
+            d[j] = 1.0
+            D.append(d)
+            cl.append(r["pair"])
+    Y, F, D = np.array(Ys), np.array(Fs), np.array(D)
+    X = np.column_stack([D, F])
+    W = bt.W(cl)
+
+    def fit(w):
+        Xw = X * w[:, None]
+        return np.linalg.lstsq(Xw.T @ X, Xw.T @ Y, rcond=None)[0]
+
+    pt = fit(np.ones(len(Y)))
+    draws = np.array([fit(w) for w in W])
+    ia, is_, in_ = lines.index("a"), lines.index("s"), lines.index("n")
+    out = {"slope": _pack(pt[-1], draws[:, -1], len(rows), len(set(cl))),
+           "aligned_minus_swapped": _pack(pt[ia] - pt[is_], draws[:, ia] - draws[:, is_], len(rows), len(set(cl))),
+           "aligned_minus_neutral": _pack(pt[ia] - pt[in_], draws[:, ia] - draws[:, in_], len(rows), len(set(cl))),
+           "swapped_minus_neutral": _pack(pt[is_] - pt[in_], draws[:, is_] - draws[:, in_], len(rows), len(set(cl)))}
+    return out
+
+
+def check_task_reading(rows, bt) -> dict:
+    """How much of the yes/no effect is plausibly a task-success reading ("does this action succeed at my goal?")
+    rather than a prediction of the environment's reply. TextCraft's question ("Will this action succeed? Answer Yes
+    or No.") is not anchored to the reply, unlike ALFWorld's. Compared item by item with the first-token readout of
+    the observation (which is the observation decision, first-token mass 1 for Qwen), on failures and successes, by
+    role, and by line: under the aligned line the action always serves the named goal (a goal craft completes it, an
+    ingredient craft is a step toward it); under the swapped line it never does (the object lies in the aligned tree
+    only); the neutral line names no goal."""
+    main = [r for r in rows if r["pop"] == "main"]
+    succ = [r for r in rows if r["pop"] == "success"]
+    groups = {"fail|all": main, "fail|goal": [r for r in main if r["role"] == "goal"],
+              "fail|ingredient": [r for r in main if r["role"] == "ingredient"],
+              "succ|all": succ, "succ|goal": [r for r in succ if r["role"] == "goal"],
+              "succ|ingredient": [r for r in succ if r["role"] == "ingredient"]}
+    out = {}
+    for lab, rs in groups.items():
+        cl = pairs_of(rs)
+        yd, fd, ld = (arr(rs, lambda r: r["Ya"] - r["Ys"]), arr(rs, lambda r: r["Fa"] - r["Fs"]),
+                      arr(rs, lambda r: r["La"] - r["Ls"]))
+        g = {"n": len(rs),
+             "yes_no": mean_ci(yd, cl, bt), "first_token": mean_ci(fd, cl, bt), "two_candidate": mean_ci(ld, cl, bt),
+             "yes_no_minus_first_token": mean_ci(yd - fd, cl, bt),
+             "yes_no_aligned_minus_neutral": mean_ci(arr(rs, lambda r: r["Ya"] - r["Yn"]), cl, bt),
+             "yes_no_swapped_minus_neutral": mean_ci(arr(rs, lambda r: r["Ys"] - r["Yn"]), cl, bt),
+             "first_aligned_minus_neutral": mean_ci(arr(rs, lambda r: r["Fa"] - r["Fn"]), cl, bt),
+             "first_swapped_minus_neutral": mean_ci(arr(rs, lambda r: r["Fs"] - r["Fn"]), cl, bt),
+             "share_yes_no_up_first_not_up": _r(np.mean((yd > 0) & (fd <= 0))),
+             "share_first_up_yes_no_not_up": _r(np.mean((fd > 0) & (yd <= 0)))}
+        if len(rs) > 5:
+            from scipy.stats import spearmanr
+            g["spearman_item_effects"] = _r(spearmanr(yd, fd).correlation)
+        # the observation readout says success (first-token L at least +3) but the answer is No, and the reverse
+        dis = {}
+        for c, k in (("aligned", "a"), ("swapped", "s"), ("neutral", "n")):
+            F, Y = arr(rs, lambda r: r["F" + k]), arr(rs, lambda r: r["Y" + k])
+            pos, neg = F >= 3, F <= -3
+            dis[c] = {"n_obs_success": int(pos.sum()),
+                      "answer_no_given_obs_success": _r(np.mean(Y[pos] <= 0)) if pos.any() else None,
+                      "n_obs_failure": int(neg.sum()),
+                      "answer_yes_given_obs_failure": _r(np.mean(Y[neg] > 0)) if neg.any() else None}
+        g["dissociation"] = dis
+        g["line_shift_given_first_token"] = wls_line_shift(rs, bt)
+        out[lab] = g
+    # on successes, the yes/no effect should be about zero for a world model that knows the action works; compare it
+    # with the observation readout on the same items, per length bin
+    out["succ_by_bin"] = {b: {"yes_no": mean_ci(arr([r for r in succ if r["bin"] == b], lambda r: r["Ya"] - r["Ys"]),
+                                                [r["pair"] for r in succ if r["bin"] == b], bt),
+                              "first_token": mean_ci(arr([r for r in succ if r["bin"] == b], lambda r: r["Fa"] - r["Fs"]),
+                                                     [r["pair"] for r in succ if r["bin"] == b], bt)} for b in BINS}
+    return out
+
+
 def check_format(scores, gen_llama) -> dict:
     """What free generation could add: the probability mass on the two candidates' first tokens per arm (main and
     success items), how often the first-token sign equals the full two-candidate sign, and, for Llama's existing
@@ -1067,6 +1150,8 @@ def main() -> None:
         print(f"[{SHORT[m]}] decisions, heterogeneity", file=sys.stderr)
         res["decisions"] = check_decisions(rows, bt)
         res["heterogeneity"] = check_heterogeneity(rows, bt)
+        print(f"[{SHORT[m]}] task-success reading of the yes/no question", file=sys.stderr)
+        res["task_reading"] = check_task_reading(rows, bt)
         out["per_model"][SHORT[m]] = res
     print("[both] prompt variants", file=sys.stderr)
     out["prompts"] = check_prompts(variants, rows_by_model, items)

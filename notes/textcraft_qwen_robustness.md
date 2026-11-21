@@ -25,13 +25,21 @@
    - *On goal crafts that work.* Qwen says "Yes" to 65% under the aligned line, 73% under the neutral line and 14% under the swapped line. For 156 of these 300 working actions the answer flips from Yes to No when the other goal is named.
    - *What that means.* Qwen treats "crafting the item the other goal line does not ask for" as an action that will fail. That is a large decision-level error on working actions.
 
+7. **TextCraft's yes/no question is mostly answered as "will this succeed at my task?", so the cross-environment yes/no comparison does not hold (section 9).**
+   - *The question.* Unlike ALFWorld's, TextCraft's question is not tied to the environment's reply.
+   - *The excess.* On failures, Qwen's yes/no effect (+2.92) is three times the shift in its own predicted observation (first token +0.97). The excess is +1.95 [+1.64, +2.29], and +2.04 at a matched first-token score. On successes the yes/no effect is +9.60 against +2.65.
+   - *The clearest sign.* On working goal crafts that Qwen's observation readout confidently calls successes, it answers "No" to 72% under the swapped line and to 1% under the neutral line.
+   - *Llama.* Llama shows no such component: its yes/no effect matches its first-token effect.
+   - *What follows.* "Qwen's yes/no effect is the same size in TextCraft (2.92) as in ALFWorld (2.80)" compares different quantities. On the readout anchored to the reply, TextCraft's effect is about a third to a half of ALFWorld's.
+
 6. **Practical size on failing actions is modest.** The two-candidate success prediction on failures is 19.0% (aligned), 16.5% (neutral) and 15.1% (swapped). Aligned against swapped is +3.9 points [+2.2, +5.5]. Balanced accuracy is the same under the aligned and neutral lines (0.774 and 0.775) and lower under the swapped line (0.755; yes/no 0.626).
 
 **What this means for the paper.**
 
 - *Keep.* "Goal effect confirmed for Qwen" stands, and it does not rest on a few pairs or on one prompt.
 - *Change "naming the goal raises predicted success for settled failures".* The data support "the two task lines separate Qwen's predictions". On failures, part of that separation is a modest rise under the aligned line on the two-candidate scale. On the yes/no scale and on goal-completing crafts, the main part is a fall under the swapped line.
-- *Report the effect's shape.* It is concentrated on first-time crafts and, among intermediate crafts, mostly on names that share a word with the goal. The median is far below the mean. The cross-benchmark yes/no comparison (2.92 against ALFWorld's 2.80) should be read with the yes/no decomposition next to it.
+- *Report the effect's shape.* It is concentrated on first-time crafts and, among intermediate crafts, mostly on names that share a word with the goal. The median is far below the mean.
+- *Drop the claim that the yes/no effect has the same size as ALFWorld's.* TextCraft's yes/no number is mostly a task-success judgement (section 9). Compare environments on readouts anchored to the reply, and rescore TextCraft with an anchored question before any yes/no comparison.
 
 ## 1. Data, provenance and method
 
@@ -223,7 +231,7 @@ The anomaly has two parts.
 1. **The neutral line makes Qwen more willing to say "Yes" to everything.** This shows most on used-up ingredients: 6.5% Yes under the neutral line against 0.2% under the aligned line. "Explore the crafting commands" reads as a license to try anything, and any named goal makes Qwen stricter. Discrimination does not suffer: the yes/no AUC is 0.85 under the neutral line and 0.84 under the aligned line. It is a level shift, and it is why aligned minus neutral is negative overall.
 2. **The swapped line makes Qwen say "No" to crafting the other goal's final item, whether or not that craft works.** On goal-role successes, swapped minus neutral is −18 nats, and the Yes share falls from 73% to 14%. The yes/no AUC under the swapped line drops to 0.74 (goal role 0.76), from 0.84–0.87 under the other two. The swapped line damages discrimination, and the aligned line does not.
 
-So the yes/no effect of +2.92 is mainly the swapped line suppressing "Yes", not the aligned line raising it. The likeliest reading is that Qwen answers "Will this action succeed?" partly as "is this a step toward my goal?". Crafting the top item of the tree the task does not ask for is then "not going to succeed". The two-candidate readout shows the same direction on goal crafts, weaker: on goal-role successes the share predicted success is 72.7% aligned, 66.0% neutral and 55.7% swapped. It cannot be called a pure format effect, because the two-candidate reply ("Crafted 1 minecraft:…" against "Could not find enough items…") asks no question about goals.
+So the yes/no effect of +2.92 is mainly the swapped line suppressing "Yes", not the aligned line raising it. The likeliest reading is that Qwen answers "Will this action succeed?" partly as "is this a step toward my goal?". Crafting the top item of the tree the task does not ask for is then "not going to succeed". The two-candidate readout shows the same direction on goal crafts, weaker: on goal-role successes the share predicted success is 72.7% aligned, 66.0% neutral and 55.7% swapped. It cannot be called a pure format effect, because the two-candidate reply ("Crafted 1 minecraft:…" against "Could not find enough items…") asks no question about goals. Section 9 tests the task-success reading directly.
 
 ## 6. Check 5: prompt robustness
 
@@ -326,7 +334,89 @@ Class and repetition cannot be fully separated, because only 11 used-up items ar
 
 **Length by role.** The goal-role effect grows with history length: −0.02 at 1–3 steps, +1.27 at 4–8 and +1.89 at 9–12. The ingredient effect falls: +2.15, +0.78 and +0.45. The ingredient fall is largely composition: used-up and repeat crafts, which show no effect, are nearly absent at 1–3 steps.
 
-## 9. Check 8: free generation (not run, and why)
+## 9. Is the yes/no answer a world-model prediction or a task-success judgement? (added 2026-11-21 at the coordinator's request)
+
+**Why the question arises.** The two environments ask different yes/no questions:
+
+- *ALFWorld* anchors the question to the environment's reply: "will this action succeed, or will the environment reply "Nothing happens."? Answer Yes if it succeeds and No if nothing happens."
+- *TextCraft* asks only: "Question: Will this action succeed? Answer Yes or No."
+
+The TextCraft wording can be read as "will this action succeed at my task?". A model reading it that way says "No" to an action that works but does not serve the named goal. A world model predicting the environment's reply should not. Under the aligned line every action serves the named goal: a goal craft completes it, an ingredient craft is a step toward it. Under the swapped line no action does, because the crafted item lies in the aligned goal's tree only. The neutral line ("explore the crafting commands") names no goal, so every action is on task. The yes/no effect therefore contrasts "serves the named task" with "does not", on top of whatever it measures about feasibility.
+
+**How it was checked.** All of this is on CPU, from the confirmatory scores. The yardstick is the first-token readout of the observation, the score for "Craft" against "Could" as the first word of the environment's next reply. For Qwen this is the observation decision itself: the mass on these two tokens is 1, and their sign fixes what greedy generation would say. A world model whose yes/no answer reports the same belief as its predicted observation should show a yes/no effect of about the size of its first-token effect. There are three comparisons.
+
+The first comparison is *the excess*: the item-level difference between the yes/no effect and the first-token effect, on failures and on successes, by role.
+
+The second is *the shift at a matched predicted observation*. Every item is pooled under all three lines, and the yes/no score $Y_{i,g}$ of item $i$ under line $g$ is regressed on its first-token score $F_{i,g}$, with one intercept per line:
+
+$$Y_{i,g} = c_g + b\,F_{i,g} + e_{i,g}.$$
+
+The intercept differences, for example $c_{\text{aligned}} - c_{\text{swapped}}$, are yes/no shifts between lines that the change in the predicted observation does not account for. The slope $b$ absorbs any difference in scale between the two readouts. The intervals come from weighted least squares refitted in each pair resample.
+
+The third is *the dissociation*: among items whose first-token score predicts success with confidence (a first-token score of at least +3), the share answered "No", per line.
+
+**Qwen: most of the yes/no effect is not in the predicted observation.**
+
+| Qwen3-8B, items | Yes/no effect | First-token effect | Yes/no minus first token | Shift at matched first token, aligned minus swapped |
+|---|---|---|---|---|
+| Failures, all (1,500) | +2.92 [+2.54, +3.32] | +0.97 [+0.67, +1.27] | +1.95 [+1.64, +2.29] | +2.04 [+1.74, +2.37] |
+| Failures, goal role (510) | +4.97 [+4.17, +5.78] | +1.19 [+0.65, +1.76] | +3.78 [+3.19, +4.40] | +3.60 [+2.97, +4.25] |
+| Failures, ingredient (990) | +1.87 [+1.50, +2.24] | +0.86 [+0.48, +1.25] | +1.01 [+0.73, +1.27] | +1.13 [+0.88, +1.38] |
+| Successes, all (600) | +9.60 [+8.15, +11.06] | +2.65 [+1.86, +3.43] | +6.95 [+5.82, +8.10] | +7.15 [+6.00, +8.30] |
+| Successes, goal role (300) | +16.44 [+14.95, +17.98] | +4.49 [+3.33, +5.66] | +11.95 [+10.69, +13.31] | +12.42 [+11.12, +13.82] |
+| Successes, ingredient (300) | +2.75 [+1.90, +3.72] | +0.81 [+0.11, +1.51] | +1.94 [+1.38, +2.52] | +1.96 [+1.38, +2.55] |
+
+**The excess.** On failures, two thirds of Qwen's yes/no effect (+1.95 of +2.92) is beyond the shift in its own predicted observation. The regression gives the same at a matched first-token score (+2.04). Its slope is 0.91 [0.87, 0.95], so the yes/no answer is not simply a stretched copy of the observation score; it moves slightly less per nat. A difference of scale therefore cannot explain the excess.
+
+**Successes.** A world model that knows an action works should show little goal effect on successes. Qwen's observation readout does shift on successes (+2.65, a general lift under the matching line). Its yes/no effect is +9.60, almost four times larger, and +16.4 nats on goal crafts that work. The excess is largest at the shortest histories (yes/no +12.56 against first token +3.02 at 1–3 steps; +7.16 against +1.96 at 9–12).
+
+**The direction of the excess is the one a task-success reading predicts.**
+
+| Qwen3-8B: share answered "No" among items whose observation readout confidently predicts success | Aligned | Swapped | Neutral |
+|---|---|---|---|
+| Goal-role successes (182 / 129 / 173 items) | 12.6% | 72.1% | 1.2% |
+| Ingredient successes (203 / 202 / 210) | 12.3% | 22.3% | 5.7% |
+| Failures, all (216 / 165 / 165) | 22.2% | 38.2% | 8.5% |
+
+Under the swapped line Qwen predicts that crafting the other task's final item will produce "Crafted 1 minecraft:…", yet answers "No" to whether it will succeed in 72% of such working crafts. It does so in 1% under the neutral line, where no task is at stake. This is the clearest sign that the question is being answered as "will this succeed at my task?".
+
+**Relative to the neutral line, at matched first-token scores.**
+
+- *Off task.* The swapped line lowers yes/no by 4.50 on failures, 15.42 on goal successes and 7.78 on ingredient successes. The penalty is largest for the action most plainly off task, crafting the other goal's final item.
+- *On task.* The aligned line does not raise "Yes" above neutral even when the action completes the task: +0.20 on goal-role failures, −3.00 on goal successes, −3.71 and −5.82 on ingredient failures and successes. Any named goal makes Qwen stricter than "explore".
+
+The task reading is therefore one-sided: "does not serve my goal" turns into "No", while "serves my goal" does not turn into "Yes".
+
+**Item by item.** The two readouts agree only moderately: Spearman correlation of the item effects 0.57 on failures, 0.62 on successes. 23% of failures (20% of successes) move toward Yes on the yes/no question while the first token does not move toward success. The reverse holds for 10% (6%).
+
+**Llama: no task-success component of any size.**
+
+| Llama-3.1-8B, items | Yes/no effect | First-token effect | Yes/no minus first token | Shift at matched first token, aligned minus swapped |
+|---|---|---|---|---|
+| Failures, all (1,500) | −0.15 [−0.21, −0.09] | −0.16 [−0.25, −0.08] | +0.01 [−0.05, +0.08] | −0.03 [−0.08, +0.02] |
+| Failures, goal role (510) | −0.30 [−0.42, −0.18] | −0.55 [−0.68, −0.42] | +0.25 [+0.14, +0.37] | +0.16 [+0.06, +0.27] |
+| Successes, goal role (300) | +0.42 [+0.19, +0.66] | +0.01 [−0.30, +0.31] | +0.41 [+0.19, +0.61] | +0.41 [+0.25, +0.58] |
+| Successes, ingredient (300) | +0.02 [−0.07, +0.10] | +0.22 [+0.09, +0.36] | −0.20 [−0.31, −0.10] | −0.10 [−0.16, −0.03] |
+
+Llama's yes/no effect matches its first-token effect on failures. On goal crafts there is a small excess in the task-reading direction (+0.25 on failures, +0.41 on successes), a tenth to a thirtieth of Qwen's. At matched first-token scores both named lines lower Llama's yes/no by about half a nat against neutral (aligned −0.56, swapped −0.53). That is a general strictness under any named goal, with no difference between the right and the wrong goal. Llama answers "No" to 72–73% of the items its observation readout calls successes under either named line, and 52% under the neutral line. Its yes/no answers lean to "No" whatever the task, which matches its near-floor yes/no competence (section 7). Llama's small TextCraft yes/no effect is therefore not a task-success reading, and its sign matches its observation readout.
+
+**How much of Qwen's yes/no effect is plausibly task-success reading.** As an estimate, the part of the yes/no effect that the predicted observation does not account for is about two thirds on failures (+1.95 to +2.04 of +2.92) and about three quarters on successes (+6.95 to +7.15 of +9.60). Its location and direction match a task-success reading: the swapped line, goal crafts, working actions, and items the model itself predicts will succeed.
+
+Two limits apply. First, the first-token readout is the yardstick, and it is not certain to be free of task reading. It is anchored to the environment's reply wording, and its own goal effect on successes (+2.65) shows the task line acts there too. So "two thirds" is an estimate of the extra task component the unanchored question adds, not of all task influence. Second, the yes/no prompt differs from the observation prompt in its final lines, so some of the excess could come from the question format rather than from a reading of "succeed". The pattern in the dissociation table is hard to explain that way.
+
+**What this implies for "Qwen's yes/no effect is the same size in TextCraft (2.92) as in ALFWorld (2.80)".** That comparison, made in `textcraft_vs_alfworld.md` (branch `xenv-compare`) and repeated in the results note's follow-up, set an anchored question against an unanchored one. The cross-environment metrics on that branch show the ALFWorld yes/no effect tracking its observation readout, which the TextCraft one does not:
+
+- *Failures.* ALFWorld's yes/no effect (2.80) is close to its first-token effect (2.52), an excess of about 0.3 nats. TextCraft's (2.92) is three times its first-token effect (0.97), an excess of about 2 nats.
+- *Against neutral.* In ALFWorld the yes/no effect is the aligned line raising "Yes" (aligned minus neutral +2.52, swapped minus neutral −0.28). In TextCraft it is the swapped line lowering it (−2.07 and −5.00).
+- *Successes.* ALFWorld's yes/no effect is 2.44 against a two-candidate 1.94 (point estimates from `textcraft_vs_alfworld_metrics.json`). TextCraft's is 9.60 against 2.61.
+
+The equality of 2.92 and 2.80 is therefore not evidence that the goal effect is equally large in the two environments. In TextCraft, about two thirds of the yes/no number is plausibly a different quantity, a judgement of whether the action serves the stated task. The part the predicted observation accounts for, roughly 0.9 to 1.0 nats, is about a third of ALFWorld's yes/no effect. On the readout anchored to the reply in both environments, the first token, TextCraft's effect is 0.39 of ALFWorld's overall (0.97 against 2.52). The cross-environment note reports 0.54 at matched history lengths and about 0.46 at a matched neutral baseline. The cross-environment statement should become: "on readouts anchored to the environment's reply, Qwen's goal effect in TextCraft is about a third to a half of its ALFWorld size; the yes/no question gives similar numbers in both environments only because TextCraft's unanchored question adds a task-success judgement."
+
+This also affects the confirmatory named readout "yes/no +2.93", which is confirmed. Its existence is not in doubt. Its size, and its standing as a cross-benchmark ruler, are: section 13, C6 of the design named yes/no "the cross-benchmark metric" because its replies are the same in both environments, but its question is not.
+
+**What would settle it.** One scoring run would settle it: Qwen and Llama on the main and success items, with TextCraft's question anchored the way ALFWorld's is ("Will this action succeed, or will the environment reply "Could not find enough items to craft …"? Answer Yes if it succeeds and No if it replies that."). It would cost about 6,000 scores. It is GPU work and was not run here. Round 2 should use an anchored question, or score both wordings, before its yes/no results are compared with ALFWorld.
+
+## 10. Check 8: free generation (not run, and why)
 
 The plan allowed a small generation run for Qwen if the scores left open what Qwen actually predicts. They do not, so no GPU job was started and no ICE checkout was made.
 
@@ -335,7 +425,7 @@ The plan allowed a small generation run for Qwen if the scores left open what Qw
 
 A Qwen generation run would reproduce the decision tables of section 7 to within a fraction of a percent. It would cost GPU time and checks and add no information.
 
-## 10. Overall verdict
+## 11. Overall verdict
 
 **How robust.** Qwen3-8B's positive TextCraft goal effect is robust in sign:
 
@@ -351,6 +441,7 @@ None of the artefacts examined carries it. The name remainder is zero, the first
 - *Two subsets.* It lives where Qwen's state judgement is open: crafts the history has not shown before, and above all too-few failures. On intermediate crafts it mostly needs a word shared with the goal's name.
 - *What it is not.* It is absent on repeated crafts and inside confident predictions.
 - *A contrast, not a lift.* Relative to the neutral line it is less a lift under the right goal than a penalty under the wrong one. That holds especially on the yes/no question and on goal-completing crafts, where naming the other goal makes Qwen reject crafts that would work.
+- *Partly not a world-model quantity.* On the yes/no question about two thirds of the effect is plausibly a judgement of whether the action serves the stated task, not a prediction of the environment's reply. This happens because TextCraft's question is not anchored to the reply. On the two-candidate and first-token readouts the effect is a prediction of the reply.
 
 **What it means.** Read as a statement about a world model's use of the task line, the evidence supports this: Qwen lets the task line decide outcomes where the history leaves them open. Where the link between action and task is obvious, it predicts the action works under the matching task. Where the action does not serve the named task, it predicts the action fails. This is a task-relevance bias, the same family as the ALFWorld finding. It is not specifically "naming the goal makes the model optimistic about failing actions". Its costs fall more on working actions under a mismatched task than on failing actions under the right task.
 
@@ -361,16 +452,19 @@ None of the artefacts examined carries it. The name remainder is zero, the first
 - The neutral line is not a neutral zero: "explore" makes Qwen permissive on yes/no. Statements relative to it are descriptive.
 - A run padding histories or adding first-time used-up items, and one varying overlap within a pair, would settle the first two. Round 2's arms that separate naming from completion bear on the goal-role part.
 
-## 11. What should change in the paper
+## 12. What should change in the paper
 
 1. **Keep the confirmatory statement** ("confirmed for Qwen3-8B only"), and add that its sign survives pair and family clustering, robust means and all prompt variants.
 2. **Replace "naming the goal raises predicted success for actions the history has settled"** with a two-line contrast. "Qwen's predictions differ between the matching and the mismatched task line." On failures the matching line adds a few points of predicted success relative to a neutral line (two-candidate). On yes/no and on goal-completing crafts the difference is mainly the mismatched line lowering predicted success, including for working actions.
 3. **Report the median and a trimmed mean next to the mean** (+0.25 and +0.48 against +0.94), and the decision-level numbers (+3.9 points on failures; a fall in "Yes" from 65% to 14% on goal-completing successes).
 4. **Qualify the "intermediate lift"** as concentrated in first-time crafts whose names share a word with the goal. The results note's sentence "the goal line moves the predicted outcome, not just the copying of a name" is right about the reply side (the remainder is zero). It does not address the prompt-side overlap, which carries most of the ingredient lift.
-5. **Qualify the yes/no cross-benchmark comparison.** In TextCraft the +2.92 is mostly the swapped line suppressing "Yes", and the neutral line is permissive. Before equating it with ALFWorld's 2.80, the same decomposition against neutral should be checked on ALFWorld.
+5. **Withdraw "the yes/no effect is the same size as on ALFWorld (2.92 against 2.80)".**
+   - *Why.* TextCraft's question is not anchored to the reply. About two thirds of Qwen's TextCraft yes/no effect is not in its predicted observation, and it has the signature of a task-success judgement (section 9). ALFWorld's anchored yes/no effect tracks its observation readout.
+   - *Replacement.* "On readouts anchored to the environment's reply, Qwen's TextCraft effect is about a third to a half of its ALFWorld size."
+   - *The named readout.* Report the confirmed yes/no readout with this caveat. Do not use TextCraft yes/no as a cross-benchmark ruler until it is rescored with an anchored question.
 6. **Correct the zero-shot remark** in the dx note: Qwen's zero-shot effect is larger only in the reply tails, and its first-token effect is smaller.
 
-## 12. Reproducing
+## 13. Reproducing
 
 From the repository root, with the score copies above (verified by SHA-256) laid out as `<dir>/main/shard_0{0..3}/scoring.jsonl`, `<dir>/examples_on_goal/`, `<dir>/empty_start/`, `<dir>/zeroshot/`, `<dir>/objectgoal/`, `<dir>/prompts/` and `<dir>/generate/` (Llama's generations, for section 9), and with `wf/textcraft/data/recipes_frozen.json` in place (git-ignored), run:
 
@@ -388,4 +482,5 @@ It takes about three minutes on a laptop. Where to find each part of this note i
 | Check 5 | top-level `prompts` |
 | Check 6 | `decisions` |
 | Check 7 | `heterogeneity` |
+| Section 9 (task-success reading) | `task_reading` |
 | Check 8 | top-level `format` |
