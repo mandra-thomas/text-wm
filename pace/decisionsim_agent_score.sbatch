@@ -5,11 +5,13 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48G
-# Stage 1b verifier scores, one model and one shard per job (2 shards per model). Every candidate under the
-# task-aware and task-blind prompts and, where a swap object exists, the swapped one: 25,000-54,000 single-token
-# passes per model at about 0.15-0.25 s (histories to 30 steps), 1-4 GPU-hours per model. 4 h per half-model job, about
-# three times its central share; a cut-off job resumes from its saved scores (WF_RESUME=1).
-#SBATCH --time=4:00:00
+# Stage 1b verifier scores, one model and one shard per job (2 shards per model). Every distinct candidate of the two
+# lists (one shared cache) under the task-aware, task-blind and, where a swap object exists, swapped prompts, plus the
+# neutral prompt for the priority models; single-candidate states get the blind arm only. 45,000-100,000 single-token
+# passes per priority model, 35,000-80,000 for Qwen, at about 0.15-0.25 s (histories to 30 steps): 2-7 GPU-hours per
+# model. 6 h per half-model job; a cut-off job resumes from its saved scores (WF_RESUME=1).
+# Submit only after the model-free analysis has been read (the futility rule, notes/decisionsim_agent_design.md).
+#SBATCH --time=6:00:00
 #SBATCH --gres=gpu:1
 # Any free L40S, A40 or A100 (every model here fits in 40 GB); brackets because ICE appends &cuda13.
 #SBATCH --constraint=(gpu-l40s|gpu-a40|gpu-a100)

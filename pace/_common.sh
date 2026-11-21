@@ -214,10 +214,11 @@ start_vllm() {
     ${revision_args[@]+"${revision_args[@]}"} \
     --max-model-len "${VLLM_MAX_MODEL_LEN:-8192}" \
     --no-enable-prefix-caching \
+    ${VLLM_EXTRA_ARGS:-} \
     --port "${VLLM_PORT}" \
     >"${log}" 2>&1 &
   echo $! >"${VLLM_PID_FILE}"
-  echo "vLLM starting model=${model} revision=${revision:-unpinned} port=${VLLM_PORT} (log=${log})"
+  echo "vLLM starting model=${model} revision=${revision:-unpinned} port=${VLLM_PORT} extra=${VLLM_EXTRA_ARGS:-none} (log=${log})"
   # Wait until healthy or timeout
   for _ in $(seq 1 120); do
     # Fail fast if process died; an answer on this port could come from another job's server.

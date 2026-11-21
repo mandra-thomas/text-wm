@@ -1,5 +1,5 @@
-"""Stage 1b (wf/decisionsim_agent.py, notes/decisionsim_agent_design.md): synthetic checks of every rule, and mock runs
-end to end (sample, label, score, analysis), on the simulator and the mock agent and scorer."""
+"""Stage 1b (wf/decisionsim_agent.py, notes/decisionsim_agent_design.md, amended after review 1): synthetic checks of
+every rule, and mock runs end to end (sample, label, score, analysis), on the simulator and the mock agent and scorer."""
 from __future__ import annotations
 
 import json
@@ -17,7 +17,6 @@ from wf.env.scene import Scene
 from wf.env.server import AlfworldClient
 from wf.rq1v import YN_QUESTION
 from wf.scoring import logodds
-from wf.scoring.prompts import agent_react_messages
 from wf.util import read_jsonl
 
 TASK = "Your task is to: put some saltshaker on cabinet."
@@ -25,13 +24,15 @@ FIRST = "You are in the middle of a room. Looking quickly around you, you see a 
 HIST = FIRST + "\n> go to shelf 1\nYou arrive at shelf 1. On the shelf 1, you see a mug 1."
 
 
-# ---------------- synthetic states ----------------
+# ---------------- synthetic states (list views) ----------------
 
 
-def _cand(rank, failed, goal=False, det=True, shared=False, admissible=True, action=None, progress=False, err=None):
-    return {"rank": rank, "action": action or f"act {rank}", "count": 1, "greedy": rank == 1, "true_obs": None if err else
-            ("Nothing happens." if failed else "You arrive at x."), "server_error": err, "failed": failed,
-            "context_determined": det, "targets_goal_object": goal, "shared_location": shared,
+def _cand(rank, failed, goal=False, det=True, shared=False, admissible=True, action=None, progress=False, err=None,
+          count=1):
+    a = action or f"act {rank}"
+    return {"key": A.akey(a), "rank": rank, "action": a, "count": count, "greedy": rank == 1,
+            "true_obs": None if err else ("Nothing happens." if failed else "You arrive at x."), "server_error": err,
+            "failed": failed, "context_determined": det, "targets_goal_object": goal, "shared_location": shared,
             "admissible": admissible, "action_type": "take" if goal else "go to", "progress": progress}
 
 
@@ -39,15 +40,25 @@ def _state(cands, game="g1", t=2, swap="mug", agnostic=True):
     return {"game_id": game, "state_idx": t, "task_line": TASK, "goal_object": "saltshaker", "target": "cabinet",
             "history_text": HIST, "history_goal_agnostic": agnostic, "swap": swap,
             "swapped_task_line": TASK.replace("saltshaker", swap) if swap else None, "rank1_replay_ok": True,
-            "candidates": cands}
+            "history_replay_ok": True, "candidates": cands}
 
 
-def _L(state, values, arm=A.AWARE):
+def _lab(cands, t1=None, **kw):
+    """A labelled state whose primary list is `cands` (and whose t1 list is `t1`, default the same)."""
+    s = _state([{k: v for k, v in c.items() if k not in ("rank", "count", "greedy")} for c in cands + (t1 or [])], **kw)
+    uniq = {c["key"]: c for c in s["candidates"]}
+    s["candidates"] = list(uniq.values())
+    entry = lambda cs: [{"rank": c["rank"], "action": c["action"], "count": c["count"], "greedy": c["greedy"]} for c in cs]
+    s["lists"] = {A.PRIMARY_LIST: entry(cands), A.T1_LIST: entry(t1 or cands)}
+    return s
+
+
+def _L(state, values):
     return {A.cand_id(state, c): v for c, v in zip(state["candidates"], values)}
 
 
 def _scores(states, per_arm):
-    """per_arm[arm] = list (per state) of lists of L in rank order."""
+    """per_arm[arm] = list (per state) of lists of L in candidate order."""
     return {arm: {k: v for s, vals in zip(states, lists) for k, v in _L(s, vals).items()} for arm, lists in per_arm.items()}
 
 
@@ -57,6 +68,7 @@ def _scores(states, per_arm):
 def test_normalize_collapses_space_case_and_final_stop():
     assert A.normalize_action("  Go  to   Drawer 1. ") == "go to drawer 1"
     assert A.normalize_action(None) is None and A.normalize_action(" . ") is None
+    assert A.akey("Go to Drawer 1.") == A.akey("go to drawer 1") != A.akey("go to drawer 2")
 
 
 def test_rank1_is_the_greedy_action_even_if_never_sampled():
@@ -76,8 +88,7 @@ def test_ranked_by_count_then_seeded_hash_not_order_of_appearance():
     r = A.rank_candidates("z", replies, "g", 4)
     acts = [c["action"] for c in r["candidates"]]
     assert acts[:3] == ["z", "b", "d"]
-    tied = sorted(["a", "c"], key=lambda a: A.tie_key("g", 4, a))
-    assert acts[3:] == tied
+    assert acts[3:] == sorted(["a", "c"], key=lambda a: A.tie_key("g", 4, a))
     shuffled = replies[:]
     random.Random(1).shuffle(shuffled)
     assert A.rank_candidates("z", shuffled, "g", 4)["candidates"] == r["candidates"]
@@ -93,31 +104,58 @@ def test_list_is_cut_at_k_max_and_the_cut_is_recorded():
     replies = [f"Action: a{i}" for i in range(10)]
     r = A.rank_candidates("z", replies, "g", 0, k_max=4)
     assert len(r["candidates"]) == 4 and r["n_cut"] == 7 and r["n_distinct_sampled"] == 10
-    assert A.K_MAX == 8 and A.N_SAMPLES == 20 and A.TEMPERATURE == 1.0 and A.TOP_P == 1.0
+    assert A.K_MAX == 8 and A.N_SAMPLES == 20 and A.MAX_TOKENS == 256
 
 
-def test_bookkeeping_flags_identical_replies():
-    st = {"n_samples": 3, "n_format_errors": 0, "candidates": [{"count": 3}], "n_cut": 0,
-          "replies": [{"text": "Action: look", "finish_reason": "stop"}] * 3}
-    other = {**st, "replies": [{"text": "Action: look", "finish_reason": "stop"}, {"text": "Action: x", "finish_reason": "length"}]}
+def test_sampling_settings_after_review_1():
+    assert A.SAMPLINGS[A.PRIMARY_LIST] == {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "min_p": 0.0}
+    assert A.SAMPLINGS[A.T1_LIST] == {"temperature": 1.0, "top_p": 1.0, "top_k": -1, "min_p": 0.0}
+    assert A.GREEDY["temperature"] == 0.0 and A.GREEDY_AGREEMENT_MIN == 0.90
+    assert A.FIXED_PARAMS == {"repetition_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0}
+
+
+def test_bookkeeping_flags_identical_replies_drift_and_seed_check():
+    lst = lambda texts, fin="stop": {"n_samples": len(texts), "n_format_errors": 0, "n_cut": 0,
+                                     "candidates": [{"count": 3}], "replies": [{"text": x, "finish_reason": fin} for x in texts]}
+    st = {"lists": {"primary": lst(["Action: look"] * 3)}, "greedy_fresh": {"agrees": True},
+          "seed_check": {"distinct_first": 3, "same_set": True}}
+    other = {"lists": {"primary": lst(["Action: look", "Action: x"], "length")}, "greedy_fresh": {"agrees": False},
+             "seed_check": {"distinct_first": 1, "same_set": True}}
     b = A.sampling_bookkeeping([st, other])
-    assert b["states_all_replies_identical"] == 1 and b["truncated_replies"] == 1 and b["format_error_share"] == 0
+    assert b["primary"]["states_all_replies_identical"] == 1 and b["primary"]["truncated_replies"] == 2
+    assert b["greedy_agreement"] == 0.5 and b["drifted_sampler"]
+    assert b["seed_check"] == {"n_states": 2, "nondegenerate": 1, "nondegenerate_same_set": 1}
+    gate = A.smoke_gate({**b, "replay_mismatches": 0})
+    assert not gate["passed"]  # a second seed reproduced a non-degenerate set
+    ok = A.sampling_bookkeeping([{**st, "seed_check": {"distinct_first": 3, "same_set": False}}])
+    assert A.smoke_gate({**ok, "replay_mismatches": 0})["passed"]
+    assert not A.smoke_gate({**ok, "replay_mismatches": 1})["passed"]
+    bad = A.sampling_bookkeeping([{**st, "lists": {"primary": {**lst(["x"] * 4), "n_format_errors": 1}},
+                                   "seed_check": {"distinct_first": 3, "same_set": False}}])
+    assert not A.smoke_gate({**bad, "replay_mismatches": 0})["passed"]  # 25% format errors is not under 25%
 
 
-def test_sample_seed_is_per_state_and_fixed():
+def test_sample_seed_is_per_state_per_list_and_fixed():
     assert A.sample_seed("g", 1) == A.sample_seed("g", 1) != A.sample_seed("g", 2) != A.sample_seed("h", 1)
+    assert A.sample_seed("g", 1, name="primary") != A.sample_seed("g", 1, name="t1")
 
 
 # ---------------- verifier prompts ----------------
 
 
-def test_remove_task_line_deletes_only_that_line():
-    assert A.remove_task_line(HIST) == HIST.replace("\n" + TASK, "")
-    assert A.remove_task_line(TASK + "\nrest") == "rest"
+def test_blind_history_deletes_only_the_real_task_line_in_the_first_observation():
+    assert A.blind_history(HIST, TASK) == HIST.replace("\n" + TASK, "")
     with pytest.raises(ValueError):
-        A.remove_task_line("no task here")
+        A.blind_history("no task here", TASK)
     with pytest.raises(ValueError):
-        A.remove_task_line(TASK + "\n" + TASK)
+        A.blind_history(HIST + "\n" + TASK, TASK)  # two task lines
+    with pytest.raises(ValueError):
+        A.blind_history(HIST, "Your task is to: put some mug on cabinet.")  # not the real task line
+    with pytest.raises(ValueError):
+        A.blind_history(TASK + "\nYou are in the middle of a room.", TASK)  # the first line
+    moved = "You are in the middle of a room.\n> go to shelf 1\n" + TASK
+    with pytest.raises(ValueError):
+        A.blind_history(moved, TASK)  # after the first action
 
 
 @pytest.fixture
@@ -132,11 +170,12 @@ def mock_score(monkeypatch):
 def test_each_arm_differs_only_in_the_query_task_line(mock_score, tag):
     s = _state([_cand(1, True, goal=True, action="take saltshaker 1 from cabinet 1")])
     c = s["candidates"][0]
-    aware, blind, swapped = (A.arm_messages(tag, s, c, a) for a in A.ARMS)
-    assert aware[:-1] == blind[:-1] == swapped[:-1]  # the examples and system text never change
-    assert all(m[-1]["content"].endswith(YN_QUESTION) for m in (aware, blind, swapped))
+    aware, blind, swapped, neutral = (A.arm_messages(tag, s, c, a) for a in (A.AWARE, A.BLIND, A.SWAPPED, A.NEUTRAL))
+    assert aware[:-1] == blind[:-1] == swapped[:-1] == neutral[:-1]  # the examples and system text never change
+    assert all(m[-1]["content"].endswith(YN_QUESTION) for m in (aware, blind, swapped, neutral))
     assert TASK in aware[-1]["content"] and "Your task is to:" not in blind[-1]["content"]
     assert "put some mug on cabinet." in swapped[-1]["content"] and "saltshaker on" not in swapped[-1]["content"]
+    assert "Your task is to: explore the room." in neutral[-1]["content"]
     assert blind[-1]["content"] == aware[-1]["content"].replace("\n" + TASK, "")
     assert "take saltshaker 1 from cabinet 1" in aware[-1]["content"]
     assert any("Your task is to:" in m["content"] for m in blind[:-1])  # the examples keep theirs
@@ -149,8 +188,43 @@ def test_prompts_are_the_earlier_yes_no_prompts(mock_score):
     s = _state([_cand(1, True, action="take saltshaker 1 from cabinet 1")])
     item = A.prompt_item(s, s["candidates"][0])
     for tag in A.MODEL_TAGS:
-        assert A.arm_messages(tag, s, s["candidates"][0], A.AWARE) == messages_for(tag)(item, "yn_aligned")
-        assert A.arm_messages(tag, s, s["candidates"][0], A.SWAPPED) == messages_for(tag)(item, "yn_swapped")
+        for arm in ("yn_aligned", "yn_swapped", "yn_absent"):
+            assert A.arm_messages(tag, s, s["candidates"][0], arm) == messages_for(tag)(item, arm)
+
+
+def test_arms_at_a_single_candidate_state_is_blind_only():
+    one = _state([_cand(1, True)])
+    two = _state([_cand(1, True), _cand(2, False)])
+    assert A.arms_at(one, A.ARMS) == (A.BLIND,)
+    assert A.arms_at(two, A.ARMS) == A.ARMS
+    assert A.arms_at({**two, "swap": None}, A.ARMS) == (A.AWARE, A.BLIND, A.NEUTRAL)
+    assert A.arms_at(_state([_cand(1, True), _cand(2, False, err="x")]), A.ARMS) == (A.BLIND,)
+
+
+# ---------------- views ----------------
+
+
+def test_views_follow_each_list_and_share_labels():
+    a, b, c = _cand(1, True), _cand(2, False, count=3), _cand(3, True, goal=True)
+    t1c = {**c, "rank": 2}
+    lab = _lab([a, b], t1=[{**a}, t1c])
+    v = A.view(lab, A.PRIMARY_LIST)
+    assert [x["action"] for x in v["candidates"]] == ["act 1", "act 2"] and v["n_union"] == 3
+    w = A.view(lab, A.T1_LIST)
+    assert [x["action"] for x in w["candidates"]] == ["act 1", "act 3"] and w["candidates"][1]["rank"] == 2
+    assert A.cand_id(v, v["candidates"][0]) == A.cand_id(w, w["candidates"][0])  # one cache entry for both lists
+
+
+def test_sampled_twice_and_first_occurrence_filters():
+    a, b, c = _cand(1, False), _cand(2, True, count=1, action="x"), _cand(3, True, count=2, action="y")
+    lab = _lab([a, b, c])
+    v = A.view(lab, A.PRIMARY_LIST, A.sampled_twice)
+    assert [x["action"] for x in v["candidates"]] == ["act 1", "y"]
+    s1 = _state([_cand(1, True, action="x"), _cand(2, False)], t=0)
+    s2 = _state([_cand(1, True, action="x"), _cand(2, True, action="z"), _cand(3, False)], t=1)
+    s3 = _state([_cand(1, True, action="x")], t=2)
+    out = A.first_occurrence([s2, s1, s3])
+    assert [[c["action"] for c in s["candidates"]] for s in out] == [["x", "act 2"], ["z", "act 3"]]
 
 
 # ---------------- selection ----------------
@@ -169,16 +243,23 @@ def test_selection_rules():
     assert A.choose("aware", s, L, fallback="max_L", k=2)["rank"] == 2
 
 
+def test_a_single_candidate_is_chosen_without_scores():
+    s = _state([_cand(1, True)])
+    for cfg in ("none", "oracle", "aware", "blind"):
+        assert A.choose(cfg, s, {A.AWARE: {}, A.BLIND: {}})["rank"] == 1
+
+
 def test_oracle_with_no_success_falls_back_to_rank1():
-    s = _state([_cand(1, True), _cand(2, True)])
-    assert A.choose("oracle", s)["rank"] == 1
+    assert A.choose("oracle", _state([_cand(1, True), _cand(2, True)]))["rank"] == 1
 
 
-def test_server_error_candidates_are_skipped():
+def test_server_error_candidates_are_skipped_before_the_k_cut():
     s = _state([_cand(1, True), _cand(2, False, err="boom"), _cand(3, False)])
     L = _scores([s], {A.AWARE: [[-1, 5, 1]]})
     assert A.choose("aware", s, L)["rank"] == 3 and A.choose("oracle", s)["rank"] == 3
     assert [c["rank"] for c in A.scored_candidates(s)] == [1, 3]
+    assert A.choose("aware", s, L, k=2)["rank"] == 3  # k counts runnable candidates
+    assert A.choose("oracle", s, k=2)["rank"] == 3
 
 
 def test_scores_are_rounded_to_a_64th_before_the_threshold():
@@ -210,6 +291,20 @@ def test_encounter_strict_and_reachable():
     assert not A.encounter(_state([_cand(1, True, goal=True, err="x")]))
 
 
+def test_encounter_bands_and_the_futility_rule():
+    sts = [_state([_cand(1, True, goal=True), _cand(2, False)], game=f"g{i}", t=t) for i, t in enumerate((0, 11, 12, 29))]
+    rep = A.encounter_report(sts)
+    b = rep["encounter_by_step_band"]
+    assert (b["step_0"]["n_states"], b["steps_1_11"]["n_states"], b["steps_12_29"]["n_states"]) == (1, 1, 2)
+    assert rep["reachable_games"] == 4 and rep["futility"]["primary_cannot_reach_significance"]
+    many = [_state([_cand(1, True, goal=True)], game=f"g{i}") for i in range(7)]
+    assert not A.encounter_report(many)["futility"]["primary_cannot_reach_significance"]
+    unreachable = [_state([_cand(1, False), _cand(2, True, goal=True)], game=f"g{i}") for i in range(7)]
+    rep = A.encounter_report(unreachable)  # encounters in 7 games, but a success is always ranked above them
+    assert rep["encounter_games"] == 7 and rep["reachable_games"] == 0
+    assert rep["futility"]["primary_cannot_reach_significance"]
+
+
 # ---------------- contrasts and statistics ----------------
 
 
@@ -217,11 +312,12 @@ def _four_states():
     s1 = _state([_cand(1, True), _cand(2, True, goal=True), _cand(3, False)], game="g1", t=0)  # harm
     s2 = _state([_cand(1, True), _cand(2, False)], game="g2", t=0)  # help
     s3 = _state([_cand(1, False), _cand(2, False)], game="g3", t=0)  # both succeed, changed
-    s4 = _state([_cand(1, False)], game="g4", t=0, swap=None)  # same
+    s4 = _state([_cand(1, False), _cand(2, True)], game="g4", t=0, swap=None)  # same
     states = [s1, s2, s3, s4]
-    L = _scores(states, {A.AWARE: [[-1, 1, 1], [-1, 1], [-1, 1], [1]],
-                         A.BLIND: [[-1, -1, 1], [1, 1], [1, 1], [1]],
-                         A.SWAPPED: [[-1, -1, 1], [-1, 1], [1, 1], [1]]})
+    L = _scores(states, {A.AWARE: [[-1, 1, 1], [-1, 1], [-1, 1], [1, 1]],
+                         A.BLIND: [[-1, -1, 1], [1, 1], [1, 1], [1, 1]],
+                         A.SWAPPED: [[-1, -1, 1], [-1, 1], [1, 1], [1, 1]],
+                         A.NEUTRAL: [[-1, -1, 1], [1, 1], [1, 1], [1, 1]]})
     return states, L
 
 
@@ -230,8 +326,15 @@ def test_contrast_counts_harm_help_and_the_identity():
     c = A.contrast(states, L, "aware", "blind")
     assert c["changed"] == {"n": 3, "harm": 1, "help": 1, "both_fail": 0, "both_succeed": 1}
     assert c["difference"]["estimate"] == 0 and c["identity_holds"]
-    assert c["harm_by_kind_of_choice"] == {"regime": 1}
+    assert c["harm_by_kind_of_choice"] == {"regime": 1} and c["harm_regime_share"] == 1.0
     assert c["fail_rate_a"]["estimate"] == 0.25 and c["fail_rate_b"]["estimate"] == 0.25
+    assert c["difference"]["n_games_nonzero"] == 2 and c["difference"]["p_min_sign_flip"] == 0.5
+
+
+def test_leave_one_game_out():
+    r = A.leave_one_game_out([1, 0, 0, 1], [0, 0, 0, 0], ["a", "b", "c", "c"])
+    assert r["min"] == pytest.approx(1 / 3) and r["max"] == pytest.approx(2 / 3)
+    assert r["most_influential_game"] == "a" and r["estimate_without_it"] == pytest.approx(1 / 3)
 
 
 def test_decomposition_on_states_with_a_swap_and_its_identity():
@@ -240,6 +343,16 @@ def test_decomposition_on_states_with_a_swap_and_its_identity():
     assert dec["n_states"] == 3 and dec["identity_holds"]
     assert dec["aware_minus_swapped"]["estimate"] == pytest.approx(1 / 3)
     assert dec["swapped_minus_blind"]["estimate"] == pytest.approx(-1 / 3)
+
+
+def test_attribution_rule():
+    mk = lambda ab, as_: {"n_states": 5, "aware_minus_blind": {"estimate": ab}, "aware_minus_swapped": {"estimate": as_}}
+    assert A.attributable(mk(0.02, 0.01)) and A.attributable(mk(0.02, 0.03))
+    assert not A.attributable(mk(0.02, 0.009)) and not A.attributable(mk(0.02, -0.01))
+    assert not A.attributable(mk(-0.02, -0.01)) and not A.attributable(None)
+    ci_up = {"ci": [0.001, 0.02]}
+    assert A.verdict(ci_up, 0.01, mk(0.02, 0.015)) == "toward failure, attributable to the real task"
+    assert A.verdict(ci_up, 0.01, mk(0.02, 0.005)) == "toward failure, not attributable to the real task"
 
 
 def test_inference_resamples_and_flips_whole_games(monkeypatch):
@@ -253,14 +366,51 @@ def test_inference_resamples_and_flips_whole_games(monkeypatch):
 
 
 def test_holm_and_verdicts():
-    adj = A.holm({"a": 0.01, "b": 0.04})
-    assert adj == {"a": 0.02, "b": 0.04}
+    assert A.holm({"a": 0.01, "b": 0.04}) == {"a": 0.02, "b": 0.04}
     assert A.holm({"a": float("nan"), "b": 0.01}) == {"b": 0.02, "a": 1.0}
     assert A.holm({"a": 0.03, "b": 0.031}) == {"a": 0.06, "b": 0.06}  # never below an earlier adjusted p
-    assert A.verdict({"ci": [0.001, 0.02]}, 0.03) == "toward failure"
-    assert A.verdict({"ci": [-0.02, -0.001]}, 0.03) == "toward success"
-    assert A.verdict({"ci": [0.001, 0.02]}, 0.06) == "no reliable difference"
-    assert A.verdict({"ci": [-0.001, 0.02]}, 0.01) == "no reliable difference"
+    assert A.verdict({"ci": [-0.02, -0.001]}, 0.03, None) == "toward success"
+    assert A.verdict({"ci": [0.001, 0.02]}, 0.06, None) == "no reliable difference"
+    assert A.verdict({"ci": [-0.001, 0.02]}, 0.01, None) == "no reliable difference"
+
+
+def _model(p, ci, interpretable=True, harm=3, regime_share=1.0):
+    block = {"difference": {"estimate": 0.01, "ci": ci, "p": p, "n_games_nonzero": 9, "p_min_sign_flip": 2 ** -8},
+             "n_states": 100, "harm_regime_share": regime_share, "changed": {"harm": harm}}
+    dec = {"n_states": 50, "aware_minus_blind": {"estimate": 0.02}, "aware_minus_swapped": {"estimate": 0.015}}
+    return {"primary": block, "conditional": block, "competence": {"interpretable": interpretable},
+            "decomposition": dec, "conditional_decomposition": dec}
+
+
+def test_the_verdict_reads_the_holm_p_not_the_raw_p():
+    models = {"llama3.1-8b": _model(0.03, [0.001, 0.02]), "mistral-7b-v0.3": _model(0.5, [-0.01, 0.02])}
+    out = A.primary_block(models, list(A.PRIORITY), set(), "primary", "decomposition")["per_model"]
+    assert out["llama3.1-8b"]["p_holm"] == pytest.approx(0.06)
+    assert out["llama3.1-8b"]["verdict"] == "no reliable difference"  # raw p 0.03 with the interval above zero
+    models["mistral-7b-v0.3"] = _model(0.02, [0.001, 0.02])
+    out = A.primary_block(models, list(A.PRIORITY), set(), "primary", "decomposition")["per_model"]
+    assert out["llama3.1-8b"]["verdict"] == "toward failure, attributable to the real task"
+
+
+def test_a_failed_gate_enters_holm_with_p_one():
+    models = {"llama3.1-8b": _model(0.02, [0.001, 0.02])}
+    blk = A.primary_block(models, list(A.PRIORITY), {"mistral-7b-v0.3"}, "primary", "decomposition")["per_model"]
+    assert blk["mistral-7b-v0.3"]["verdict"] == "not interpreted (Yes/No gate failed)"
+    assert blk["llama3.1-8b"]["p_holm"] == pytest.approx(0.04)  # raw 0.02 < 0.025: still significant
+    assert blk["llama3.1-8b"]["verdict"].startswith("toward failure")
+    models = {"llama3.1-8b": _model(0.03, [0.001, 0.02])}
+    blk = A.primary_block(models, list(A.PRIORITY), {"mistral-7b-v0.3"}, "primary", "decomposition")["per_model"]
+    assert blk["llama3.1-8b"]["verdict"] == "no reliable difference"  # Llama needs raw p < 0.025
+    wait = A.primary_block(models, list(A.PRIORITY), set(), "primary", "decomposition")["per_model"]
+    assert wait["llama3.1-8b"]["p_holm"] is None and wait["llama3.1-8b"]["verdict"] == "waiting for every priority model"
+
+
+def test_incompetent_models_stay_in_holm_and_harm_from_loops_is_flagged():
+    models = {"llama3.1-8b": _model(0.01, [0.001, 0.02], interpretable=False),
+              "mistral-7b-v0.3": _model(0.02, [0.001, 0.02], regime_share=0.2)}
+    out = A.primary_block(models, list(A.PRIORITY), set(), "primary", "decomposition")["per_model"]
+    assert out["llama3.1-8b"]["verdict"] == "not interpreted" and out["llama3.1-8b"]["p_holm"] == pytest.approx(0.02)
+    assert out["mistral-7b-v0.3"]["harm_mostly_regime"] is False
 
 
 def test_auc_and_competence():
@@ -270,32 +420,89 @@ def test_auc_and_competence():
     brute = sum((p > q) + 0.5 * (p == q) for p in pos for q in neg) / (len(pos) * len(neg))
     assert A.auc(pos, neg) == pytest.approx(brute)
     assert A.auc([], [1]) != A.auc([], [1])
-    acc = {A.BLIND: {"auc": 0.8, "yes_rate_failures": 0.2, "yes_rate_successes": 0.9}}
-    assert A.competence(acc)["interpretable"]
+    acc = {A.BLIND: {"auc": 0.70, "yes_rate_failures": 0.95, "yes_rate_successes": 0.05}}
+    assert A.competence(acc)["interpretable"]  # the thresholds themselves pass
     for bad in ({"auc": 0.69}, {"yes_rate_failures": 0.96}, {"yes_rate_successes": 0.04}):
         assert not A.competence({A.BLIND: {**acc[A.BLIND], **bad}})["interpretable"]
 
 
-def test_model_report_parts_add_up_and_sensitivities_run():
+def test_acceptance_counts_zero_as_no():
+    s = _state([_cand(1, True), _cand(2, False)])
+    L = _scores([s], {A.AWARE: [[0, 1]], A.BLIND: [[0, 0]]})
+    acc = A.acceptance([s], L, L)
+    assert acc[A.AWARE]["yes_rate_failures"] == 0 and acc[A.BLIND]["yes_rate_successes"] == 0
+    assert acc["aware_minus_blind"]["success/all"]["yes_rate_shift"] == 1.0
+
+
+def _labs_and_scores():
     states, L = _four_states()
-    rep = A.model_report(states, L, L)
-    assert rep["by_encounter"]["parts_add_up"]
-    assert rep["primary"]["identity_holds"]
-    assert rep["fallback_rate"] == {"aware": 0.0, "blind": 0.0}
-    assert set(rep["sensitivity"]) == {"game_weighted", "first_12_steps", "k_2", "k_4", "fallback_max_L"}
+    labs = []
+    for s in states:
+        labs.append(_lab(s["candidates"], game=s["game_id"], t=s["state_idx"], swap=s["swap"]))
+    return labs, L
+
+
+def test_model_report_parts_add_up_and_readouts():
+    labs, L = _labs_and_scores()
+    rep = A.model_report(labs, L, L)
+    assert rep["by_encounter"]["parts_add_up"] and rep["by_encounter"]["encounter_states"] == 1
+    assert rep["primary"]["identity_holds"] and rep["conditional"]["n_states"] == 1
+    assert rep["conditional"]["difference"]["estimate"] == 1.0  # the harm state is the encounter state
+    assert rep["inert"]["aware"] == {"fallback_rate": 0.0, "rank1_share": 0.25}
+    assert rep["inert"]["blind"]["rank1_share"] == 0.75
+    assert set(rep["sensitivity"]) == {"game_weighted", "first_12_steps", "k_2", "k_4", "fallback_max_L", "t1_list",
+                                       "t1_list_conditional", "sampled_twice", "first_occurrence_of_failures"}
     assert rep["acceptance"][A.AWARE]["by_group"]["regime"]["yes_rate"] == 1.0
-    assert rep["acceptance"]["aware_minus_blind"]["regime"]["yes_rate_shift"] == 1.0
+    assert rep["neutral"]["aware_minus_neutral"]["estimate"] == 0.0
+    assert rep["fail_rate"]["none"]["estimate"] == 0.5
 
 
-def test_complete_states_need_every_arm_where_defined():
-    states, L = _four_states()
-    keep, short = A.complete_states(states, L)
-    assert short == 0
-    del L[A.SWAPPED][A.cand_id(states[0], states[0]["candidates"][0])]
-    keep, short = A.complete_states(states, L)
-    assert short == 1 and states[0] not in keep
-    L2 = {a: v for a, v in L.items() if a != A.SWAPPED}
-    assert A.complete_states(states, L2)[1] == 0  # swapped not scored at all: not required
+def test_by_encounter_uses_the_main_not_the_strict_label():
+    labs, L = _labs_and_scores()
+    labs[0]["history_goal_agnostic"] = False
+    rep = A.model_report(labs, L, L)
+    assert rep["by_encounter"]["encounter_states"] == 1
+
+
+def test_first_12_steps_means_steps_0_to_11():
+    labs, L = _labs_and_scores()
+    ids = {}
+    for lab, t in zip(labs, (11, 12, 0, 0)):
+        old = {c["key"]: A.cand_id(lab, c) for c in lab["candidates"]}
+        lab["state_idx"] = t
+        ids.update({old[c["key"]]: A.cand_id(lab, c) for c in lab["candidates"]})
+    L = {a: {ids[k]: v for k, v in sc.items()} for a, sc in L.items()}
+    assert A.model_report(labs, L, L)["sensitivity"]["first_12_steps"]["n_states"] == 3
+
+
+def test_verifier_value_sign_and_progress_direction():
+    s = _state([_cand(1, True), _cand(2, False, progress=True)], game="g1", t=0)
+    labs = [_lab(s["candidates"], game="g1", t=0)]
+    L = _scores(labs, {A.AWARE: [[1, 1]], A.BLIND: [[-1, 1]]})
+    rep = A.model_report(labs, L, L)
+    assert rep["verifier_value"]["blind"]["none_minus_verifier"]["estimate"] == 1.0
+    assert rep["verifier_value"]["aware"]["none_minus_verifier"]["estimate"] == 0.0
+    assert rep["progress_aware_minus_blind"]["estimate"] == -1.0
+
+
+def test_game_weighted_delta_weighs_games_equally():
+    states = [_state([_cand(1, True), _cand(2, False)], game="big", t=t) for t in range(3)]
+    states.append(_state([_cand(1, False), _cand(2, True)], game="small", t=0))
+    L = _scores(states, {A.AWARE: [[1, 1]] * 4, A.BLIND: [[-1, 1]] * 4})
+    assert A.game_weighted_delta(states, L)["estimate"] == 0.0  # big: +1 on every state; small: -1
+    assert A.contrast(states, L, "aware", "blind")["difference"]["estimate"] == 0.5
+
+
+def test_complete_labs_need_every_arm_where_defined():
+    labs, L = _labs_and_scores()
+    assert A.complete_labs(labs, L)[1] == 0
+    del L[A.SWAPPED][A.cand_id(labs[0], labs[0]["candidates"][0])]
+    keep, short = A.complete_labs(labs, L)
+    assert short == 1 and labs[0] not in keep
+    assert A.complete_labs(labs, {a: v for a, v in L.items() if a not in (A.SWAPPED, A.NEUTRAL)})[1] == 0
+    single = _lab([_cand(1, True)], game="g9")
+    assert A.complete_labs([single], {A.AWARE: {}, A.BLIND: {A.cand_id(single, single["candidates"][0]): 1.0}})[1] == 0
+    assert A.complete_labs([single], {A.AWARE: {}, A.BLIND: {}})[1] == 1
 
 
 def test_disagreements_feed_stage2():
@@ -311,16 +518,33 @@ def test_disagreements_feed_stage2():
 
 def test_progress_events():
     pe = A.progress_event
-    assert pe("take saltshaker 1 from shelf 1", "You pick up the saltshaker 1 from the shelf 1.", "saltshaker", "cabinet", HIST, False)
-    assert not pe("take mug 1 from shelf 1", "You pick up the mug 1 from the shelf 1.", "saltshaker", "cabinet", HIST, False)
-    assert pe("move saltshaker 1 to cabinet 1", "You move the saltshaker 1 to the cabinet 1.", "saltshaker", "cabinet", HIST, False)
-    assert not pe("move saltshaker 1 to shelf 1", "You move the saltshaker 1 to the shelf 1.", "saltshaker", "cabinet", HIST, False)
-    assert pe("go to cabinet 1", "You arrive at cabinet 1. On the cabinet 1, you see a saltshaker 2.", "saltshaker", "cabinet", HIST, False)
-    assert not pe("go to cabinet 1", "You arrive at cabinet 1. On the cabinet 1, you see a saltshaker 2.", "saltshaker", "cabinet",
+    assert pe("take saltshaker 1 from shelf 1", "You pick up the saltshaker 1 from the shelf 1.", TASK, HIST, False)
+    assert not pe("take mug 1 from shelf 1", "You pick up the mug 1 from the shelf 1.", TASK, HIST, False)
+    assert pe("move saltshaker 1 to cabinet 1", "You move the saltshaker 1 to the cabinet 1.", TASK, HIST, False)
+    assert not pe("move saltshaker 1 to shelf 1", "You move the saltshaker 1 to the shelf 1.", TASK, HIST, False)
+    assert pe("go to cabinet 1", "You arrive at cabinet 1. On the cabinet 1, you see a saltshaker 2.", TASK, HIST, False)
+    assert not pe("go to cabinet 1", "You arrive at cabinet 1. On the cabinet 1, you see a saltshaker 2.", TASK,
                   HIST + "\nYou see a saltshaker 2.", False)
-    assert not pe("take saltshaker 1 from shelf 1", "Nothing happens.", "saltshaker", "cabinet", HIST, True)
-    assert pe("look", "You are in the room.", "saltshaker", "cabinet", HIST, True)
-    assert pe("use desklamp 1", "You turn on the desklamp 1.", "cd", "desklamp", HIST, False)
+    assert not pe("take saltshaker 1 from shelf 1", "Nothing happens.", TASK, HIST, True)
+    assert pe("look", "You are in the room.", TASK, HIST, True)
+
+
+def test_progress_needs_the_task_transformation_no_repeats_and_the_object_in_hand_for_the_lamp():
+    pe = A.progress_event
+    heat = "Your task is to: heat some egg and put it in countertop."
+    assert pe("heat egg 1 with microwave 1", "You heat the egg 1 using the microwave 1.", heat, HIST, False)
+    assert not pe("cool egg 1 with fridge 1", "You cool the egg 1 using the fridge 1.", heat, HIST, False)
+    assert not pe("heat mug 1 with microwave 1", "You heat the mug 1 using the microwave 1.", heat, HIST, False)
+    clean = "Your task is to: put a clean egg in countertop."
+    assert not pe("clean mug 1 with sinkbasin 1", "You clean the mug 1 using the sinkbasin 1.", clean, HIST, False)
+    again = HIST + "\n> take saltshaker 1 from shelf 1\nYou pick up the saltshaker 1 from the shelf 1."
+    assert not pe("take saltshaker 1 from shelf 1", "You pick up the saltshaker 1 from the shelf 1.", TASK, again, False)
+    failed_before = HIST + "\n> take saltshaker 1 from shelf 1\nNothing happens."
+    assert pe("take saltshaker 1 from shelf 1", "You pick up the saltshaker 1 from the shelf 1.", TASK, failed_before, False)
+    lamp = "Your task is to: look at cd under the desklamp."
+    held = HIST + "\n> take cd 1 from shelf 1\nYou pick up the cd 1 from the shelf 1."
+    assert pe("use desklamp 1", "You turn on the desklamp 1.", lamp, held, False)
+    assert not pe("use desklamp 1", "You turn on the desklamp 1.", lamp, HIST, False)
 
 
 def _scene():
@@ -336,13 +560,9 @@ def test_swap_object_excludes_named_interacted_and_co_located_types():
     sc = _scene()
     acts = ["take saltshaker 1 from drawer 1", "examine plate 1"]
     pen_hist = HIST + "\n> take pen 1 from cabinet 1\nNothing happens."
-    swap = A.state_swap_object(sc, TASK, "saltshaker", acts, pen_hist, "g", 3)
-    # drawer 1 holds cup and saltshaker; plate is named; pen is acted on in the history: only mug remains
-    assert swap == "mug"
+    assert A.state_swap_object(sc, TASK, "saltshaker", acts, pen_hist, "g", 3) == "mug"
     assert A.state_swap_object(sc, TASK, "saltshaker", acts + ["take mug 1 from shelf 1"], pen_hist, "g", 3) is None
     assert A.state_swap_object(sc, TASK, "saltshaker", acts + ["take mug 1 from shelf 1"], HIST, "g", 3) == "pen"
-    many = A.state_swap_object(sc, TASK, "saltshaker", [], HIST, "g", 3)
-    assert many == A.state_swap_object(sc, TASK, "saltshaker", [], HIST, "g", 3)  # seeded
 
 
 # ---------------- mock runs end to end ----------------
@@ -389,8 +609,9 @@ def _label(i=0, n=2, **kw):
 
 
 def _score(tag, **kw):
+    arms = list(A.ARMS) if tag in A.PRIORITY else [A.AWARE, A.BLIND, A.SWAPPED]
     return A.run_decisionsim_agent_score({"run_id": f"dsa_score_{tag}", "model": tag, "label_source": "dsa_label",
-                                          "n_shards": 1, **kw})
+                                          "n_shards": 1, "arms": arms, **kw})
 
 
 def _analysis():
@@ -406,35 +627,63 @@ def _pipeline():
     assert _analysis() == 0
 
 
-def _states(root, run="dsa_sample", name="states.jsonl"):
+def _rows(root, run="dsa_sample", name="states.jsonl"):
     return sorted((r for p in sorted((root / run).glob("shard_*")) for r in read_jsonl(p / name)),
                   key=lambda r: (r["game_id"], r["state_idx"]))
 
 
-def test_end_to_end_every_decision_point_once(mock_runs):
+def _rewrite(path, rows):
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+
+
+def _always_swap(monkeypatch):
+    """The simulator's rooms are too small for the swap rules (every type sits at some candidate's receptacle), so the
+    runs that exercise the swapped arm draw a fixed swap object instead; the rules are tested on their own above."""
+    monkeypatch.setattr(A, "state_swap_object", lambda *a, **k: "plate")
+
+
+def test_end_to_end_every_decision_point_once(mock_runs, monkeypatch):
     root, eps, _ = mock_runs
+    _always_swap(monkeypatch)
     _pipeline()
-    states = _states(root)
+    states = _rows(root)
     assert [(s["game_id"], s["state_idx"]) for s in states] == sorted((e["game_id"], s["t"]) for e in eps for s in e["trace"])
     for s in states:
         ep = next(e for e in eps if e["game_id"] == s["game_id"])
-        assert s["candidates"][0]["action"] == ep["trace"][s["state_idx"]]["executed"]
+        assert set(s["lists"]) == {A.PRIMARY_LIST, A.T1_LIST}
+        for lst in s["lists"].values():
+            assert lst["candidates"][0]["action"] == ep["trace"][s["state_idx"]]["executed"]
+            assert lst["n_samples"] == A.N_SAMPLES and len(lst["candidates"]) <= A.K_MAX
         assert s["prefix_actions"] == [x["executed"] for x in ep["trace"][: s["state_idx"]]]
-        assert s["n_samples"] == A.N_SAMPLES and len(s["candidates"]) <= A.K_MAX
-    labs = _states(root, "dsa_label", "labels.jsonl")
-    assert len(labs) == len(states) and all(x["rank1_replay_ok"] for x in labs)
+        assert "agrees" in s["greedy_fresh"]
+    labs = _rows(root, "dsa_label", "labels.jsonl")
+    assert len(labs) == len(states) and all(x["rank1_replay_ok"] and x["history_replay_ok"] for x in labs)
+    for lab, st in zip(labs, states):  # the union is labelled once: primary order first
+        assert [c["action"] for c in lab["candidates"]] == A.union_actions(st)
     assert any(A.regime(c) for x in labs for c in x["candidates"])
     assert any(c["admissible"] is False and c["failed"] for x in labs for c in x["candidates"])
     m = json.loads((root / "dsa_analysis" / "metrics.json").read_text())
-    assert set(m["models"]) == set(A.MODEL_TAGS) and not m["waiting"]
+    assert set(m["models"]) == set(A.MODEL_TAGS) and not m["waiting"] and not m["gate_failed"]
     for tag, rep in m["models"].items():
         assert rep["primary"]["identity_holds"] and rep["n_states"] == len(states)
         assert rep["decomposition"]["identity_holds"] and rep["by_encounter"]["parts_add_up"]
-    assert set(m["primary"]["per_model"]) == set(A.PRIORITY)
-    assert all(v["p_holm"] is not None for v in m["primary"]["per_model"].values())
-    for v in m["primary"]["per_model"].values():  # the mock scorer is no better than chance: never interpreted
-        assert not v["interpretable"] and v["verdict"] == "not interpreted"
-    assert m["encounter"]["n_states"] == len(states)
+        assert ("neutral" in rep) == (tag in A.PRIORITY)
+    for key in ("overall", "conditional_on_encounter"):
+        per = m["primary"][key]["per_model"]
+        assert set(per) == set(A.PRIORITY) and all(v["p_holm"] is not None for v in per.values())
+        for v in per.values():  # the mock scorer is no better than chance: never interpreted
+            assert not v["interpretable"] and v["verdict"] == "not interpreted"
+    assert m["encounter"]["n_states"] == len(states) and "futility" in m["primary"]
+    assert m["sampling"]["greedy_agreement"] == m["sampling"]["greedy_agreement"]
+
+
+def test_analysis_runs_model_free_before_any_score(mock_runs):
+    root, _, _ = mock_runs
+    assert _sample(0, n=1) == 0 and _label(0, n=1) == 0
+    assert A.run_decisionsim_agent_analysis({"run_id": "dsa_enc", "label_source": "dsa_label", "models": {}}) == 0
+    m = json.loads((root / "dsa_enc" / "metrics.json").read_text())
+    assert m["encounter"]["n_states"] > 0 and m["primary"]["futility"]["rule"]
+    assert m["encounter_t1_list"]["n_states"] == m["encounter"]["n_states"]
 
 
 def test_sampling_prompt_is_the_rq3_agent_prompt_and_request_settings(mock_runs, monkeypatch):
@@ -442,21 +691,48 @@ def test_sampling_prompt_is_the_rq3_agent_prompt_and_request_settings(mock_runs,
     seen = []
     orig = A.AgentSampler.sample
 
-    def spy(self, messages, n, temperature, top_p, max_tokens, seed):
-        seen.append((messages, n, temperature, top_p, max_tokens, seed))
-        return orig(self, messages, n, temperature, top_p, max_tokens, seed)
+    def spy(self, messages, n, params, max_tokens, seed):
+        seen.append((messages, n, params, max_tokens, seed))
+        return orig(self, messages, n, params, max_tokens, seed)
 
     monkeypatch.setattr(A.AgentSampler, "sample", spy)
     assert _sample(0, n=1) == 0
     rq3 = [m for e in sorted(eps, key=lambda e: e["game_id"]) for m in prompts[e["game_id"]]]
-    assert [x[0] for x in seen] == rq3
-    states = _states(root)
-    assert [x[1:] for x in seen] == [(20, 1.0, 1.0, 256, A.sample_seed(s["game_id"], s["state_idx"])) for s in states]
+    assert [x[0] for x in seen[::3]] == rq3 and all(x[0] == y[0] for x, y in zip(seen[::3], seen[1::3]))
+    states = _rows(root)
+    expect = []
+    for s in states:
+        g, t = s["game_id"], s["state_idx"]
+        expect += [(20, A.SAMPLINGS["primary"], 256, A.sample_seed(g, t, name="primary")),
+                   (20, A.SAMPLINGS["t1"], 256, A.sample_seed(g, t, name="t1")),
+                   (1, A.GREEDY, 256, A.sample_seed(g, t, name="greedy"))]
+    assert [x[1:] for x in seen] == expect
+    m = json.loads((root / "dsa_sample" / "shard_00_of_01" / "metrics.json").read_text())
+    assert m["vllm"] == {"version": "mock"} and m["request_settings"]["primary"]["top_k"] == 20
+
+
+def test_sampling_history_text_is_the_world_model_history(mock_runs):
+    root, eps, _ = mock_runs
+    assert _sample(0, n=1) == 0
+    first = AlfworldClient()
+    first.create()
+    for s in _rows(root):
+        ep = next(e for e in eps if e["game_id"] == s["game_id"])
+        f = first.reset(s["game_id"], "train").first_observation
+        assert s["history_text"] == A.archived_history(f, ep["trace"], s["state_idx"])
+
+
+def test_seed_check_on_the_smoke_states(mock_runs):
+    root, _, _ = mock_runs
+    assert _sample(0, n=1, seed_check=True, max_games=1) == 0
+    m = json.loads((root / "dsa_sample" / "shard_00_of_01" / "metrics.json").read_text())
+    assert m["seed_check"]["n_states"] > 0 and m["seed_check"]["nondegenerate_same_set"] == 0
+    assert m["smoke_gate"]["passed"]
 
 
 def test_real_sampler_sends_the_designed_payload(monkeypatch):
     monkeypatch.delenv("WF_MOCK_AGENT", raising=False)
-    sent = {}
+    sent, got = {}, {}
 
     class R:
         ok = True
@@ -465,31 +741,34 @@ def test_real_sampler_sends_the_designed_payload(monkeypatch):
             pass
 
         def json(self):
-            return {"choices": [{"message": {"content": "Action: look"}, "finish_reason": "stop"}] * 3}
+            return {"choices": [{"message": {"content": "Action: look"}, "finish_reason": "stop"}] * 3, "version": "0.8.5"}
 
     s = A.AgentSampler(base_url="http://x/v1")
     monkeypatch.setattr(s._session, "post", lambda url, json, timeout: (sent.update(json), R())[1])
-    out = s.sample([{"role": "user", "content": "hi"}], 3, 1.0, 1.0, 256, 7)
-    assert len(out) == 3 and sent["n"] == 3 and sent["temperature"] == 1.0 and sent["top_p"] == 1.0
-    assert sent["top_k"] == -1 and sent["seed"] == 7 and sent["max_tokens"] == 256
+    monkeypatch.setattr(s._session, "get", lambda url, timeout: (got.update(url=url), R())[1])
+    out = s.sample([{"role": "user", "content": "hi"}], 3, A.SAMPLINGS["primary"], 256, 7)
+    assert len(out) == 3 and sent["n"] == 3 and sent["temperature"] == 0.7 and sent["top_p"] == 0.8
+    assert sent["top_k"] == 20 and sent["min_p"] == 0.0 and sent["seed"] == 7 and sent["max_tokens"] == 256
+    assert sent["repetition_penalty"] == 1.0 and sent["presence_penalty"] == 0 and sent["frequency_penalty"] == 0
     assert sent["chat_template_kwargs"] == {"enable_thinking": False}
     with pytest.raises(RuntimeError):
-        s.sample([{"role": "user", "content": "hi"}], 4, 1.0, 1.0, 256, 7)
+        s.sample([{"role": "user", "content": "hi"}], 4, A.SAMPLINGS["t1"], 256, 7)
+    assert s.server_info()["version"] == "0.8.5" and got["url"] == "http://x/version"
 
 
 def test_sample_resume_draws_nothing_new_and_refuses_another_prompt(mock_runs, monkeypatch):
     root, eps, _ = mock_runs
     assert _sample(0, n=1) == 0
-    before = (root / "dsa_sample" / "shard_00_of_01" / "states.jsonl").read_text()
+    p = root / "dsa_sample" / "shard_00_of_01" / "states.jsonl"
+    before = p.read_text()
     calls = []
     monkeypatch.setattr(A.AgentSampler, "sample", lambda *a, **k: calls.append(1) or [])
     (root / "dsa_sample" / "shard_00_of_01" / "games_done.jsonl").write_text("")  # walk every game again
     assert _sample(0, n=1, resume=True) == 0
-    assert not calls and (root / "dsa_sample" / "shard_00_of_01" / "states.jsonl").read_text() == before
-    p = root / "dsa_sample" / "shard_00_of_01" / "states.jsonl"
+    assert not calls and p.read_text() == before
     rows = read_jsonl(p)
     rows[0]["prompt_sha"] = "other"
-    p.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    _rewrite(p, rows)
     (root / "dsa_sample" / "shard_00_of_01" / "games_done.jsonl").write_text("")
     with pytest.raises(SystemExit):
         _sample(0, n=1, resume=True)
@@ -498,12 +777,12 @@ def test_sample_resume_draws_nothing_new_and_refuses_another_prompt(mock_runs, m
 def test_a_fresh_sample_run_does_not_append_to_old_lists(mock_runs, monkeypatch):
     root, _, _ = mock_runs
     assert _sample(0, n=1) == 0
-    first = _states(root)
+    first = _rows(root)
     calls = []
     orig = A.AgentSampler.sample
     monkeypatch.setattr(A.AgentSampler, "sample", lambda self, *a, **k: calls.append(1) or orig(self, *a, **k))
     assert _sample(0, n=1) == 0
-    assert _states(root) == first and len(calls) == len(first)  # sampled afresh, not read back from the old file
+    assert _rows(root) == first and len(calls) == 3 * len(first)  # sampled afresh, not read back from the old file
 
 
 def test_replay_mismatch_stops_the_game_there(mock_runs):
@@ -511,10 +790,10 @@ def test_replay_mismatch_stops_the_game_there(mock_runs):
     p = root / "rq3_mock" / "shard_00_of_01" / "episodes.jsonl"
     rows = read_jsonl(p)
     rows[0]["trace"][2]["real_obs"] = "something else"
-    p.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    _rewrite(p, rows)
     assert _sample(0, n=1) == 0
     g = rows[0]["game_id"]
-    assert [s["state_idx"] for s in _states(root) if s["game_id"] == g] == [0, 1, 2]
+    assert [s["state_idx"] for s in _rows(root) if s["game_id"] == g] == [0, 1, 2]
     mm = read_jsonl(root / "dsa_sample" / "shard_00_of_01" / "mismatches.jsonl")
     assert [(x["game_id"], x["state_idx"]) for x in mm] == [(g, 2)]
 
@@ -530,26 +809,62 @@ def test_rank1_mismatch_makes_the_state_unusable(mock_runs):
     p = root / "dsa_sample" / "shard_00_of_01" / "states.jsonl"
     rows = read_jsonl(p)
     rows[1]["recorded_obs"] = "not what the server says"
-    p.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    _rewrite(p, rows)
     assert _label(0, n=1) == 0
-    labs = _states(root, "dsa_label", "labels.jsonl")
+    labs = _rows(root, "dsa_label", "labels.jsonl")
     bad = [x for x in labs if not x["rank1_replay_ok"]]
     assert [(x["game_id"], x["state_idx"]) for x in bad] == [(rows[1]["game_id"], rows[1]["state_idx"])]
     assert _score("qwen3-8b") == 0
     scored = {(x["game_id"], x["state_idx"]) for x in read_jsonl(root / "dsa_score_qwen3-8b" / "shard_00_of_01" / "scoring.jsonl")}
     assert (rows[1]["game_id"], rows[1]["state_idx"]) not in scored
+    assert A.run_decisionsim_agent_analysis({"run_id": "dsa_enc", "label_source": "dsa_label",
+                                             "models": {"qwen3-8b": "dsa_score_qwen3-8b"}}) == 0
+    m = json.loads((root / "dsa_enc" / "metrics.json").read_text())
+    assert m["states"]["n_usable"] == len(labs) - 1 == m["encounter"]["n_states"] == m["models"]["qwen3-8b"]["n_states"]
+
+
+def test_a_history_that_does_not_replay_makes_the_state_unusable(mock_runs, monkeypatch):
+    root, _, _ = mock_runs
+    assert _sample(0, n=1) == 0
+    p = root / "dsa_sample" / "shard_00_of_01" / "states.jsonl"
+    rows = read_jsonl(p)
+    rows[2]["history_text"] += "\n(edited)"
+    _rewrite(p, rows)
+    assert _label(0, n=1) == 0
+    labs = _rows(root, "dsa_label", "labels.jsonl")
+    assert [(x["game_id"], x["state_idx"]) for x in labs if not x["history_replay_ok"]] == [(rows[2]["game_id"], rows[2]["state_idx"])]
+    assert sum(A.usable(x) for x in labs) == len(labs) - 1
+
+
+def test_every_replay_of_a_state_must_reproduce_its_history(mock_runs, monkeypatch):
+    root, _, _ = mock_runs
+    assert _sample(0, n=1) == 0
+    real = A.replay
+    n = {"k": 0}
+
+    def drifting(client, game, prefix, split="train"):
+        h = real(client, game, prefix, split=split)
+        n["k"] += 1
+        if n["k"] == 2:  # the second replay of the first state comes back different
+            h.state.history = list(h.state.history) + [("look", "drift")]
+        return h
+
+    monkeypatch.setattr(A, "replay", drifting)
+    assert _label(0, n=1) == 0
+    labs = _rows(root, "dsa_label", "labels.jsonl")
+    assert not labs[0]["history_replay_ok"] and all(x["history_replay_ok"] for x in labs[1:])
 
 
 def test_label_stops_partial_and_resumes_to_the_same_labels(mock_runs):
     root, _, _ = mock_runs
     assert _sample(0, n=1) == 0
     assert _label(0, n=1) == 0
-    whole = _states(root, "dsa_label", "labels.jsonl")
+    whole = _rows(root, "dsa_label", "labels.jsonl")
     assert _label(0, n=1, max_replays_per_job=10) == 1
     assert "PARTIAL" in (root / "dsa_label" / "shard_00_of_01" / "STATUS.md").read_text()
     while _label(0, n=1, max_replays_per_job=10, resume=True) == 1:
         pass
-    assert _states(root, "dsa_label", "labels.jsonl") == whole
+    assert _rows(root, "dsa_label", "labels.jsonl") == whole
 
 
 def test_labels_match_a_fresh_replay_on_the_simulator(mock_runs):
@@ -560,7 +875,7 @@ def test_labels_match_a_fresh_replay_on_the_simulator(mock_runs):
 
     client = AlfworldClient()
     client.create()
-    for x in _states(root, "dsa_label", "labels.jsonl")[:6]:
+    for x in _rows(root, "dsa_label", "labels.jsonl")[:6]:
         for c in x["candidates"]:
             h = replay(client, x["game_id"], x["prefix_actions"], split="train")
             assert history_text_from_state(h.state) == x["history_text"]
@@ -570,8 +885,43 @@ def test_labels_match_a_fresh_replay_on_the_simulator(mock_runs):
             assert c["context_determined"] == context_determined_label(x["history_text"], c["action"], obs)
 
 
-def test_each_arm_sends_its_own_prompt_once_per_candidate(mock_runs, monkeypatch):
+def test_label_state_marks_determination_and_goal_agnostic_history(mock_runs):
+    from wf.data.transitions import context_determined_label
+    from wf.env.scene import scan_scene
+
+    client = AlfworldClient()
+    client.create()
+    st = client.reset("train/1", "train")
+    lists = {"primary": {"candidates": [{"rank": 1, "action": "inventory"}, {"rank": 2, "action": "go to drawer 1"}],
+                         "n_samples": 0, "n_format_errors": 0, "n_cut": 0},
+             "t1": {"candidates": [{"rank": 1, "action": "inventory"}, {"rank": 2, "action": "take apple 1 from countertop 1"}],
+                    "n_samples": 0, "n_format_errors": 0, "n_cut": 0}}
+    s = {"game_id": "train/1", "split": "train", "state_idx": 0, "task_line": st.task_line, "prefix_actions": [],
+         "recorded_obs": None, "history_text": st.first_observation, "lists": lists}
+    lab, used = A.label_state(client, scan_scene(client, "train/1", "train"), s)
+    assert used == 3 and not lab["rank1_replay_ok"] and lab["history_replay_ok"]  # recorded reply None
+    inv, go, take = lab["candidates"]
+    assert not inv["failed"] and inv["context_determined"]  # no news in the reply: determined success
+    assert not go["failed"] and not go["context_determined"]  # reveals contents: not determined
+    assert take["failed"] and take["context_determined"] and take["admissible"] is False
+    for c in lab["candidates"]:
+        assert c["context_determined"] == context_determined_label(lab["history_text"], c["action"], c["true_obs"])
+    assert lab["history_goal_agnostic"] and lab["lists"]["t1"][1]["action"] == "take apple 1 from countertop 1"
+    goal = lab["goal_object"]
+    touched = {**s, "prefix_actions": ["go to drawer 1", "open drawer 1", f"take {goal} 1 from drawer 1"]}
+    h = client.reset("train/1", "train")
+    for a in touched["prefix_actions"]:
+        h = client.step(h, a)
+    from wf.env.replay import history_text_from_state
+
+    touched["history_text"] = history_text_from_state(h)
+    lab2, _ = A.label_state(client, scan_scene(client, "train/1", "train"), touched)
+    assert not lab2["history_goal_agnostic"]
+
+
+def test_each_arm_sends_its_own_prompt_once_per_distinct_candidate(mock_runs, monkeypatch):
     root, _, _ = mock_runs
+    _always_swap(monkeypatch)
     assert _sample(0, n=1) == 0 and _label(0, n=1) == 0
     sent = []
     orig = logodds.LogoddsScorer.score_one_token_pair
@@ -582,7 +932,7 @@ def test_each_arm_sends_its_own_prompt_once_per_candidate(mock_runs, monkeypatch
 
     monkeypatch.setattr(logodds.LogoddsScorer, "score_one_token_pair", spy)
     assert _score("llama3.1-8b") == 0
-    labs = {f"{x['game_id']}#{x['state_idx']:02d}": x for x in _states(root, "dsa_label", "labels.jsonl")}
+    labs = {f"{x['game_id']}#{x['state_idx']:02d}": x for x in _rows(root, "dsa_label", "labels.jsonl")}
     keys = [(t, c) for t, c, _ in sent]
     assert len(keys) == len(set(keys))
     for tid, cond, msgs in sent:
@@ -593,13 +943,19 @@ def test_each_arm_sends_its_own_prompt_once_per_candidate(mock_runs, monkeypatch
             assert st["task_line"] in last
         elif cond == A.BLIND:
             assert "Your task is to:" not in last
+        elif cond == A.NEUTRAL:
+            assert "Your task is to: explore the room." in last
         else:
             assert st["swapped_task_line"] in last and st["swap"]
-    n_cands = sum(len(A.scored_candidates(x)) for x in labs.values())
-    assert sum(c == A.AWARE for _, c, _ in sent) == n_cands == sum(c == A.BLIND for _, c, _ in sent)
+    multi = [x for x in labs.values() if len(A.scored_candidates(x)) > 1]
+    single = [x for x in labs.values() if len(A.scored_candidates(x)) == 1]
+    n_multi = sum(len(A.scored_candidates(x)) for x in multi)
+    assert sum(c == A.BLIND for _, c, _ in sent) == n_multi + len(single)
+    assert sum(c == A.AWARE for _, c, _ in sent) == n_multi == sum(c == A.NEUTRAL for _, c, _ in sent)
+    assert sum(c == A.SWAPPED for _, c, _ in sent) == sum(len(A.scored_candidates(x)) for x in multi if x["swap"]) > 0
 
 
-def test_score_resume_and_refusal_of_other_prompts(mock_runs, monkeypatch):
+def test_score_resume_and_refusal_of_other_prompts(mock_runs):
     root, _, _ = mock_runs
     assert _sample(0, n=1) == 0 and _label(0, n=1) == 0 and _score("qwen3-8b") == 0
     p = root / "dsa_score_qwen3-8b" / "shard_00_of_01" / "scoring.jsonl"
@@ -607,7 +963,7 @@ def test_score_resume_and_refusal_of_other_prompts(mock_runs, monkeypatch):
     assert _score("qwen3-8b", resume=True) == 0 and p.read_text() == before
     rows = read_jsonl(p)
     rows[0]["score_hash"] = "x"
-    p.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    _rewrite(p, rows)
     with pytest.raises(SystemExit):
         _score("qwen3-8b", resume=True)
 
@@ -630,9 +986,9 @@ def test_scores_are_saved_one_at_a_time(mock_runs, monkeypatch):
     assert len(read_jsonl(root / "dsa_score_qwen3-8b" / "shard_00_of_01" / "scoring.jsonl")) == 3
 
 
-def test_a_failed_gate_scores_nothing(mock_runs, monkeypatch):
+def test_a_failed_gate_scores_nothing_and_enters_holm_with_p_one(mock_runs, monkeypatch):
     root, _, _ = mock_runs
-    assert _sample(0, n=1) == 0 and _label(0, n=1) == 0
+    assert _sample(0, n=1) == 0 and _label(0, n=1) == 0 and _score("llama3.1-8b") == 0
     import wf.decisionsim as D
 
     spec = families.MODELS["mistral-7b-v0.3"]
@@ -647,6 +1003,11 @@ def test_a_failed_gate_scores_nothing(mock_runs, monkeypatch):
         _score("mistral-7b-v0.3")
     d = root / "dsa_score_mistral-7b-v0.3" / "shard_00_of_01"
     assert not (d / "scoring.jsonl").exists() and json.loads((d / "tokenization_checks.json").read_text())["ok"] is False
+    assert _analysis() == 0
+    m = json.loads((root / "dsa_analysis" / "metrics.json").read_text())
+    assert m["gate_failed"] == ["mistral-7b-v0.3"]
+    per = m["primary"]["overall"]["per_model"]
+    assert per["mistral-7b-v0.3"]["p_holm"] == 1.0 and per["llama3.1-8b"]["p_holm"] is not None
 
 
 def test_arms_must_include_aware_and_blind(mock_runs):
@@ -665,7 +1026,7 @@ def test_analysis_waits_and_refuses_scores_of_another_label_run(mock_runs):
     assert _analysis() == 0
     m = json.loads((root / "dsa_analysis" / "metrics.json").read_text())
     assert "qwen3-8b" in m["waiting"] and "llama3.1-8b" in m["waiting"] and not m["models"]
-    assert m["primary"]["per_model"] == {}
+    assert m["primary"]["overall"]["per_model"] == {}
 
 
 def test_holm_waits_for_every_priority_model(mock_runs):
@@ -673,48 +1034,8 @@ def test_holm_waits_for_every_priority_model(mock_runs):
     assert _sample(0, n=1) == 0 and _label(0, n=1) == 0 and _score("llama3.1-8b") == 0
     assert _analysis() == 0
     m = json.loads((root / "dsa_analysis" / "metrics.json").read_text())
-    v = m["primary"]["per_model"]["llama3.1-8b"]
+    v = m["primary"]["overall"]["per_model"]["llama3.1-8b"]
     assert v["p_holm"] is None and v["verdict"] == "waiting for every priority model"
-
-
-def test_dry_run_on_mock_archives(mock_runs):
-    root, eps, _ = mock_runs
-    client = AlfworldClient()
-    client.create()
-    rows = []
-    for e in eps:
-        st = client.reset(e["game_id"], "train")
-        rows.append({"game_id": e["game_id"], "history_len": 0, "history_text": st.first_observation})
-    (root / "coll").mkdir()
-    (root / "coll" / "transitions.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
-    assert A.run_decisionsim_agent_dryrun({"run_id": "dsa_dry", "episodes_source": "rq3_mock",
-                                           "first_obs_sources": ["coll"]}) == 0
-    m = json.loads((root / "dsa_dry" / "metrics.json").read_text())
-    assert m["n_states"] == sum(len(e["trace"]) for e in eps) and m["n_history_problems"] == 0
-    assert m["plumbing_known_answer"]["is_zero"]
-    fails = sum(s["real_obs"] == "Nothing happens." for e in eps for s in e["trace"])
-    assert m["rank1"]["candidates"]["failed"] == fails
-
-
-def test_dry_run_history_is_the_replayed_history(mock_runs):
-    root, eps, _ = mock_runs
-    from wf.env.replay import history_text_from_state, replay
-
-    client = AlfworldClient()
-    client.create()
-    e = eps[0]
-    first = client.reset(e["game_id"], "train").first_observation
-    for t in range(len(e["trace"])):
-        h = replay(client, e["game_id"], [x["executed"] for x in e["trace"][:t]], split="train")
-        assert A.archived_history(first, e["trace"], t) == history_text_from_state(h.state)
-
-
-def test_mock_agent_prompt_carries_admissible_actions(mock_runs):
-    _, eps, prompts = mock_runs
-    msgs = prompts[eps[0]["game_id"]][0]
-    assert msgs == agent_react_messages(observation=msgs[-1]["content"].split("Observation: ", 1)[1].split("\nAdmissible", 1)[0],
-                                        history=[], admissible=[ln[2:] for ln in msgs[-1]["content"].split("Admissible actions:\n", 1)[1]
-                                                                .split("\nRespond", 1)[0].splitlines()])
 
 
 def test_lists_are_saved_one_state_at_a_time(mock_runs, monkeypatch):
@@ -724,7 +1045,7 @@ def test_lists_are_saved_one_state_at_a_time(mock_runs, monkeypatch):
 
     def flaky(self, *a, **k):
         n["k"] += 1
-        if n["k"] == 3:
+        if n["k"] == 7:  # the first request of the third state
             raise RuntimeError("vLLM went away")
         return orig(self, *a, **k)
 
@@ -752,22 +1073,63 @@ def test_labels_are_saved_one_state_at_a_time(mock_runs, monkeypatch):
     assert len(read_jsonl(root / "dsa_label" / "shard_00_of_01" / "labels.jsonl")) == 2
 
 
-def test_label_state_marks_determination_by_the_rq2_rules(mock_runs):
-    from wf.data.transitions import context_determined_label
-    from wf.env.scene import scan_scene
+def test_dry_run_on_mock_archives(mock_runs):
+    root, eps, _ = mock_runs
+    client = AlfworldClient()
+    client.create()
+    rows = []
+    for e in eps:
+        st = client.reset(e["game_id"], "train")
+        rows.append({"game_id": e["game_id"], "history_len": 0, "history_text": st.first_observation})
+    (root / "coll").mkdir()
+    _rewrite(root / "coll" / "transitions.jsonl", rows)
+    assert A.run_decisionsim_agent_dryrun({"run_id": "dsa_dry", "episodes_source": "rq3_mock",
+                                           "first_obs_sources": ["coll"]}) == 0
+    m = json.loads((root / "dsa_dry" / "metrics.json").read_text())
+    assert m["n_states"] == sum(len(e["trace"]) for e in eps) and m["n_history_problems"] == 0
+    assert m["plumbing_known_answer"]["is_zero"]
+    fails = sum(s["real_obs"] == "Nothing happens." for e in eps for s in e["trace"])
+    assert m["rank1"]["candidates"]["failed"] == fails
+    assert sum(v["failing_rank1"] for v in m["per_game"].values()) == fails
+
+
+def test_dry_run_history_is_the_replayed_history(mock_runs):
+    root, eps, _ = mock_runs
+    from wf.env.replay import history_text_from_state, replay
 
     client = AlfworldClient()
     client.create()
-    st = client.reset("train/1", "train")
-    s = {"game_id": "train/1", "split": "train", "state_idx": 0, "task_line": st.task_line, "prefix_actions": [],
-         "recorded_obs": None, "n_format_errors": 0, "n_samples": 0, "n_cut": 0,
-         "candidates": [{"rank": 1, "action": "inventory"}, {"rank": 2, "action": "go to drawer 1"},
-                        {"rank": 3, "action": "take apple 1 from countertop 1"}]}
-    lab, used = A.label_state(client, scan_scene(client, "train/1", "train"), s)
-    assert used == 3 and not lab["rank1_replay_ok"]  # recorded reply None: rank 1 cannot match
-    inv, go, take = lab["candidates"]
-    assert not inv["failed"] and inv["context_determined"]  # no news in the reply: determined success
-    assert not go["failed"] and not go["context_determined"]  # reveals contents: not determined
-    assert take["failed"] and take["context_determined"] and take["admissible"] is False
-    for c in lab["candidates"]:
-        assert c["context_determined"] == context_determined_label(lab["history_text"], c["action"], c["true_obs"])
+    e = eps[0]
+    first = client.reset(e["game_id"], "train").first_observation
+    for t in range(len(e["trace"])):
+        h = replay(client, e["game_id"], [x["executed"] for x in e["trace"][:t]], split="train")
+        assert A.archived_history(first, e["trace"], t) == history_text_from_state(h.state)
+
+
+def test_precision_script_floor_and_holm_threshold():
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("prec", Path(__file__).resolve().parents[1] / "scripts" / "decisionsim_agent_precision.py")
+    prec = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(prec)
+    assert prec.p_min(7) == 2 ** -6 < 0.025 < prec.p_min(6) == 2 ** -5
+    assert prec.min_games_for(0.025) == 7 == A.MIN_GAMES_FOR_SIGNIFICANCE
+
+
+def test_harm_kinds_count_harm_states_only():
+    states, L = _four_states()
+    both = _state([_cand(1, True), _cand(2, True)], game="g5", t=0)  # both choices fail at a go-to: not harm
+    L2 = {a: {**v, **_L(both, [1, 1])} for a, v in L.items()}
+    c = A.contrast(states + [both], L2, "aware", "blind")
+    assert c["harm_by_kind_of_choice"] == {"regime": 1} and c["harm_regime_share"] == 1.0
+
+
+def test_seed_check_flags_a_seed_that_changes_nothing():
+    class Stuck:
+        def sample(self, messages, n, params, max_tokens, seed):
+            return [{"text": f"Action: a{i % 3}", "finish_reason": "stop"} for i in range(n)]
+
+    rec = A.sample_state(Stuck(), [{"role": "user", "content": "x"}], "a0", "g", 0, {"seed_check": True})
+    assert rec["seed_check"] == {"distinct_first": 3, "same_set": True}
+    assert set(rec["lists"]) == {A.PRIMARY_LIST, A.T1_LIST} and rec["greedy_fresh"]["agrees"] is True

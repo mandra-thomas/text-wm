@@ -1,20 +1,23 @@
 """Stage 1b: verification of the agent's own ranked candidates (exploratory; design in
-notes/decisionsim_agent_design.md, committed before any data of this stage).
+notes/decisionsim_agent_design.md, committed before any data of this stage and amended after review 1, before any
+data).
 
-At every decision point of the 134 RQ3 no-foresight episodes (2,973 states), the Qwen3-8B ReAct agent's own candidate
-list is frozen: rank 1 is the action the agent actually took (greedy), followed by up to K_MAX - 1 distinct actions
-from N_SAMPLES samples of its reply at temperature 1, ranked by how often they were sampled (ties by a seeded hash).
-Each candidate's true outcome comes from a fresh replay on the real server ("Nothing happens." is a failure), with the
-RQ2 labels (history-determined, acts on the task's object, shared spot). A yes/no world-model verifier scores every
-candidate with the task line shown (aware), deleted (blind) or swapped to another object (attribution). The agent acts
-on its highest-ranked candidate the verifier accepts (rounded L > 0), or on rank 1 if it accepts none. Two
-configurations need no model: none (rank 1, the real agent) and the simulator oracle.
+At every decision point of the 134 RQ3 no-foresight episodes (2,973 states), two frozen candidate lists of the
+Qwen3-8B ReAct agent are sampled in one job: the primary list (Qwen's recommended non-thinking settings: temperature
+0.7, top-p 0.8, top-k 20, min-p 0) and a sensitivity list (temperature 1, untruncated), each 20 replies. Rank 1 of both
+is the action the agent actually took (greedy, archived); the other ranks are the distinct sampled actions by count
+(ties by a seeded hash), at most K_MAX in all. A fresh greedy completion per state is a drift diagnostic. Every
+distinct (state, normalised action) of the two lists is labelled once by a fresh replay on the real server ("Nothing
+happens." is a failure; RQ2 labels), and scored once per verifier arm: the task line shown (aware), deleted (blind),
+swapped to another object (attribution) or replaced by "explore the room" (neutral; priority models only, never
+decides). The agent acts on its highest-ranked candidate the verifier accepts (rounded L > 0), or on rank 1 if it
+accepts none. No verifier (rank 1) and the simulator oracle need no model.
 
 Runs:
-  decisionsim_agent_sample           GPU: vLLM agent + ALFWorld server; samples and freezes the ranked lists
-  decisionsim_agent_label            CPU: ALFWorld server; one fresh replay per candidate, labels, swap object
-  decisionsim_agent_score_<model>    GPU: yes/no scores, every candidate under every arm, one job per shard
-  decisionsim_agent_analysis         CPU: decisions, Delta_invalid, encounter rates, attribution
+  decisionsim_agent_sample           GPU: vLLM agent + ALFWorld server; samples and freezes the lists
+  decisionsim_agent_label            CPU: ALFWorld server; one fresh replay per distinct candidate, labels, swap object
+  decisionsim_agent_score_<model>    GPU: yes/no scores, every distinct candidate under every arm
+  decisionsim_agent_analysis         CPU: encounter rates and the futility rule (no model needed), then decisions
   decisionsim_agent_dryrun           CPU, no model and no server: the archived episodes, rank 1 only
 """
 from __future__ import annotations
@@ -51,25 +54,34 @@ from wf.util import append_jsonl, read_jsonl, repair_jsonl, require_filed, runs_
 
 NOTHING = "Nothing happens."
 SEED = C.RNG_SEED
-# Candidate lists (design note, "Candidate generation and ranking").
+# Candidate lists (design note, "Candidate generation and ranking", amended after review 1).
 N_SAMPLES = 20
-TEMPERATURE = 1.0
-TOP_P = 1.0
+PRIMARY_LIST, T1_LIST = "primary", "t1"
+SAMPLINGS = {
+    PRIMARY_LIST: {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "min_p": 0.0},  # Qwen3 non-thinking defaults
+    T1_LIST: {"temperature": 1.0, "top_p": 1.0, "top_k": -1, "min_p": 0.0},  # the model's own distribution
+}
+GREEDY = {"temperature": 0.0, "top_p": 1.0, "top_k": -1, "min_p": 0.0}
+# Sent with every request so no server default can change the distribution.
+FIXED_PARAMS = {"repetition_penalty": 1.0, "presence_penalty": 0.0, "frequency_penalty": 0.0}
 MAX_TOKENS = 256  # as the RQ3 agent
-K_MAX = 8  # rank 1 (the greedy action) and at most K_MAX - 1 sampled actions
+K_MAX = 8  # rank 1 (the greedy action) and at most K_MAX - 1 sampled actions, per list
+GREEDY_AGREEMENT_MIN = 0.90  # below this, the lists are described as from a drifted sampler
 # Verifier arms: only the query's task line differs.
-AWARE, BLIND, SWAPPED = "yn_aligned", "yn_blind", "yn_swapped"
-ARMS = (AWARE, BLIND, SWAPPED)
-CONFIG_ARM = {"aware": AWARE, "blind": BLIND, "swapped": SWAPPED}
-CONFIGS = ("none", "aware", "blind", "swapped", "oracle")
+AWARE, BLIND, SWAPPED, NEUTRAL = "yn_aligned", "yn_blind", "yn_swapped", "yn_absent"
+ARMS = (AWARE, BLIND, SWAPPED, NEUTRAL)
+CONFIG_ARM = {"aware": AWARE, "blind": BLIND, "swapped": SWAPPED, "neutral": NEUTRAL}
+CONFIGS = ("none", "aware", "blind", "oracle")
 MODEL_TAGS = ("llama3.1-8b", "mistral-7b-v0.3", "qwen3-8b")
-PRIORITY = ("llama3.1-8b", "mistral-7b-v0.3")  # Holm-corrected primary tests; Qwen3-8B is a contrast
+PRIORITY = ("llama3.1-8b", "mistral-7b-v0.3")  # Holm-corrected tests; Qwen3-8B is a contrast
 GRID = 64  # scores are rounded to 1/64 nat before any comparison
 ALPHA = 0.05
+SWAP_SHARE = 0.5  # attributable: aware - swapped is positive and at least half of a positive aware - blind
+MIN_GAMES_FOR_SIGNIFICANCE = 7  # sign-flip floor 2^(1-g) must be below Holm's first threshold 0.025
 # Competence rule of wave A, on this stage's candidates under the task-blind prompt.
 COMPETENCE = {"auc_min": 0.70, "yes_failures_max": 0.95, "yes_successes_min": 0.05}
 STEP_BANDS = (("step_0", 0, 0), ("steps_1_11", 1, 11), ("steps_12_29", 12, 10**6))
-EARLY_STEPS = 12  # sensitivity: the first 12 steps, as in Stage 1a's collection
+EARLY_STEPS = 12  # sensitivity: steps 0-11, as in Stage 1a's collection
 SHARD_COMPLETE = "shard complete"
 TASK_PREFIX = "Your task is to:"
 
@@ -154,8 +166,8 @@ def _fresh(d: Path, names: tuple[str, ...], resume: bool) -> None:
 # ---------------- candidate lists ----------------
 
 
-def sample_seed(game: str, t: int, seed: int = SEED) -> int:
-    return int(hashlib.sha256(f"{seed}|decisionsim_agent|{game}|{t}".encode()).hexdigest()[:8], 16)
+def sample_seed(game: str, t: int, seed: int = SEED, name: str = PRIMARY_LIST) -> int:
+    return int(hashlib.sha256(f"{seed}|decisionsim_agent|{name}|{game}|{t}".encode()).hexdigest()[:8], 16)
 
 
 def tie_key(game: str, t: int, action: str, seed: int = SEED) -> str:
@@ -169,6 +181,11 @@ def normalize_action(action: str | None) -> str | None:
         return None
     a = " ".join(action.split()).lower().rstrip(".").strip()
     return a or None
+
+
+def akey(action: str) -> str:
+    """The cache key of an action at a state: its normalised form, hashed (shared by both lists)."""
+    return hashlib.sha256((normalize_action(action) or action).encode()).hexdigest()[:12]
 
 
 def rank_candidates(greedy: str, replies: list[str], game: str, t: int, k_max: int = K_MAX,
@@ -190,8 +207,8 @@ def rank_candidates(greedy: str, replies: list[str], game: str, t: int, k_max: i
 
 
 class AgentSampler:
-    """n completions of the RQ3 agent's reply from the vLLM server (thinking off); a deterministic stand-in when
-    WF_MOCK_AGENT=1."""
+    """Completions of the RQ3 agent's reply from the vLLM server (thinking off), every sampling parameter sent
+    explicitly; a deterministic stand-in when WF_MOCK_AGENT=1."""
 
     def __init__(self, base_url: str | None = None, model: str = C.AGENT_MODEL):
         self.base_url = (os.environ.get("VLLM_BASE_URL") or base_url or C.VLLM_BASE_URL_DEFAULT).rstrip("/")
@@ -199,30 +216,46 @@ class AgentSampler:
         self.mock = os.environ.get("WF_MOCK_AGENT", "0") == "1"
         self._session = requests.Session()
 
-    def sample(self, messages: list[dict[str, str]], n: int, temperature: float, top_p: float, max_tokens: int,
+    def payload(self, messages: list[dict[str, str]], n: int, params: dict[str, float], max_tokens: int,
+                seed: int) -> dict[str, Any]:
+        return {"model": self.model, "messages": messages, "n": n, **params, **FIXED_PARAMS, "max_tokens": max_tokens,
+                "seed": seed, "chat_template_kwargs": {"enable_thinking": False}}
+
+    def sample(self, messages: list[dict[str, str]], n: int, params: dict[str, float], max_tokens: int,
                seed: int) -> list[dict[str, str]]:
         if self.mock:
-            return self._mock(messages, n, seed)
-        payload = {"model": self.model, "messages": messages, "n": n, "temperature": temperature, "top_p": top_p,
-                   "top_k": -1, "max_tokens": max_tokens, "seed": seed,
-                   "chat_template_kwargs": {"enable_thinking": False}}
-        r = self._session.post(f"{self.base_url}/chat/completions", json=payload, timeout=600)
+            return self._mock(messages, n, params, seed)
+        r = self._session.post(f"{self.base_url}/chat/completions", json=self.payload(messages, n, params, max_tokens, seed),
+                               timeout=600)
         r.raise_for_status()
         choices = r.json()["choices"]
         if len(choices) != n:
             raise RuntimeError(f"asked for {n} completions, got {len(choices)}")
         return [{"text": c["message"]["content"] or "", "finish_reason": c.get("finish_reason")} for c in choices]
 
+    def server_info(self) -> dict[str, Any]:
+        """The vLLM version (its /version endpoint), recorded with the lists."""
+        if self.mock:
+            return {"version": "mock"}
+        try:
+            r = self._session.get(self.base_url.rsplit("/v1", 1)[0] + "/version", timeout=30)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:  # recorded, never fatal: the job log also prints the version
+            return {"version": None, "error": str(e)[:200]}
+
     @staticmethod
-    def _mock(messages: list[dict[str, str]], n: int, seed: int) -> list[dict[str, str]]:
+    def _mock(messages: list[dict[str, str]], n: int, params: dict[str, float], seed: int) -> list[dict[str, str]]:
         text = messages[-1]["content"]
         body, _, tail = text.partition("Admissible actions:")
         adm = [ln.strip()[2:] for ln in tail.splitlines() if ln.strip().startswith("- ")]
         task = re.search(r"Your task is to:.*", "\n".join(m["content"] for m in messages[2:]))
         goal = parse_task_line(task.group(0)).goal_object if task else "mug"
+        if params["temperature"] == 0:
+            return [{"text": f"Thought: ok\nAction: {adm[0] if adm else 'look'}", "finish_reason": "stop"}] * n
         out = []
         for i in range(n):
-            h = int(hashlib.sha256(f"{seed}|{i}|{body}".encode()).hexdigest()[:8], 16)
+            h = int(hashlib.sha256(f"{seed}|{i}|{params['temperature']}|{body}".encode()).hexdigest()[:8], 16)
             k = h % 20
             if k == 0:
                 reply = "Thought: hmm, let me think."  # format error
@@ -243,6 +276,30 @@ def _sha(obj: Any) -> str:
 SAMPLE_OUTPUTS = ("states.jsonl", "mismatches.jsonl", "games_done.jsonl")
 
 
+def sample_state(sampler: AgentSampler, msgs: list[dict[str, str]], greedy: str, g: str, t: int, cfg: dict) -> dict:
+    """Both lists, the fresh greedy diagnostic and (smoke only) the seed check, for one state."""
+    seed, n, k_max = int(cfg.get("seed", SEED)), int(cfg.get("n_samples", N_SAMPLES)), int(cfg.get("k_max", K_MAX))
+    max_tokens = int(cfg.get("max_tokens", MAX_TOKENS))
+    samplings = cfg.get("samplings", SAMPLINGS)
+    lists = {}
+    for name, params in samplings.items():
+        replies = sampler.sample(msgs, n, params, max_tokens, sample_seed(g, t, seed, name))
+        lists[name] = {"sample_seed": sample_seed(g, t, seed, name), "params": params, "replies": replies,
+                       **rank_candidates(greedy, [r["text"] for r in replies], g, t, k_max, seed)}
+    fresh = sampler.sample(msgs, 1, GREEDY, max_tokens, sample_seed(g, t, seed, "greedy"))[0]
+    rec = {"lists": lists, "greedy_fresh": {"text": fresh["text"],
+                                            "action": normalize_action(parse_react_action(fresh["text"])),
+                                            "agrees": normalize_action(parse_react_action(fresh["text"])) == normalize_action(greedy)}}
+    if cfg.get("seed_check"):
+        params = samplings[PRIMARY_LIST]
+        again = sampler.sample(msgs, n, params, max_tokens, sample_seed(g, t, seed, "seed_check"))
+        first = [r["text"] for r in lists[PRIMARY_LIST]["replies"]]
+        # a working per-request seed gives a different sequence of replies; the same sequence means the seed is not
+        # what drives the draws (and within-request collapse shows as one distinct reply)
+        rec["seed_check"] = {"distinct_first": len(set(first)), "same_set": first == [r["text"] for r in again]}
+    return rec
+
+
 def run_decisionsim_agent_sample(cfg: dict) -> int:
     base = cfg["run_id"]
     require_filed(base)
@@ -256,9 +313,6 @@ def run_decisionsim_agent_sample(cfg: dict) -> int:
     d = _init_run(run_id, cfg, inputs=tuple(episode_files(cfg["episodes_source"])))
     _fresh(d, SAMPLE_OUTPUTS, bool(cfg.get("resume")))
     write_json(d / "shard.json", {"shard": i, "n_shards": n, "games": games, "all_games": sorted(episodes)})
-    n_samples, temp = int(cfg.get("n_samples", N_SAMPLES)), float(cfg.get("temperature", TEMPERATURE))
-    top_p, max_tokens = float(cfg.get("top_p", TOP_P)), int(cfg.get("max_tokens", MAX_TOKENS))
-    k_max, seed = int(cfg.get("k_max", K_MAX)), int(cfg.get("seed", SEED))
     saved = {(r["game_id"], r["state_idx"]): r for r in read_jsonl(d / "states.jsonl")}
     done = {r["game_id"] for r in read_jsonl(d / "games_done.jsonl")}
     client = _client(cfg)
@@ -278,15 +332,15 @@ def run_decisionsim_agent_sample(cfg: dict) -> int:
             psha = _sha(msgs)
             if (g, t) in saved:
                 if saved[(g, t)]["prompt_sha"] != psha:
-                    raise SystemExit(f"{run_id}: {g} step {t}: the saved list was sampled on another prompt; "
+                    raise SystemExit(f"{run_id}: {g} step {t}: the saved lists were sampled on another prompt; "
                                      f"rerun without --resume")
             else:
-                replies = sampler.sample(msgs, n_samples, temp, top_p, max_tokens, sample_seed(g, t, seed))
-                ranked = rank_candidates(step["executed"], [r["text"] for r in replies], g, t, k_max, seed)
                 rec = {"game_id": g, "split": split, "state_idx": t, "task_line": state.task_line,
                        "prefix_actions": list(prefix), "greedy": step["executed"], "recorded_obs": step["real_obs"],
                        "admissible": list(state.admissible), "prompt_sha": psha,
-                       "sample_seed": sample_seed(g, t, seed), "replies": replies, **ranked}
+                       # the world model's history at sampling time; labelling's replays must reproduce it
+                       "history_text": history_text_from_state(state),
+                       **sample_state(sampler, msgs, step["executed"], g, t, cfg)}
                 append_jsonl(d / "states.jsonl", [rec])  # saved as it finishes
                 saved[(g, t)] = rec
             new = client.step(state, step["executed"])
@@ -303,6 +357,11 @@ def run_decisionsim_agent_sample(cfg: dict) -> int:
     mine = [r for r in saved.values() if r["game_id"] in set(games)]
     book = sampling_bookkeeping(mine)
     book["replay_mismatches"] = len(read_jsonl(d / "mismatches.jsonl"))
+    book["vllm"] = sampler.server_info()
+    book["request_settings"] = {name: {**p, **FIXED_PARAMS, "n": int(cfg.get("n_samples", N_SAMPLES)),
+                                       "max_tokens": int(cfg.get("max_tokens", MAX_TOKENS))}
+                                for name, p in cfg.get("samplings", SAMPLINGS).items()}
+    book["smoke_gate"] = smoke_gate(book)
     write_json(d / "metrics.json", book)
     write_status(run_id, f"shard {i} of {n}: {len(mine)} states in {len(games)} games\n{book}", ok=False,
                  reported=SHARD_COMPLETE)
@@ -310,28 +369,72 @@ def run_decisionsim_agent_sample(cfg: dict) -> int:
 
 
 def sampling_bookkeeping(states: list[dict]) -> dict[str, Any]:
-    n_samples = sum(s["n_samples"] for s in states)
-    return {"n_states": len(states), "n_samples": n_samples,
-            "format_error_share": sum(s["n_format_errors"] for s in states) / n_samples if n_samples else float("nan"),
-            "mean_list_length": _mean([len(s["candidates"]) for s in states]),
-            "list_length_counts": dict(sorted(Counter(len(s["candidates"]) for s in states).items())),
-            "states_with_cut": sum(s["n_cut"] > 0 for s in states),
-            "greedy_never_sampled": sum(s["candidates"][0]["count"] == 0 for s in states),
-            "truncated_replies": sum(r.get("finish_reason") == "length" for s in states for r in s.get("replies", [])),
-            # a seeding fault would return n copies of one reply; at temperature 1 that should almost never happen
-            "states_all_replies_identical": sum(len({r["text"] for r in s.get("replies", [])}) == 1 < len(s.get("replies", []))
-                                                for s in states)}
+    out: dict[str, Any] = {"n_states": len(states)}
+    names = sorted({k for s in states for k in s["lists"]})
+    for name in names:
+        ls = [s["lists"][name] for s in states if name in s["lists"]]
+        n_samples = sum(x["n_samples"] for x in ls)
+        out[name] = {
+            "n_samples": n_samples,
+            "format_error_share": sum(x["n_format_errors"] for x in ls) / n_samples if n_samples else float("nan"),
+            "mean_list_length": _mean([len(x["candidates"]) for x in ls]),
+            "list_length_counts": dict(sorted(Counter(len(x["candidates"]) for x in ls).items())),
+            "states_with_cut": sum(x["n_cut"] > 0 for x in ls),
+            "greedy_never_sampled": sum(x["candidates"][0]["count"] == 0 for x in ls),
+            "truncated_replies": sum(r.get("finish_reason") == "length" for x in ls for r in x.get("replies", [])),
+            "states_all_replies_identical": sum(len({r["text"] for r in x.get("replies", [])}) == 1 < len(x.get("replies", []))
+                                                for x in ls)}
+    fresh = [s["greedy_fresh"]["agrees"] for s in states if "greedy_fresh" in s]
+    out["greedy_agreement"] = _mean([float(x) for x in fresh])
+    out["drifted_sampler"] = bool(fresh) and out["greedy_agreement"] < GREEDY_AGREEMENT_MIN
+    checks = [s["seed_check"] for s in states if "seed_check" in s]
+    out["seed_check"] = {"n_states": len(checks), "nondegenerate": sum(c["distinct_first"] > 1 for c in checks),
+                         "nondegenerate_same_set": sum(c["distinct_first"] > 1 and c["same_set"] for c in checks)}
+    return out
+
+
+def smoke_gate(book: dict[str, Any]) -> dict[str, Any]:
+    """The engineering gate before the census (design note, amended): format errors under 25% of samples in every
+    list, no replay mismatch, and, where the seed check ran, a second seed never reproducing a non-degenerate set."""
+    fmt = {k: v["format_error_share"] for k, v in book.items() if isinstance(v, dict) and "format_error_share" in v}
+    sc = book["seed_check"]
+    ok = (all(x < 0.25 for x in fmt.values()) and book["replay_mismatches"] == 0
+          and sc["nondegenerate_same_set"] == 0 and (sc["n_states"] == 0 or sc["nondegenerate"] > 0))
+    return {"passed": bool(ok), "format_error_share": fmt, "replay_mismatches": book["replay_mismatches"],
+            "seed_check": sc}
 
 
 # ---------------- labels ----------------
 
 
-def progress_event(action: str, obs: str | None, goal: str, target: str, history_text: str, won: bool) -> bool:
-    """A descriptive task-progress event read off the real reply (design note, "Progress")."""
+def task_transformation(task_line: str) -> str | None:
+    text = task_line.split(TASK_PREFIX, 1)[-1].lower()
+    for verb, words in (("heat", r"\b(?:heat|hot)\b"), ("cool", r"\bcool\b"), ("clean", r"\bclean\b")):
+        if re.search(words, text):
+            return verb
+    return None
+
+
+def _done_before(history_text: str, action: str) -> bool:
+    """The action already ran and did something earlier in the history (a repeat)."""
+    lines = history_text.split("\n")
+    return any(ln == f"> {action}" and k + 1 < len(lines) and lines[k + 1].strip() != NOTHING
+               for k, ln in enumerate(lines))
+
+
+def progress_event(action: str, obs: str | None, task_line: str, history_text: str, won: bool) -> bool:
+    """A descriptive task-progress event read off the real reply (design note, "Progress", amended): the game won;
+    picking up the goal object; moving it to the task's target type; the task's own transformation applied to it;
+    the lamp turned on while holding it (look tasks); or a goal instance seen for the first time. A repeat of an
+    action that already worked earlier is never progress."""
     if obs is None or obs.strip() == NOTHING:
         return False
     if won:
         return True
+    if _done_before(history_text, action):
+        return False
+    spec = parse_task_line(task_line)
+    goal, target = spec.goal_object, spec.receptacle
     kind = lambda inst: inst.rsplit(" ", 1)[0]
     m = re.fullmatch(r"take (.+) from (.+)", action)
     if m and kind(m[1]) == goal and obs.startswith("You pick up"):
@@ -340,10 +443,11 @@ def progress_event(action: str, obs: str | None, goal: str, target: str, history
     if m and kind(m[1]) == goal and kind(m[2]) == target and obs.startswith("You move"):
         return True
     m = re.fullmatch(r"(heat|cool|clean) (.+) with (.+)", action)
-    if m and kind(m[2]) == goal and obs.startswith(f"You {m[1]}"):
+    if m and kind(m[2]) == goal and m[1] == task_transformation(task_line) and obs.startswith(f"You {m[1]}"):
         return True
     if target == "desklamp" and action.startswith("use ") and obs.startswith("You turn on"):
-        return True
+        held = history_facts(history_text).holding
+        return bool(held and kind(held) == goal)
     if "you see" not in obs.lower():
         return False
     seen = set(re.findall(rf"\b{re.escape(goal)} \d+\b", history_text))
@@ -362,23 +466,32 @@ def state_swap_object(scene: Scene, task_line: str, goal: str, actions: list[str
                         feasible=lambda o: swap_feasible(task_line, o, scene.traits, len(scene.instances(o))))
 
 
+def union_actions(s: dict) -> list[str]:
+    """Every distinct action of the state's lists, primary first: each is labelled and scored once (the cache)."""
+    out: dict[str, str] = {}
+    for name in [PRIMARY_LIST] + sorted(k for k in s["lists"] if k != PRIMARY_LIST):
+        for c in s["lists"].get(name, {}).get("candidates", []):
+            out.setdefault(akey(c["action"]), c["action"])
+    return list(out.values())
+
+
 def label_state(client: Any, scene: Scene, s: dict, seed: int = SEED) -> tuple[dict, int]:
-    """Every candidate executed on a fresh replay of the state; (labelled state, replays used)."""
+    """Every distinct candidate executed on a fresh replay of the state; (labelled state, replays used). Every replay
+    must reproduce the history saved at sampling time, otherwise the state is unusable."""
     g, t, split = s["game_id"], int(s["state_idx"]), s.get("split", "valid_unseen")
     spec = parse_task_line(s["task_line"])
-    goal, target = spec.goal_object, spec.receptacle
-    hist: str | None = None
-    adm: list[str] = []
+    goal = spec.goal_object
+    hist = s["history_text"]
+    adm: list[str] | None = None
+    history_ok = True
     out = []
-    for c in s["candidates"]:
+    for a in union_actions(s):
         h = replay(client, g, s["prefix_actions"], split=split)
-        here = history_text_from_state(h.state)
-        if hist is None:
-            hist, adm = here, list(h.state.admissible)
-        elif here != hist:
-            raise RuntimeError(f"{g} step {t}: two replays of one state gave different histories")
-        a = c["action"]
-        rec = {**c, "true_obs": None, "server_error": None}
+        if history_text_from_state(h.state) != hist:
+            history_ok = False
+        if adm is None:
+            adm = list(h.state.admissible)
+        rec: dict[str, Any] = {"key": akey(a), "action": a, "true_obs": None, "server_error": None}
         try:
             obs, info = step_counterfactual(h, a)
         except RuntimeError as e:
@@ -391,20 +504,21 @@ def label_state(client: Any, scene: Scene, s: dict, seed: int = SEED) -> tuple[d
                     "targets_goal_object": names_object(a, goal),
                     "shared_location": at_shared_spot(history_facts(hist), a, scene),
                     "admissible": a in adm, "action_type": action_type(a), "won": bool(info.get("won")),
-                    "progress": progress_event(a, obs, goal, target, hist, bool(info.get("won")))})
+                    "progress": progress_event(a, obs, s["task_line"], hist, bool(info.get("won")))})
         rec["determination_reason"] = (determination_reason({"history_text": hist, "context_determined": det,
                                                              "action": a}) if failed else None)
         out.append(rec)
-    assert hist is not None
     swap = state_swap_object(scene, s["task_line"], goal, [c["action"] for c in out], hist, g, t, seed)
     rank1 = out[0]
     rank1_ok = rank1["server_error"] is None and rank1["true_obs"] == s["recorded_obs"]
     lab = {"game_id": g, "split": split, "state_idx": t, "task_line": s["task_line"], "goal_object": goal,
-           "target": target, "history_text": hist, "history_goal_agnostic": goal not in interacted_objects(hist),
+           "target": spec.receptacle, "history_text": hist, "history_goal_agnostic": goal not in interacted_objects(hist),
            "prefix_actions": s["prefix_actions"], "swap": swap,
            "swapped_task_line": make_swapped_task_line(s["task_line"], goal, swap) if swap else None,
-           "rank1_replay_ok": rank1_ok, "n_format_errors": s["n_format_errors"], "n_samples": s["n_samples"],
-           "n_cut": s["n_cut"], "candidates": out}
+           "rank1_replay_ok": rank1_ok, "history_replay_ok": history_ok,
+           "lists": {k: v["candidates"] for k, v in s["lists"].items()},
+           "list_meta": {k: {x: v[x] for x in ("n_samples", "n_format_errors", "n_cut")} for k, v in s["lists"].items()},
+           "greedy_fresh_agrees": s.get("greedy_fresh", {}).get("agrees"), "candidates": out}
     return lab, len(out)
 
 
@@ -447,9 +561,8 @@ def run_decisionsim_agent_label(cfg: dict) -> int:
             continue
         scene = scan_scene(client, g, todo[0].get("split", "valid_unseen"))
         for s in todo:
-            if budget and used and used + len(s["candidates"]) > budget:
-                done = len(saved)
-                write_status(run_id, f"PARTIAL — {done} states labelled; resubmit with WF_RESUME=1", ok=False)
+            if budget and used and used + len(union_actions(s)) > budget:
+                write_status(run_id, f"PARTIAL — {len(saved)} states labelled; resubmit with WF_RESUME=1", ok=False)
                 return 1
             lab, k = label_state(client, scene, s, seed)
             used += k
@@ -457,8 +570,11 @@ def run_decisionsim_agent_label(cfg: dict) -> int:
             saved.add((g, s["state_idx"]))
     labs = [r for r in read_jsonl(d / "labels.jsonl") if r["game_id"] in set(games)]
     book = {"n_states": len(labs), "rank1_replay_mismatch": sum(not r["rank1_replay_ok"] for r in labs),
+            "history_replay_mismatch": sum(not r["history_replay_ok"] for r in labs),
             "server_errors": sum(c["server_error"] is not None for r in labs for c in r["candidates"]),
-            "n_candidates": sum(len(r["candidates"]) for r in labs), "states_without_swap": sum(not r["swap"] for r in labs)}
+            "n_candidates": sum(len(r["candidates"]) for r in labs),
+            "n_candidates_primary_list": sum(len(r["lists"].get(PRIMARY_LIST, [])) for r in labs),
+            "states_without_swap": sum(not r["swap"] for r in labs)}
     write_json(d / "metrics.json", book)
     write_status(run_id, f"shard {i} of {n}: {book}", ok=False, reported=SHARD_COMPLETE)
     return 0
@@ -467,26 +583,34 @@ def run_decisionsim_agent_label(cfg: dict) -> int:
 # ---------------- verifier prompts and scoring ----------------
 
 
-def remove_task_line(text: str) -> str:
-    """The text without its one task line (and one newline next to it); every other byte unchanged."""
-    lines = text.split("\n")
-    idx = [k for k, ln in enumerate(lines) if ln.startswith(TASK_PREFIX)]
-    if len(idx) != 1:
-        raise ValueError(f"expected exactly one task line, found {len(idx)}")
-    del lines[idx[0]]
-    return "\n".join(lines)
+def blind_history(history_text: str, task_line: str) -> str:
+    """The history without its task sentence (and the line break before it), nothing else: the guards of Stage 1a's
+    `blind_history` (one task line, equal to the real task line, inside the first observation before the first
+    action, never the first line)."""
+    lines = history_text.split("\n")
+    at = [k for k, ln in enumerate(lines) if ln.startswith(TASK_PREFIX)]
+    first_action = next((k for k, ln in enumerate(lines) if ln.startswith("> ")), len(lines))
+    if len(at) != 1:
+        raise ValueError(f"expected exactly one task line, found {len(at)}")
+    k = at[0]
+    if k == 0 or k > first_action or lines[k] != task_line:
+        raise ValueError("the task line is not the real task line at the end of the first observation")
+    return "\n".join(lines[:k] + lines[k + 1:])
 
 
-def blind_messages(msgs: list[dict[str, str]]) -> list[dict[str, str]]:
-    """The aware prompt with the query's task line deleted; the examples (earlier turns) are untouched."""
+def blind_messages(msgs: list[dict[str, str]], history_text: str, task_line: str) -> list[dict[str, str]]:
+    """The aware prompt with the task sentence removed from the query's history; the system text and the few-shot
+    examples (which keep their own task lines, as in every arm) are untouched."""
     last = msgs[-1]
-    if last["role"] != "user":
-        raise ValueError("the query must be the last, user turn")
-    return [dict(m) for m in msgs[:-1]] + [{**last, "content": remove_task_line(last["content"])}]
+    old = f"History:\n{history_text}\n\nAction: "
+    if last["role"] != "user" or last["content"].count(old) != 1:
+        raise ValueError("the query's history is not in the last turn exactly once")
+    new = f"History:\n{blind_history(history_text, task_line)}\n\nAction: "
+    return [dict(m) for m in msgs[:-1]] + [{**last, "content": last["content"].replace(old, new)}]
 
 
 def cand_id(state: dict, cand: dict) -> str:
-    return f"{state['game_id']}#{int(state['state_idx']):02d}#{int(cand['rank'])}"
+    return f"{state['game_id']}#{int(state['state_idx']):02d}#{akey(cand['action'])}"
 
 
 def prompt_item(state: dict, cand: dict) -> dict:
@@ -506,27 +630,35 @@ def _builder(tag: str) -> Callable[[dict, str], list[dict[str, str]] | None]:
 def arm_messages(tag: str, state: dict, cand: dict, arm: str) -> list[dict[str, str]] | None:
     build = _builder(tag)
     item = prompt_item(state, cand)
-    if arm == AWARE:
-        return build(item, AWARE)
+    if arm in (AWARE, NEUTRAL):
+        return build(item, arm)
     if arm == BLIND:
-        return blind_messages(build(item, AWARE))
+        return blind_messages(build(item, AWARE), state["history_text"], state["task_line"])
     if arm == SWAPPED:
         return build(item, SWAPPED) if state.get("swap") else None
     raise ValueError(arm)
 
 
 def usable(state: dict) -> bool:
-    """Rank 1 replayed to the episode's own reply (otherwise the state is not the agent's)."""
-    return bool(state.get("rank1_replay_ok"))
+    """Rank 1 replayed to the episode's own reply, and every replay reproduced the sampling-time history."""
+    return bool(state.get("rank1_replay_ok")) and bool(state.get("history_replay_ok", True))
 
 
 def scored_candidates(state: dict) -> list[dict]:
-    """The list in rank order, without candidates the server could not execute."""
+    """The candidates in order, without those the server could not execute (k-cuts apply after this)."""
     return [c for c in state["candidates"] if c.get("server_error") is None]
 
 
+def arms_at(state: dict, arms: tuple[str, ...]) -> tuple[str, ...]:
+    """At a state with a single distinct candidate every verifier must choose it, so only the blind arm (needed for
+    the competence rule) is scored there; the swapped arm only where a swap object exists."""
+    if len(scored_candidates(state)) == 1:
+        return tuple(a for a in arms if a == BLIND)
+    return tuple(a for a in arms if a != SWAPPED or state.get("swap"))
+
+
 def score_jobs(states: list[dict], arms: tuple[str, ...]) -> list[tuple[dict, dict, str]]:
-    return [(s, c, a) for s in states for c in scored_candidates(s) for a in arms if a != SWAPPED or s.get("swap")]
+    return [(s, c, a) for s in states for c in scored_candidates(s) for a in arms_at(s, arms)]
 
 
 def load_labels(source: str) -> tuple[list[dict], list[Path], list[str]]:
@@ -545,7 +677,7 @@ def run_decisionsim_agent_score(cfg: dict) -> int:
     tag = cfg["model"]
     if tag not in MODEL_TAGS:
         raise SystemExit(f"unknown model {tag!r}; known: {MODEL_TAGS}")
-    arms = tuple(cfg.get("arms", ARMS))
+    arms = tuple(cfg.get("arms", (AWARE, BLIND, SWAPPED)))
     if AWARE not in arms or BLIND not in arms or not set(arms) <= set(ARMS):
         raise SystemExit(f"arms must include {AWARE} and {BLIND}, from {ARMS}; got {arms}")
     base = cfg["run_id"]
@@ -583,11 +715,54 @@ def run_decisionsim_agent_score(cfg: dict) -> int:
             sc = scorer.score_one_token_pair(transition_id=key[0], condition=a, messages=prompts[key],
                                              o_plus="Yes", o_minus="No")
             append_jsonl(d / "scoring.jsonl", [{**sc.to_dict(), "game_id": s["game_id"], "state_idx": s["state_idx"],
-                                                "rank": c["rank"], "score_hash": hashes[key]}])
+                                                "action": c["action"], "score_hash": hashes[key]}])
         scorer.close()
     write_status(run_id, f"shard {i} of {n}: {len(jobs)} yes/no scores at {len(mine)} states ({tag})", ok=False,
                  reported=SHARD_COMPLETE)
     return 0
+
+
+# ---------------- list views ----------------
+
+
+VIEW_KEYS = ("game_id", "state_idx", "task_line", "goal_object", "target", "history_text", "history_goal_agnostic",
+             "swap", "swapped_task_line")
+
+
+def view(lab: dict, name: str = PRIMARY_LIST, keep: Callable[[dict, dict], bool] | None = None) -> dict | None:
+    """A labelled state seen through one of its lists: the labelled candidates in that list's order, with the list's
+    ranks and counts; None if nothing is left. `n_union` counts the state's distinct runnable candidates."""
+    by = {c["key"]: c for c in lab["candidates"] if c.get("server_error") is None}
+    cands = []
+    for e in lab["lists"].get(name, []):
+        c = by.get(akey(e["action"]))
+        if c is None or (keep is not None and not keep(e, c)):
+            continue
+        cands.append({**c, "rank": e["rank"], "count": e["count"], "greedy": e["greedy"]})
+    if not cands:
+        return None
+    return {**{k: lab.get(k) for k in VIEW_KEYS}, "list": name, "candidates": cands, "n_union": len(by)}
+
+
+def views(labs: list[dict], name: str = PRIMARY_LIST, keep: Callable[[dict, dict], bool] | None = None) -> list[dict]:
+    return [v for v in (view(s, name, keep) for s in labs) if v is not None]
+
+
+def sampled_twice(entry: dict, cand: dict) -> bool:
+    """Sensitivity: rank 1 and the candidates sampled at least twice."""
+    return bool(entry["greedy"]) or entry["count"] >= 2
+
+
+def first_occurrence(vs: list[dict]) -> list[dict]:
+    """Loop sensitivity: a failing action counts only at the first state of its game where it is listed."""
+    out, seen = [], defaultdict(set)
+    for v in sorted(vs, key=lambda v: (v["game_id"], v["state_idx"])):
+        g = v["game_id"]
+        keep = [c for c in v["candidates"] if not (c["failed"] and c["key"] in seen[g])]
+        seen[g] |= {c["key"] for c in v["candidates"] if c["failed"]}
+        if keep:
+            out.append({**v, "candidates": keep})
+    return out
 
 
 # ---------------- decisions ----------------
@@ -610,9 +785,11 @@ def regime(c: dict) -> bool:
 def choose(config: str, state: dict, L: dict[str, dict[str, float]] | None = None, k: int | None = None,
            fallback: str = "rank1") -> dict:
     """The action the agent acts on: none, rank 1; oracle, the highest-ranked true success; a verifier, its
-    highest-ranked accepted candidate, else rank 1 (or, as a sensitivity, the candidate with the largest L)."""
+    highest-ranked accepted candidate, else rank 1 (or, as a sensitivity, the candidate with the largest L). A list
+    of one candidate is chosen whatever the scores. k cuts the list after candidates the server could not run are
+    dropped."""
     cands = scored_candidates(state)[:k] if k else scored_candidates(state)
-    if config == "none":
+    if config == "none" or len(cands) == 1:
         return cands[0]
     if config == "oracle":
         return next((c for c in cands if not c["failed"]), cands[0])
@@ -665,7 +842,27 @@ def _paired(a: list[float], b: list[float], games: list[str]) -> dict[str, Any]:
     diffs = [x - y for x, y in zip(a, b)]
     out = _boot(diffs, games)
     out["p"] = pair_permutation(diffs, seed=SEED, cluster_ids=games) if diffs else float("nan")
+    by: dict[str, float] = defaultdict(float)
+    for g, x in zip(games, diffs):
+        by[g] += x
+    g_nz = sum(abs(v) > 1e-12 for v in by.values())
+    out["n_games_nonzero"] = g_nz
+    out["p_min_sign_flip"] = 2.0 ** (1 - g_nz) if g_nz else 1.0  # no sign-flip p can be smaller
     return out
+
+
+def leave_one_game_out(a: list[float], b: list[float], games: list[str]) -> dict[str, Any]:
+    """The mean difference with each game left out in turn: its range and the game that moves it most."""
+    diffs = [x - y for x, y in zip(a, b)]
+    if not diffs:
+        return {"min": float("nan"), "max": float("nan"), "most_influential_game": None}
+    full = _mean(diffs)
+    est = {g: _mean([d for d, h in zip(diffs, games) if h != g]) for g in sorted(set(games)) if len(set(games)) > 1}
+    if not est:
+        return {"min": full, "max": full, "most_influential_game": None}
+    worst = max(est, key=lambda g: abs(est[g] - full))
+    return {"min": min(est.values()), "max": max(est.values()), "most_influential_game": worst,
+            "estimate_without_it": est[worst]}
 
 
 def holm(ps: dict[str, float]) -> dict[str, float]:
@@ -689,7 +886,7 @@ def auc(pos: list[float], neg: list[float]) -> float:
     return wins / (len(pos) * len(neg))
 
 
-def _kind_of_failure(c: dict, state: dict) -> str:
+def _kind_of_failure(c: dict) -> str:
     if regime(c):
         return "regime"
     if c.get("targets_goal_object"):
@@ -712,13 +909,21 @@ def encounter_report(states: list[dict]) -> dict[str, Any]:
     for s, c in cands:
         by_rank[c["rank"]][0] += 1
         by_rank[c["rank"]][1] += regime(c)
-    n_samples = sum(s.get("n_samples", 0) for s in states)
+    reach_games = sorted({s["game_id"] for s in states if reachable(s)})
     return {
         "n_states": len(states), "n_games": len(set(games)), "n_candidates": len(cands),
         "mean_list_length": _mean([len(scored_candidates(s)) for s in states]),
         "encounter": _boot([float(encounter(s)) for s in states], games),
         "encounter_strict": _boot([float(encounter(s, strict=True)) for s in states], games),
         "reachable": _boot([float(reachable(s)) for s in states], games),
+        "encounter_games": len({s["game_id"] for s in states if encounter(s)}),
+        "reachable_games": len(reach_games),
+        # The futility rule fixed after review 1: the sign-flip p can reach Holm's first threshold (0.025) only with
+        # at least MIN_GAMES_FOR_SIGNIFICANCE games whose net difference is not zero.
+        "futility": {"rule": f"reachable encounter states in fewer than {MIN_GAMES_FOR_SIGNIFICANCE} games: the primary "
+                             f"cannot reach significance; the encounter rates are the result and verifier scoring is "
+                             f"decided then",
+                     "primary_cannot_reach_significance": len(reach_games) < MIN_GAMES_FOR_SIGNIFICANCE},
         "encounter_by_step_band": bands,
         "regime_candidates": {"n": len(reg), "free_form": sum(c.get("admissible") is False for _, c in reg),
                               "rank1": sum(c["rank"] == 1 for _, c in reg)},
@@ -730,9 +935,23 @@ def encounter_report(states: list[dict]) -> dict[str, Any]:
                        "determined_failures": sum(c["failed"] and bool(c["context_determined"]) for _, c in cands)},
         "fail_rate": {cfg: _boot([float(choose(cfg, s)["failed"]) for s in states], games) for cfg in ("none", "oracle")},
         "progress_rate": {cfg: _boot([float(choose(cfg, s)["progress"]) for s in states], games) for cfg in ("none", "oracle")},
-        "format_error_share": (sum(s.get("n_format_errors", 0) for s in states) / n_samples) if n_samples else float("nan"),
-        "states_with_cut_list": sum(s.get("n_cut", 0) > 0 for s in states),
         "states_without_swap": sum(not s.get("swap") for s in states)}
+
+
+def label_bookkeeping(labs: list[dict]) -> dict[str, Any]:
+    fresh = [s["greedy_fresh_agrees"] for s in labs if s.get("greedy_fresh_agrees") is not None]
+    agree = _mean([float(x) for x in fresh])
+    out: dict[str, Any] = {"greedy_agreement": agree,
+                           "drifted_sampler": bool(fresh) and agree < GREEDY_AGREEMENT_MIN,
+                           "drift_rule": f"agreement of a fresh greedy completion with the archived action below "
+                                         f"{GREEDY_AGREEMENT_MIN:.0%}: the lists are described as from a drifted sampler"}
+    for name in sorted({k for s in labs for k in s.get("list_meta", {})}):
+        metas = [s["list_meta"][name] for s in labs if name in s.get("list_meta", {})]
+        n = sum(m["n_samples"] for m in metas)
+        out[name] = {"format_error_share": sum(m["n_format_errors"] for m in metas) / n if n else float("nan"),
+                     "states_with_cut": sum(m["n_cut"] > 0 for m in metas),
+                     "greedy_never_sampled": sum(s["lists"][name][0]["count"] == 0 for s in labs if name in s["lists"])}
+    return out
 
 
 # ---------------- one model ----------------
@@ -748,13 +967,16 @@ def scores_by_arm(records: list[dict]) -> tuple[dict[str, dict[str, float]], dic
     return dict(q), dict(raw)
 
 
-def complete_states(states: list[dict], L: dict[str, dict[str, float]]) -> tuple[list[dict], int]:
-    """States with a score for every candidate under aware, blind and (where a swap exists) swapped."""
+def complete_labs(labs: list[dict], L: dict[str, dict[str, float]]) -> tuple[list[dict], int]:
+    """States with every score the decisions need: blind for every candidate; aware (and swapped where a swap exists,
+    neutral if scored) for every candidate of a state with more than one."""
     def ok(s: dict) -> bool:
-        need = [AWARE, BLIND] + ([SWAPPED] if s.get("swap") and SWAPPED in L else [])
-        return all(cand_id(s, c) in L.get(a, {}) for a in need for c in scored_candidates(s))
-    keep = [s for s in states if ok(s)]
-    return keep, len(states) - len(keep)
+        cs = scored_candidates(s)
+        need = [BLIND] if len(cs) == 1 else [AWARE, BLIND] + [a for a in (SWAPPED, NEUTRAL) if a in L
+                                                              and (a != SWAPPED or s.get("swap"))]
+        return all(cand_id(s, c) in L.get(a, {}) for a in need for c in cs)
+    keep = [s for s in labs if ok(s)]
+    return keep, len(labs) - len(keep)
 
 
 def contrast(states: list[dict], L: dict[str, dict[str, float]], a: str, b: str) -> dict[str, Any]:
@@ -766,25 +988,27 @@ def contrast(states: list[dict], L: dict[str, dict[str, float]], a: str, b: str)
     fb = [float(c["failed"]) for c in cb]
     harm = [float(x and not y) for x, y in zip(fa, fb)]
     help_ = [float(y and not x) for x, y in zip(fa, fb)]
-    changed = [x["rank"] != y["rank"] for x, y in zip(ca, cb)]
+    changed = [x["key"] != y["key"] for x, y in zip(ca, cb)]
     n = len(states)
     both_fail = sum(ch and x and y for ch, x, y in zip(changed, fa, fb))
     both_ok = sum(ch and not x and not y for ch, x, y in zip(changed, fa, fb))
-    kinds = Counter(_kind_of_failure(c, s) for c, s, h in zip(ca, states, harm) if h)
+    kinds = Counter(_kind_of_failure(c) for c, h in zip(ca, harm) if h)
+    n_harm = int(sum(harm))
     return {"n_states": n, "n_games": len(set(games)),
             "fail_rate_a": _boot(fa, games), "fail_rate_b": _boot(fb, games),
-            "difference": _paired(fa, fb, games),
+            "difference": _paired(fa, fb, games), "leave_one_game_out": leave_one_game_out(fa, fb, games),
             "harm_rate": _boot(harm, games), "help_rate": _boot(help_, games),
             "change_rate": _boot([float(x) for x in changed], games),
-            "changed": {"n": sum(changed), "harm": int(sum(harm)), "help": int(sum(help_)), "both_fail": both_fail,
+            "changed": {"n": sum(changed), "harm": n_harm, "help": int(sum(help_)), "both_fail": both_fail,
                         "both_succeed": both_ok},
             "harm_by_kind_of_choice": dict(sorted(kinds.items())),
+            "harm_regime_share": kinds.get("regime", 0) / n_harm if n_harm else float("nan"),
             "identity_holds": (not n) or abs((sum(harm) - sum(help_)) / n - (sum(fa) - sum(fb)) / n) < 1e-12}
 
 
 def acceptance(states: list[dict], L: dict[str, dict[str, float]], Lraw: dict[str, dict[str, float]]) -> dict[str, Any]:
-    """Per candidate, per arm: acceptance by outcome x goal relevance x determination, the AUC, and aware-minus-blind
-    shifts."""
+    """Per candidate, per arm (where scored): acceptance by outcome x goal relevance x determination, the AUC, and
+    aware-minus-blind shifts."""
     groups: dict[str, list[tuple[dict, dict]]] = defaultdict(list)
     for s in states:
         for c in scored_candidates(s):
@@ -795,21 +1019,23 @@ def acceptance(states: list[dict], L: dict[str, dict[str, float]], Lraw: dict[st
             groups[f"{out}/all"].append((s, c))
             groups["regime" if regime(c) else "not_regime"].append((s, c))
     rep: dict[str, Any] = {}
-    for arm in (AWARE, BLIND, SWAPPED):
+    for arm in ARMS:
         if arm not in L:
             continue
-        sts = [s for s in states if arm != SWAPPED or s.get("swap")]
-        pos = [L[arm][cand_id(s, c)] for s in sts for c in scored_candidates(s) if not c["failed"]]
-        neg = [L[arm][cand_id(s, c)] for s in sts for c in scored_candidates(s) if c["failed"]]
+        sc = L[arm]
+        pos = [sc[cand_id(s, c)] for s in states for c in scored_candidates(s) if not c["failed"] and cand_id(s, c) in sc]
+        neg = [sc[cand_id(s, c)] for s in states for c in scored_candidates(s) if c["failed"] and cand_id(s, c) in sc]
         rep[arm] = {"auc": auc(pos, neg), "yes_rate_successes": _mean([float(x > 0) for x in pos]),
                     "yes_rate_failures": _mean([float(x > 0) for x in neg]),
-                    "by_group": {k: {"n": len(v), "yes_rate": _mean([float(accepts(L[arm], cand_id(s, c))) for s, c in v
-                                                                     if cand_id(s, c) in L[arm]])}
+                    "by_group": {k: {"n": len(v), "yes_rate": _mean([float(accepts(sc, cand_id(s, c))) for s, c in v
+                                                                     if cand_id(s, c) in sc])}
                                  for k, v in sorted(groups.items())}}
+    both = lambda s, c: cand_id(s, c) in L[AWARE] and cand_id(s, c) in L[BLIND]
     rep["aware_minus_blind"] = {
-        k: {"n": len(v), "yes_rate_shift": _mean([float(accepts(L[AWARE], cand_id(s, c))) - float(accepts(L[BLIND], cand_id(s, c)))
-                                                  for s, c in v]),
-            "mean_L_shift": _mean([Lraw[AWARE][cand_id(s, c)] - Lraw[BLIND][cand_id(s, c)] for s, c in v])}
+        k: {"n": sum(both(s, c) for s, c in v),
+            "yes_rate_shift": _mean([float(accepts(L[AWARE], cand_id(s, c))) - float(accepts(L[BLIND], cand_id(s, c)))
+                                     for s, c in v if both(s, c)]),
+            "mean_L_shift": _mean([Lraw[AWARE][cand_id(s, c)] - Lraw[BLIND][cand_id(s, c)] for s, c in v if both(s, c)])}
         for k, v in sorted(groups.items())}
     return rep
 
@@ -833,6 +1059,15 @@ def decomposition(states: list[dict], L: dict[str, dict[str, float]]) -> dict[st
             "identity_holds": (not sts) or abs(ab["estimate"] - as_["estimate"] - sb["estimate"]) < 1e-9}
 
 
+def attributable(dec: dict[str, Any] | None) -> bool:
+    """Toward failure is attributed to the real task when aware - swapped is positive and at least half of a positive
+    aware - blind, both on the states with a swap (Stage 1a's rule)."""
+    if not dec or not dec.get("n_states"):
+        return False
+    ab, as_ = dec["aware_minus_blind"]["estimate"], dec["aware_minus_swapped"]["estimate"]
+    return ab > 0 and as_ > 0 and as_ >= SWAP_SHARE * ab
+
+
 def _delta(states: list[dict], L: dict[str, dict[str, float]], **kw: Any) -> dict[str, Any]:
     games = [s["game_id"] for s in states]
     fa = [float(choose("aware", s, L, **kw)["failed"]) for s in states]
@@ -851,27 +1086,46 @@ def game_weighted_delta(states: list[dict], L: dict[str, dict[str, float]]) -> d
     return out
 
 
-def model_report(states: list[dict], L: dict[str, dict[str, float]], Lraw: dict[str, dict[str, float]]) -> dict[str, Any]:
+def inert(states: list[dict], L: dict[str, dict[str, float]]) -> dict[str, Any]:
+    """How often each verifier changes nothing: the fallback rate and the share choosing rank 1, at states with more
+    than one candidate."""
+    multi = [s for s in states if len(scored_candidates(s)) > 1]
+    out = {"n_states": len(multi)}
+    for cfg in ("aware", "blind", "swapped", "neutral"):
+        if CONFIG_ARM[cfg] not in L:
+            continue
+        sts = [s for s in multi if cfg != "swapped" or s.get("swap")]
+        out[cfg] = {"fallback_rate": _mean([float(fell_back(cfg, s, L)) for s in sts]),
+                    "rank1_share": _mean([float(choose(cfg, s, L)["rank"] == scored_candidates(s)[0]["rank"]) for s in sts])}
+    return out
+
+
+def model_report(labs: list[dict], L: dict[str, dict[str, float]], Lraw: dict[str, dict[str, float]]) -> dict[str, Any]:
+    """Everything for one model; decisions on the primary list, sensitivities on the others. `labs` are labelled
+    states with every score the decisions need."""
+    states = views(labs, PRIMARY_LIST)
     games = [s["game_id"] for s in states]
-    configs = [c for c in CONFIGS if c != "swapped"]
     rep: dict[str, Any] = {"n_states": len(states), "n_games": len(set(games))}
-    rep["fail_rate"] = {c: _boot([float(choose(c, s, L)["failed"]) for s in states], games) for c in configs}
+    rep["fail_rate"] = {c: _boot([float(choose(c, s, L)["failed"]) for s in states], games) for c in CONFIGS}
     rep["primary"] = contrast(states, L, "aware", "blind")
-    rep["fallback_rate"] = {c: _mean([float(fell_back(c, s, L)) for s in states]) for c in ("aware", "blind")}
+    enc = [s for s in states if encounter(s)]
+    non = [s for s in states if not encounter(s)]
+    rep["conditional"] = contrast(enc, L, "aware", "blind")  # key secondary: encounter states (model-free label)
+    d_non = _delta(non, L)
+    rep["by_encounter"] = {"encounter_states": len(enc), "non_encounter": d_non,
+                           "parts_add_up": (not states) or abs(
+                               (len(enc) * (rep["conditional"]["difference"]["estimate"] if enc else 0.0)
+                                + len(non) * (d_non["estimate"] if non else 0.0))
+                               / len(states) - rep["primary"]["difference"]["estimate"]) < 1e-9}
+    rep["inert"] = inert(states, L)
     rep["verifier_value"] = {
         c: {"none_minus_verifier": _paired([float(choose("none", s, L)["failed"]) for s in states],
                                            [float(choose(c, s, L)["failed"]) for s in states], games),
             "verifier_minus_oracle": _paired([float(choose(c, s, L)["failed"]) for s in states],
                                              [float(choose("oracle", s, L)["failed"]) for s in states], games)}
         for c in ("aware", "blind")}
-    enc = [s for s in states if encounter(s)]
-    non = [s for s in states if not encounter(s)]
-    d_enc, d_non = _delta(enc, L), _delta(non, L)
-    rep["by_encounter"] = {"encounter": d_enc, "non_encounter": d_non,
-                           "parts_add_up": (not states) or abs(
-                               (len(enc) * (d_enc["estimate"] if enc else 0.0) + len(non) * (d_non["estimate"] if non else 0.0))
-                               / len(states) - rep["primary"]["difference"]["estimate"]) < 1e-9}
-    rep["progress"] = {c: _boot([float(choose(c, s, L)["progress"]) for s in states], games) for c in configs}
+    # Progress is descriptive only (design note, amended).
+    rep["progress"] = {c: _boot([float(choose(c, s, L)["progress"]) for s in states], games) for c in CONFIGS}
     rep["progress_aware_minus_blind"] = _paired([float(choose("aware", s, L)["progress"]) for s in states],
                                                 [float(choose("blind", s, L)["progress"]) for s in states], games)
     rep["acceptance"] = acceptance(states, L, Lraw)
@@ -881,20 +1135,73 @@ def model_report(states: list[dict], L: dict[str, dict[str, float]], Lraw: dict[
         rep["swapped"] = {"fail_rate": _boot([float(choose("swapped", s, L)["failed"]) for s in sw],
                                              [s["game_id"] for s in sw])}
         rep["decomposition"] = decomposition(states, L)
+        rep["conditional_decomposition"] = decomposition(enc, L)
+    if NEUTRAL in L:  # secondary, never decides
+        rep["neutral"] = {"fail_rate": _boot([float(choose("neutral", s, L)["failed"]) for s in states], games),
+                          "aware_minus_neutral": contrast(states, L, "aware", "neutral")["difference"],
+                          "neutral_minus_blind": contrast(states, L, "neutral", "blind")["difference"]}
     early = [s for s in states if s["state_idx"] < EARLY_STEPS]
+    t1 = views(labs, T1_LIST)
     rep["sensitivity"] = {"game_weighted": game_weighted_delta(states, L), "first_12_steps": _delta(early, L),
                           "k_2": _delta(states, L, k=2), "k_4": _delta(states, L, k=4),
-                          "fallback_max_L": _delta(states, L, fallback="max_L")}
+                          "fallback_max_L": _delta(states, L, fallback="max_L"),
+                          "t1_list": _delta(t1, L), "t1_list_conditional": _delta([s for s in t1 if encounter(s)], L),
+                          "sampled_twice": _delta(views(labs, PRIMARY_LIST, sampled_twice), L),
+                          "first_occurrence_of_failures": _delta(first_occurrence(states), L)}
+    rep["disagreements"] = disagreements(states, L)
     return rep
 
 
-def verdict(diff: dict[str, Any], p_adj: float) -> str:
+def verdict(diff: dict[str, Any], p_adj: float, dec: dict[str, Any] | None) -> str:
     lo, hi = diff["ci"]
     if p_adj < ALPHA and lo > 0:
-        return "toward failure"
+        return ("toward failure, attributable to the real task" if attributable(dec)
+                else "toward failure, not attributable to the real task")
     if p_adj < ALPHA and hi < 0:
         return "toward success"
     return "no reliable difference"
+
+
+def primary_block(models: dict[str, dict], priority: list[str], gate_failed: set[str], key: str,
+                  dec_key: str) -> dict[str, Any]:
+    """One Holm family over the priority models: the overall (key "primary") or the conditional (key "conditional")
+    aware - blind difference. A priority model that failed its Yes/No gate enters with p = 1 and is not interpreted;
+    the family waits until every priority model is in or has failed its gate."""
+    ps = {t: (1.0 if t in gate_failed else models[t][key]["difference"]["p"])
+          for t in priority if t in models or t in gate_failed}
+    adj = holm(ps) if len(ps) == len(priority) else {}
+    per: dict[str, Any] = {}
+    for t in priority:
+        if t in gate_failed:
+            per[t] = {"p": 1.0, "p_holm": adj.get(t), "verdict": "not interpreted (Yes/No gate failed)"}
+            continue
+        if t not in models:
+            continue
+        m = models[t]
+        diff = m[key]["difference"]
+        if t not in adj:
+            v = "waiting for every priority model"
+        elif not m["competence"]["interpretable"]:
+            v = "not interpreted"
+        else:
+            v = verdict(diff, adj[t], m.get(dec_key))
+        per[t] = {"delta_invalid": diff["estimate"], "ci": diff["ci"], "p": diff["p"], "p_holm": adj.get(t),
+                  "n_states": m[key]["n_states"], "n_games_nonzero": diff["n_games_nonzero"],
+                  "p_min_sign_flip": diff["p_min_sign_flip"], "interpretable": m["competence"]["interpretable"],
+                  "harm_regime_share": m[key]["harm_regime_share"],
+                  # pre-declared: harm driven mostly by non-regime actions (e.g. go-to loops) is not evidence for the
+                  # main finding
+                  "harm_mostly_regime": m[key]["harm_regime_share"] >= 0.5 if m[key]["changed"]["harm"] else None,
+                  "verdict": v}
+    return {"priority_models": priority, "holm_family_size": len(priority), "per_model": per}
+
+
+def gate_failures(folders: list[Path]) -> bool:
+    for p in folders:
+        f = p / "tokenization_checks.json"
+        if f.exists() and json.loads(f.read_text(encoding="utf-8")).get("ok") is False:
+            return True
+    return False
 
 
 def run_decisionsim_agent_analysis(cfg: dict) -> int:
@@ -905,14 +1212,23 @@ def run_decisionsim_agent_analysis(cfg: dict) -> int:
     if problems:
         write_status(run_id, "the analysis waits for every labelling shard:\n" + "\n".join(problems), ok=False)
         return 1
-    states = [s for s in labs if usable(s)]
+    good = [s for s in labs if usable(s)]
     report: dict[str, Any] = {
-        "design": "notes/decisionsim_agent_design.md (committed before any data of this stage)",
-        "states": {"n_labelled": len(labs), "n_usable": len(states), "rank1_replay_mismatch": len(labs) - len(states)},
-        "encounter": encounter_report(states), "models": {}, "waiting": {}}
+        "design": "notes/decisionsim_agent_design.md (committed before any data of this stage; amended after review 1, "
+                  "before any data)",
+        "states": {"n_labelled": len(labs), "n_usable": len(good),
+                   "rank1_replay_mismatch": sum(not s.get("rank1_replay_ok") for s in labs),
+                   "history_replay_mismatch": sum(not s.get("history_replay_ok", True) for s in labs)},
+        "sampling": label_bookkeeping(good),
+        "encounter": encounter_report(views(good, PRIMARY_LIST)),
+        "encounter_t1_list": encounter_report(views(good, T1_LIST)),
+        "models": {}, "waiting": {}, "gate_failed": []}
     score_folders: list[Path] = []
     for tag, source in cfg.get("models", {}).items():
         sfolders, sproblems = complete_shards(source)
+        if gate_failures(sfolders):
+            report["gate_failed"].append(tag)
+            continue
         for p in sfolders:
             saved = json.loads((p / "config.json").read_text(encoding="utf-8")) if (p / "config.json").exists() else {}
             if saved.get("label_source") != cfg["label_source"]:
@@ -924,23 +1240,16 @@ def run_decisionsim_agent_analysis(cfg: dict) -> int:
         if AWARE not in L or BLIND not in L:
             report["waiting"][tag] = [f"needs {AWARE} and {BLIND}; has {sorted(L)}"]
             continue
-        sts, short = complete_states(states, L)
-        report["models"][tag] = {"n_states_incomplete": short, **model_report(sts, L, Lraw),
-                                 "disagreements": disagreements(sts, L)}
+        sts, short = complete_labs(good, L)
+        report["models"][tag] = {"n_states_incomplete": short, **model_report(sts, L, Lraw)}
         score_folders += sfolders
-    priority = [t for t in cfg.get("priority", PRIORITY)]
-    ps = {t: report["models"][t]["primary"]["difference"]["p"] for t in priority if t in report["models"]}
-    adj = holm(ps) if len(ps) == len(priority) else {}
+    priority = list(cfg.get("priority", PRIORITY))
+    failed = set(report["gate_failed"])
     report["primary"] = {
-        "priority_models": priority, "holm_family_size": len(priority),
-        "per_model": {t: {"delta_invalid": report["models"][t]["primary"]["difference"]["estimate"],
-                          "ci": report["models"][t]["primary"]["difference"]["ci"],
-                          "p": report["models"][t]["primary"]["difference"]["p"], "p_holm": adj.get(t),
-                          "interpretable": report["models"][t]["competence"]["interpretable"],
-                          "verdict": (verdict(report["models"][t]["primary"]["difference"], adj[t])
-                                      if t in adj and report["models"][t]["competence"]["interpretable"]
-                                      else "not interpreted" if t in adj else "waiting for every priority model")}
-                      for t in priority if t in report["models"]}}
+        "overall": primary_block(report["models"], priority, failed, "primary", "decomposition"),
+        "conditional_on_encounter": primary_block(report["models"], priority, failed, "conditional",
+                                                  "conditional_decomposition"),
+        "futility": report["encounter"]["futility"]}
     report["stage2_feed"] = {t: stage2_feed(m["disagreements"]) for t, m in report["models"].items()}
     from wf.provenance import provenance
 
@@ -948,9 +1257,11 @@ def run_decisionsim_agent_analysis(cfg: dict) -> int:
                                       inputs=[p / "labels.jsonl" for p in folders] + [p / "scoring.jsonl" for p in score_folders])
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Stage 1b: verification of the agent's ranked candidates (exploratory)", report)
-    lines = [f"{t}: Delta_invalid {v['delta_invalid']:+.4f} {v['ci']}, p_holm {v['p_holm']}, {v['verdict']}"
-             for t, v in report["primary"]["per_model"].items()]
-    write_status(run_id, f"encounter {report['encounter']['encounter']['estimate']:.3f}\n" + "\n".join(lines)
+    lines = [f"{t} overall: {v.get('delta_invalid', float('nan')):+.4f} {v.get('ci')}, p_holm {v.get('p_holm')}, {v['verdict']}"
+             for t, v in report["primary"]["overall"]["per_model"].items()]
+    write_status(run_id, f"encounter {report['encounter']['encounter']['estimate']:.3f} in "
+                         f"{report['encounter']['encounter_games']} games; futility "
+                         f"{report['encounter']['futility']['primary_cannot_reach_significance']}\n" + "\n".join(lines)
                  + (f"\nwaiting: {sorted(report['waiting'])}" if report["waiting"] else ""), ok=False,
                  reported="Stage 1b report")
     return 0
@@ -961,7 +1272,7 @@ def disagreements(states: list[dict], L: dict[str, dict[str, float]]) -> list[di
     out = []
     for s in states:
         a, b = choose("aware", s, L), choose("blind", s, L)
-        if a["rank"] == b["rank"]:
+        if a["key"] == b["key"]:
             continue
         cell = ("harm" if a["failed"] and not b["failed"] else "help" if b["failed"] and not a["failed"]
                 else "both_fail" if a["failed"] else "both_succeed")
@@ -1000,7 +1311,7 @@ def archived_history(first: str, trace: list[dict], t: int) -> str:
     return "\n".join(parts)
 
 
-def rank1_state(game: str, ep: dict, t: int, first: str) -> dict:
+def rank1_lab(game: str, ep: dict, t: int, first: str) -> dict:
     """A rank-1-only labelled state built from the archived episode (outcome = the recorded reply)."""
     step = ep["trace"][t]
     hist = archived_history(first, ep["trace"], t)
@@ -1010,15 +1321,16 @@ def rank1_state(game: str, ep: dict, t: int, first: str) -> dict:
     failed = obs.strip() == NOTHING
     won = bool(ep.get("success")) and t == len(ep["trace"]) - 1  # an episode ends at its win
     # Not recorded in the episode: whether the action was admissible, and the shared-spot flag (scene scan).
-    c = {"rank": 1, "action": a, "count": None, "greedy": True, "true_obs": obs, "server_error": None,
+    c = {"key": akey(a), "action": a, "true_obs": obs, "server_error": None,
          "failed": failed, "context_determined": context_determined_label(hist, a, obs),
          "targets_goal_object": names_object(a, spec.goal_object), "shared_location": False, "admissible": None,
-         "action_type": action_type(a), "won": won,
-         "progress": progress_event(a, obs, spec.goal_object, spec.receptacle, hist, won)}
+         "action_type": action_type(a), "won": won, "progress": progress_event(a, obs, task_line, hist, won)}
+    entry = [{"rank": 1, "action": a, "count": None, "greedy": True}]
     return {"game_id": game, "state_idx": t, "task_line": task_line, "goal_object": spec.goal_object,
             "target": spec.receptacle, "history_text": hist,
             "history_goal_agnostic": spec.goal_object not in interacted_objects(hist), "swap": None,
-            "swapped_task_line": None, "rank1_replay_ok": True, "candidates": [c]}
+            "swapped_task_line": None, "rank1_replay_ok": True, "history_replay_ok": True,
+            "lists": {PRIMARY_LIST: entry, T1_LIST: entry}, "candidates": [c]}
 
 
 def repick_proxy(source: str, firsts: dict[str, str]) -> dict[str, Any]:
@@ -1062,29 +1374,37 @@ def run_decisionsim_agent_dryrun(cfg: dict) -> int:
     if missing:
         write_status(run_id, f"no opening observation for {len(missing)} games: {missing[:5]}", ok=False)
         return 1
-    states, problems = [], []
+    labs, problems = [], []
     for g in sorted(episodes):
         for t in range(len(episodes[g]["trace"])):
-            s = rank1_state(g, episodes[g], t, firsts[g])
+            s = rank1_lab(g, episodes[g], t, firsts[g])
             try:
-                blind = remove_task_line(s["history_text"])
-                if TASK_PREFIX in blind or blind.replace("\n", "") != s["history_text"].replace(s["task_line"], "").replace("\n", ""):
-                    problems.append(f"{g} step {t}: the blind history is not the history without its task line")
+                blind = blind_history(s["history_text"], s["task_line"])
+                if TASK_PREFIX in blind:
+                    problems.append(f"{g} step {t}: the blind history still holds a task line")
             except ValueError as e:
                 problems.append(f"{g} step {t}: {e}")
-            states.append(s)
+            labs.append(s)
     # Known answer: with one candidate per state every configuration chooses rank 1, so Delta_invalid is exactly 0
     # whatever the scores; seeded stand-in scores exercise the analysis without any model.
     rng = random.Random(SEED)
+    states = views(labs)
     L = {a: {cand_id(s, c): quantize(rng.gauss(0, 3)) for s in states for c in s["candidates"]} for a in (AWARE, BLIND)}
-    plumbing = model_report(states, L, L)
+    plumbing = model_report(labs, L, L)
+    enc = encounter_report(states)
     report = {"design": "notes/decisionsim_agent_design.md", "note": "rank 1 only, from the archived episodes; no model",
               "n_states": len(states), "n_games": len(episodes), "episodes_won": sum(bool(e["success"]) for e in episodes.values()),
               "episodes_at_cap": sum(len(e["trace"]) >= C.STEP_CAP for e in episodes.values()),
               "history_problems": problems[:20], "n_history_problems": len(problems),
-              "rank1": encounter_report(states),
+              "rank1": enc,
+              "rank1_note": "the shared-spot flag needs the scene scan and is not applied here, so the rank-1 regime "
+                            "count is an upper bound",
               "rank1_failing_by_verb": dict(sorted(Counter(s["candidates"][0]["action_type"] for s in states
                                                             if s["candidates"][0]["failed"]).items())),
+              "per_game": {g: {"n_states": len(episodes[g]["trace"]),
+                               "failing_rank1": sum(st["real_obs"].strip() == NOTHING for st in episodes[g]["trace"]),
+                               "regime_rank1": sum(encounter(s) for s in states if s["game_id"] == g)}
+                           for g in sorted(episodes)},
               "repick_proxy": repick_proxy(cfg["episodes_source"], firsts),
               "plumbing_known_answer": {"delta_invalid": plumbing["primary"]["difference"]["estimate"],
                                         "is_zero": plumbing["primary"]["difference"]["estimate"] == 0.0,
@@ -1093,5 +1413,5 @@ def run_decisionsim_agent_dryrun(cfg: dict) -> int:
     write_run_report(run_id, "Stage 1b dry run (archived episodes, rank 1 only, no model)", report)
     ok = not problems and report["plumbing_known_answer"]["is_zero"]
     write_status(run_id, f"{len(states)} states in {len(episodes)} games; history problems {len(problems)}; "
-                         f"rank-1 failure rate {report['rank1']['fail_rate']['none']['estimate']:.4f}", ok=ok)
+                         f"rank-1 failure rate {enc['fail_rate']['none']['estimate']:.4f}", ok=ok)
     return 0 if ok else 1
