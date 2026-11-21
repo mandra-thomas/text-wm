@@ -448,3 +448,73 @@ The logged `rq1v_score` rows carry no `model_revision` (null): the revision is t
 ### B11. Tests
 
 Value checks on synthetic data with known answers now cover the 21 mutants that survived review 2 (the end-to-end test checked structure only), and every new piece of code has its own. The review's 35 mutants (seven adapted to changed lines) and 42 mutants of this round's code are in `scripts/mutation_check.py`; the killing tests are listed in `testing.md`. One existing test's tolerance was raised from $10^{-6}$ to $10^{-4}$ nats: multithreaded float32 matrix products on a CPU differ by a few $10^{-6}$ between batch shapes, and the identical-prefix check it guards fails on wrong positions by far more.
+
+## Amendments after review 3, before any run (2026-11-21)
+
+Status: a third outside review read amendment 2, its code and tests, simulated the ablation once more, checked the selection and hashes on the real items, and put 40 bugs into the code (19 survived the tests). Its verdicts: "pass with fixes" for the engineering; for the science, "fail as written" for the rows that carry hypothesis labels, and "pass with fixes" after four must-fix items. Everything below was decided after that review and before any activation, patching, probe or lens result existed; no interpretability job has run. Where this amendment contradicts anything earlier, it holds. `deviations.md` records it ("Interpretability pilot: amendments after review 3").
+
+### C1. Onset against arrival: like with like, and no hypothesis labels
+
+B1 compared the onset (a 95% lower bound staying at or above 0.6, on the ablation grid, at the answer position) with an arrival layer of a different kind (the first layer from which the *final* template tokens' point fraction stays at or above 0.5, at any layer). Changes:
+
+- *Arrival on the same terms.* The arrival layer the onset is compared with is now read from the noising curve of the `last` group (the answer position, where the ablation acts) under the onset's own rule: the earliest layer of the grid 4, 8, …, 32 from which the pointwise 95% lower bound of the fraction restored stays at or above 0.6 (`analysis.patch_arrival_layer`, `pilot.arrival_on_answer_position`). The final group's 0.5 arrival is still reported, descriptively, with its index rounded to 6 decimals.
+- *Rounding.* Any arrival index is rounded to 6 decimals before it is rounded up to the grid, so floating-point noise (32.000000001) cannot move it to the next grid layer.
+- *Not assessable.* If there is no arrival on the grid, or the arrival lies after the deepest layer the onset is read on, the row is "not assessable". If the direct-path rule (C2) excludes every profile layer, it says so.
+- *No onset.* "No single direction" only when the deepest layer's removal has an upper bound below 0.3; otherwise "inconclusive (no onset, interval too wide)". Before, a missing onset always read as evidence for H1 and H2, even when the interval was too wide to say.
+- *No labels.* The minimal pilot's output (`table_rows`, formerly `verdict_rows`) names no hypothesis: "at or before arrival", "after arrival", "no single direction", "inconclusive", "not assessable". The mapping to hypotheses of B1 stays in this note and is applied only in the full pilot.
+
+### C2. Direct-path share: a second tautology, and the rule for it
+
+Review 3's simulation (`direct_path_sim.py`) gave the answer position at a middle layer an item-specific change $z_i$ with no shared direction, plus a part $a_i r$ already in readout form. A cross-fitted mean ablation along the mean difference then removes about the readout-form share of the effect by construction: as that share rose from 0 to 0.65, the removed share rose from 0 to 0.84, and the onset rule (lower bound of at least 0.6) passed once the share was about 0.55, although no single direction carries the item-specific change. Near the end of the profile (layer 28) a large readout-form share is likely under any account.
+
+The pilot now reports, at every profile layer $\ell$ and per stratum, the *direct-path share*: the part of the goal effect already in readout form at that layer, read at the final norm's scale. With $r = \gamma \odot (W_U[\text{Yes}] - W_U[\text{No}])$ the readout direction, $h^A_{\ell,i}$ and $h^S_{\ell,i}$ the aligned and swapped answer-position residuals of item $i$ at layer $\ell$, $\rho^A_i$ and $\rho^S_i$ the root mean square of each prompt's last-layer residual (the final norm's scale), and $D^A_i$, $D^S_i$ the final yes/no readouts,
+
+$$
+\lambda_\ell = \frac{\sum_i \left( r^\top h^A_{\ell,i} / \rho^A_i - r^\top h^S_{\ell,i} / \rho^S_i \right)}{\sum_i \left( D^A_i - D^S_i \right)} .
+$$
+
+It is computed on CPU from stage 0's residuals on the ablation's failure items, weighted, with a game-bootstrap interval (`analysis.direct_path_share`, `pilot.direct_path_report`). At the last layer it equals 1.
+
+**Pre-registered rule (one, chosen now): a profile layer whose direct-path share has a 95% upper bound at or above 0.3 is treated as a caveat layer: its removal is reported, but it is excluded from the onset, which is read on the remaining profile layers, per stratum (`analysis.direct_path_kept`, `DIRECT_PATH_MAX`).**
+
+Why this rule rather than reading the onset on removal minus $\lambda$ with a paired bootstrap: the subtraction would make the 0.6 band unreachable wherever $\lambda$ exceeds 0.4, and it would also subtract the part H3 itself predicts. Under H3 the goal's signal is written in readout form at the answer position, so a large $\lambda$ is part of the hypothesis, not a nuisance to subtract. The question the onset can answer cleanly is whether one direction carries the effect *before* the effect is in readout form, and that is only answerable at layers where the direct path is small. The threshold 0.3 is the band below which a removal of at least 0.6 cannot be explained by the direct path alone. The cost: if every layer from the true onset on has a large direct-path share, the row is "not assessable". `test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it` reproduces the simulation's pattern (with readout-form share 0, 0.3 and about 0.6, the removal tracks it, and the rule removes the layer where the naive onset would have been found).
+
+### C3. The H4 rows, restated again
+
+- *Steering against a reference.* A new edit, `steer_task|L`, adds along the task direction its own mean aligned-minus-swapped projection. The H4 steering row is now the gain along $s_\perp$ (the success direction without its readout component) over the gain along $u$ at the same layer, summed over the same swapped prompts (`analysis.steer_relative`). Steering along $u$ is what the task itself does, so the ratio says how much of that a generic success feature reproduces, free of differences in scale between layers.
+- *The perp-over-task removal ratio only where it means something.* The ratio of what the task direction without its success component removes to what the task direction removes is read only at layers where the task direction's removal has a lower bound of at least 0.3 (`analysis.perp_over_task`); elsewhere it is "not assessable", and the H4 row is the median over the assessable H4 layers, or "not assessable" if none.
+- *Mention is not a null for H4.* A mention of the object is itself an object match, so "the projected cosine exceeds the mention direction's" is dropped from the H4 criterion. The mention direction's projected cosine with the success direction, and the task-minus-mention difference, are reported apart, as a goal-role row (`goal_role`).
+- *Reliability and intervals.* Between-fold cosines are now reported for the projected task, success and mention directions. Each projected cosine is also reported disattenuated: divided by the square root of the two directions' between-fold cosines, what it would be between noise-free directions, to first order (`analysis.disattenuated`; undefined if a reliability is not positive). Every projected task-success cosine gets a game-bootstrap interval in which both directions are re-estimated in every resample (`analysis.projected_cosine_boot`, `pilot.h4_cosine_report`).
+- *A layer-specific answer direction.* The final readout direction is only the last layer's notion of "the answer"; at a middle layer the answer may be carried along another direction. At every H4 layer a ridge regression of the final readout on that layer's neutral-prompt residual, fit after centring both within each (outcome, verb) cell so that it does not learn the success or verb contrast, gives a layer-specific answer direction (`analysis.answer_direction`). The H4 cosine is reported with the readout direction projected out, and with both the readout and the answer direction projected out.
+
+H4 predictions, restated (medians over the H4 layers of B2). H4: the projected cosine is at least 0.3 under both projections (its bootstrap lower bound above 0); steering along $s_\perp$ gains at least half of what steering along $u$ gains; where assessable, ablating the task direction without its success component removes less than half of what the task direction removes. H3: projected cosine below 0.1 under both projections; steering along $s_\perp$ below 20% of the gain along $u$; where assessable, the success-free direction removes at least 80% of what the task direction removes. The disattenuated cosine is reported and read only together with the raw one: a disattenuated value cannot rescue a raw cosine whose interval includes 0.
+
+### C4. Steering amounts per stratum
+
+Qwen's goal effect is about twice as large at step 0 as later, so one pooled steering amount over- or under-steers each stratum. Every steering amount (along the success direction, along it without its readout component, along the task direction) is now estimated on the other fold separately for step 0 and for later items (`estimate_directions(strata=…)`, `steer_by_stratum`), and each item is steered by its own stratum's amount: the ablation edits each stratum's items in a separate call (`run_interp_pilot_ablate`). Mean-ablation midpoints stay pooled. If the other fold had no step-0 items, the pooled amount would be used; it has 268.
+
+### C5. Tests and mutants
+
+Value tests on weighted bootstrap draws (the weights must enter every draw, not only the point estimate), the verb weighting, the mention rows, the first-token gate's arms, the selection when a minimum exceeds its stratum, the GPU check, the caveat layers and the defaults kill the 19 surviving mutants of review 3 (one of them, K36, by checking that every ablation item has a weight; K19 is equivalent and left out: with more eligible items than n the selection always takes exactly n). Review 3's 40 mutants (K4, K5, K26 and K32 adapted to changed lines, K19 left out) and 28 mutants of this round's code are in `scripts/mutation_check.py`; killing tests are in `testing.md`.
+
+### C6. Calibration rule, completed; minimums for small draws; folds in the full pilot
+
+The calibration rule of B3 is completed as follows (dated 2026-11-21, before any run):
+
+- *Margin fixed.* The full pilot's n per stratum and measure is the pilot's n times $(1.96\,\mathrm{SE}/0.075)^2$, times 1.2 (`SAMPLE_SIZE_MARGIN`), the allowance for games as clusters.
+- *B fixed.* Every bootstrap uses 2,000 game resamples, for percentile intervals and for the SEs behind normal intervals; the pilot does not set it.
+- *Bonferroni form struck.* It was already fixed by B5 (normal intervals from the bootstrap SE); the pilot does not set it either. What the pilot's SEs set is the full pilot's sample sizes, nothing else.
+- *More measures.* The sample sizes are now computed also for the object-mention share, the neutral-gap ratio (with a paired bootstrap SE), the answer-position arrival (the SE of the `last` curve at the arrival layer), the H4 cosine, the steering ratio and the perp-over-task ratio (`pilot.sample_sizes`).
+- *Folds in the full pilot.* Its verdicts use fold 1's items only (the fold no intervention has touched). Fold 0's 100 patched items and 125 edited items are reported separately and never pooled into a verdict.
+
+*Minimums for small draws.* The stratum minimums are set for 100 patching items and 75 ablation failures; when fewer are drawn they are scaled by n over that reference and rounded half up (`pilot.scaled_minimum`). The 10-item timing run of patching therefore draws at least 3 step-0 items and 3 with an object mention, instead of minimums larger than the run.
+
+### C7. GPU names and compute
+
+`check_gpu` compares GPU names exactly. `--constraint=gpu-a100` can land on another A100 model (40 GB against 80 GB, PCIe against SXM) whose name differs, and the check will then refuse it. That is kept as the conservative choice, since bfloat16 kernels are not guaranteed to match across models of a family; the job script says so, and a refused job is resubmitted to a node with stage 0's exact GPU (the refusal message names it). The ablation now has 55 edits per prompt (7 kinds at 7 profile layers, 4 random, the caveat and the last layer), which still fit in 4 batches of 15 edits and a clean row, so the forward rows are unchanged: about 197,000 in all, 5.5 A100-hours (about 5.6 with model loads and the per-stratum calls) or 8.2 L40S-hours, within the job's 12 hours.
+
+### C8. What the yes/no format can and cannot show
+
+- *An answer the model never gives.* On RQ2's failures, Qwen3-8B's mean probability of "Yes" is about 0.2% even under the aligned task (`exploratory_results.md`, section 4): its answer is at the floor in both conditions. The yes/no pilot therefore localizes a shift of 2.8 nats in log-odds inside an answer that stays "No", not a change of answer. That is a legitimate object for localization, but its findings should not be described as the mechanism by which the model "predicts success".
+- *Not the headline effect.* The confirmatory effect is 6.12 nats in the two-candidate format, where the success text is often preferred. The yes/no effect is a different readout of the same manipulation. The minimal pilot does not explain the headline; at most its localization carries over. The first-token readout is now gated in stage 0 (B6), and a residual map of the full two-candidate reply (teacher-forcing the success text, by the coarse groups, 50 items; A9) is planned for the full pilot.
+- *Transfer.* The first transfer target for any direction or localization found here is TextCraft's yes/no format (branch `textcraft`, once scored and showing a goal effect), before τ-bench.
