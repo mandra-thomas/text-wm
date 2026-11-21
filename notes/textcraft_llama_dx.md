@@ -117,3 +117,61 @@ This fits a reading in which a goal line makes both models judge a craft of the 
 ### Practical size
 
 On a probability scale Llama's effect is negligible. The mean predicted chance of success differs by +0.38 points [−0.57, +1.28] between aligned and swapped over all main failures, by −1.90 points [−3.12, −0.83] on the goal role and by +1.55 points [+0.37, +2.71] on ingredients. On goal-role failures Llama predicts success (L above zero) for 3.3% of items under the aligned line and 4.9% under the swapped line. Between the two lines 2.7% of items flip from failure to success and 1.2% the other way. On the yes/no question its "Yes" share on goal-role failures is 0.0% under both lines (mean probability of "Yes" 0.9% and 1.1%). The reversal is a change of confidence inside a failure judgement Llama already makes, not a change of decision. For Qwen, by contrast, the share of goal-role successes answered "Yes" falls from 65% under the aligned line to 14% under the swapped line, which is a change of decision.
+
+## Findings from the prompt variants and the new runs (GPU)
+
+All runs below finished with every record present and no stale record (each record's item hash recomputed for its own prompt). The new runs ran at commit `b589e5a` (zero-shot, ICE job 7206794; object goal, job 7206854, after a fast-forward to `610b458` before it started) and `f74c262` (generation, job 7207017; prompt variants, job 7207018), from the new checkouts `text-wm-fix26` and `text-wm-fix27`. Each is read against the verified prompt's scores on the same items.
+
+### Examples on goal (design D10)
+
+The third prompt example ("get 2 jungle logs" succeeding) was put back under the goal whose tree holds jungle logs, so that no example acts off its goal. On 200 seeded main couples (400 items, 130 pairs), Llama's ΔL is −0.24 [−0.39, −0.10] with these examples and −0.19 [−0.34, −0.05] with the verified ones. The per-item difference, variant minus verified, is −0.05 [−0.08, −0.02], and on the goal role −0.09 [−0.15, −0.03]. For Qwen it is +0.72 against +0.75 (difference −0.03 [−0.19, +0.13]). The off-goal example does not produce Llama's reversal. Removing it makes the reversal very slightly larger, the opposite of what design D9's bias would predict if it were acting on Llama.
+
+### Empty start (design D10)
+
+One sentence stating that the inventory starts empty was added to the system text. On 300 seeded main couples (600 items, 168 pairs), Llama's ΔL is −0.11 [−0.23, +0.01] with the sentence and −0.18 [−0.30, −0.06] without. The difference is +0.07 [+0.04, +0.11], and on the goal role −0.49 [−0.72, −0.26] against −0.63 [−0.86, −0.41] (difference +0.14 [+0.07, +0.21]). For Qwen it is +1.00 against +1.04 (difference −0.04 [−0.13, +0.05]). The hidden-state account predicts that stating the empty start removes a positive, evidence-driven part of ΔL, so ΔL should fall. It does not fall for either model: Qwen's effect does not depend on doubt about the starting inventory, and Llama's reversal shrinks by about a fifth on the goal role but stays clearly negative there. Over all items, Llama's interval with the sentence reaches zero (upper end +0.01), so the overall negative is not robust to this prompt change, while the goal-role negative is.
+
+### Zero-shot (run 1)
+
+The verified prompt without its three examples was scored on 150 main and 100 success couples. Without examples neither model works as a world model: the neutral-line AUC between successes and failures falls from 0.64 to 0.43 for Llama and from 0.87 to 0.43 for Qwen on these items, and Llama's probability mass on the two candidates' first tokens falls from 0.86 to 0.25 (Qwen's from 1.00 to 0.64). A ΔL measured zero-shot is the goal line's pull on a model that does not discriminate, so it says little about a world model. With that limit:
+
+| Population and role | Llama zero-shot | Llama verified | Qwen zero-shot | Qwen verified |
+|---|---|---|---|---|
+| Failures, all (300 items, 102 pairs) | −0.42 [−0.68, −0.16] | −0.28 [−0.46, −0.09] | +2.11 [+1.64, +2.60] | +0.62 [+0.09, +1.21] |
+| Failures, goal role (110) | −1.01 [−1.55, −0.41] | −0.90 [−1.22, −0.58] | +3.46 [+2.49, +4.46] | +1.03 [−0.03, +2.15] |
+| Failures, ingredient role (190) | −0.08 [−0.26, +0.10] | +0.07 [−0.08, +0.24] | +1.33 [+0.91, +1.75] | +0.38 [−0.22, +1.01] |
+| Successes, goal role (102) | +0.65 [+0.17, +1.15] | −0.01 [−0.47, +0.49] | +3.65 [+2.70, +4.58] | +3.22 [+1.63, +4.87] |
+
+Llama's goal-role reversal does not need the examples. Qwen's goal effect is larger without them, and its negative goal × never-obtained cell turns strongly positive (+4.18 [+2.79, +5.51]); for Qwen the examples, and the discrimination they bring, hold the goal effect down.
+
+### Free generation and free yes/no answers (runs 2 and 5)
+
+On a held-out seeded sample (60 goal-role and 30 ingredient main couples, 30 goal-role and 30 ingredient success couples; 300 items), Llama generated the next observation and, separately, answered the yes/no question in free text, under each line.
+
+| Items | Line | Observation predicts success | Free answer "Yes" |
+|---|---|---|---|
+| Goal-role failures (120) | aligned / swapped / neutral | 2 / 5 / 4 | 0 / 0 / 1 |
+| Goal-role successes (60) | aligned / swapped / neutral | 11 / 10 / 14 | 2 / 0 / 3 |
+| Ingredient failures (60) | aligned / swapped / neutral | 34 / 33 / 33 | 3 / 5 / 8 |
+| Ingredient successes (60) | aligned / swapped / neutral | 41 / 39 / 36 | 7 / 7 / 9 |
+
+On goal-role failures the generated observation is the exact failure reply for 95% (aligned), 92% (swapped) and 95% (neutral) of items, and the paired difference in the share predicting success, aligned minus swapped, is −0.03 [−0.06, 0.00]. On goal-role successes Llama also predicts failure, for about 80% of items under every line. The generations confirm that the two-candidate scores reflect what Llama actually predicts, and that it predicts failure for nearly every craft of a goal, whichever line is shown. On ingredients its generations say success about as often for failures as for successes (34 of 60 against 41 of 60 under the aligned line), as the low ingredient AUC implied. Its free yes/no answers are "No" for nearly everything, successes included, which is why the yes/no readout sits near its floor. Some ingredient generations are a third text ("You already have 4 acacia planks."), and the tokens that take the 10% of first-token mass neither candidate gets are mostly "You", "Got", "Cannot", "Not", "Already" and "Inventory"; that mass is 0.10 under the aligned and the swapped lines and 0.12 under the neutral line, so it does not differ between the two lines that define ΔL.
+
+### Object goal on ingredient actions (run 3)
+
+An ingredient action crafting Y was scored under "Goal: craft Y." and compared with the verified aligned ("craft G"), swapped ("craft P") and neutral lines on 150 main and 100 success ingredient couples.
+
+| Items | Llama: object goal − aligned | Llama: object goal − neutral | Qwen: object goal − aligned | Qwen: object goal − neutral |
+|---|---|---|---|---|
+| Failures (300 items, 98 pairs) | −1.40 [−1.62, −1.20] | −1.03 [−1.27, −0.80] | −1.23 [−1.94, −0.45] | +0.28 [−0.31, +0.85] |
+| Failures, never obtained (86) | −1.84 [−2.34, −1.39] | | −4.00 [−5.79, −2.38] | |
+| Failures, too few (78) | −1.57 [−2.02, −1.05] | | +0.01 [−1.55, +1.67] | |
+| Failures, used up (136) | −1.03 [−1.23, −0.82] | | −0.19 [−0.89, +0.55] | |
+| Successes (200 items, 81 pairs) | −1.74 [−2.04, −1.46] | −0.82 [−1.14, −0.50] | +0.80 [−0.11, +1.71] | +1.93 [+1.31, +2.56] |
+| Yes/no, failures | −0.79 [−0.92, −0.66] | −1.25 [−1.39, −1.11] | +2.18 [+1.19, +3.18] | −0.08 [−0.89, +0.74] |
+| Yes/no, successes | −0.92 [−1.08, −0.77] | −1.03 [−1.19, −0.87] | +5.37 [+4.46, +6.28] | +0.79 [−0.03, +1.71] |
+
+For Llama, making the action's own object the goal lowers its predicted success on every class, on successes as much as on failures, on both scales, and below the neutral line. By length bin the drop on failures is −2.81 [−3.37, −2.25] at 1–3 steps, −1.11 at 4–8 and −1.00 at 9–12. Discrimination falls slightly (AUC 0.71 to 0.65), and the share of ingredient successes Llama predicts as successes falls from 79% to 51%. This is the goal-role pattern again, larger, on items that are not top items. It follows whichever item is named as the goal. It is a level shift against crafting the named goal, not a sharper judgement of failures.
+
+For Qwen the same line acts differently: it lowers predicted success sharply where the inputs were never obtained (−4.00; yes/no −4.34) and otherwise leaves it or raises it (successes +0.80, yes/no +5.37), and its AUC rises slightly (0.87 to 0.89). Qwen reads "craft Y" as a prompt to check Y's inputs, and the check finds names that never appeared. That matches Qwen's negative goal × never-obtained cell, and its large positive effect where inputs were gathered.
+
+The run cannot say whether naming the object or making it the terminal craft drives Llama's drop, because the line does both (plan 6).
