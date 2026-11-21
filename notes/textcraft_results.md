@@ -21,7 +21,7 @@ The rule fixed in advance: confirmed for a model when ΔL > 0, the 95% interval 
 
 - **Robustness.** The coherence-robust estimate is +1.17 [+0.71, +1.64]. On tie couples, where the history favours neither goal, it is +0.99 [+0.12, +2.03]. Equivalence to zero is rejected on all three scales.
 - **Size against ALFWorld.**
-  - On the yes/no scale the effect is +2.93 [+2.54, +3.30] nats, the same as ALFWorld's 2.80.
+  - On the yes/no scale the effect is +2.93 [+2.54, +3.30] nats. *(This number should not be compared with ALFWorld's 2.80: TextCraft's yes/no question is not anchored to the environment's reply and partly reads as task relevance; see "The yes/no question" under the follow-up analyses.)*
   - On the two-candidate scale it is about a sixth of ALFWorld's 6.12.
   - Standardized by the item SD of the difference it is 0.20, against about 1.0 on ALFWorld.
   - The two-candidate scale depends on each environment's reply texts (section 13, D5), so the three scales are reported together.
@@ -74,7 +74,7 @@ Goal × used up has only 6 items (one pair) and is omitted.
 
 ## Reading and limits
 
-- **The effect is not specific to ALFWorld for Qwen3-8B.** In an environment with no hidden object locations, where failures follow from counting, naming the goal still raises predicted success for actions the history has already settled. That includes actions whose failure only arithmetic settles. On the yes/no scale it does so by the same amount as on ALFWorld.
+- **The effect is not specific to ALFWorld for Qwen3-8B.** In an environment with no hidden object locations, where failures follow from counting, the matching task line still scores actions the history has already settled as more likely to succeed than the mismatched line does. That includes actions whose failure only arithmetic settles. On readouts anchored to the environment's reply the effect is about a third to a half of ALFWorld's, and it is heavy-tailed. The earlier statement that the yes/no effect equals ALFWorld's is withdrawn (follow-up analyses, "The yes/no question").
 - **Llama's ALFWorld effect does not carry over.** Llama-3.1-8B's ALFWorld effect (1.65 nats two-candidate, 2.21 yes/no) is absent in TextCraft, replaced by a small reversed effect. That reversal comes from a model that does not track inventory arithmetic here (used-up AUC 0.31; counting AUC 0.42). The pre-registered reading is "naming the goal makes the model more careful". Given the weak competence, we do not read it as a working state judgement being shifted. This qualification is our interpretation, not a pre-registered reading: D7 only qualifies a *confirmed* effect when competence fails, and the same logic applies to a negative one.
 - **Why the ALFWorld–TextCraft difference for Llama cannot be pinned down.** As section 13, D7 lists, TextCraft differs from ALFWorld in four ways a cross-environment difference cannot separate:
   - no hidden state;
@@ -88,7 +88,20 @@ Goal × used up has only 6 items (one pair) and is omitted.
 
 Everything in this section was done after the confirmatory result above had been read. None of it changes that result. Details, dated plans and all numbers are on two branches: `textcraft-llama-dx` (`notes/textcraft_llama_dx.md`) and `xenv-compare` (`notes/textcraft_vs_alfworld.md`).
 
-**Qwen's smaller effect is mostly a matter of scale and items.** The two-candidate ΔL falls from 6.12 nats in ALFWorld to 0.94 here, but 59% of ALFWorld's figure is the goal raising the probability of the words *after* "You" in ALFWorld's success sentence. TextCraft's two replies name the same item, so this term is zero by design. ALFWorld's largest effects are also at step 0, which the main set lacks. On rulers that do not depend on the reply wording the two environments agree: the yes/no effect is 2.92 against 2.80 (ratio 1.04 [0.89, 1.21]), and failures flipped to predicted success are 5.6% against 5.9%. A residual factor of about two remains on the first token at later steps.
+**Qwen's effect in TextCraft is smaller than in ALFWorld, by about half on rulers anchored to the environment's reply.** *(Corrected 2026-11-21. An earlier version of this paragraph said the two environments "agree" on the yes/no question, 2.92 against 2.80. That comparison is withdrawn; see "The yes/no question" below.)*
+
+- *The two-candidate drop is largely about the replies.* The two-candidate ΔL falls from 6.12 nats in ALFWorld to 0.94 here. Of ALFWorld's figure, 59% is the goal raising the probability of the words *after* "You" in ALFWorld's success sentence, and TextCraft's two replies name the same item, so that term is zero by design. ALFWorld's largest effects are also at step 0, which the main set lacks.
+- *On the reply's first token, TextCraft is a third to a half of ALFWorld.* The first token is the model's predicted observation, "Craft" against "Could". The ratio is 0.39 overall, about 0.54 at matched history lengths and about 0.46 at a matched baseline (`textcraft_vs_alfworld.md`, branch `xenv-compare`).
+- *The flip rates are similar.* Failures flipped to predicted success are 5.6% here against 5.9% in ALFWorld.
+
+**The yes/no question.** TextCraft's question, "Will this action succeed? Answer Yes or No.", is not anchored to the environment's reply. ALFWorld's is: "…or will the environment reply 'Nothing happens.'?". Qwen's TextCraft yes/no answers partly judge whether the action serves the named task (`textcraft_qwen_robustness.md`, section 9, branch `textcraft-qwen-robust`).
+
+- *At matched predicted observations, the swapped line shifts the answer.* At the same first-token score, the swapped line shifts the yes/no answer toward "No" by 2.0 nats on failures and 7.2 nats on successes.
+- *The clearest case is working goal crafts.* On working goal crafts that Qwen's own predicted observation confidently calls successes, it answers "No" to 72% under the swapped line, against 13% aligned and 1% neutral.
+- *About two-thirds of Qwen's yes/no effect on failures is not in its predicted observation.* The share is three-quarters on successes.
+- *Llama shows no such component.*
+
+TextCraft's confirmed yes/no readout (+2.93) is therefore partly a task-relevance judgement. It should not be compared with ALFWorld's yes/no effect, which tracks its predicted observation. Later TextCraft runs use a question anchored to the environment's replies.
 
 **The effect has two components with opposite signs.**
 
@@ -149,6 +162,15 @@ Given the cue, the true outcome adds nothing to Llama's score (slope −0.55 nat
 - **Competence is necessary for a positive effect here, but not sufficient.** No competence comes with no positive effect, which fits the cross-model pattern (`textcraft_vs_alfworld.md`, section 9). But in the one ingredient cell where Llama is competent (never obtained, AUC 0.86), its effect is still null (−0.11), where Qwen's is +1.64.
 - **The goal-craft negative is not explained by incompetence.** It sits where Llama discriminates. Part of that discrimination is a prior that goal crafts fail: Llama predicts success for only 24% of goal crafts that work.
 - **Round 2 applies the families rule to every model before any data.** Llama-3.1-8B is expected to fail it.
+
+**How robust Qwen's effect is** (`textcraft_qwen_robustness.md` and `textcraft_qwen_competence.md`, branches `textcraft-qwen-robust` and `textcraft-qwen-competence`).
+
+- *The direction holds on every check.* An independent recompute gives +0.94 [+0.60, +1.27]. Dropping any one pair or recipe family leaves +0.85 to +1.06. The sign also holds under trimmed and winsorized means, on every reply-anchored readout, and under every prompt variant; the clean prompt raises the effect.
+- *It is heavy-tailed.* The median item moves +0.25 [−0.00, +0.48] and the 10% trimmed mean is +0.48 [+0.24, +0.73]. The top 5% of items carry 80% of the total, but the interval reaches zero only after the 29 largest-contributing pairs of 229 are dropped.
+- *It sits where Qwen's judgement is open.* That means crafts the history has not shown before, and too-few failures. On repeats of a craft the history already shows it is −0.33. Among ingredient crafts, it rests mostly on names that share a word with the goal: +0.18 [−0.40, +0.74] without any shared word.
+- *Against the neutral line, much of it is a penalty under the wrong goal.* On failing actions, predicted success is 19.0% aligned, 16.5% neutral and 15.1% swapped, a difference of +3.9 points [+2.2, +5.5] between aligned and swapped. The penalty also reaches working actions. On working goal crafts, "Yes" on the yes/no question falls from 65% aligned to 14% swapped (156 of 300 flip), partly through the task-relevance reading described above.
+- *Competence.* Qwen discriminates well (AUC 0.86) but is overconfident: 32% of items it scores above 0.9 fail. Its scores follow the "input names appear" cue (tracking 0.89) and treat repeated crafts as likely failures, while still giving the true outcome large weight. The goal effect is largest where Qwen is uncertain. On confident, correct failures it shifts log-odds (+0.68) but rarely changes the answer: 3.4% flip under the aligned line, against 0.9% under the swapped line.
+- *How to describe it.* Qwen's TextCraft result is best described as a task-relevance bias between the matching and the mismatched task lines, in a competent but overconfident predictor. It is not well described as "naming the goal raises predicted success".
 
 **The prompt matters.** The verified system text quotes the original agent's instructions ("Every round I will give you an observation, you have to respond an action…"). Removing them, with the world-model framing and the environment's rules kept, raises the goal-role effect by +0.39 for Llama and +1.66 for Qwen. Competence is left about unchanged (−0.016 and +0.002 AUC). From now on TextCraft runs use this clean system text, after the tokenization and golden-prompt checks pass. Results under it are a different quantity from the confirmatory one and are reported as such.
 
