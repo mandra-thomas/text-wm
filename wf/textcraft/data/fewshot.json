@@ -1,0 +1,113 @@
+[
+ {
+  "action": "craft 1 white dye using 1 lily of the valley",
+  "goal": "light gray dye",
+  "history": [
+   [
+    "get 3 azure bluet",
+    "Got 3 azure bluet"
+   ],
+   [
+    "inventory",
+    "Inventory: [azure bluet] (3) "
+   ],
+   [
+    "get 4 lily of the valley",
+    "Got 4 lily of the valley"
+   ]
+  ],
+  "observation": "Crafted 1 minecraft:white_dye",
+  "pair_id": "p049",
+  "recipe_lines": [
+   "craft 1 light gray dye using 1 white tulip",
+   "craft 1 white dye using 1 bone meal",
+   "craft 3 bone meal using 1 bone",
+   "craft 2 light gray dye using 1 gray dye, 1 white dye",
+   "craft 2 gray dye using 1 black dye, 1 white dye",
+   "craft 1 gold ingot using 9 gold nugget",
+   "craft 1 light gray dye using 1 azure bluet",
+   "craft 1 black dye using 1 ink sac",
+   "craft 1 black dye using 1 wither rose",
+   "craft 1 white dye using 1 lily of the valley",
+   "craft 3 light gray dye using 1 black dye, 2 white dye",
+   "craft 1 light gray dye using 1 oxeye daisy"
+  ],
+  "walk_seed": 0
+ },
+ {
+  "action": "craft 4 stick using 2 acacia planks",
+  "goal": "acacia sign",
+  "history": [
+   [
+    "get 3 spruce logs",
+    "Got 3 spruce logs"
+   ],
+   [
+    "inventory",
+    "Inventory: [spruce logs] (3) "
+   ]
+  ],
+  "observation": "Could not find enough items to craft minecraft:stick",
+  "pair_id": "p119",
+  "recipe_lines": [
+   "craft 4 jungle planks using 1 jungle logs",
+   "craft 4 oak planks using 1 oak logs",
+   "craft 4 warped planks using 1 warped stems",
+   "craft 2 blaze powder using 1 blaze rod",
+   "craft 4 dark oak planks using 1 dark oak logs",
+   "craft 4 crimson planks using 1 crimson stems",
+   "craft 1 stick using 2 bamboo",
+   "craft 4 spruce planks using 1 spruce logs",
+   "craft 3 acacia sign using 6 acacia planks, 1 stick",
+   "craft 4 birch planks using 1 birch logs",
+   "craft 3 fire charge using 1 gunpowder, 1 blaze powder, 1 coal",
+   "craft 4 acacia planks using 1 acacia logs",
+   "craft 4 stick using 2 planks"
+  ],
+  "walk_seed": 3
+ },
+ {
+  "action": "get 2 jungle logs",
+  "goal": "granite",
+  "history": [
+   [
+    "get 2 birch logs",
+    "Got 2 birch logs"
+   ],
+   [
+    "get 3 birch logs",
+    "Got 3 birch logs"
+   ],
+   [
+    "craft 4 birch planks using 1 birch logs",
+    "Crafted 4 minecraft:birch_planks"
+   ],
+   [
+    "craft 4 stick using 2 birch planks",
+    "Crafted 4 minecraft:stick"
+   ],
+   [
+    "inventory",
+    "Inventory: [birch logs] (4) [birch planks] (2) [stick] (4) "
+   ]
+  ],
+  "observation": "Got 2 jungle logs",
+  "pair_id": "p140",
+  "recipe_lines": [
+   "craft 3 birch sign using 6 birch planks, 1 stick",
+   "craft 4 warped planks using 1 warped stems",
+   "craft 4 birch planks using 1 birch logs",
+   "craft 1 stick using 2 bamboo",
+   "craft 4 stick using 2 planks",
+   "craft 4 jungle planks using 1 jungle logs",
+   "craft 4 spruce planks using 1 spruce logs",
+   "craft 2 diorite using 2 quartz, 2 cobblestone",
+   "craft 4 oak planks using 1 oak logs",
+   "craft 4 dark oak planks using 1 dark oak logs",
+   "craft 4 acacia planks using 1 acacia logs",
+   "craft 4 crimson planks using 1 crimson stems",
+   "craft 1 granite using 1 diorite, 1 quartz"
+  ],
+  "walk_seed": 0
+ }
+]

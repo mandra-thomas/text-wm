@@ -48,3 +48,6 @@ logs/
 
 # Tool caches kept off the ICE home quota (pace/_common.sh)
 .cache/
+
+# TextCraft recipe database: Minecraft game data, rebuilt by python -m wf.textcraft.freeze, never committed
+wf/textcraft/data/recipes_frozen.json

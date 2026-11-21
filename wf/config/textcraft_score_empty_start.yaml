@@ -1,0 +1,9 @@
+run_id: textcraft_score_empty_start
+# Exploratory (design section 13): 300 seeded main couples, both models, aligned and swapped lines, with one sentence
+# added to the system text stating that the inventory starts empty. Read only against the verified prompt on the same
+# items, never as a result of its own.
+manifest: wf/textcraft/data/manifest.json
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+variant: empty_start
+n_shards: 1
+token_check: true

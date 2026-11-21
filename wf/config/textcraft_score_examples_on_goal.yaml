@@ -1,0 +1,9 @@
+run_id: textcraft_score_examples_on_goal
+# Exploratory (design section 13): 200 seeded main couples, both models, aligned and swapped lines, with the third
+# prompt example back under the goal of its pair whose tree holds the fetched item (every example on its own goal, as
+# before section 12, C8). Read only against the verified prompt on the same items, never as a result of its own.
+manifest: wf/textcraft/data/manifest.json
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+variant: examples_on_goal
+n_shards: 1
+token_check: true

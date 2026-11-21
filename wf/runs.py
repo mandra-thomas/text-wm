@@ -1412,6 +1412,12 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "rq2_score_smoke": lambda cfg: _rq2("run_rq2_score")(cfg),
     "rq2_analysis": lambda cfg: _rq2("run_rq2_analysis")(cfg),
     "rq2_smoke_analysis": lambda cfg: _rq2("run_rq2_analysis")(cfg),
+    # TextCraft replication (notes/textcraft_design.md)
+    "textcraft_score": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
+    "textcraft_score_smoke": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
+    "textcraft_score_examples_on_goal": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
+    "textcraft_score_empty_start": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
+    "textcraft_analysis": lambda cfg: _lazy("textcraft.analysis", "run_textcraft_analysis")(cfg),
     # 2026-11-20, documentation audit: the shared-spot sensitivity (A2), the audit analyses (C) and re-runs of
     # analyses under new run ids, so the original runs stay as they were (A3, B1, B4).
     "rq2_shared_score": lambda cfg: _lazy("rq2_shared", "run_rq2_shared_score")(cfg),

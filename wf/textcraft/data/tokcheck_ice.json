@@ -1,0 +1,70 @@
+{
+ "fewshot_sha256": "e6ddab93966981f9a6bfa70cd26ce0a1552c733a1ac46142f306ea41adfb1253",
+ "golden_check": {
+  "llama3.1-8b-fewshot": [],
+  "qwen3-8b-fewshot": []
+ },
+ "items_sha256": "3b81ac3ff41f0dae2b0aead538db197d6510c2ae8ce1a4f50b87d49aa5e421a6",
+ "llama3.1-8b-fewshot": {
+  "arms": [
+   "aligned",
+   "swapped",
+   "neutral",
+   "yn_aligned",
+   "yn_swapped",
+   "yn_neutral",
+   "prefix_aligned",
+   "prefix_swapped"
+  ],
+  "examples": {},
+  "n_items": 3200,
+  "n_items_with_problems": 0,
+  "ok": true,
+  "snapshot": "0e9e39f249a16976918f6564b8830bc894c89659"
+ },
+ "qwen3-8b-fewshot": {
+  "arms": [
+   "aligned",
+   "swapped",
+   "neutral",
+   "yn_aligned",
+   "yn_swapped",
+   "yn_neutral",
+   "prefix_aligned",
+   "prefix_swapped"
+  ],
+  "examples": {},
+  "n_items": 3200,
+  "n_items_with_problems": 0,
+  "ok": true,
+  "snapshot": "b968826d9c46dd6066d109eabc6255188de91218"
+ },
+ "run": "ICE login node, ~/scratch/envs/serve2 (transformers 5.23.0), HF_HUB_OFFLINE=1, 2026-11-20",
+ "variants_section_13": {
+  "llama3.1-8b-fewshot|empty_start": {
+   "examples": {},
+   "n_items": 600,
+   "n_items_with_problems": 0,
+   "ok": true
+  },
+  "llama3.1-8b-fewshot|examples_on_goal": {
+   "examples": {},
+   "n_items": 400,
+   "n_items_with_problems": 0,
+   "ok": true
+  },
+  "qwen3-8b-fewshot|empty_start": {
+   "examples": {},
+   "n_items": 600,
+   "n_items_with_problems": 0,
+   "ok": true
+  },
+  "qwen3-8b-fewshot|examples_on_goal": {
+   "examples": {},
+   "n_items": 400,
+   "n_items_with_problems": 0,
+   "ok": true
+  },
+  "run": "ICE login node, ~/scratch/envs/serve2 (transformers 5.23.0), HF_HUB_OFFLINE=1, 2026-11-20; same snapshots; arms aligned and swapped; system text and prompt examples of each variant (score.VARIANTS)"
+ }
+}

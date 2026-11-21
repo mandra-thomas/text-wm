@@ -10,6 +10,41 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided or found 2026-11-20, later (replications and follow-up designs)
+
+None of this changes a preregistered threshold or the RQ2 result.
+
+- **TextCraft: frozen, scored, merged.** The design and analysis code were frozen before scoring at the annotated tag `textcraft-design-frozen-2026-11-20` (commit `5a3702a`). The tag message records the test, the item hashes, the design history and what was seen before the freeze: one format-only smoke run, with no aligned-against-swapped difference computed. Full scoring (51,200 scores) and the analysis ran at that commit. Result: confirmed for Qwen3-8B, a small negative effect for Llama-3.1-8B, so not a replication across both models (`textcraft_results.md`). The branch was merged into the main line after scoring. Two exploratory prompt variants (design section 13, D10) were scored afterwards. An exploratory investigation of the Llama result is in progress on branch `textcraft-llama-dx`.
+- **Mistral placement check read.** Moving Mistral's system text to the first turn changes its goal effect by +0.30 nats [0.13, 0.48] on the yes/no question and +0.02 [−0.15, 0.20] on the two-candidate scale. Both are below the logged one-fifth threshold, so placement is reported as not moving the effect (`families_results.md`).
+- **τ-bench (branch `taubench`).** Review 3 added a validity gate: do the prompts and labels concern only whether the backend executes the call, rather than whether the call is appropriate or allowed by policy? The labels are task-invariant: the simulated backend never sees the task, and every failure reply comes from a listed rule. The wording was changed before any score:
+  - the yes/no question asks whether the backend executes the call without an error, instead of whether it "succeeds";
+  - a null on failing calls is read together with the working "witness" call;
+  - the reading of the prompt variant without the "backend does not see the task" sentence is narrowed;
+  - the instruction no longer frames the task as an input to the prediction.
+
+  Review 4 confirmed these with wording-only fixes. The full token check passed on the final prompts for both models (1,413 items each, no problems). The items were rebuilt and verified on the cluster at the final commit, and the rebuild reproduces the pinned hashes. A format and timing smoke run is in progress.
+- **Follow-up designs revised before any score.** Each change below was made in response to an independent review, before any data.
+  - **Mechanism battery (`mechanism2`).** Reviews 1 and 2.
+    - Two contrasts were made into minimal pairs, because the desire lines had dropped the household task their comparators kept.
+    - An affirmed-existence arm was added. It pairs with the negated one and differs only in "no" against "a".
+    - Prediction cells that favoured one account were made symmetric.
+  - **Interpretability pilot (`interp`).** Reviews 1 and 2.
+    - The last layer is excluded from the ablation summary, because there the removal is complete by construction.
+    - The test of a generic success feature removes the readout component before comparing directions.
+    - Substantive thresholds stay as written; the pilot sets only sample sizes.
+    - Step-0 quotas were added.
+  - **Decision simulation (`decisionsim`).** Review 1.
+    - State-level rates use even steps only, because of the collector's schedule (`exploratory_results.md`, section 7).
+    - Scores are rounded to 1/64 nat before comparison.
+    - The swapped task is scored, so the object-naming effect can be separated from the relevance penalty.
+    - The gate for a closed-loop agent study tests a verifier that checks the agent's own proposal. It is no longer a maximum over a menu whose make-up guarantees a positive result.
+- **Decision studies staged.** The question "does the prediction shift change decisions?" is studied offline in stages.
+  - **Fixed candidate menus** at collected states measure whether the shift *can* change a choice. This adds a literal task-blind verifier, a no-verifier baseline and a simulator-oracle verifier.
+  - **Candidates generated and ranked by an agent** measure how often it happens in a real decision distribution. This stage is primary for claims about practical impact.
+  - **Branching the simulator where verifiers disagree** is designed only after the first two show enough disagreements.
+  - A closed-loop comparison of agents is out of scope. No stage is designed to guarantee a harmful result.
+- **Facts found while designing these studies** are in `exploratory_results.md`, section 7: the agent's natural failure rate, the step-0 concentration of the yes/no effect, the relevance penalty of a neutral comparison, the 1/64-nat steps of the scores, and the collector's odd-step schedule.
+
 ## Decided or found 2026-11-20 (documentation and rigor audit)
 
 ### Changes from the 2026-11-20 audit

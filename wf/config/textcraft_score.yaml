@@ -1,0 +1,9 @@
+run_id: textcraft_score
+# TextCraft replication of the RQ2 goal effect (notes/textcraft_design.md). Every verified item (main, usefulness,
+# success, secondary get, empty history; design section 12), both few-shot models, aligned / swapped / neutral goal lines, each as the two-candidate
+# prediction, as the yes/no question, and (aligned and swapped) as the
+# prefix-only control with the object name removed from both replies (design section 11, A4). Refuses items whose hash is not in a verified manifest.
+# Sharded by goal pair: WF_SHARD / WF_N_SHARDS.
+manifest: wf/textcraft/data/manifest.json
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+n_shards: 4
