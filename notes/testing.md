@@ -126,6 +126,64 @@ The gate's tests use a stand-in tokenizer and template: the laptop has no transf
 
 The real tokenizers (pinned Qwen3-8B, Llama-3.1-8B and Mistral-7B-Instruct-v0.3, ICE login node, CPU) passed the battery's gate on every prompt: both candidates of all 1,403 items and all 20,731 yes/no prompts per model, no problem; "Yes" and "No" single tokens for each; every item's first tokens "You" against "Nothing".
 
+**Review 2 (2026-11-20, before any score).** The review's 22 mutants (Q1 to Q22; fifteen had survived: Q1, Q2, Q4 to Q11, Q13, Q15, Q16, Q20, Q21) were added to `scripts/mutation_check.py`, adapted where the amended code moved their text: Q4 and Q10 now remove a zone the amended cells allow (H2 on P1 without L; H2 on P2 allowing S), since the amendment made the original mutants' additions part of the design; Q5 to Q8 follow the one-line-per-account prediction table; Q13 targets the two-format rule's helper `_joint`; Q19 the template shared by desire_check and desire_check_can. Twenty-six mutants of the amendment (N1 to N26: the minimal pairs and P8, the new templates, Mistral's arms, the rival rule for "consistent", the summary lists and wording, the integrity check and the item-file hashes, the secondary readouts, the first-token flag, the mixture readout, the separation check) and three for the step-0 restriction of the position arms were added. The `_end` arms and the alias reading were removed with the amendment, so their three mutants ("end arms skipped at every step", "alias reads the aligned score", "alias fallback at every step") were replaced by the three step-0 mutants below, and nine existing mutants were updated where their text moved (desire_keep and desire_check templates, made specific now that two templates share their words; the described arm; resume; P6 for evidence; untested; one format decides; the mixture wording; negated for every verb). New tests: the minimal pairs differ only in the designed words; the design note's amended prediction table, parsed cell by cell ("+" as S or L), equals `PREDICTIONS`; P6 counts every step-0 item of the union when the sample leaves some out; contradicted in one format and undecided in the other is undecided, and the account untested; "consistent" needs a rival contradicted on the same contrast (for P6, the rival "no position effect"); no two accounts share a row, and the two pairs separated by one contrast only are known; Holm at a fixed family of eight with a missing p as 1; the dropped-draw rule counts resamples, not items; the secondary readouts read the arms they name (all-placement P5, P5 against cancelled's lift, the old P1 and P2, the desire gap, P7 and P8 on items whose receptacle was not seen, the mixture readout); the first-token sign split is flagged; the by-history P7 readout reads takes of the goal object only; the knowledge split reads the content contrasts only; the analysis reports Mistral by default; the scoring run records the item files' hashes; the analysis refuses changed items, missing scores and doubled scores; the integrity check counts per model, arm and format; Mistral's arms are the primary contrasts' arms. Run on 2026-11-20 (`MUTANTS_MATCHING=mech2`, four shards): all 110 mech2 mutants killed, none timed out or failed to apply. `tests/test_mech2.py`: 77 tests pass.
+
+| Mutant | Killed by (`tests/test_mech2.py::`) |
+| --- | --- |
+| position arms after step 0 | `test_every_arm_builds_for_every_task_type_and_verb` |
+| position arms dropped at step 0 too | `test_every_arm_builds_for_every_task_type_and_verb` |
+| missing score read from another arm | `test_a_missing_score_reads_as_none` |
+| Q1 NaN p not replaced by 1 (family shrinks) | `test_holm_family_of_eight_counts_a_missing_p_as_one` |
+| Q2 P6 on sample step-0 only | `test_p6_counts_every_step0_item_of_the_union_even_outside_the_sample` |
+| Q3 strata by game only | `test_sample_is_stratified_seeded_and_order_free` |
+| Q4 H2 P1 without L | `test_the_prediction_table_in_the_note_is_the_code_s` |
+| Q5 H3 P5 allows N | `test_the_prediction_table_in_the_note_is_the_code_s` |
+| Q6 H4 P7 allows N | `test_the_prediction_table_in_the_note_is_the_code_s` |
+| Q7 H5 P3 only Z | `test_the_prediction_table_in_the_note_is_the_code_s` |
+| Q8 H6_lexical P4 allows S | `test_the_prediction_table_in_the_note_is_the_code_s` |
+| Q9 H6_position allows only N | `test_the_prediction_table_in_the_note_is_the_code_s` |
+| Q10 H2 P2 allows S | `test_the_prediction_table_in_the_note_is_the_code_s` |
+| Q11 dropped-draw rule uses 2% of n_items | `test_dropped_draw_rule_counts_resamples_not_items` |
+| Q12 r interval from mean bootstrap | `test_yes_no_family_reads_yes_no_scores_with_its_own_denominator` |
+| Q13 contradicted only needs one format | `test_two_format_rule_contradicted_in_one_format_and_undecided_in_the_other_is_undecided` |
+| Q14 negated_status reads exact instances | `test_negated_claim_status_and_p7_items` |
+| Q15 all-placement done against swapped | `test_secondary_readouts_read_the_arms_they_name` |
+| Q16 analysis default models omit mistral | `test_end_to_end_two_shards_then_analysis` |
+| Q17 zones_of returns only endpoints | `test_categories_follow_the_zones` |
+| Q18 categorize ignores estimable | `test_ratio_needs_a_positive_reference_and_few_dropped_draws` |
+| Q19 desire_check article always a | `test_templates_read_as_written` |
+| Q20 knowledge split on step-0 terms too | `test_knowledge_split_reads_the_content_contrasts_only` |
+| Q21 P7 by history on takes of any object | `test_negated_by_history_reads_takes_of_the_goal_object_only` |
+| Q22 TRIVIAL label replaced by POS_SMALL when significant | `test_position_counts_only_for_the_position_account` |
+| N1 P1 against swapped | `test_each_planted_fingerprint_is_read_as_its_own_account[H3_salience]` |
+| N2 P2 against swapped | `test_each_planted_fingerprint_is_read_as_its_own_account[H2_evidence]` |
+| N3 P8 against swapped | `test_each_planted_fingerprint_is_read_as_its_own_account[H3_salience]` |
+| N4 desire_check_can hopes it cannot | `test_templates_read_as_written` |
+| N5 desire_keep_sw without the swapped task | `test_templates_read_as_written` |
+| N6 affirmed denies too | `test_templates_read_as_written` |
+| N7 Mistral scored on every arm | `test_the_secondary_model_is_scored_and_reported_descriptively` |
+| N8 rival readings left out | `test_position_counts_only_for_the_position_account` |
+| N9 consistent without a rival contradicted | `test_consistent_needs_a_rival_contradicted_on_the_same_contrast` |
+| N10 untested listed as nothing | `test_two_format_rule_contradicted_in_one_format_and_undecided_in_the_other_is_undecided` |
+| N11 contradicted read as rejected | `test_readout_verdicts_and_the_joint_rule` |
+| N12 integrity ignores item hashes | `test_analysis_refuses_a_score_of_a_changed_item` |
+| N13 integrity mismatch never refuses | `test_analysis_refuses_a_score_of_a_changed_item` |
+| N14 analysis ignores the integrity check | `test_analysis_refuses_a_score_of_a_changed_item` |
+| N15 item files not recorded | `test_scoring_records_the_item_files_hashes` |
+| N16 duplicates not counted | `test_analysis_refuses_doubled_scores` |
+| N17 missing scores not counted | `test_analysis_refuses_missing_or_doubled_scores` |
+| N18 P5 against the aligned effect, not cancelled | `test_secondary_readouts_read_the_arms_they_name` |
+| N19 contents-not-shown reads every take item | `test_contents_not_shown_reads_only_the_takes_whose_receptacle_was_not_seen` |
+| N20 first-token split flagged on agreement | `test_secondary_readouts_read_the_arms_they_name` |
+| N21 mixture readout reads cand for yes/no | `test_secondary_readouts_read_the_arms_they_name` |
+| N22 status line without yes/no categories | `test_end_to_end_two_shards_then_analysis` |
+| N23 old P1 reads the new keep line | `test_secondary_readouts_read_the_arms_they_name` |
+| N24 separations read overlap as separation | `test_no_two_accounts_share_a_row_and_the_thin_pairs_are_known` |
+| N25 affirmed with "a" for every object | `test_templates_read_as_written` |
+| N26 H4 P2 allows Z | `test_each_planted_fingerprint_is_read_as_its_own_account[H5_policy_blend]` |
+
+The gate was rerun on the real tokenizers after the amendment (ICE, `coc-cpu` partition, CPU job 7205732, the job's environment, 2026-11-20): both candidates of all 1,403 items for each model, and every yes/no prompt each model is scored on (19,292 for Qwen3-8B and Llama-3.1-8B, 15,083 for Mistral-7B-Instruct-v0.3, among them 3,520 of the three new arms), no problem for any model; "Yes" and "No" are the same single tokens as before.
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:
