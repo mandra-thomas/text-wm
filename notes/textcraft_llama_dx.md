@@ -141,7 +141,7 @@ The verified prompt without its three examples was scored on 150 main and 100 su
 | Failures, ingredient role (190) | −0.08 [−0.26, +0.10] | +0.07 [−0.08, +0.24] | +1.33 [+0.91, +1.75] | +0.38 [−0.22, +1.01] |
 | Successes, goal role (102) | +0.65 [+0.17, +1.15] | −0.01 [−0.47, +0.49] | +3.65 [+2.70, +4.58] | +3.22 [+1.63, +4.87] |
 
-Llama's goal-role reversal does not need the examples. Qwen's goal effect is larger without them, and its negative goal × never-obtained cell turns strongly positive (+4.18 [+2.79, +5.51]); for Qwen the examples, and the discrimination they bring, hold the goal effect down.
+Llama's goal-role reversal does not need the examples. Qwen's goal effect is larger without them, and its negative goal × never-obtained cell turns strongly positive (+4.18 [+2.79, +5.51]); for Qwen the examples, and the discrimination they bring, hold the goal effect down. *(Correction, 2026-11-21, from `textcraft_qwen_robustness.md` on branch `textcraft-qwen-robust`: Qwen's larger zero-shot effect sits in the reply tails. Zero-shot, its two-candidate score is about +63 nats for every item and its AUC is 0.43, and its first-token effect is +0.31 [−0.09, +0.75], smaller than with the examples, not larger.)*
 
 ### Free generation and free yes/no answers (runs 2 and 5)
 
