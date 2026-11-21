@@ -72,6 +72,18 @@ def two_item_line(goal: str, partner: str) -> str | None:
     return f"Goal: craft {a} and {b}."
 
 
+def two_item_partner_done(rec: dict) -> bool:
+    """User point 1 (2026-11-21): under "craft A and B", crafting one item would complete the whole objective if the
+    other named item were already made or held. True when either named goal appears as a history step's product or
+    is held after the history (text only). Such records leave the naming and completion contrasts; by construction
+    there are none (the walk never crafts a goal, and goals cannot be fetched), which verify checks."""
+    from wf.textcraft import checker as K
+
+    held = K.account(rec["history"]).held
+    made = {K.step_object(o) for _a, o in rec["history"]}
+    return any(g in made or held.get(g, 0) > 0 for g in (rec["goal"], rec["partner"]))
+
+
 def parse_arm(arm: str) -> tuple[bool, int, bool, str]:
     """(question, padding steps, extended list, line) of an arm name."""
     question = arm.startswith("yn_")

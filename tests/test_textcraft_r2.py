@@ -818,8 +818,8 @@ def test_interpretation_separates_measurable_effects_from_distortions():
     ("confirmed below zero", "inconclusive", "confirmed below zero", "completion contributes; naming not constrained"),
     ("confirmed below zero", "confirmed above zero", "confirmed below zero", "completion penalty, naming constrained"),
     ("confirmed below zero", "equivalent to zero", "confirmed below zero", "completion penalty, naming constrained"),
-    ("confirmed below zero", "confirmed below zero", "confirmed below zero", "naming or sub-goal-completion penalty"),
-    ("confirmed below zero", "confirmed below zero", "inconclusive", "naming or sub-goal-completion penalty"),
+    ("confirmed below zero", "confirmed below zero", "confirmed below zero", "naming / partial-completion penalty"),
+    ("confirmed below zero", "confirmed below zero", "inconclusive", "naming / partial-completion penalty"),
     ("confirmed below zero", "inconclusive", "inconclusive", "penalty present, mechanism unresolved"),
     ("confirmed below zero", "equivalent to zero", "inconclusive", "penalty present, mechanism unresolved"),
     ("equivalent to zero", "confirmed below zero", "inconclusive", "no penalty larger than the margin"),
@@ -831,14 +831,13 @@ def test_reading_table(p, dn, dc, want):
     assert r["penalty"].startswith(want)
 
 
-def test_partial_naming_and_timing_qualifiers():
+def test_timing_qualifier_and_no_partial_naming_rule():
     v = {"lift": "inconclusive", "parent_penalty": "confirmed below zero", "naming": "inconclusive",
          "completion": "inconclusive", "timing": "confirmed above zero"}
-    r = A.reading(v, partial_naming_flag=True, timing_comparable=True)
-    assert r["penalty"].endswith("penalty possibly carried by partial naming (the strict parents' estimate is not negative)")
+    r = A.reading(v, timing_comparable=True)
+    assert "partial naming" not in r["penalty"]  # user point 4: the subset comparison is reported, not read as a rule
     assert r["timing"].startswith("sensitivity to added empty-inventory steps") and r["timing"].endswith("not read as timing")
-    r2 = A.reading(v)
-    assert "partial naming" not in r2["penalty"] and "not read as timing" not in r2["timing"]
+    assert "not read as timing" not in A.reading(v)["timing"]
     base = {**v, "parent_penalty": "inconclusive"}
     assert A.reading({**base, "timing": "equivalent to zero"})["timing"].startswith("no sensitivity")
     assert A.reading({**base, "timing": "not applicable"})["timing"] == "not applicable"
@@ -846,19 +845,17 @@ def test_partial_naming_and_timing_qualifiers():
     assert A.reading({**base, "lift": "equivalent to zero"})["lift"] == "no lift larger than the margin"
 
 
-def test_partial_naming_flag_follows_the_strict_subset():
+def test_model_verdicts_keep_estimates_and_limit_interpretation():
     block = {"contrasts": {c: {"estimate": -1.0, "ci95": [-2, -0.5], "applicable": True} for c in A.CONTRASTS},
-             "competence": {"interpretable": True, "local": {"per_contrast": {c: {"competent": True} for c in A.CONTRASTS}}},
+             "competence": {"interpretable": False, "local": {"per_contrast": {c: {"competent": True} for c in A.CONTRASTS}}},
              "descriptive": {"parent": {"penalty_by_subset": {"strict": {"estimate": 0.2}}}}}
     block["contrasts"]["timing"]["comparable_to_one_lookup_change"] = False
     fam = {f"m:{c}:{t}": {"p_holm": 0.001 if t == "differs" else 1.0} for c in A.CONTRASTS for t in A.TESTS}
-    v = A.model_verdicts(block, fam, "m")
-    assert "partial naming" in v["reading"]["penalty"]
-    block["descriptive"]["parent"]["penalty_by_subset"]["strict"]["estimate"] = -0.3
-    assert "partial naming" not in A.model_verdicts(block, fam, "m")["reading"]["penalty"]
     block["competence"]["local"]["per_contrast"]["lift"]["competent"] = False
     out = A.model_verdicts(block, fam, "m")
     assert out["contrasts"]["lift"] == "confirmed below zero" and out["interpretation"]["lift"].startswith("statistically measurable")
+    assert out["interpretation"]["parent_penalty"] == "distortion in a competent predictor"
+    assert out["overall_gate_interpretable"] is False and "partial naming" not in out["reading"]["penalty"]
 
 
 def test_across_models_patterns_and_f3():
@@ -1174,3 +1171,75 @@ def test_round2_question_is_anchored_to_the_replies():
     for r in recs[:400]:
         for text in (r["candidates"]["o_plus"], r["candidates"]["o_minus"]):
             assert text.startswith(("Crafted ", "Got ", "Could not find ")), text
+
+
+# ---------------- user points 1-4 (2026-11-21) ----------------
+
+
+def test_no_two_item_record_has_a_named_goal_already_made(records):
+    both = [r for r in records if r.get("both_task_line")]
+    assert len(both) == 2963 and not any(R.two_item_partner_done(r) for r in both)
+    rep = I.check_records([r for r in records if r["kind"] == "main"][:50], SHOTS)
+    assert rep["two_item_records_with_a_named_goal_already_made_or_held"] == {}
+
+
+def test_a_made_partner_is_detected_and_leaves_naming_and_completion(small, fast):
+    recs = copy.deepcopy(small)
+    goal_rec = next(r for r in recs if r["kind"] == "main" and r["role"] == "goal" and r["population"] == "main"
+                    and r["both_task_line"])
+    made = f"Crafted 1 minecraft:{goal_rec['partner'].replace(' ', '_')}"
+    fake = {**goal_rec, "history": [["get 1 y", "Got 1 y"], ["craft 1 x using 1 y", made]]}
+    assert R.two_item_partner_done(fake) is True  # made by a craft
+    assert R.two_item_partner_done({**goal_rec, "history": [["get 1 x", f"Got 1 {goal_rec['partner']}"]]}) is True
+    scores = _planted(recs, "qwen3-8b")
+    by = A.index_scores(scores, recs, SHOTS, "qwen3-8b")[0]
+    pops = A.populations(recs)
+    before = A.contrasts(by, pops, 0.4)["naming"]["n_goal"]
+    for r in pops["goal"]:
+        if r["id"] == goal_rec["id"]:
+            r["history"] = [["get 1 x", f"Got 1 {goal_rec['partner']}"]] + r["history"]
+    assert A.contrasts(by, pops, 0.4)["naming"]["n_goal"] == before - 1
+
+
+def test_matched_sensitivity_removes_a_profile_confound():
+    """Goal-role items sit in one cell, ingredients in another, plus matched cells with no role difference: the
+    unmatched gap is large, the matched one is zero."""
+    recs, vals = [], {}
+    k = 0
+    for role, prof, x, n in (("goal", ("1-3", "raw", "one"), 0.0, 10), ("ingredient", ("1-3", "raw", "one"), 0.0, 10),
+                             ("goal", ("4-8", "craftable", "several"), 5.0, 10), ("ingredient", ("9-12", "raw", "one"), -5.0, 10)):
+        for _ in range(n):
+            k += 1
+            recs.append({"id": f"i{k}", "pair_id": f"p{k % 7}", "role": role, "prof": prof})
+            vals[f"i{k}"] = x
+    out = A.matched_gap({}, recs, lambda i: vals[i], profile=lambda r: r["prof"], B=50)
+    assert out["estimate"] == pytest.approx(0.0) and out["n_cells_used"] == 1 and out["n_items_in_used_cells"] == 20
+    # a small cell (3 of each role) is left out; a second used cell of 5 per role with gap 1.5 is weighted by 5
+    for role, prof, x, n in (("goal", ("1-3", "mixed", "one"), 9.0, 3), ("ingredient", ("1-3", "mixed", "one"), 0.0, 3),
+                             ("goal", ("9-12", "craftable", "one"), 1.5, 5), ("ingredient", ("9-12", "craftable", "one"), 0.0, 5)):
+        for _ in range(n):
+            k += 1
+            recs.append({"id": f"i{k}", "pair_id": f"p{k % 7}", "role": role, "prof": prof})
+            vals[f"i{k}"] = x
+    out = A.matched_gap({}, recs, lambda i: vals[i], profile=lambda r: r["prof"], B=50)
+    assert out["n_cells_used"] == 2 and out["estimate"] == pytest.approx((10 * 0.0 + 5 * 1.5) / 15)
+    assert A.short_profile({"length_bin": "4-8", "recipe_lines": ["craft 1 a using 1 b"],
+                            "short_inputs": [{"name": "a"}]}) == ("4-8", "craftable", "one")
+    assert A.short_profile({"length_bin": "4-8", "recipe_lines": ["craft 1 a using 1 b"],
+                            "short_inputs": [{"name": "a"}, {"name": "b"}]}) == ("4-8", "mixed", "several")
+
+
+def test_sensitivity_and_strict_comparison_are_reported(small, fast, monkeypatch):
+    monkeypatch.setattr(A, "MATCH_MIN", 1)
+    recs = copy.deepcopy(small)
+    strict = {r["id"] for r in recs if r["kind"] == "parent" and r["parent_rule"] == "strict"}
+    other = {r["id"] for r in recs if r["kind"] == "parent" and r["parent_rule"] != "strict" and r["population"] == "main"}
+    assert strict and other
+    sc = [{**x, "L": x["L"] + 1.0} if (x["transition_id"] in strict and x["condition"] == "ext_aligned") else x
+          for x in _planted(recs, "qwen3-8b")]
+    by = A.index_scores(sc, recs, SHOTS, "qwen3-8b")[0]
+    d = A.descriptive(by, A.populations(recs))
+    assert set(d["sensitivity_matched"]) == {"naming", "completion", "timing", "role_gap"}
+    assert d["sensitivity_matched"]["naming"]["estimate"] == pytest.approx(0.4)
+    assert d["sensitivity_matched"]["completion"]["estimate"] == pytest.approx(-1.1)
+    assert d["parent"]["penalty_strict_minus_overlapping"]["estimate"] == pytest.approx(1.0)

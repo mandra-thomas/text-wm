@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import random
 import statistics
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Callable
 
@@ -499,7 +499,8 @@ def contrast_inputs(by: dict, pops: dict[str, list[dict]]) -> dict[str, tuple]:
     """Rows of the five contrasts. Dn, Dc and T compare goal-role failures with class-matched ingredient failures
     (too few and never obtained; review 1), so the difference in differences is not also a difference in failure
     class; Λ keeps all 990 ingredient failures."""
-    roles = pops["goal"] + pops["ingredient_matched"]
+    # user point 1: a record whose other named goal is already made or held leaves naming and completion (none exist)
+    roles = [r for r in pops["goal"] + pops["ingredient_matched"] if not R.two_item_partner_done(r)]
     padded = pops["padded_goal"] + pops["padded_ingredient_matched"]
     delta = lambda rid, k: (L(by, rid, f"pad{k}_aligned") - L(by, rid, f"pad{k}_swapped")) if k else \
         (L(by, rid, "aligned") - L(by, rid, "swapped"))
@@ -581,22 +582,21 @@ def interpretation(v: str, competent: bool, rec: dict | None) -> str:
     return v
 
 
-def reading(v: dict[str, str], partial_naming_flag: bool = False, timing_comparable: bool = False) -> dict[str, str]:
+def reading(v: dict[str, str], timing_comparable: bool = False) -> dict[str, str]:
     """The design's per-model reading rules, as amended before the freeze (section 14)."""
     p, dn, dc, t = v["parent_penalty"], v["naming"], v["completion"], v["timing"]
     naming_constrained = dn in ("equivalent to zero", "confirmed above zero")
     if p == "confirmed below zero":
         if dn == "confirmed below zero":
-            pen = ("naming or sub-goal-completion penalty (naming the crafted item, or completing a named sub-goal, "
-                   "lowers predicted success; a completion part cannot be separated from the dilution of naming)")
+            pen = ("naming / partial-completion penalty (naming the crafted item, or completing one item of a named "
+                   "two-item goal, lowers predicted success; a completion part cannot be separated from the dilution of "
+                   "naming)")
         elif dc == "confirmed below zero" and naming_constrained:
             pen = "completion penalty, naming constrained"
         elif dc == "confirmed below zero":
             pen = "completion contributes; naming not constrained (no completion-only conclusion)"
         else:
             pen = "penalty present, mechanism unresolved"
-        if partial_naming_flag:
-            pen += "; penalty possibly carried by partial naming (the strict parents' estimate is not negative)"
     elif p == "equivalent to zero":
         pen = "no penalty larger than the margin under the clean prompt"
     elif p == "confirmed above zero":
@@ -687,6 +687,8 @@ def descriptive(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
                               for x in ("strict", "word_only", "full_name")},
         "penalty_subset_differences": {f"{a}_minus_{b}": _subset_diff(by, pf, a, b)
                                        for a, b in (("strict", "word_only"), ("strict", "full_name"), ("word_only", "full_name"))},
+        # user point 4: the direct comparison of strict parents with overlapping ones (word only and whole name)
+        "penalty_strict_minus_overlapping": _subset_diff(by, pf, "strict", "overlapping"),
         # each line on its own faithful display: "craft G" on the item's list against "craft Z" on the extended list
         "penalty_on_own_displays": d(pf, "aligned", "ext_parent"),
         # the two-item line on the extended list splits P exactly (descriptive)
@@ -707,6 +709,15 @@ def descriptive(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
     has_both = lambda i: L(by, i, "both") == L(by, i, "both")
     out["role_gap_main"] = describe_gap(*gap_rows(by, roles, lambda i: (L(by, i, "aligned") - L(by, i, "swapped"))
                                                   if has_both(i) else float("nan")))
+    # user point 2: matched sensitivity analyses of the role comparisons (not primary)
+    roles_all = pops["goal"] + pops["ingredient_matched"]
+    pad_rows = pops["padded_goal"] + pops["padded_ingredient_matched"]
+    dl = lambda i, k: (L(by, i, f"pad{k}_aligned") - L(by, i, f"pad{k}_swapped"))
+    out["sensitivity_matched"] = {
+        "naming": matched_gap(by, roles_all, lambda i: L(by, i, "both") - L(by, i, "swapped")),
+        "completion": matched_gap(by, roles_all, lambda i: L(by, i, "aligned") - L(by, i, "both")),
+        "timing": matched_gap(by, pad_rows, lambda i: dl(i, 8) - dl(i, 1)),
+        "role_gap": matched_gap(by, roles_all, lambda i: L(by, i, "aligned") - L(by, i, "swapped"))}
     ing = pops["ingredient"]
     out["lift_by_class"] = {c: d([r for r in ing if r["failure_class"] == c], "aligned", "swapped")
                             for c in ("used_up", "too_few", "never_obtained")}
@@ -729,11 +740,58 @@ def descriptive(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
     return out
 
 
+def short_profile(r: dict) -> tuple[str, str, str]:
+    """User point 2: (length bin, whether the missing inputs are craftable, raw or mixed, one or several missing),
+    read from the prompt text (an input is craftable when a displayed line outputs it)."""
+    from wf.textcraft.checker import displayed_outputs
+
+    outs = displayed_outputs(r["recipe_lines"])
+    kinds = {"craftable" if s["name"] in outs else "raw" for s in r["short_inputs"]}
+    kind = kinds.pop() if len(kinds) == 1 else "mixed"
+    return r["length_bin"], kind, "one" if len(r["short_inputs"]) == 1 else "several"
+
+
+MATCH_MIN = 5  # items of each role a cell needs
+
+
+def matched_gap(by: dict, recs: list[dict], value: Callable[[str], float], profile: Callable[[dict], tuple] = short_profile,
+                B: int | None = None) -> dict[str, Any]:
+    """Sensitivity (not primary): goal-role minus ingredient mean of `value` within cells of equal profile (length
+    bin, craftable or raw missing inputs, number of missing inputs), averaged over cells holding at least MATCH_MIN
+    items of each role, each cell weighted by its smaller count; as the round-1 matched comparison. Pair bootstrap."""
+    rows = []
+    for r in recs:
+        x = value(r["id"])
+        if x == x:
+            rows.append((r["pair_id"], r["role"], profile(r), x))
+
+    def stat(rs: list) -> float:
+        cells: dict[tuple, dict[str, list]] = defaultdict(lambda: {"goal": [], "ingredient": []})
+        for _p, role, prof, x in rs:
+            cells[prof][role].append(x)
+        num = den = 0.0
+        for c in cells.values():
+            w = min(len(c["goal"]), len(c["ingredient"]))
+            if w >= MATCH_MIN:
+                num += w * (mean(c["goal"]) - mean(c["ingredient"]))
+                den += w
+        return num / den if den else float("nan")
+
+    d = draws(stat, rows, [p for p, *_ in rows], B=DESC_DRAWS if B is None else B)
+    cells = defaultdict(Counter)
+    for _p, role, prof, _x in rows:
+        cells[prof][role] += 1
+    used = [c for c in cells.values() if min(c["goal"], c["ingredient"]) >= MATCH_MIN]
+    return {"estimate": stat(rows), "ci95": [pct(d, 0.025), pct(d, 0.975)], "n_cells_used": len(used),
+            "n_items_in_used_cells": sum(c["goal"] + c["ingredient"] for c in used), "min_items_per_role": MATCH_MIN}
+
+
 def _subset_diff(by: dict, recs: list[dict], a: str, b: str) -> dict[str, Any]:
     """Mean P in parent subset a minus subset b, pair bootstrap (the subsets play the goal and ingredient slots)."""
     rows, cl = [], []
     for r in recs:
         k = parent_subset(r)
+        k = "overlapping" if (b == "overlapping" and k != "strict") else k
         x = L(by, r["id"], "ext_aligned") - L(by, r["id"], "ext_parent")
         if k in (a, b) and x == x:
             rows.append(("goal" if k == a else "ingredient", x))
@@ -764,12 +822,10 @@ def model_block(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
 def model_verdicts(block: dict[str, Any], fam: dict, tag: str) -> dict[str, Any]:
     v = {c: verdict(block["contrasts"][c], fam, tag, c) for c in CONTRASTS}
     comp = {c: block["competence"]["local"]["per_contrast"][c]["competent"] for c in CONTRASTS}
-    strict = block["descriptive"]["parent"]["penalty_by_subset"]["strict"]["estimate"]
-    partial = bool(v["parent_penalty"] == "confirmed below zero" and not (strict == strict and strict < 0))
     timing = block["contrasts"]["timing"]
     return {"contrasts": v, "competent": comp,
             "interpretation": {c: interpretation(v[c], comp[c], block["contrasts"][c]) for c in CONTRASTS},
-            "reading": reading(v, partial, bool(timing.get("comparable_to_one_lookup_change"))),
+            "reading": reading(v, bool(timing.get("comparable_to_one_lookup_change"))),
             "overall_gate_interpretable": block["competence"]["interpretable"]}
 
 

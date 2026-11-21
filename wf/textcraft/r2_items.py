@@ -362,11 +362,14 @@ def check_records(records: list[dict], shots) -> dict:
                 fails[name].append((r["id"], probs))
     ids = Counter(r["id"] for r in records)
     goals = {g for r in records for g in (r["goal"], r["partner"], r.get("parent")) if g}
+    done = Counter(f"{r['kind']}|{r['population']}|{r['role']}|{r['failure_class']}" for r in records
+                   if r.get("both_task_line") and R.two_item_partner_done(r))
     return {"n_records": len(records), "hash_seed": os.environ.get("PYTHONHASHSEED"),
             **{f"{k}_failures": len(v) for k, v in fails.items()},
             "examples": {k: v[:5] for k, v in fails.items() if v},
             "duplicate_ids": sum(n - 1 for n in ids.values() if n > 1),
-            "fewshot_goals_in_records": sorted(goals & fewshot_goals())}
+            "fewshot_goals_in_records": sorted(goals & fewshot_goals()),
+            "two_item_records_with_a_named_goal_already_made_or_held": dict(sorted(done.items()))}
 
 
 def passes(r: dict, n: int) -> bool:

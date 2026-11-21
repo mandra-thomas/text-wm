@@ -201,7 +201,7 @@ $$P = \overline{L(\text{ext\_aligned}) - L(\text{ext\_parent})}.$$
 
 The action, the history and the displayed list are identical. G is relevant under both lines, so the intermediate lift cancels. Only whether the goal line names G and makes its craft complete the task changes. P estimates the sum of the naming and completion terms on one item. *What it separates:* the penalty from item structure. Round 1's goal-versus-ingredient comparison compared different crafts (goal crafts more often lack craftable inputs and have more short inputs); P compares one craft with itself. *What it does not separate:* naming from completion, because "craft G" does both, like the round-1 object-goal run in the opposite direction.
 
-**3. Naming without completion (Dn), on main failures.** *(Ingredient rows class-matched, 14.R2: only too-few and never-obtained ingredient failures, 496 items, enter Dn, Dc and T.)* The difference in differences
+**3. Naming / partial-completion (Dn), on main failures.** *(Renamed, 14.V1: crafting G under "craft A and B" names G and completes one item of the two-item goal, so Dn is not pure naming.)* *(Ingredient rows class-matched, 14.R2: only too-few and never-obtained ingredient failures, 496 items, enter Dn, Dc and T.)* The difference in differences
 
 $$D_n = \overline{L(\text{both}) - L(\text{swapped})}_{\text{goal}} - \overline{L(\text{both}) - L(\text{swapped})}_{\text{ingredient}}.$$
 
@@ -221,7 +221,7 @@ $$D_n + D_c = \overline{\Delta L}_{\text{goal}} - \overline{\Delta L}_{\text{ing
 
 *What the two-item contrasts separate.* Naming from completion, holding the action and the history fixed: Dn varies naming with completion held off, and Dc varies completion with naming held on. *What they do not separate, and how each caveat bears on the reading:*
 
-- (a) In the two-item line G is one of two named items, so a naming effect may be diluted. Under a pure naming account with dilution, Dn is negative and Dc is also negative but smaller in size than the naming effect itself. Crafting G under "craft A and B" also completes a named sub-goal. *(Qualified, 14.R5.)* So a negative Dn reads as a *naming or sub-goal-completion* penalty, not as naming alone. A pure completion account of the whole task predicts Dn not below zero; an inconclusive Dn is not evidence that naming has no effect (14.U4).
+- (a) In the two-item line G is one of two named items, so a naming effect may be diluted. Under a pure naming account with dilution, Dn is negative and Dc is also negative but smaller in size than the naming effect itself. Crafting G under "craft A and B" also completes a named sub-goal. *(Qualified, 14.R5.)* So a negative Dn reads as a *naming / partial-completion* penalty (14.V1), not as naming alone. A pure completion account of the whole task predicts Dn not below zero; an inconclusive Dn is not evidence that naming has no effect (14.U4).
 - (b) The difference in differences compares goal-role with ingredient items, which differ in structure. Structure's main effect cancels because each item is compared with itself; an interaction between structure and goal line does not cancel. P has no such caveat.
 - (c) The two-item line is off-template in wording (section 4.1).
 - (d) Position: the object is named first in half the goal-role items. Dn and Dc are reported by position as a description.
@@ -257,14 +257,18 @@ This is a disclosed observation. It does not change the confirmatory verdicts, w
 
 **Predictions table** (two-candidate, failures; "none" means no directional prediction; the account's own predictions are in the last row). *Revised before the freeze (14.R4).* Λ rests on TextCraft round 1 only. Dc rests on ALFWorld's goal-directed part on completing moves (`notes/textcraft_vs_alfworld.md`, branch `xenv-compare`, section 10: the 2×2 part that holds naming fixed, on the moves that would complete the task). Dn has no directional expectation: ALFWorld's mention part names the object in a goal the action does *not* advance, while in Dn crafting G completes a named sub-goal.
 
-| Model | Intermediate lift Λ | Within-item penalty P | Naming without completion Dn | Completion with naming held Dc | Timing T |
+| Model | Intermediate lift Λ | Within-item penalty P | Naming / partial-completion Dn | Completion with naming held Dc | Timing T |
 |---|---|---|---|---|---|
-| Qwen3-8B | above zero (TextCraft round 1 +0.88; clean sample +0.77) | none overall; more negative on never-obtained than too-few records | none | not below zero (ALFWorld goal-directed part on completing moves +0.56 [0.17, 0.95]) | none |
-| Llama-3.1-8B (likely to fail competence) | equivalent to zero (TextCraft round 1 +0.03 [−0.07, +0.13]) | below zero (object-goal run −1.40; expected about −0.5 to −0.9 under the clean prompt) | none | below zero (ALFWorld goal-directed part on completing moves −0.81 [−1.02, −0.60]) | none |
+| Qwen3-8B | above zero (TextCraft round 1 +0.88; clean sample +0.77) | none overall; more negative on never-obtained than too-few records | none | none (14.V3) | none |
+| Llama-3.1-8B (likely to fail competence) | equivalent to zero (TextCraft round 1 +0.03 [−0.07, +0.13]) | below zero (object-goal run −1.40; expected about −0.5 to −0.9 under the clean prompt) | none | motivated expectation below zero, not a firm prediction (14.V3) | none |
 | Gemma-2-9B-it | none | below zero (the account's generality claim only) | none | none | none |
 | Mistral-7B-v0.3 | none | below zero (the account's generality claim only) | none | none | none |
 | Llama-3.2-3B | none | below zero (the account's generality claim only) | none | none | none |
-| The account, any model | differs across models and carries the between-model difference in the total effect | below zero | completion reading: not below zero; naming or sub-goal-completion reading: below zero | completion reading: below zero; naming reading: at or near zero, below zero only by dilution | sensitivity reading: above zero; no-sensitivity reading: equivalent to zero |
+| The account, any model | differs across models and carries the between-model difference in the total effect | below zero | completion reading: not below zero; naming / partial-completion reading: below zero | completion reading: below zero; naming reading: at or near zero, below zero only by dilution | sensitivity reading: above zero; no-sensitivity reading: equivalent to zero |
+
+*No confirmatory rule depends on any entry of this table (14.V3).* The tests, verdicts, interpretations and readings of section 8 are the same whatever was predicted; the table records expectations so that they can be checked afterwards.
+
+*Revised again before the freeze (14.V3).* Dc expectations are now exploratory motivation only: ALFWorld's goal-directed contrast is not the same intervention as TextCraft's completion contrast (a different mention manipulation, different verbs and replies), and Qwen's positive ALFWorld estimate is not evidence that a penalty is absent, given its uncertainty. The previous revision gave Qwen "not below zero" and Llama "below zero" for Dc.
 
 *The first version of this table* predicted Λ for Qwen and Llama from ALFWorld's goal-directed part (+0.72, −0.18), Dn "not below zero" for both from ALFWorld's mention part, and Dc "below zero" for both. Those mappings were wrong (14.R4).
 
@@ -323,7 +327,7 @@ where SD is the item standard deviation of ΔL (aligned minus swapped) over the 
 
 | P | Dn | Dc | Reading |
 |---|---|---|---|
-| below zero | below zero | any | **Naming or sub-goal-completion penalty.** Naming the crafted item, or completing a named sub-goal, lowers predicted success. Whether completing the whole task adds to it cannot be separated from the dilution of naming in the two-item line. |
+| below zero | below zero | any | **Naming / partial-completion penalty.** Naming the crafted item, or completing a named sub-goal, lowers predicted success. Whether completing the whole task adds to it cannot be separated from the dilution of naming in the two-item line. |
 | below zero | equivalent to zero or confirmed above zero | below zero | **Completion penalty, naming constrained.** Crafting the item that finishes the named task lowers predicted success, and naming the object alone does not lower it by more than δ. |
 | below zero | inconclusive | below zero | **Completion contributes; naming not constrained.** No completion-only conclusion. |
 | below zero | inconclusive or equivalent | inconclusive or equivalent | **Penalty present, mechanism unresolved.** |
@@ -333,7 +337,7 @@ where SD is the item standard deviation of ΔL (aligned minus swapped) over the 
 
 *Completion-only rule.* A reading that the penalty is about completion and not naming needs the naming contribution to be constrained: Dn equivalent to zero (within δ) or confirmed above zero. An inconclusive Dn is not evidence that naming has no effect.
 
-*Partial-naming rule (14.U2).* If the pooled P is confirmed below zero but the strict parents' estimate is not negative, the reading adds "penalty possibly carried by partial naming".
+*Strict against overlapping parents (14.U2, revised by 14.V4).* Beside the pooled P the analysis reports the direct comparison: P on strict parents minus P on overlapping parents (word overlap only and whole name together), with its 95% interval. This comparison is descriptive and is not part of any reading rule. A difference whose interval excludes zero shows that the penalty differs with partial naming of G in the parent line. That is consistent with partial naming contributing, but the two groups also differ in which goals and parents they hold. An interval across zero does not show that partial naming plays no part, and an inconclusive strict-subset estimate next to a significant pooled one does not show that partial naming drives the pooled result.
 
 *The parts are read causally only under assumptions (14.U4).* The two-item split is an algebraic decomposition. Reading Dn and Dc as the effects of naming and of completion needs four assumptions:
 
@@ -540,7 +544,7 @@ The pooled P over all 675 parent failures stays the primary contrast. It is **no
 - *word overlap only*: a shared word but not G's whole name (298 failures, 52 pairs);
 - *whole name*: G's whole name, as a contiguous word sequence, inside Z's name (201 failures, 33 pairs).
 
-*Rule.* If the pooled P is confirmed below zero but the strict subset's estimate is not negative, the reading says "penalty possibly carried by partial naming".
+*Rule (withdrawn by 14.V4).* The first version of this item read a pooled penalty with a non-negative strict-subset estimate as "penalty possibly carried by partial naming". That inference is not valid. It is replaced by the direct comparison of strict and overlapping parents, with its interval (section 8).
 
 *Also reported (S):*
 - P on each line's own faithful display: L under "craft G" on the item's own list minus L under "craft Z" on the extended list, which is P plus the list control.
@@ -583,7 +587,7 @@ The results map to it as follows (for Llama-3.1-8B; the same reading applies to 
 - across families, if F3 holds by its corrected rule (14.R6);
 - for a model competent for P, Dn and Dc, if P and the round-2 role gap (Dn plus Dc, reported as `role_gap_main`) are both clearly signed but opposite. That is, P confirmed in one direction while the role gap's 95% interval lies on the other side: the within-item and between-item measures of the same penalty then disagree.
 
-If P is confirmed below zero only through the partially named parents (14.U2), the penalty component survives, but its completion reading does not.
+How the penalty depends on partial naming is read from the strict-against-overlapping comparison (section 8), not from a rule.
 
 ### Review 1: must-fix items
 
@@ -593,7 +597,7 @@ If P is confirmed below zero only through the partially named parents (14.U2), t
 - **14.R2 Class-matched controls.** The ingredient rows of Dn, Dc and T are restricted to too-few and never-obtained failures: 496 main and 332 padded. Without this, the difference in differences also compared failure classes, since goal-role failures are never used up. Λ keeps all 990 and is also reported by class. This changes Llama's ingredient competence population (14.U1).
 - **14.R3 The identity's scope.** Dn + Dc equals the goal-minus-ingredient ΔL exactly only on the 500 goal-role and 496 class-matched ingredient failures with a two-item line. It splits the round-2 role gap under the clean prompt, unmatched, and not round 1's (section 6).
 - **14.R4 The ALFWorld mapping.** ALFWorld's goal-directed part, (aligned − mention) − (swapped − fourth), holds naming fixed and varies whether the action advances the task, so it maps to Dc, not Λ. Λ predictions now rest on TextCraft round 1 only. The Dc predictions use the goal-directed part on completing moves (`notes/textcraft_vs_alfworld.md`, branch `xenv-compare`, section 10): Llama −0.81 [−1.02, −0.60] gives below zero; Qwen +0.56 [0.17, 0.95] gives not below zero. The Dn expectation was softened to none, because ALFWorld's mention part names the object in a goal the action does not advance, while in Dn crafting G completes a named sub-goal. The predictions table in section 7 is the revised one.
-- **14.R5 Reading a negative Dn.** It reads "naming or sub-goal-completion penalty" (section 6, caveat a; section 8).
+- **14.R5 Reading a negative Dn.** It reads "naming or sub-goal-completion penalty" (section 6, caveat a; section 8); relabelled "naming / partial-completion" by 14.V1.
 - **14.R6 F3.** F3 holds only if at least one model competent for P, other than Llama-3.1, has P equivalent to zero or confirmed above zero, and none is confirmed below zero. If one is confirmed below zero, F3 does not hold. Otherwise F3 is "undecided".
 - **14.R7 Section 9's yes/no claim.** Only Λ, Dn and Dc have yes/no versions. P and T are two-candidate only. The wording is corrected rather than adding yes/no arms.
 - **14.R8 The parent's neutral arm.** Each parent record gets `yn_neutral` on its own list (882 single-pass scores per model), so P's competence can be read on the neutral line. With the extended-list two-item arm (S, 873 two-candidate scores per model) each model now scores 25,743 (record, arm) combinations, 128,715 in all, about 9.2 GPU-hours (section 11).
@@ -628,6 +632,32 @@ Consequences:
 - Every round-1 yes/no figure quoted in this note came from the unanchored question: Llama's yes/no AUC of 0.61 overall and 0.85 on the goal role, the yes shares, and 14.U1's disclosure table. These figures are a guide to how the gates behave, not a forecast of round 2's.
 - The item hash covers the question, so scores made with another question can never attach to these records.
 - The tokenization check and the golden renderings were rerun with the new question for all five models (14.C). "Yes" and "No" must still be single tokens equal to the template's reply after every yes/no prompt.
+
+### 14.V The owner's final points (2026-11-21, before any round-2 score)
+
+**14.V1 Two-item completion semantics.** Under "craft A and B", crafting one of the two items would complete the whole objective if the other were already made or held. Every record with a two-item line was checked, text only (`r2.two_item_partner_done`): either goal appears as the product of a history step, or is held after the history. There are **no** such records among the 2,963 records with a two-item line (2,090 main and 873 parent; by role and class: none in any cell). This holds by construction, since the walk never crafts a goal and goals cannot be fetched. Verify counts them on every run.
+
+The rule, fixed now: any such record leaves the naming and completion contrasts and the role-gap readout. It would be reported separately, but none exist.
+
+Because crafting G under the two-item line still completes one *item* of a named two-item goal, Dn is labelled **"naming / partial-completion"** everywhere, and its negative reading is "naming / partial-completion penalty".
+
+**14.V2 Remaining role-comparison confounds: sensitivity analyses (not primary).** Goal-role and class-matched ingredient failures still differ in history length, in whether the missing inputs are craftable intermediates or raw materials, and in how many inputs are missing. For Dn, Dc, T and the role gap (aligned minus swapped, goal minus ingredient), the analysis reports a matched estimate:
+
+- cells are defined by length bin, by the missing inputs (all craftable, all raw, or mixed; an input is craftable when a displayed line outputs it, read from the prompt), and by the number of missing inputs (one, or several);
+- within each cell holding at least 5 items of each role, the goal-minus-ingredient mean is computed;
+- cells are averaged with the smaller count as the weight, as in round 1's matched comparison;
+- intervals come from a pair bootstrap.
+
+On the records, 13 of 15 cells (985 items) qualify for Dn, Dc and the role gap, and 9 of 10 (663 items) for T. These estimates are reported as sensitivity beside the primary estimates. They do not enter the family or the readings.
+
+Dn and Dc do not identify psychological mechanisms on their own. They are differences in predicted log-odds between constructed prompts. Read as "naming" and "completion" effects, they rest on the assumptions stated in 14.U4: additivity, no interaction between the conjunctive goal and the action's role, equal dilution, no interaction between structure and the goal line, and no position effect.
+
+**14.V3 The ALFWorld analogy is motivation, not prediction.** ALFWorld's goal-directed contrast changes another part of the task (the destination or the transformation) for a different kind of action. It is not the same intervention as TextCraft's one-item against two-item contrast. Qwen's positive ALFWorld estimate (+0.56 [0.17, 0.95]) is not evidence that a penalty is absent. The Dc column of the predictions table now reads "none" for Qwen, and "motivated expectation below zero, not a firm prediction" for Llama. No confirmatory rule depends on any prediction or expectation in this note.
+
+**14.V4 Subsets and competence, read carefully.**
+
+- *Parents.* The partial-naming reading rule is withdrawn (section 8). The direct comparison of strict against overlapping parents is reported with its interval, together with what it can and cannot show.
+- *Competence.* A competence AUC measures discrimination between successes and failures. It is not proof that the model reasons about the inventory correctly: a model can discriminate through a shortcut that coincides with the truth in a population. That is why the heuristic tracking (H1, H2, H6, H2∧H9) is reported within each gated population. Task effects are reported for every model whether or not its gates pass, with the limited interpretation of section 8 when they fail.
 
 ### 14.C Checks rerun after the amendments
 
