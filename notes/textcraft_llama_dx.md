@@ -175,3 +175,101 @@ For Llama, making the action's own object the goal lowers its predicted success 
 For Qwen the same line acts differently: it lowers predicted success sharply where the inputs were never obtained (−4.00; yes/no −4.34) and otherwise leaves it or raises it (successes +0.80, yes/no +5.37), and its AUC rises slightly (0.87 to 0.89). Qwen reads "craft Y" as a prompt to check Y's inputs, and the check finds names that never appeared. That matches Qwen's negative goal × never-obtained cell, and its large positive effect where inputs were gathered.
 
 The run cannot say whether naming the object or making it the terminal craft drives Llama's drop, because the line does both (plan 6).
+
+### Clean world-model prompt and explicit inventory (run 4; the reviewers' test B)
+
+On 150 main and 100 success couples (500 items, 108 pairs on the failures), both models were scored under three variants of the prompt and the three goal lines. Competence was read first, as planned. The table gives the change in the neutral-line AUC against the verified prompt on the same items, with intervals from resampling pairs.
+
+| Variant | Llama AUC change, all | Llama, goal role | Qwen AUC change, all | Qwen, goal role |
+|---|---|---|---|---|
+| Clean system text | −0.016 [−0.031, −0.003] | −0.035 [−0.062, −0.005] | +0.002 [−0.009, +0.013] | −0.014 [−0.029, +0.000] |
+| Inventory step | +0.088 [+0.063, +0.113] | +0.066 [+0.032, +0.100] | +0.099 [+0.073, +0.130] | +0.056 [+0.020, +0.093] |
+| Clean + inventory | +0.074 [+0.045, +0.105] | +0.045 [+0.004, +0.081] | +0.096 [+0.069, +0.126] | +0.051 [+0.014, +0.089] |
+
+On these items the verified prompt's AUC is 0.54 for Llama and 0.84 for Qwen. Showing the inventory raises them to 0.62 and 0.94. The clean system text leaves Qwen's competence unchanged and lowers Llama's slightly. Showing the inventory helps Llama on every class but does not fix its worst one: used-up failures are still ranked above successes (AUC 0.35, from 0.24).
+
+ΔL on the failures, under each variant:
+
+| Failures | Verified | Clean | Inventory | Clean + inventory |
+|---|---|---|---|---|
+| Llama, all (300) | −0.30 [−0.51, −0.11] | −0.17 [−0.33, −0.01] | −0.26 [−0.44, −0.10] | −0.09 [−0.24, +0.06] |
+| Llama, goal role (100) | −0.98 [−1.34, −0.64] | −0.59 [−0.87, −0.31] | −0.87 [−1.22, −0.54] | −0.51 [−0.81, −0.24] |
+| Llama, ingredient (200) | +0.04 [−0.14, +0.23] | +0.04 [−0.13, +0.20] | +0.05 [−0.11, +0.20] | +0.13 [−0.03, +0.28] |
+| Qwen, all (300) | +1.15 [+0.60, +1.69] | +1.52 [+0.98, +2.05] | +1.12 [+0.54, +1.68] | +1.42 [+0.87, +1.97] |
+| Qwen, goal role (100) | +1.37 [+0.16, +2.58] | +3.03 [+1.76, +4.33] | +1.86 [+0.58, +3.22] | +3.10 [+1.89, +4.39] |
+| Qwen, ingredient (200) | +1.05 [+0.40, +1.73] | +0.77 [+0.19, +1.34] | +0.74 [+0.19, +1.34] | +0.58 [+0.06, +1.12] |
+
+The per-item differences against the verified prompt, on the goal role, are: Llama clean +0.39 [+0.24, +0.55], inventory +0.11 [−0.09, +0.29], clean + inventory +0.47 [+0.26, +0.68]; Qwen clean +1.66 [+1.30, +2.01], inventory +0.49 [−0.16, +1.17], clean + inventory +1.73 [+1.06, +2.46]. On the ingredient role no variant moves Llama (all within ±0.1), and the clean text lowers Qwen a little (−0.28 [−0.59, +0.02]).
+
+Reading by the plan:
+
+- *Inventory shown (test B).* Both models' competence rises clearly, and neither model's goal effect changes much. Llama's goal-role effect stays negative (−0.87), and no positive effect appears on its ingredients (+0.05). Qwen's overall effect is unchanged (+1.12 against +1.15) although its AUC reaches 0.94. This is the plan's second outcome: the reversal does not depend on Llama reconstructing the state from the history. It is about the goal role. The same holds for Qwen's positive effect, which also survives a fully readable state. On the decision scale the shown inventory makes no difference to the goal-role failures either: Llama predicts success for 3% of them under the aligned line and 4% under the swapped line.
+- *Clean system text.* The agent instructions are not neutral. Removing them moves the goal-role effect up in both models, by +0.39 for Llama and +1.66 for Qwen, and leaves the ingredient role about where it was. Llama's goal-role effect shrinks by about 40% but stays negative. Its overall effect on these failures becomes −0.17 [−0.33, −0.01], and with the inventory also shown −0.09 [−0.24, +0.06].
+
+### Which prompt later runs should use (a recommendation, for the owner to decide)
+
+The clean system text is the better default for later TextCraft runs, including other model families, with three qualifications.
+
+The arguments for it: it is a world-model prompt, not an agent prompt. It matches the ALFWorld world-model system text, which is a framing sentence with no agent instructions (`wf/scoring/prompts.py`, `WM_SYSTEM`). It keeps Qwen's competence unchanged and costs Llama little (−0.016 AUC). It removes the one phrase ("from the inventory or the environment") that hinted at a hidden store. And it changes the goal-role effect by a lot in both models, which shows that the agent instructions were shaping the measured effect rather than leaving it alone.
+
+The qualifications:
+
+1. The confirmatory TextCraft result stands for the prompt it was frozen with. A run under the clean prompt measures a related but different quantity, and should be reported as such, not as a re-estimate of the confirmatory number.
+2. These diagnostic runs did not run the tokenization and golden-prompt checks that the design requires before scoring (validation standard, step 7). The clean text and the inventory step should pass `wf/textcraft/tokcheck.py` for every model before any run that will be reported.
+3. The explicit inventory step is not a good default. It raises competence a lot, but it changes the question from "does the goal line shift a world model that must track state from the history" to "does it shift one that is shown the state". It is better kept as a separate arm, where it is the cleanest test of whether an effect depends on state reconstruction.
+
+### Criteria for a robust negative
+
+The reviewers listed five criteria for calling Llama's negative effect robust. Against each:
+
+1. *Persists under more than one reasonable prompt.* For the goal role, yes: it is negative under the verified prompt, the examples-on-goal prompt, the empty-start prompt, the clean prompt, the inventory prompt and the clean + inventory prompt (from −0.49 to −0.98 on their samples), and zero-shot. For the overall ΔL, no: its interval reaches zero under the empty-start prompt (−0.11 [−0.23, +0.01]) and under the clean + inventory prompt (−0.09 [−0.24, +0.06]), and barely excludes it under the clean prompt (−0.17 [−0.33, −0.01]).
+2. *Not driven by a misunderstanding of the initial inventory.* Met. Stating the empty start shrinks the goal-role effect by about a fifth (+0.14), and showing the inventory does not change it significantly (+0.11 [−0.09, +0.29]).
+3. *Holds in a competent subset.* Met. The goal role is where Llama discriminates best (AUC 0.84 under the neutral line, 0.88 with the inventory shown), and the effect is −0.76 on the 249 goal × never-obtained items whose neutral prediction is correct.
+4. *Meaningfully negative on an outcome scale.* Not met. The mean predicted chance of success moves by +0.38 points overall and −1.9 points on the goal role. The share of goal-role failures predicted as success is 3.3% against 4.9%, generated observations predict success for 2 against 5 of 120 goal-role failures, and the free yes/no answer is "No" for all of them under both lines.
+5. *Reproduced by an independent recompute.* Met (−0.19 [−0.29, −0.09]).
+
+So the overall negative primary is real under the frozen prompt but is neither robust to reasonable prompt changes nor of practical size. The goal-role negative is robust on the log-odds scale and on yes/no, across prompts, pairs and recipe families, but it is a change of confidence inside a failure judgement Llama already makes.
+
+## Assessment
+
+### What most likely explains the Llama result
+
+Llama's negative ΔL is the sum of two things. Neither is specific to Llama in kind, but their balance is.
+
+1. **A terminal-craft penalty.** When the action crafts the item the goal line names, Llama judges it less likely to succeed than the same craft under another goal line. The penalty is largest early in the game, with none of the goal's inputs held. It follows whichever item is named as the goal: an ingredient made the goal drops by −1.40 on failures and −1.74 on successes. It is present without examples, with the empty start stated, with the inventory shown and with the clean prompt (smaller there). Qwen shows a penalty of the same size relative to its own ingredient effect (matched goal minus ingredient −0.82 against Llama's −0.80) and a negative goal × never-obtained cell. So the shared cell the coordinator pointed to is the place where this penalty is not masked.
+2. **No positive goal effect on intermediate actions.** On ingredient crafts Llama's ΔL is +0.03 [−0.07, +0.13], under every prompt variant tried. Qwen's is about +0.9. This is what differs most from ALFWorld. There, Llama's effect was almost entirely "mention", the task line naming the action's object (2×2: mention +1.04, goal-directed −0.18). In TextCraft no ingredient action's object is named by the goal line, and Llama's TextCraft usefulness-only readout (−0.16 [−0.43, +0.08]) is close to ALFWorld's goal-directed part. The only TextCraft actions whose object the goal names are the goal crafts, where the terminal penalty pushes the other way. For Qwen the separate cross-environment comparison (`notes/textcraft_vs_alfworld.md`, branch `xenv-compare`) finds that most of the ALFWorld two-candidate effect sat in reply text TextCraft does not have, so the "smaller in TextCraft" pattern has a format component for Qwen as well. That note was not repeated here.
+
+With a positive ingredient effect near +1 and the same goal-role penalty, Qwen's total stays positive. With an ingredient effect near zero, Llama's goes negative.
+
+Confidence. The decomposition is well supported: the goal role carries all of the effect, the ingredient role is null, and the penalty reappears on ingredients made the goal. These hold across pairs, families, prompts and readouts. The mechanism behind the penalty is not established. "Completing a named goal looks premature, especially early" fits the length and progress gradients and the object-goal run. A negative effect of naming the object verbatim would fit them too, because in TextCraft's one-item goal format naming an item and making it the terminal craft always go together. The account of the missing ingredient effect via mention is an inference from ALFWorld's 2×2, not a TextCraft test.
+
+### The explanations, in short
+
+| Explanation | Verdict | Main evidence |
+|---|---|---|
+| 1. Few-shot pattern copying | Not supported | The off-goal example moves ΔL by −0.05 (the wrong way). The items most like example 2 show no reversal. The reversal persists zero-shot. No example crafts a goal. |
+| 2. Goal-completion caution | Supported as a description; mechanism open | All of the effect is in the goal role, it is largest early with nothing held, it reappears when an ingredient is made the goal, and Qwen shares it. Naming and terminal status cannot be separated in TextCraft. |
+| 3. Swapped is not neutral, second task on screen | The description is right for the goal role only; the proposed mechanism is not | On ingredients both lines raise L equally over neutral. The partner's tree never holds a goal craft's object, and holds its missing inputs in 17 of 510 goal-role items. Ties show the same effect. |
+| 4. Competence floor | Not the cause of the reversal | The reversal sits where Llama is competent (goal role, AUC 0.84) and is unchanged when the inventory raises competence. It does fit the absence of any effect on ingredients. |
+| 5. Hidden state | Not supported in TextCraft; the ALFWorld side is open | Empty start: Qwen −0.04, Llama +0.07. A shown inventory changes neither model's ΔL. In ALFWorld, Llama's effect was largest where the receptacle had been seen without the object (2.8), not where the location was hidden (1.5). |
+| 6. Lexical or reply format | Not supported as the main cause | The effect is decided at the first token ("Craft" against "Could", the same in every condition), appears on yes/no, and shows up in free generation. The leftover first-token mass is equal under aligned and swapped. |
+| 7. Heterogeneity or artefact | Not supported | 73% of goal pairs are negative. Leaving out any one pair moves the estimate by at most 0.02. Clustering by recipe family keeps the interval below zero. |
+| 8. Agent instructions in the system text | Found: they shape the effect | The clean text raises the goal-role effect by +0.39 (Llama) and +1.66 (Qwen). |
+
+### What remains undecided, and what would decide it
+
+- **Naming against completion.** No TextCraft goal line can name an item without making it the goal. Two runs would come closest. (a) The parent-goal arm of plan 6 makes a goal craft intermediate by naming an item that consumes it; it needs a small builder with its own replay and checker checks, and about 15 GPU-minutes. (b) A cheaper check needs no GPU: the ALFWorld scores, where the final "put" step completes the task and earlier steps do not, can show whether Llama's ALFWorld effect also dips on the completing step. The loaders on `xenv-compare` would make this short.
+- **Timing against content.** The length and progress gradients are correlational. Padding histories with steps that change nothing (repeated inventory look-ups before the first `get`) would vary length at fixed content. It costs about 2,000 scores.
+- **Why Llama has no ingredient effect.** The mention account predicts that a goal line naming the ingredient without making it the goal would raise Llama's L. TextCraft's format cannot express that without leaving the environment's template, so this is best tested in ALFWorld's existing 2×2 design rather than here.
+- **The prompt for later runs** is a decision for the owner (recommendation above). The tokenization checks are needed first.
+
+## Runs and code
+
+| Run | ICE job | Commit | Checkout | GPU time | Records |
+|---|---|---|---|---|---|
+| `textcraft_dx_zeroshot` | 7206794 | `b589e5a` | `text-wm-fix26` | 17 min | 3,000 |
+| `textcraft_dx_objectgoal` | 7206854 | `610b458` | `text-wm-fix26` | 22 min | 2,000 |
+| `textcraft_dx_generate` | 7207017 | `f74c262` | `text-wm-fix27` | 12 min | 900 |
+| `textcraft_dx_prompts` | 7207018 | `f74c262` | `text-wm-fix27` | 47 min | 9,000 |
+
+About 98 GPU-minutes in all. An earlier generation job (7206795) was cancelled 6 seconds after it started, when its scope was widened by plan 5; a queued resume job (7207529) was cancelled unused. The confirmatory checkout `text-wm-fix24` and its runs were only read. Code: `wf/textcraft/dx.py` (the four runs), `wf/config/textcraft_dx_*.yaml`, `pace/textcraft_dx.sbatch`, `scripts/textcraft_llama_dx.py` (pair-clustered estimates), with tests in `tests/test_textcraft_dx.py` (17, mock mode). The per-cut analysis scripts were one-off and are not in the repository; every number above can be recomputed from the scoring records with the helpers in `scripts/textcraft_llama_dx.py`.
