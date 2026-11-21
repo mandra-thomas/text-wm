@@ -354,3 +354,97 @@ At the design's assumed 0.1 s per forward row on an A100 (about 0.15 s on an L40
 **What the minimal pilot can conclude.** Whether the tooling reproduces the scored effect item by item on the real model; how much of the yes/no effect the residual stream at the answer position, the final template tokens, the action line, the task line and (after step 0) the history carry at each depth, separately at step 0 and later; whether a single answer-position direction removes the effect without collapsing the neutral success-versus-failure gap; whether that direction is mostly the model's own success direction (the restated H4) or orthogonal to it (H3), and whether it is about the goal role or merely the name (mention control); and the variances needed to fix the thresholds of A6.
 
 **What it cannot conclude.** Whether the represented state changes (H1, H2): the history-fact probes need the neutral prompts of all collected items (stage 1), which it does not run, so its hidden-state probe is descriptive only; anything about heads or which blocks write the effect (attention and MLP grids, stage 3); the policy-blending account (H5, no policy-prompt direction); transfer to described goals or across formats; the first-token or full-reply readouts; anything about Llama or about the base model; and any verdict at all, since its thresholds are provisional and its patching sample is the calibration fold's clear-effect items. It is one model, one prompt format, one GPU type and one split, and it localizes; it does not establish a mechanism (A8).
+
+## Amendments after review 2, before any run (2026-11-20)
+
+Status: a second outside review read the amended design, the minimal pilot's code and its tests, ran a simulation of the ablation, and put 35 bugs back into the code one at a time (21 survived the tests). Its verdicts were "pass with fixes" for the engineering and "fail as written" for the science, turning to "pass with fixes" after four must-fix items. Everything below was decided after that review and before any activation, patching, probe or lens result existed; no interpretability job has run. Where this amendment contradicts sections 1 to 12, amendment 1 or section M, this amendment holds. `deviations.md` records it ("Interpretability pilot: amendments after review 2").
+
+### B1. The last layer made the ablation test tautological; it is replaced by a depth profile
+
+At the last layer the readout is linear in the residual up to the final norm's per-prompt scale: with $h$ the residual after the last layer, $\gamma$ the final RMSNorm and $w = W_U[\text{Yes}] - W_U[\text{No}]$,
+
+$$
+D(h) = w^\top \gamma(h).
+$$
+
+The task direction $u$ at that layer is the unit mean of the items' aligned-minus-swapped differences, so the sum of those differences points exactly along $u$. A mean ablation sets the component along $u$ to the same value $c$ in both prompts of every item, which deletes every item's difference along $u$; what is left of the differences sums to zero, and so does its effect on a linear readout. The pooled removed share is therefore about 1 at the last layer whatever produced the effect, a single shared feature or thousands of item-specific changes. Cross-fitting does not rescue it, because the other fold's mean difference points the same way as soon as the effect has any shared part. Review 2 simulated this in 4,096 dimensions with mostly item-specific differences and a small shared part and found a removed share of about 0.99 for every size of the shared part. Section 7's rule ("the layer whose ablation removes the most") would then always have picked the last layer, and the row "one direction removes at least 60%" would always have said yes.
+
+Changes:
+
+- *Layers.* The ablation's *depth profile* is every fourth layer from 4 up to 0.8 of depth: 4, 8, …, 28 for Qwen3-8B (`analysis.profile_layers`; 4, …, 24 for Llama-3.1-8B). The last layer (35) is ablated only as a sanity edit, `task_last|35`, expected to remove about everything; it enters no readout. Layer 32 is decided as follows: only three decoder layers follow it, so the same argument holds approximately, and how nearly linear those layers are cannot be known before running. It is ablated with the task direction only (`task|32`) and reported with that caveat, but it is excluded from the summary, from the layer choice and from `task_from` (`analysis.caveat_layers`). The cost is that an effect carried by one direction only from layer 32 on would read as "no onset within the profile"; that is the conservative error.
+- *Summary measure.* "The maximum over layers" is withdrawn for the ablation. The pre-registered summary is the *onset layer*: the earliest profile layer $L^*$ from which the cross-fitted removed share's 95% lower bound stays at or above 0.6 at every later profile layer (`analysis.onset_layer`). A claim about every layer from $L^*$ on is an intersection of per-layer tests, so the per-layer intervals need no correction. If the deepest profile layer's lower bound is below 0.6, the onset is undefined ("no onset within the profile"). The removed share at every profile layer is reported with its interval.
+- *Outcome-table row, restated* (replaces section 9's row "One answer-position direction removes the effect"). The onset layer is compared with the patching arrival layer of section 5 (the first layer from which noising the final template tokens restores at least half of the effect), rounded up to the next layer of the ablation grid, since the onset can only be a grid layer (`analysis.onset_versus_arrival`). H1 and H2 predict that the onset comes after the arrival layer, or that there is none: the goal's influence reaches the final positions through a changed state, which the answer position integrates item by item before one direction can carry it. H3, H4 and H5 predict that it comes at or before the arrival layer: the signal is written at the answer position as one feature, so one direction carries it as soon as it arrives. H6 predicts the same as H3, early. The neutral-gap condition of A3 (the ablated gap at least 90% of the unablated one) is read at the onset layer.
+- *Test.* `test_last_layer_ablation_is_tautological_and_the_depth_profile_is_not` builds review 2's case at small size (256 dimensions, 400 items per fold): middle-layer differences that are item-specific with mean zero, turned into a shared shift by a nonlinearity before a last layer read through an RMSNorm. The cross-fitted last-layer ablation removes about 0.95 of the effect, the middle-layer ablation about 0, the onset over the profile is undefined, and an onset that admitted the last layer would have reported it. With a shared middle-layer direction instead, the onset is found at the middle layer.
+
+### B2. H4 against H3: the readout confound
+
+Any direction that raises "Yes" at the answer position has a component along the readout direction $r = \gamma \odot w$ (A1). The task direction $u$ does, because the task raises "Yes"; the success direction $s$ does, because successes read "Yes". Their cosine can therefore be well above zero under H3, where the task's signal is not the model's success feature at all, and adding along $s$ raises the readout through $r$ whatever the mechanism. Section A5's first and third H4 predictions could not separate H4 from H3.
+
+The H4 cosine is therefore read after the readout direction is projected out of both directions. With $\hat r = r / \lVert r \rVert$ and, for any direction $v$, $v_\perp = (v - (v^\top \hat r)\hat r) / \lVert v - (v^\top \hat r)\hat r \rVert$, it is
+
+$$
+\cos(u_\perp, s_\perp).
+$$
+
+Changes:
+
+- *Success direction within verbs.* 106 of the 292 determined successes have verbs that no determined failure has (examine 56, go to 24, close 16, use 6, inventory 4), so the plain difference of means also encodes "which verb is this". $s$ is now the weighted mean over verbs present in both sets of the within-verb difference of mean neutral residuals (successes minus failures), each verb weighted by $n_s n_f / (n_s + n_f)$ (`analysis.success_direction`). The failures used are those after step 0, since no determined success is at step 0 (B4).
+- *Cosines after projecting out the readout.* The projected cosine above is reported next to its null baselines: the same cosine for the mention-contrast direction (naming the action's object without the goal role), the cosine between the two folds' estimates of $u$ (how far the estimate agrees with itself; a cosine of $u$ with anything is read against it), the cross-fold cosine of one fold's $u_\perp$ with the other fold's $s_\perp$ (no shared estimation noise), and $1/\sqrt{4096} \approx 0.016$, the standard deviation of a random pair's cosine (`pilot.fold_cosines`). The raw cosine is still reported and not read.
+- *Steering without the readout component.* A new edit, `steer_success_perp_readout|L`, adds along $s_\perp$ the mean aligned-minus-swapped projection on $s_\perp$; its gain on swapped prompts is reported as a share of the goal effect on the same items. Raw steering along $s$ is reported and not read.
+- *Layers fixed now.* The H4 rows are read at the profile layers up to two thirds of depth (Qwen3-8B 4, …, 24; Llama 4, …, 20; `analysis.h4_layers`), and of those only at layers strictly before the patching arrival layer measured on the calibration fold. From the arrival layer on, the final positions already carry the effect and the answer position's residual is increasingly a function of the answer itself, so two directions tied to the answer align there whatever the mechanism. Two thirds is where the design's "late" third begins; the arrival cut can only remove layers, never add them. If no layer remains, the H4 rows are "not assessable".
+- *H4 predictions, restated* (replace A5's first three; medians over the H4 layers, `pilot.h4_rows`). H4: the projected cosine is at least 0.3 and exceeds the mention direction's projected cosine; steering along $s_\perp$ raises swapped prompts by at least half of the goal effect; ablating the task direction without its success component removes less than half of what the task direction removes. H3: projected cosine below 0.1; steering along $s_\perp$ below 20% of the effect; the task direction without its success component removes at least 80% of what the task direction removes. "The direction moves determined successes as much as failures" (kept) is read after step 0 only (B4).
+
+### B3. Calibration rule, and interventions on one fold only
+
+**Calibration rule (dated 2026-11-20, after review 2, before any run).** The substantive bands stay as written: 0.15 and 0.3 for the history share, 0.6 and 0.3 for removal by one direction (now read through the onset layer, B1), 0.2 and 0.5 for κ, 90% for the neutral gap, and the H4 bands of B2. The minimal pilot does not move any of them, and A6's "the bands are fixed from the minimal pilot's variances" is withdrawn. The minimal pilot's per-stratum game-bootstrap standard errors are used for three things only, all for the full pilot: the number of items per stratum for each summary measure's 95% interval to reach a half-width of at most 0.075 (half of the narrowest gap between bands, 0.15 to 0.3), computed as the pilot's n times $(1.96 \, \mathrm{SE} / 0.075)^2$ (`analysis.n_for_half_width`, reported by the analysis as `sample_size`); the number of bootstrap resamples; and the form of the Bonferroni intervals (B5). These settings are written in a dated note before any full-pilot item is patched or edited.
+
+The scaling assumes the SE falls as one over the square root of the number of items; with games as clusters it falls more slowly once items per game grow, so the computed n is a lower bound and the note adds a margin.
+
+**Interventions on the calibration fold only.** The minimal pilot patches and edits only items of the calibration fold's games (fold 0 of split seed 0). Patching already did so (its items and placebo pairs come from the calibration fold); the ablation now does too (`edit_folds: [0]`): calibration-fold items are edited with directions estimated on the other fold's stage-0 residuals. The other fold's items are never patched or edited before the full pilot, so its intervention results cannot have shaped any choice made after the minimal pilot. Stage 0 still runs on both folds, because the reproduction gate needs every item and the cross-fitted directions need the other fold's residuals; those are observational readouts, already seen at the gate, not intervention results. With one fold edited, the secondary readouts at "the chosen layer" can only use a layer chosen on the same fold's items; they are flagged "in-sample" in the output, and the pre-registered summary (the onset layer) does not depend on a choice.
+
+### B4. Step 0 and object mentions: quotas, weights, and what is undefined
+
+At the minimal pilot's sizes, proportional sampling left too few step-0 items to say anything per stratum. In the calibration fold, 239 of about 1,840 failures with a clear logged effect are at step 0 (13%), and only 60 (3%) are later items whose history after the task line names the action's object (the items that have `hist_obj` tokens at all). Changes (`run.select_stratified`):
+
+- *Patching*: 100 items, at least 30 at step 0 and at least 25 later items with an object mention; the rest (45) are later items without one, each stratum split over failure reasons in proportion.
+- *Ablation*: 75 failures with at least 20 at step 0 (proportional would give about 8), and 50 determined successes, all on the calibration fold.
+- *Weights.* Each item's weight is its stratum's share of the eligible items over its share of the sample (strata: step 0, later with a mention, later without), stored in the run's manifest. Every pooled ("all") estimate (ratio-of-sums fractions, removed shares, steering shares, gaps, shifts) uses the weights inside every bootstrap resample, so pooled numbers describe the population, not the oversampled mix. With the expected mix the weights are about 0.43, 0.13 and 1.86, and the pooled estimate's effective sample size is about 62 of 100. Within the step-0 stratum and within the object-mention share the weights are constant and change nothing.
+- *No determined success at step 0.* All 292 determined successes have a history (`history_len` of 1 or more). The success direction is therefore estimated on later items (B2) and applied unchanged to step-0 prompts; the step-0 success-versus-failure gap, and the removal on determined successes at step 0, are undefined and are reported as such (`analysis.gap` returns `defined: false`), not as zero. At step 0 the discrimination row and the "moves successes" row are not filled.
+- The object-mention share is computed on the oversampled mention items (about 25) against their position-matched control. Section M's object-mention readout is no longer uncalibrated, but with 25 items it is still a calibration number, not a verdict.
+
+### B5. Bonferroni intervals
+
+A percentile interval at $\alpha = 0.05/36$ reads the outer 0.07% of the bootstrap draws on each side, one or two of 2,000 draws, so its bounds are noise. Every Bonferroni-corrected interval (per-layer patching fractions, removed nats, the placebo floor) is now a normal interval from the bootstrap standard error: the point estimate plus or minus $z_{1-\alpha/2}$ times the standard deviation of the draws (`analysis._interval_normal`), which 2,000 draws estimate well. Pointwise and maximum-over-layers intervals stay percentile intervals.
+
+### B6. First-token readout in stage 0
+
+Stage 0 now also scores the first-token readout ("You" against "Nothing") on the 4,666 failures' aligned and swapped two-candidate prompts (9,332 prompts, readouts only, no residuals kept), and gates it against the logged first-token term `L_first` of `rq1v_score`'s plain arms, with the same five checks as the yes/no gate (mean effect 2.52 nats for Qwen, published). Stage 0 passes only if both gates pass. A patching grid in that format (noising only, about 25 items, paid for by dropping denoising from the calibration run) was considered and not adopted: 25 items calibrate nothing, and denoising is the sufficiency half of the history share, which the calibration needs. The first-token patching map stays in the full pilot.
+
+### B7. Groups
+
+The action line is split into its object (the action's object word and instance number, `action_obj`) and the rest (`action_rest`); "action" stays as their union. A large action share carried by the object's name points to lexical matching (H6); one carried by the verb and receptacle does not. `hist_swap` (history tokens naming the swapped object) is added to the minimal pilot's grid. The grid is now 12 groups by 36 layers.
+
+### B8. GPU type and compute
+
+The job script asks for 12 hours (was 8). Every GPU stage reads the GPUs recorded in stage 0's `jobs.jsonl` (and, when resuming, its own) and refuses to start, writing why, on any other GPU type, or when it cannot read its own GPU while one is on record (`pilot.check_gpu`), so a resubmission must use stage 0's GPU type. Recomputed forward rows, at the design's 0.1 s per row on an A100 and 0.15 s on an L40S:
+
+| Run | Forward rows | A100 hours | L40S hours |
+|---|---|---|---|
+| `interp_pilot_stage0` (19,540 yes/no prompts with residuals, 9,332 first-token prompts without) | 28,900 | 0.8 | 1.2 |
+| `interp_pilot_patch` (at most 432 cells per direction, batches of 15 cells and a clean row, a source run per direction; 100 items and 50 placebo pairs) | at most 144,000 | 4.0 | 6.0 |
+| `interp_pilot_ablate` (calibration fold: 125 items, 3 prompts, 48 edits in 4 batches of 16) | 24,000 | 0.7 | 1.0 |
+| Total | about 197,000 | about 5.5 | about 8.2 |
+
+Patching is an upper bound: step-0 items have no history groups and items without an object mention no `hist_obj` cells. 12 hours leave about 45% over the L40S estimate.
+
+### B9. Rounding of edits
+
+An edit is computed in float32 and cast back to the model's bfloat16, which moves the edited component by up to about $2^{-8}$ of its size. On the first prompt each ablation job edits, the residual at the answer position is read after every edit at every edited layer, and the realized value is logged (`run.edit_items(checks=…)`, `edit_checks.json`): for a mean ablation the component along the direction minus its target, for steering the added component minus the amount.
+
+### B10. Gate references
+
+The logged `rq1v_score` rows carry no `model_revision` (null): the revision is the one pinned in `wf.constants` at the scoring run's commit and is not recorded per row; stage 0's manifest says so. Each logged row's `item_hash` (the scorer's hash of the action, history, task lines and candidates) is now checked against the current item's, and any mismatch fails the gate. On the archived scores, all 36,102 Qwen rows match.
+
+### B11. Tests
+
+Value checks on synthetic data with known answers now cover the 21 mutants that survived review 2 (the end-to-end test checked structure only), and every new piece of code has its own. The review's 35 mutants (seven adapted to changed lines) and 42 mutants of this round's code are in `scripts/mutation_check.py`; the killing tests are listed in `testing.md`. One existing test's tolerance was raised from $10^{-6}$ to $10^{-4}$ nats: multithreaded float32 matrix products on a CPU differ by a few $10^{-6}$ between batch shapes, and the identical-prefix check it guards fails on wrong positions by far more.
