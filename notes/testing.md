@@ -87,8 +87,8 @@ Fix round 1 (after review 1, before any score) adds tests for: odd-step states l
 | review1 M15 gate checks only the prompts still to score | `test_the_gate_on_a_resume_checks_every_prompt_not_only_the_unscored` |
 | review1 M16 eligibility drops the success requirement | `test_eligible_states_need_the_proposal_a_success_and_a_determined_failure` |
 | review1 M17 changes toward success never reported | `test_option_c_categories (toward success)` |
-| fix1 Option C harm at the bound fails | `test_option_c_categories (harm exactly 5%)` |
-| fix1 Option C harm threshold 10% | `test_option_c_categories (default case, worth doing)` |
+| fix1 Option C harm at the bound fails (review 2: net condition at the bound) | `test_option_c_categories` (net exactly half the headroom) |
+| fix1 Option C harm threshold 10% (review 2: net share 0.75) | `test_option_c_categories` (default case, worth doing) |
 | fix1 Option C ignores p | `test_option_c_categories (p exactly 0.05)` |
 | fix1 Option C p at the bound passes | `test_option_c_categories (p exactly 0.05)` |
 | fix1 Option C reads rule 1 | `test_option_c_categories (default case, worth doing)` |
@@ -97,7 +97,7 @@ Fix round 1 (after review 1, before any score) adds tests for: odd-step states l
 | fix1 acceptance cells swapped | `test_rule2_difference_splits_by_acceptance_cell` |
 | fix1 acceptance contributions per cell | `test_rule2_difference_splits_by_acceptance_cell` |
 | fix1 attribution ignores the half | `test_option_c_categories (swapped part below half)` |
-| fix1 attribution ignores the sign | `test_option_c_categories (swapped part negative)` |
+| fix1 attribution ignores the sign | retired after review 2 as equivalent (see below) |
 | fix1 baseline on every state | `test_odd_step_states_are_left_out_of_every_state_level_rate` |
 | fix1 broad generator every step | `test_odd_step_states_are_left_out_of_every_state_level_rate` |
 | fix1 calibration at odd steps | `test_odd_step_states_are_left_out_of_every_state_level_rate` |
@@ -155,12 +155,12 @@ New tests in `tests/test_decisionsim.py` (67 collected, from 53; 54 test functio
 | stage1a Option C decides against neutral | `test_option_c_categories` (default case, worth doing) |
 | stage1a Option C does not wait for the blind arm | `test_option_c_waits_for_the_task_blind_arm` |
 | stage1a Option C harm and difference read against neutral | `test_option_c_categories` (default case, worth doing) |
-| stage1a aligned-vs-blind contrast missing | `test_contrasts_with_the_task_blind_verifier` |
-| stage1a aligned-vs-blind contrast reversed | `test_contrasts_with_the_task_blind_verifier` |
+| stage1a aligned-vs-blind contrast missing (adapted in review 2) | `test_contrasts_with_the_task_blind_verifier` |
+| stage1a aligned-vs-blind contrast reversed (adapted in review 2) | `test_contrasts_with_the_task_blind_verifier` |
 | stage1a blind arm is the neutral prompt | `test_task_blind_prompt_differs_from_the_aligned_one_only_by_the_task_sentence` (qwen3-8b) |
 | stage1a blind arm keeps the task sentence | `test_task_blind_prompt_differs_from_the_aligned_one_only_by_the_task_sentence` (qwen3-8b) |
 | stage1a blind arm not scored by default | `test_every_model_is_registered_and_configured` |
-| stage1a blind arm refused by the scoring run | `test_end_to_end_score_resume_and_analysis` |
+| stage1a blind arm refused by the scoring run (adapted in review 2) | `test_every_arm_reads_rounded_scores` |
 | stage1a blind arm strips the examples' task lines | `test_task_blind_prompt_differs_from_the_aligned_one_only_by_the_task_sentence` (qwen3-8b) |
 | stage1a blind history accepts a task sentence after an action | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
 | stage1a blind history accepts another game's task | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
@@ -169,25 +169,94 @@ New tests in `tests/test_decisionsim.py` (67 collected, from 53; 54 test functio
 | stage1a blind history leaves an empty line | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
 | stage1a blind prompt not checked for the query's history | `test_blind_prompt_refuses_a_prompt_that_does_not_hold_the_querys_history` |
 | stage1a blind shifts only where a swap exists | `test_model_report_with_the_task_blind_arm` |
-| stage1a calibration against blind uses neutral | `test_model_report_with_the_task_blind_arm` |
-| stage1a decomposition against blind uses neutral | `test_option_c_on_a_real_report` |
+| stage1a calibration against blind uses neutral (adapted in review 2) | `test_model_report_with_the_task_blind_arm` |
+| stage1a decomposition against blind uses neutral (adapted in review 2) | `test_model_report_with_both_task_blind_prompts` |
 | stage1a decomposition labels every base neutral | `test_decomposition_against_the_task_blind_verifier_adds_up` |
 | stage1a every verdict marked deciding | `test_option_c_categories` (default case, worth doing) |
 | stage1a half-oracle accept/reject reads the model | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
 | stage1a half-oracle fallback reads the model | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
 | stage1a headroom share inverted | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
-| stage1a neutral-vs-blind contrast missing | `test_contrasts_with_the_task_blind_verifier` |
+| stage1a neutral-vs-blind contrast missing (adapted in review 2) | `test_contrasts_with_the_task_blind_verifier` |
 | stage1a no verifier for rule 2 is a random choice | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
 | stage1a oracle knows nothing | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
-| stage1a pass count without the blind arm | `test_end_to_end_score_resume_and_analysis` |
+| stage1a pass count without the blind arm (adapted in review 2) | `test_end_to_end_score_resume_and_analysis` |
 | stage1a random choice over all candidates | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
 | stage1a reference points at odd steps | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
 | stage1a reference points ignore where rule 3 applies | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
 | stage1a reference points left out of the report | `test_model_report_with_the_task_blind_arm` |
 | stage1a secondary verdict decides | `test_end_to_end_score_resume_and_analysis` |
 | stage1a swapped reference points where no swap exists | `test_reference_points_for_the_swapped_arm_read_only_states_with_a_swap` |
-| stage1a swapped-vs-blind contrast missing | `test_contrasts_with_the_task_blind_verifier` |
+| stage1a swapped-vs-blind contrast missing (adapted in review 2) | `test_contrasts_with_the_task_blind_verifier` |
 | stage1a verifier minus no verifier reversed | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
+
+### Review 2 (2026-11-21, before any score)
+
+New tests in `tests/test_decisionsim.py` (96 collected, from 67; 68 test functions, from 54):
+- **Option C rule.** The rule rewritten around the net condition, the fallback-menu condition and the sign of aligned minus the comparison. There are twenty category cases, each checked under all three comparisons: integer bounds at exactly half the headroom, 21 of 42 against 21.5 of 43, the fallback share at exactly half, attribution checked before the fallback, and an interval touching zero from below. Further tests check the category order, a report whose numbers against the task-blind and neutral comparisons differ (the harm, p and counts are read against the same base), the pays-for-itself flag, and a real report in which the harm runs through a false rejection, through the fallback menu, or neither.
+- **Counts.** The net, harm and help counts, the per-cell nets and rule 2's headroom in states (odd-step states left out).
+- **`yn_blind_all`.** Its prompt for each of the five templates differs from `yn_blind` only by the examples' task lines; it refuses other example sets; recorded prompts of a mock run cover all five arms; the scoring run refuses it for a secondary model. The model report with both task-blind prompts and the prompt-format flag are tested too.
+- **The step split.**
+- **The reviewer's six gaps:** every arm reads rounded scores; rounding rounds; a state missing one task-blind score is dropped; a non-determined failing proposal counts for the no-verifier rate; the swapped headroom share is read on its own states; the rule 3 count is on even steps.
+
+`scripts/mutation_check.py` now holds 154 decision-simulation mutants:
+- 22 of the reviewer's 24 mutants, adapted to the amended code (R1 to R23 below, without R19).
+- 24 for review 2's new code (N1 to N24).
+- 10 earlier mutants adapted because the code they target changed: fix1 "harm threshold 10%" and "harm at the bound fails" now mutate the net condition, plus eight Stage 1a mutants.
+- 3 left out or retired as equivalent:
+  - the reviewer's "decomposition against blind takes aligned minus swapped from neutral": aligned minus swapped is identical in every decomposition;
+  - the reviewer's R19, "half-oracle fallback may return the rejected proposal": the oracle picks a true success either way;
+  - fix1 "attribution ignores the sign": a positive aligned-minus-base difference and the half condition already force it.
+
+All 154 are caught (`MUTANTS_MATCHING=decisionsim`, six shards, 2026-11-21). The table gives the first test in `tests/test_decisionsim.py` that fails with each review 2 mutant in place (run with `-x`).
+
+| Mutant | First test that fails |
+|---|---|
+| review2 N1 net condition ignored | `test_option_c_categories` (net one below half) |
+| review2 N2 headroom counts odd-step states | `test_rule2_headroom_and_net_counts_in_the_contrast` |
+| review2 N3 net counts harm only | `test_contrast_counts_harm_help_and_the_identity` |
+| review2 N4 cell net counts harm only | `test_rule2_difference_splits_by_acceptance_cell` |
+| review2 N5 fallback-menu condition ignored | `test_option_c_categories` (fallback above half) |
+| review2 N6 fallback at exactly half counts as through it | `test_option_c_categories` (fallback exactly half) |
+| review2 N7 fallback read from another cell | `test_option_c_categories` (default case, worth doing) |
+| review2 N8 fallback checked before attribution | `test_option_c_categories` (not attributable with a large fallback share) |
+| review2 N9 fallback category after not attributable | `test_option_c_category_order` |
+| review2 N10 attribution ignores the sign of aligned minus base | `test_option_c_categories` (aligned minus base negative) |
+| review2 N11 pays-for-itself strict | `test_option_c_notes_a_comparison_verifier_that_does_not_pay_for_itself` |
+| review2 N12 yn_blind_all allowed for a secondary model | `test_arms_must_include_aligned_and_neutral` |
+| review2 N13 example task lines not checked | `test_strip_example_tasks_refuses_a_prompt_without_the_examples` |
+| review2 N14 yn_blind_all keeps the query's task | `test_blind_all_prompt_also_strips_only_the_examples_task_lines` (qwen3-8b) |
+| review2 N15 yn_blind_all not scored for the primary models | `test_every_model_is_registered_and_configured` |
+| review2 N16 format verdict against yn_blind | `test_prompt_format_sensitivity_is_flagged_when_the_verdicts_differ` |
+| review2 N17 format sensitivity inverted | `test_prompt_format_sensitivity_is_flagged_when_the_verdicts_differ` |
+| review2 N18 calibration keys collide | `test_model_report_with_both_task_blind_prompts` |
+| review2 N19 no decomposition against yn_blind_all | `test_model_report_adds_swapped_contrasts_only_where_scored` |
+| review2 N20 the two task-blind prompts not compared | `test_model_report_with_both_task_blind_prompts` |
+| review2 N21 step 0 split takes step 2 too | `test_rule2_by_step_splits_step_zero_from_later_steps` |
+| review2 N22 primary pass count without yn_blind_all | `test_end_to_end_score_resume_and_analysis` |
+| review2 N23 net share a quarter | `test_option_c_categories` (net one below half) |
+| review2 N24 fallback share three quarters | `test_option_c_categories` (fallback above half) |
+| review2 R1 blind task sentence may be the first line | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
+| review2 R2 complete_states ignores the blind arm | `test_complete_states_drop_a_state_missing_one_task_blind_score` (yn_blind) |
+| review2 R3 aligned-vs-blind contrast only on swap states | `test_model_report_with_the_task_blind_arm` |
+| review2 R4 blind scores not rounded | `test_every_arm_reads_rounded_scores` |
+| review2 R5 secondary verdict computed against blind | `test_prompt_format_sensitivity_is_flagged_when_the_verdicts_differ` |
+| review2 R6 harm rate over changed states only | `test_contrast_counts_harm_help_and_the_identity` |
+| review2 R7 paired difference reversed | `test_contrast_counts_harm_help_and_the_identity` |
+| review2 R8 toward success includes an interval touching zero | `test_option_c_categories` (interval touching zero from below) |
+| review2 R9 calibration vs blind arguments reversed | `test_model_report_with_the_task_blind_arm` |
+| review2 R10 decomposition aligned-minus-swapped sign | `test_decomposition_adds_up_on_the_states_with_a_swap` |
+| review2 R11 rounding truncates | `test_quantize_rounds_rather_than_truncates` |
+| review2 R12 Option C harm read against neutral only | `test_option_c_categories` (default case, worth doing) |
+| review2 R13 Option C p from rule 1 | `test_option_c_categories` (default case, worth doing) |
+| review2 R14 gate skips blind prompts | `test_the_gate_on_a_resume_checks_every_prompt_not_only_the_unscored` |
+| review2 R15 blind prompt drops the examples | `test_task_blind_prompt_differs_from_the_aligned_one_only_by_the_task_sentence` (qwen3-8b) |
+| review2 R16 lure counts pairs at odd steps | `test_odd_step_states_are_left_out_of_every_state_level_rate` |
+| review2 R17 swapped headroom read on all even states | `test_swapped_reference_headroom_is_read_on_its_own_states` |
+| review2 R18 attribution read on the contrast's states | `test_option_c_categories` (aligned minus base negative) |
+| review2 R20 no-verifier rule 2 counts only determined failures | `test_no_verifier_counts_a_failing_proposal_the_history_does_not_determine` |
+| review2 R21 tie split for b reads La | `test_ties_are_counted_and_split_evenly_in_the_sensitivity_readout` |
+| review2 R22 blind history accepts two task sentences (count >= 1) | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
+| review2 R23 rule 3 states counted over all states | `test_rule3_state_count_is_on_even_steps` |
 
 ## Model families, wave A (2026-11-20)
 
