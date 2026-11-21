@@ -12,7 +12,7 @@ Plain PyTorch forward hooks on HF transformers decoder models (Qwen3, Llama); no
 - `run`: stages that save one record per item and resume.
 - `analysis`: CPU readouts of the saved records (reproduction gate, patching summaries per stratum, directions,
   cross-fitted ablation shares, the success-versus-failure gap).
-- `pilot`: the minimal pilot's runs (design amendment 1, section M), wired in `wf.runs`.
+- `pilot`: the minimal pilot's runs (design amendment 1, section M; amendment 2), wired in `wf.runs`.
 
 torch, transformers and scikit-learn are imported lazily, so the rest of `wf` never needs them.
 """

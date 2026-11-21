@@ -228,7 +228,9 @@ def test_patching_shared_prefix_positions_changes_nothing(p, tok):
     for t in (_item(), _unequal_item()):
         pr = PR.build_pair(tok, t, "yn")
         plus, minus = PR.readout_ids(tok, "yn")
-        assert R.check_prefix_noop(p, pr, plus, minus, tol=1e-6) == pytest.approx(0.0, abs=1e-6)
+        # 1e-4: multithreaded float32 CPU matmuls differ by a few 1e-6 between batch shapes; a wrong patch moves
+        # the readout by far more
+        assert R.check_prefix_noop(p, pr, plus, minus, tol=1e-4) == pytest.approx(0.0, abs=1e-4)
 
 
 def test_every_head_patched_separately_equals_patching_the_attention_output(p, tok):
@@ -710,3 +712,118 @@ def test_baseline_readout_is_float32_not_the_rounded_logits(tok, tmp_path):
         _, h = H.forward_last(qb, _ids(e))
         assert r["d"] == pytest.approx(float(qb.readout(h, plus, minus)[0]), abs=1e-6)
     assert any(abs(r["d"] - r["d_logits"]) > 1e-4 for r in store.records())
+
+
+# ---------------- amendment 2 (review 2) ----------------
+
+
+def test_action_line_splits_into_its_object_and_the_rest(tok):
+    pr = PR.build_pair(tok, _item(), "yn")
+    g = pr.groups
+    text = lambda ps: "".join(tok.decode([pr.a.ids[i]]) for i in ps)  # noqa: E731
+    assert text(g["action_obj"]).replace(" ", "") == "mug1"
+    assert sorted(g["action_obj"] + g["action_rest"]) == g["action"] and not set(g["action_obj"]) & set(g["action_rest"])
+    assert "cabinet" in text(g["action_rest"]) and "mug" not in text(g["action_rest"])
+    assert {"hist_swap", "action_obj", "action_rest"} <= set(PR.PILOT_GROUPS)
+    assert set(PR.PILOT_GROUPS) <= set(PR.GROUPS)
+    fl = pr.flipped()  # the split survives the remapping to the other prompt
+    assert [fl.a.ids[i] for i in fl.groups["action_obj"]] == [pr.a.ids[i] for i in g["action_obj"]]
+
+
+def test_mention_flag_agrees_with_the_object_mention_group(tok):
+    named = _item()  # "you see a mug 2" after the task line
+    hist = named["history_text"].replace("a mug 2, and ", "")
+    plain = _item(id="t_000003", history_text=hist)
+    assert PR.mentions_action_object(named) and not PR.mentions_action_object(plain)
+    assert PR.build_pair(tok, named, "yn").groups["hist_obj"]
+    step0 = _item(id="t_000004", history_text=hist.split("\n> ")[0], history_len=0)
+    assert not PR.mentions_action_object(step0)
+
+
+def test_placebo_patching_targets_the_swapped_prompt(p, tok, tmp_path):
+    t = _item()
+    out = R.patch_items(p, tok, [t], tmp_path / "pl.jsonl", [Cell("resid", 1, "action")], directions=("noise",),
+                        source_goal="placebo", placebo={t["id"]: "bowl"}, batch_size=2)
+    r = R.read_jsonl(out)[0]
+    plus, minus = PR.readout_ids(tok, "yn")
+
+    def d(goal, po=None):
+        e = PR.encode(tok, PR.messages(t, "yn", goal, po))
+        _, h = H.forward_last(p, _ids(e))
+        return float(p.readout(h, plus, minus)[0])
+    assert r["d_target"] == pytest.approx(d("swapped"), abs=1e-4) and r["d_source"] == pytest.approx(d("placebo", "bowl"), abs=1e-4)
+    assert r["d_target"] != pytest.approx(d("aligned"), abs=1e-3)
+
+
+def test_patching_runs_the_identical_prefix_check(p, tok, tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(R, "check_prefix_noop", lambda *a, **k: calls.append(1) or 0.0)
+    R.patch_items(p, tok, [_item(), _unequal_item()], tmp_path / "x.jsonl", [Cell("resid", 0, "action")],
+                  directions=("noise",), batch_size=2)
+    assert calls == [1]  # once per job, on its first item
+
+
+def test_lens_direction_carries_the_norm_weight(tok):
+    from wf.interp.lens import lens_direction
+
+    q = parts(_qwen(len(tok)))
+    with torch.no_grad():
+        q.norm.weight.copy_(torch.linspace(0.5, 2.0, 64))
+    plus, minus = PR.readout_ids(tok, "yn")
+    want = q.norm.weight.detach().float() * q.readout_vector(plus, minus)
+    assert torch.allclose(lens_direction(q, plus, minus), want)
+    # it is the direction along which the logit lens moves: for h with rms 1, readout(h + eps v) - readout(h)
+    # is eps * lens_dir . v to first order when v is orthogonal to h
+    h = torch.zeros(1, 64)
+    h[0, 0] = 8.0  # rms 1
+    v = torch.zeros(64)
+    v[5] = 1.0
+    delta = float(q.readout(h + 1e-3 * v, plus, minus)[0] - q.readout(h, plus, minus)[0]) / 1e-3
+    assert delta == pytest.approx(float(want[5]), rel=1e-2)
+
+
+def test_readout_of_a_zero_residual_is_finite(p, tok):
+    plus, minus = PR.readout_ids(tok, "yn")
+    z = p.readout(torch.zeros(2, 64), plus, minus)
+    assert torch.isfinite(z).all() and float(z.abs().max()) == 0.0
+    small = torch.full((1, 64), 1e-4)  # the norm's epsilon matters at this scale
+    eps = getattr(p.norm, "variance_epsilon", 1e-6)
+    want = (small * torch.rsqrt(small.pow(2).mean(-1, keepdim=True) + eps) * p.norm.weight) @ p.readout_vector(plus, minus)
+    assert float(p.readout(small, plus, minus)[0]) == pytest.approx(float(want[0]), rel=1e-5)
+
+
+def test_first_token_prompts_can_be_stored_without_activations(p, tok, tmp_path):
+    store = R.baseline(p, tok, [_item()], tmp_path / "a", formats=("yn",), goals=("aligned",), min_free_gb=0)
+    store = R.baseline(p, tok, [_item()], tmp_path / "a", formats=("obs",), goals=("aligned", "swapped"),
+                       min_free_gb=0, save_acts=False)
+    recs = store.records()
+    assert [r["fmt"] for r in recs] == ["yn", "obs", "obs"]
+    assert len(list((tmp_path / "a").glob("chunk_*.npz"))) == 1  # the readout-only rows wrote no chunk
+    rows, last = store.load("last", ["t_000001|yn|aligned"])
+    assert last.shape == (1, p.n_layers, 64)
+    e = PR.encode(tok, PR.messages(_item(), "obs", "swapped"))
+    plus, minus = PR.readout_ids(tok, "obs")
+    _, h = H.forward_last(p, _ids(e))
+    assert recs[2]["d"] == pytest.approx(float(p.readout(h, plus, minus)[0]), abs=1e-5)
+
+
+def test_realized_edits_are_read_after_the_edit(p, tok, tmp_path):
+    u = torch.nn.functional.normalize(torch.randn(64, generator=torch.Generator().manual_seed(11)), dim=0)
+    edits = {"set": [(1, lambda pos: H.direction_edit(u, pos, value=2.0))],
+             "add": [(2, lambda pos: H.direction_edit(u, pos, add=3.0))],
+             "two": [(1, lambda pos: H.direction_edit(u, pos, value=-1.0)), (2, lambda pos: H.direction_edit(u, pos, value=0.5))]}
+    checks = {"set": [(1, u.numpy(), 2.0, "set")], "add": [(2, u.numpy(), 3.0, "add")],
+              "two": [(1, u.numpy(), -1.0, "set"), (2, u.numpy(), 0.5, "set")]}
+    out = R.edit_items(p, tok, [_item(), _unequal_item()], tmp_path / "e.jsonl", edits, goals=("aligned",),
+                       batch_size=3, checks=checks)
+    recs = R.read_jsonl(out)
+    assert "edit_realized" in recs[0] and "edit_realized" not in recs[1]  # the first prompt only
+    real = recs[0]["edit_realized"]
+    assert abs(real["set"][0]) < 1e-4 and abs(real["add"][0]) < 1e-4 and max(map(abs, real["two"])) < 1e-4
+    # in bfloat16 the cast back after the edit leaves a visible, logged error
+    qb = parts(_qwen(len(tok)).to(torch.bfloat16))
+    edits_b = {"set": [(1, lambda pos: H.direction_edit(u, pos, value=7.3))]}
+    ob = R.edit_items(qb, tok, [_item()], tmp_path / "b.jsonl", edits_b, goals=("aligned",), batch_size=2,
+                      checks={"set": [(1, u.numpy(), 7.3, "set")]})
+    rb = R.read_jsonl(ob)[0]["edit_realized"]["set"][0]
+    assert 0 < abs(rb) < 0.5

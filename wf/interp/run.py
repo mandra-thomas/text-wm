@@ -69,9 +69,10 @@ class ActStore:
         for n, arr in data.items():  # residuals with very large entries would overflow fp16 silently
             if not np.isfinite(arr).all():
                 raise ValueError(f"array {n!r} does not fit in fp16 (largest entries overflow); store it as float32")
-        tmp = self.d / f"chunk_{k:05d}.tmp.npz"
-        np.savez(tmp, **data)
-        os.replace(tmp, self.d / f"chunk_{k:05d}.npz")
+        if data:  # index rows without activations (save_acts=False) need no chunk file
+            tmp = self.d / f"chunk_{k:05d}.tmp.npz"
+            np.savez(tmp, **data)
+            os.replace(tmp, self.d / f"chunk_{k:05d}.npz")
         append_jsonl(self.index, [{**r, "chunk": k, "row": i} for i, (r, _) in enumerate(self._buf)])
         self.n_chunks += 1
         self._buf = []
@@ -133,13 +134,15 @@ def final_positions(e: Encoded) -> list[int]:
 
 def baseline(p: Parts, tok: Any, items: list[dict], out: Path, formats: Iterable[str] = ("yn", "obs"),
              goals: Iterable[str] = ("aligned", "swapped", "absent"), placebo: dict[str, str] | None = None,
-             chunk: int = 64, min_free_gb: float = MIN_FREE_GB) -> ActStore:
+             chunk: int = 64, min_free_gb: float = MIN_FREE_GB, save_acts: bool = True) -> ActStore:
     """Readouts, the logit lens, and fp16 activations for every (item, format, goal).
 
     Saved per prompt: "last" (layers, width), the residual at the answer position after every layer; "probe"
     (probe layers, 2, width), the residual at the action line's last token and its receptacle token. The jsonl
     index holds the readout, the two readout tokens' probability mass, the lens values and the token count.
-    Resumes from whatever the index already holds.
+    With `save_acts` False only the index rows are kept (the first-token prompts of the minimal pilot, which
+    need their readout for the reproduction gate and no residual; amendment 2, B6). Every call flushes its own
+    chunks, so a chunk never mixes prompts with and without activations. Resumes from whatever the index holds.
     """
     import torch
 
@@ -178,7 +181,8 @@ def baseline(p: Parts, tok: Any, items: list[dict], out: Path, formats: Iterable
                        "mass": float(lp[plus].exp() + lp[minus].exp()), "n_tokens": len(e),
                        "lens": logit_lens(p, last, plus, minus), "probe_layers": pl,
                        "history_len": t.get("history_len"), "determination_reason": t.get("determination_reason")}
-                store.add(rec, {"last": last.float().cpu().numpy(), "probe": probe.float().cpu().numpy()})
+                store.add(rec, {"last": last.float().cpu().numpy(), "probe": probe.float().cpu().numpy()}
+                          if save_acts else {})
     store.flush()
     return store
 
@@ -190,29 +194,91 @@ def _stratum(t: dict) -> tuple[str, bool]:
     return (t.get("determination_reason") or "?", (t.get("history_len") or 0) == 0)
 
 
-def select_patch_items(items: list[dict], effect: dict[str, float], n: int, min_effect: float, games: set[str],
-                       seed_text: str) -> list[dict]:
-    """Up to `n` items of `games` with effect >= `min_effect`, stratified by failure reason and step 0 (design §3).
+def weighting_stratum(t: dict, mention: bool = False) -> str:
+    """The stratum an item's weight is computed in (amendment 2, B4): "step0" (no action yet), and after step 0
+    "later_mention" (the history after the task line names the action's object; only when `mention` is on) or
+    "later"."""
+    from wf.interp.prompts import mentions_action_object
 
-    Allocation is proportional with largest remainders; within a stratum the draw is a seeded shuffle.
+    if (t.get("history_len") or 0) == 0:
+        return "step0"
+    return "later_mention" if mention and mentions_action_object(t) else "later"
+
+
+def _proportional(sizes: dict, n: int) -> dict:
+    """Largest-remainder allocation of `n` proportional to `sizes`, never above a stratum's size."""
+    total = sum(sizes.values())
+    if total == 0 or n <= 0:
+        return {k: 0 for k in sizes}
+    quotas = {k: n * v / total for k, v in sizes.items()}
+    take = {k: min(sizes[k], int(q)) for k, q in quotas.items()}
+    for k in sorted(quotas, key=lambda k: (-(quotas[k] - take[k]), str(k))):
+        if sum(take.values()) >= n:
+            break
+        if take[k] < sizes[k]:
+            take[k] += 1
+    return take
+
+
+def _allocate_with_minimums(sizes: dict[str, int], n: int, mins: dict[str, int]) -> dict[str, int]:
+    """Proportional allocation in which a stratum with a minimum gets at least min(minimum, its size); the other
+    strata share what is left in proportion to their sizes. Repeats until no further minimum binds."""
+    fixed: dict[str, int] = {}
+    while True:
+        rest = {k: v for k, v in sizes.items() if k not in fixed}
+        alloc = {**fixed, **_proportional(rest, n - sum(fixed.values()))}
+        binding = {k: min(mins[k], sizes[k]) for k in rest if mins.get(k, 0) and alloc[k] < min(mins[k], sizes[k])}
+        if not binding:
+            return alloc
+        fixed.update(binding)
+
+
+def select_stratified(items: list[dict], effect: dict[str, float], n: int, min_effect: float, games: set[str],
+                      seed_text: str, min_step0: int = 0, min_mention: int = 0) -> tuple[list[dict], dict[str, float]]:
+    """Up to `n` items of `games` with effect >= `min_effect`, and each chosen item's weight (design §3,
+    amendment 2, B4).
+
+    Items are first split into weighting strata (`weighting_stratum`: step 0; later; and, with `min_mention`,
+    later items whose history names the action's object). The step-0 stratum gets at least `min_step0` items and
+    the mention stratum at least `min_mention` (or all there are); the rest of `n` is shared in proportion to
+    size. Within a weighting stratum, allocation over failure reasons is proportional with largest remainders,
+    and the draw is a seeded shuffle. An item's weight is its stratum's share of the eligible items over its
+    share of the chosen ones, so weighted pooled estimates describe the eligible population, not the
+    oversampled mix.
     """
     eligible = [t for t in items if t["game_id"] in games and effect.get(t["id"], float("-inf")) >= min_effect]
-    by: dict = defaultdict(list)
-    for t in sorted(eligible, key=lambda x: x["id"]):
-        by[_stratum(t)].append(t)
     if len(eligible) <= n:
-        return sorted(eligible, key=lambda x: x["id"])
-    quotas = {k: n * len(v) / len(eligible) for k, v in by.items()}
-    take = {k: int(q) for k, q in quotas.items()}
-    for k in sorted(quotas, key=lambda k: (-(quotas[k] - take[k]), str(k)))[: n - sum(take.values())]:
-        take[k] += 1
+        return sorted(eligible, key=lambda x: x["id"]), {t["id"]: 1.0 for t in eligible}
+    use_mention = min_mention > 0
+    strata: dict[str, list[dict]] = defaultdict(list)
+    for t in sorted(eligible, key=lambda x: x["id"]):
+        strata[weighting_stratum(t, use_mention)].append(t)
+    alloc = _allocate_with_minimums({k: len(v) for k, v in strata.items()}, n,
+                                    {"step0": min_step0, "later_mention": min_mention})
     rng = random.Random(seed_text)
-    chosen = []
-    for k in sorted(by, key=str):
-        pool = list(by[k])
-        rng.shuffle(pool)
-        chosen += pool[: take[k]]
-    return sorted(chosen, key=lambda x: x["id"])
+    chosen: list[dict] = []
+    got_by: dict[str, list[dict]] = {}
+    for w in sorted(strata):
+        by: dict = defaultdict(list)
+        for t in strata[w]:
+            by[_stratum(t)].append(t)
+        take = _proportional({k: len(v) for k, v in by.items()}, alloc[w])
+        got = []
+        for k in sorted(by, key=str):
+            pool = list(by[k])
+            rng.shuffle(pool)
+            got += pool[: take[k]]
+        chosen += got
+        got_by[w] = got
+    weights = {t["id"]: (len(strata[w]) / len(eligible)) / (len(got) / len(chosen))
+               for w, got in got_by.items() for t in got}
+    return sorted(chosen, key=lambda x: x["id"]), weights
+
+
+def select_patch_items(items: list[dict], effect: dict[str, float], n: int, min_effect: float, games: set[str],
+                       seed_text: str, min_step0: int = 0, min_mention: int = 0) -> list[dict]:
+    """`select_stratified` without the weights."""
+    return select_stratified(items, effect, n, min_effect, games, seed_text, min_step0, min_mention)[0]
 
 
 # ---------------- stage 2 and 3: patching ----------------
@@ -317,7 +383,8 @@ def _row_edit(rows: dict[int, Callable]) -> Callable:
 
 def edit_items(p: Parts, tok: Any, items: list[dict], out: Path, edits: dict[str, list[tuple[int, Callable]]],
                fmt: str = "yn", goals: Iterable[str] = ("aligned", "swapped", "absent"),
-               positions: str = "last", batch_size: int = 16) -> Path:
+               positions: str = "last", batch_size: int = 16,
+               checks: dict[str, list[tuple[int, Any, float, str]]] | None = None) -> Path:
     """Readouts with each named edit applied, one batch row per edit plus an unedited row in every batch.
 
     `edits[name]` is a list of (layer, fn_factory) where fn_factory(positions) returns an edit for the residual
@@ -326,6 +393,12 @@ def edit_items(p: Parts, tok: Any, items: list[dict], out: Path, edits: dict[str
     default; the task direction is estimated there), "final" (the template tail; only for directions estimated
     per position) or "all". Batches are padded to `batch_size` rows and each edit's readout is paired with the
     unedited row of its own batch (`edit_clean`). Readouts are float32. One record per (item, goal), resumable.
+
+    `checks[name]` lists (layer, unit vector, target, kind) for edits along a direction (amendment 2, B9). On the
+    first prompt this call edits, the residual at the answer position after each such layer is read after the
+    edit, in the model's own dtype, and the record gets `edit_realized[name]`: for kind "set" the realized
+    u.h - target (0 up to the rounding of the cast back to bfloat16), for kind "add" the realized u.h minus the
+    unedited row's u.h minus the amount added.
     """
     import torch
 
@@ -339,6 +412,7 @@ def edit_items(p: Parts, tok: Any, items: list[dict], out: Path, edits: dict[str
     done = {(r["id"], r["fmt"], r["goal"]) for r in (read_jsonl(out) if out.exists() else [])}
     plus, minus = readout_ids(tok, fmt)
     names = sorted(edits)
+    logged = not checks
     for t in items:
         for goal in goals:
             if (t["id"], fmt, goal) in done or (goal == "swapped" and not t.get("swapped_task_line")):
@@ -348,6 +422,7 @@ def edit_items(p: Parts, tok: Any, items: list[dict], out: Path, edits: dict[str
             pos = {"last": [len(e) - 1], "final": final_positions(e), "all": None}[positions]
             result: dict[str, float] = {}
             edit_clean: dict[str, float] = {}
+            realized: dict[str, list[float]] = {}
             clean = []
             for k in range(0, max(1, len(names)), max(1, batch_size - 1)):
                 chunk = names[k:k + batch_size - 1]
@@ -356,15 +431,32 @@ def edit_items(p: Parts, tok: Any, items: list[dict], out: Path, edits: dict[str
                     for layer, factory in edits[name]:
                         by_layer[layer][r] = factory(pos)
                 hook_edits = [("resid", layer, _row_edit(rows)) for layer, rows in by_layer.items()]
+                seen: dict[int, Any] = {}
+                if not logged:  # read after the edits: hooks on one module run in the order they were added
+                    for layer in sorted({c[0] for name in chunk for c in (checks or {}).get(name, [])}):
+                        def keep(h, layer=layer):
+                            seen[layer] = h[:, -1].detach().clone()
+                            return h
+                        hook_edits.append(("resid", layer, keep))
                 ids = torch.tensor([e.ids] * batch_size, device=p.device)
                 d = readout_rows(p, ids, plus, minus, edits=hook_edits)
                 clean.append(d[0])
                 result.update(dict(zip(chunk, d[1:])))
                 edit_clean.update({name: d[0] for name in chunk})
-            append_jsonl(out, [{"id": t["id"], "game_id": t["game_id"], "fmt": fmt, "goal": goal, "d": clean[0],
-                                "clean_spread": max(clean) - min(clean), "edits": result, "edit_clean": edit_clean,
-                                "positions": positions, "history_len": t.get("history_len"),
-                                "determination_reason": t.get("determination_reason")}])
+                for r, name in enumerate(chunk, start=1):
+                    for layer, u, target, kind in ([] if logged else (checks or {}).get(name, [])):
+                        uu = torch.as_tensor(u, dtype=torch.float32, device=seen[layer].device)
+                        got = float(seen[layer][r].float() @ uu)
+                        base = float(seen[layer][0].float() @ uu) if kind == "add" else 0.0
+                        realized.setdefault(name, []).append(got - base - float(target))
+            rec = {"id": t["id"], "game_id": t["game_id"], "fmt": fmt, "goal": goal, "d": clean[0],
+                   "clean_spread": max(clean) - min(clean), "edits": result, "edit_clean": edit_clean,
+                   "positions": positions, "history_len": t.get("history_len"),
+                   "determination_reason": t.get("determination_reason")}
+            if not logged:
+                rec["edit_realized"] = realized
+                logged = True
+            append_jsonl(out, [rec])
     return out
 
 

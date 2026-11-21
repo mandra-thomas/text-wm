@@ -21,12 +21,17 @@ READOUT = {"yn": ("Yes", "No"), "obs": ("You", "Nothing")}
 # Finest groups first; history subgroups are disjoint and "hist_all" is their union. "hist_obj_matched" is a
 # control, not part of the partition: as many history tokens as "hist_obj" has, drawn (seeded) from the history's
 # tokens that name neither object, so it sits in the same region (amendment 1, A7).
+# "action_obj" (the action's object and its instance number in the action line) and "action_rest" (the rest of
+# the action line) split "action" (amendment 2, B7): an action share carried by the object's name and one carried
+# by the verb and receptacle mean different things.
 GROUPS = ("span", "task_rest", "hist_obj", "hist_swap", "hist_rec", "hist_other", "hist_all", "hist_obj_matched",
-          "action", "query", "final", "last")
+          "action", "action_obj", "action_rest", "query", "final", "last")
 COARSE_GROUPS = ("span", "task_rest", "hist_all", "action", "query", "final", "last")
-# The minimal pilot's residual grid (amendment 1, section M): the coarse groups, the object-mention history tokens
-# reported separately from the rest of the history, and their position-matched control.
-PILOT_GROUPS = ("span", "task_rest", "hist_obj", "hist_obj_matched", "hist_all", "action", "query", "final", "last")
+# The minimal pilot's residual grid (amendment 1, section M; amendment 2, B7): the coarse groups, the object-mention
+# history tokens reported separately from the rest of the history with their position-matched control, the history
+# tokens naming the swapped object, and the action line split into its object and the rest.
+PILOT_GROUPS = ("span", "task_rest", "hist_obj", "hist_obj_matched", "hist_swap", "hist_all", "action", "action_obj",
+                "action_rest", "query", "final", "last")
 HIST_SUB = ("hist_obj", "hist_swap", "hist_rec", "hist_other")
 
 
@@ -241,7 +246,25 @@ def char_regions(e: Encoded, t: dict, other_object: str | None) -> dict[str, lis
         for lo, hi in hist_parts:
             regions[g] += [(lo + m.start(), lo + m.end()) for m in pat.finditer(text[lo:hi])]
     regions["hist"] = hist_parts
+    regions["action_obj"] = []
+    obj = _action_object(t["action"])
+    if obj:
+        a0, a1 = regions["action"][0]
+        m = re.compile(rf"\b{re.escape(obj)}\b(?: \d+)?").search(text, a0 + len("Action: "), a1)
+        if m:
+            regions["action_obj"] = [(m.start(), m.end())]
     return regions
+
+
+def mentions_action_object(t: dict) -> bool:
+    """Whether the history after the task line names the action's object (the same word and rule as the
+    `hist_obj` group, read from the item's history text, so items can be stratified before tokenising)."""
+    w = _action_object(t["action"]) or t.get("goal_object")
+    h = t.get("history_text") or ""
+    m = re.search(r"^Your task is to:.*$", h, flags=re.MULTILINE)
+    if not w or not m:
+        return False
+    return re.search(rf"\b{re.escape(w)}\b", h[m.end():]) is not None
 
 
 def _inside(span: tuple[int, int], ranges: list[tuple[int, int]]) -> bool:
@@ -277,6 +300,10 @@ def token_groups(pr: Pair, t: dict, other_object: str | None) -> dict[str, list[
             g = "query" if span[0] >= reg["action"][0][1] else "action"
         groups[g].append(i)
         prev = g
+    groups["action_obj"] = [i for i in groups["action"]
+                            if e.offsets[i][1] > e.offsets[i][0] and _inside(e.offsets[i], reg["action_obj"])]
+    in_obj = set(groups["action_obj"])
+    groups["action_rest"] = [i for i in groups["action"] if i not in in_obj]
     groups["hist_all"] = sorted(groups["hist_obj"] + groups["hist_swap"] + groups["hist_rec"] + groups["hist_other"])
     groups["hist_obj_matched"] = matched_positions(groups["hist_obj"], groups["hist_other"] + groups["hist_rec"],
                                                    f"interp|matched|{t['id']}")

@@ -1,21 +1,26 @@
-"""CPU analyses of the interpretability pilot's saved records (notes/interp_design.md, amendment 1).
+"""CPU analyses of the interpretability pilot's saved records (notes/interp_design.md, amendments 1 and 2).
 
 Pure functions on plain records and arrays, so they are tested without a model:
 
-- `reproduction_gate`: stage 0's readouts against the logged rq1v scores, per item and on average.
+- `reproduction_gate`: stage 0's readouts against the logged rq1v scores (yes/no L, first-token L_first), per
+  item and on average, with the logged item hashes checked.
 - `game_bootstrap`, `pooled_curve`, `max_over_layers`: ratio-of-sums fractions with game-clustered bootstraps,
   vectorised over cells, including the bootstrap of a maximum over layers (the layer is chosen inside every
   resample, so the interval accounts for the choice).
 - `patch_summary`: the pre-registered patching readouts (history share, object-mention share and its matched
   control, arrival layer, action share, early-span share) for one stratum, and the placebo floor on the nats
   scale.
-- `estimate_directions`: the task, success, mention and orthogonalised directions from stage 0's answer-position
-  residuals of one fold.
-- `ablation_summary`: removed shares with the layer chosen on the other fold, the success-versus-failure gap in
-  nats, the collateral shift on neutral prompts, steering along the success direction, controls.
+- `estimate_directions`: the task, within-verb success, mention and orthogonalised directions from stage 0's
+  answer-position residuals of one fold, and the success direction without its readout component.
+- `profile_layers`, `caveat_layers`, `h4_layers`, `onset_layer`: the ablation's depth profile and its
+  pre-registered summary (amendment 2, B1, B2).
+- `ablation_summary`: the removed share at every profile layer and the onset layer, readouts at a chosen layer,
+  the success-versus-failure gap in nats, the collateral shift on neutral prompts, steering along the success
+  direction with and without its readout component, controls.
 
 Strata: "step0" (no action yet, so no history token follows the task line and the history share is 0 by
-construction) and "later"; every readout is reported per stratum and pooled.
+construction) and "later"; every readout is reported per stratum and pooled, pooled estimates weighted back to
+the population when a stratum was oversampled (amendment 2, B4).
 """
 from __future__ import annotations
 
@@ -33,7 +38,18 @@ GATE_R_PROMPT = 0.95  # Pearson r of D with the logged L over prompts
 GATE_R_EFFECT = 0.90  # Pearson r of the item's effect with the logged effect
 GATE_COVERAGE = 0.99  # share of the logged items that stage 0 reproduced
 LOGGED_YN_EFFECT = {"qwen3-8b-fewshot": 2.80, "llama3.1-8b-fewshot": 2.21}
+# First-token two-candidate effect (rq1v's plain arms, L_first; design §2), gated the same way (amendment 2, B6).
+LOGGED_FIRST_EFFECT = {"qwen3-8b-fewshot": 2.52, "llama3.1-8b-fewshot": 0.68}
 STRATA = ("step0", "later", "all")
+# Amendment 2 (B1, B2): the ablation's depth profile stops at 0.8 of depth (layer 28 of Qwen3-8B's 36), because at
+# the last layer the readout is linear in the normed residual and mean ablation along the mean difference removes
+# the mean effect by construction, and three layers before it (layer 32) the network is close to that; the H4 rows
+# are read at layers up to two thirds of depth (24 of 36), before the answer position is dominated by the readout.
+PROFILE_MAX_DEPTH = 0.8
+H4_MAX_DEPTH = 2 / 3
+LAYER_STEP = 4
+ONSET_THRESHOLD = 0.6  # removal whose cross-fitted lower bound stays at or above this from the onset layer on
+TARGET_HALF_WIDTH = 0.075  # amendment 2, B3: the full pilot's sample size is set to reach this half-width
 
 
 def stratum(rec: dict) -> str:
@@ -67,33 +83,47 @@ def _median(x: list[float]) -> float:
 
 
 def reproduction_gate(records: list[dict], logged: dict[tuple[str, str], float], model_tag: str,
-                      fmt: str = "yn") -> dict:
+                      fmt: str = "yn", logged_hash: dict[str, str] | None = None,
+                      current_hash: dict[str, str] | None = None) -> dict:
     """Stage 0's readouts against the logged scores of the same prompts.
 
-    `records`: stage 0 index rows (id, fmt, goal, d). `logged`: {(item id, arm): L} from `rq1v_score` for this
-    model, arms "yn_aligned", "yn_swapped", "yn_absent". Passes only if every check holds: the mean effect on the
-    same items within `GATE_MEAN_TOL`, the median absolute per-prompt difference at most `GATE_MEDIAN_ABS`, the
-    per-prompt and per-item correlations at least `GATE_R_PROMPT` and `GATE_R_EFFECT`, and at least
-    `GATE_COVERAGE` of the logged items reproduced. A mean that matches while items do not would hide a prompt
-    difference that cancels on average; per-item checks catch it.
+    `records`: stage 0 index rows (id, fmt, goal, d). `logged`: {(item id, arm): score} from `rq1v_score` for
+    this model: for `fmt` "yn" the arms "yn_aligned", "yn_swapped", "yn_absent" with their L; for "obs" (the
+    first-token readout, amendment 2, B6) the plain arms "aligned" and "swapped" with their first-token term
+    L_first. Passes only if every check holds: the mean effect on the same items within `GATE_MEAN_TOL`, the
+    median absolute per-prompt difference at most `GATE_MEDIAN_ABS`, the per-prompt and per-item correlations at
+    least `GATE_R_PROMPT` and `GATE_R_EFFECT`, at least `GATE_COVERAGE` of the logged items reproduced, and, when
+    `logged_hash` and `current_hash` ({item id: `runs._item_hash`}) are given, every compared item's logged hash
+    equal to the current item's (a score never attaches to a changed item). A mean that matches while items do
+    not would hide a prompt difference that cancels on average; per-item checks catch it.
     """
-    mine = {(r["id"], f"yn_{r['goal']}"): r["d"] for r in records if r.get("fmt") == fmt
-            and r.get("goal") in ("aligned", "swapped", "absent")}
+    if fmt == "yn":
+        goals, arm = ("aligned", "swapped", "absent"), (lambda g: f"yn_{g}")
+    elif fmt == "obs":
+        goals, arm = ("aligned", "swapped"), (lambda g: g)
+    else:
+        raise ValueError(f"no logged scores for format {fmt!r}")
+    al, sw = arm("aligned"), arm("swapped")
+    mine = {(r["id"], arm(r["goal"])): r["d"] for r in records if r.get("fmt") == fmt and r.get("goal") in goals}
     shared = sorted(k for k in mine if k in logged)
     d = [mine[k] for k in shared]
     lg = [logged[k] for k in shared]
     diffs = [abs(a - b) for a, b in zip(d, lg)]
-    ids = sorted({i for i, a in shared if (i, "yn_swapped") in mine and (i, "yn_swapped") in logged
-                  and (i, "yn_aligned") in mine and (i, "yn_aligned") in logged})
-    eff = [mine[(i, "yn_aligned")] - mine[(i, "yn_swapped")] for i in ids]
-    eff_l = [logged[(i, "yn_aligned")] - logged[(i, "yn_swapped")] for i in ids]
-    logged_ids = {i for i, a in logged if a == "yn_aligned" and (i, "yn_swapped") in logged}
+    ids = sorted({i for i, a in shared if (i, sw) in mine and (i, sw) in logged
+                  and (i, al) in mine and (i, al) in logged})
+    eff = [mine[(i, al)] - mine[(i, sw)] for i in ids]
+    eff_l = [logged[(i, al)] - logged[(i, sw)] for i in ids]
+    logged_ids = {i for i, a in logged if a == al and (i, sw) in logged}
+    hash_bad = (None if logged_hash is None or current_hash is None else
+                sorted({i for i, _a in shared if logged_hash.get(i) != current_hash.get(i)}))
     out = {
-        "n_prompts": len(shared), "n_items": len(ids), "n_logged_items": len(logged_ids),
+        "fmt": fmt, "n_prompts": len(shared), "n_items": len(ids), "n_logged_items": len(logged_ids),
         "coverage": len(ids) / len(logged_ids) if logged_ids else float("nan"),
         "mean_effect": sum(eff) / len(eff) if eff else float("nan"),
         "mean_effect_logged_same_items": sum(eff_l) / len(eff_l) if eff_l else float("nan"),
-        "logged_effect_published": LOGGED_YN_EFFECT.get(model_tag),
+        "logged_effect_published": (LOGGED_YN_EFFECT if fmt == "yn" else LOGGED_FIRST_EFFECT).get(model_tag),
+        "item_hash_mismatches": None if hash_bad is None else len(hash_bad),
+        "item_hash_mismatch_examples": None if hash_bad is None else hash_bad[:5],
         "median_abs_diff": _median(diffs),
         "share_abs_diff_over_1": sum(x > 1 for x in diffs) / len(diffs) if diffs else float("nan"),
         "r_prompt": _pearson(d, lg), "r_effect": _pearson(eff, eff_l),
@@ -108,6 +138,8 @@ def reproduction_gate(records: list[dict], logged: dict[tuple[str, str], float],
         "r_effect": out["r_effect"] >= GATE_R_EFFECT,
         "coverage": out["coverage"] >= GATE_COVERAGE,
     }
+    if hash_bad is not None:
+        checks["item_hash"] = not hash_bad
     out["checks"] = checks
     out["passed"] = all(checks.values())  # nan compares False, so a missing quantity fails the gate
     return out
@@ -138,6 +170,39 @@ def _interval(boot: Any, alpha: float = 0.05) -> tuple[float, float]:
     if b.size == 0:
         return float("nan"), float("nan")
     return float(np.quantile(b, alpha / 2)), float(np.quantile(b, 1 - alpha / 2))
+
+
+def _interval_normal(point: float, boot: Any, alpha: float) -> tuple[float, float]:
+    """point +- z(1 - alpha/2) * SE, the SE being the bootstrap draws' standard deviation (amendment 2, B5).
+
+    Used for the Bonferroni-corrected intervals: at alpha = 0.05/36 a percentile interval reads the 0.07% tails,
+    which 2,000 resamples place on one or two draws, so the bound would be noise; the normal interval needs only
+    the SE, which 2,000 resamples estimate well."""
+    import numpy as np
+    from statistics import NormalDist
+
+    b = np.asarray(boot, dtype=float)
+    b = b[np.isfinite(b)]
+    if b.size < 2 or point != point:
+        return float("nan"), float("nan")
+    z = NormalDist().inv_cdf(1 - alpha / 2)
+    se = float(np.std(b, ddof=1))
+    return float(point - z * se), float(point + z * se)
+
+
+def _se(boot: Any) -> float:
+    import numpy as np
+
+    b = np.asarray(boot, dtype=float)
+    b = b[np.isfinite(b)]
+    return float(np.std(b, ddof=1)) if b.size >= 2 else float("nan")
+
+
+def item_weights(ids: list[str], weights: dict[str, float] | None) -> Any:
+    """Per-item weights (amendment 2, B4: population share over sample share of the item's stratum), 1 if none."""
+    import numpy as np
+
+    return np.array([1.0 if weights is None else float(weights.get(i, 1.0)) for i in ids])
 
 
 def ratio_curve(num: Any, den: Any, mask: Any, W: Any) -> Any:
@@ -172,7 +237,8 @@ def patch_matrix(records: list[dict], keys: list[str]) -> dict:
             if v is not None:
                 clean, source, patched = v
                 num[i, j], den[i, j], mask[i, j] = clean - patched, clean - source, True
-    return {"num": num, "den": den, "mask": mask, "games": [r["game_id"] for r in records]}
+    return {"num": num, "den": den, "mask": mask, "games": [r["game_id"] for r in records],
+            "ids": [r.get("id") for r in records]}
 
 
 def _layer_keys(group: str, n_layers: int, site: str = "resid") -> list[str]:
@@ -180,9 +246,12 @@ def _layer_keys(group: str, n_layers: int, site: str = "resid") -> list[str]:
 
 
 def group_curve(records: list[dict], group: str, n_layers: int, B: int = 2000, seed: int = 0,
-                site: str = "resid") -> dict:
+                site: str = "resid", weights: dict[str, float] | None = None) -> dict:
     """Pooled fraction restored per layer for one group, its pointwise and Bonferroni-over-layers intervals,
-    and the maximum over layers with a bootstrap interval in which the layer is re-chosen in every resample."""
+    and the maximum over layers with a bootstrap interval in which the layer is re-chosen in every resample.
+
+    `weights` ({item id: weight}) reweights items to their population shares (amendment 2, B4). Bonferroni
+    intervals are normal intervals from the bootstrap SE (amendment 2, B5)."""
     import numpy as np
 
     keys = _layer_keys(group, n_layers, site)
@@ -191,7 +260,7 @@ def group_curve(records: list[dict], group: str, n_layers: int, B: int = 2000, s
     pm = patch_matrix(records, keys)
     if not pm["mask"].any():
         return {"n": 0, "defined": False}
-    W = game_weights(pm["games"], B, seed)
+    W = game_weights(pm["games"], B, seed) * item_weights(pm["ids"], weights)[None, :]
     R = ratio_curve(pm["num"], pm["den"], pm["mask"], W)
     removed_nats = mean_curve(pm["num"], pm["mask"], W)
     point = R[0]
@@ -202,18 +271,20 @@ def group_curve(records: list[dict], group: str, n_layers: int, B: int = 2000, s
         "n": int(pm["mask"].any(axis=1).sum()), "defined": True,
         "fraction": [float(x) for x in point],
         "ci": [_interval(R[1:, j]) for j in range(len(keys))],
-        "ci_bonferroni": [_interval(R[1:, j], bonf) for j in range(len(keys))],
+        "ci_bonferroni": [_interval_normal(float(point[j]), R[1:, j], bonf) for j in range(len(keys))],
         "removed_nats": [float(x) for x in removed_nats[0]],
-        "removed_nats_ci_bonferroni": [_interval(removed_nats[1:, j], bonf) for j in range(len(keys))],
+        "removed_nats_ci_bonferroni": [_interval_normal(float(removed_nats[0, j]), removed_nats[1:, j], bonf)
+                                       for j in range(len(keys))],
         "max": float(mx[0]), "argmax_layer": int(np.nanargmax(np.where(np.isfinite(point), point, -np.inf))),
-        "max_ci": _interval(mx[1:]),
+        "max_ci": _interval(mx[1:]), "max_se": _se(mx[1:]),
     }
 
 
 def placebo_floor(records: list[dict], group: str, n_layers: int, B: int = 2000, seed: int = 0,
                   site: str = "resid") -> dict:
-    """Per layer, the placebo pairs' mean absolute change of the readout (nats) and its Bonferroni upper bound:
-    the noise floor, on the same scale as the goal pairs' removed nats (amendment 1, A7)."""
+    """Per layer, the placebo pairs' mean absolute change of the readout (nats) and its Bonferroni upper bound
+    (normal, from the bootstrap SE): the noise floor, on the same scale as the goal pairs' removed nats
+    (amendment 1, A7)."""
     import numpy as np
 
     keys = _layer_keys(group, n_layers, site)
@@ -226,7 +297,7 @@ def placebo_floor(records: list[dict], group: str, n_layers: int, B: int = 2000,
     A = mean_curve(np.abs(pm["num"]), pm["mask"], W)
     bonf = 0.05 / n_layers
     return {"n": int(pm["mask"].any(axis=1).sum()), "mean_abs_nats": [float(x) for x in A[0]],
-            "upper_bonferroni": [_interval(A[1:, j], bonf)[1] for j in range(len(keys))]}
+            "upper_bonferroni": [_interval_normal(float(A[0, j]), A[1:, j], bonf)[1] for j in range(len(keys))]}
 
 
 def arrival_from_curve(fractions: list[float], threshold: float = 0.5) -> float:
@@ -235,7 +306,8 @@ def arrival_from_curve(fractions: list[float], threshold: float = 0.5) -> float:
     return arrival_layer(fractions, threshold)
 
 
-def patch_summary(records: list[dict], placebo: list[dict], n_layers: int, B: int = 2000, seed: int = 0) -> dict:
+def patch_summary(records: list[dict], placebo: list[dict], n_layers: int, B: int = 2000, seed: int = 0,
+                  weights: dict[str, float] | None = None) -> dict:
     """The pre-registered patching readouts for one set of records (one direction, one stratum).
 
     - history share: the maximum over layers of the fraction restored by the whole history after the task line,
@@ -246,21 +318,27 @@ def patch_summary(records: list[dict], placebo: list[dict], n_layers: int, B: in
     - action share; early-span share (equal-length items: span fraction at the end of the first third of the
       layers minus at the end of the second third);
     - for every group, the per-layer removed nats against the placebo floor (Bonferroni over layers).
+
+    `weights` reweight the goal pairs to the population's strata (amendment 2, B4); the placebo floor is a
+    per-cell noise level and is not reweighted.
     """
     out: dict[str, Any] = {"n_items": len(records), "n_placebo": len(placebo)}
-    curves = {g: group_curve(records, g, n_layers, B, seed)
-              for g in ("hist_all", "hist_obj", "hist_obj_matched", "action", "final", "last", "span", "task_rest",
-                        "query")}
+    curves = {g: group_curve(records, g, n_layers, B, seed, weights=weights)
+              for g in ("hist_all", "hist_obj", "hist_obj_matched", "hist_swap", "action", "action_obj", "action_rest",
+                        "final", "last", "span", "task_rest", "query")}
     out["curves"] = curves
     out["history_share"] = ({"defined": False, "why": "no history token after the task line (step 0)"}
                             if not curves["hist_all"].get("defined") else
                             {"defined": True, "max": curves["hist_all"]["max"], "ci": curves["hist_all"]["max_ci"],
-                             "layer": curves["hist_all"]["argmax_layer"]})
+                             "se": curves["hist_all"]["max_se"], "layer": curves["hist_all"]["argmax_layer"]})
     ho, hm = curves["hist_obj"], curves["hist_obj_matched"]
     out["object_mention_share"] = ({"defined": False} if not ho.get("defined") else
                                    {"defined": True, "max": ho["max"], "ci": ho["max_ci"],
                                     "matched_max": hm.get("max"), "matched_ci": hm.get("max_ci")})
-    out["action_share"] = {"max": curves["action"].get("max"), "ci": curves["action"].get("max_ci")}
+    out["action_share"] = {"max": curves["action"].get("max"), "ci": curves["action"].get("max_ci"),
+                           "se": curves["action"].get("max_se")}
+    out["action_object_share"] = {"max": curves["action_obj"].get("max"), "ci": curves["action_obj"].get("max_ci")}
+    out["action_rest_share"] = {"max": curves["action_rest"].get("max"), "ci": curves["action_rest"].get("max_ci")}
     fin = curves["final"].get("fraction")
     out["arrival_layer"] = arrival_from_curve(fin) if fin else float("nan")
     sp = curves["span"].get("fraction")
@@ -296,20 +374,67 @@ def _unit(v: Any) -> Any:
     return v / n
 
 
-def estimate_directions(H: dict[str, Any], success_rows: Any, failure_rows: Any) -> dict:
+def verb(t: dict) -> str:
+    """The action's verb ("take", "move", ...), the stratum of the within-verb success direction."""
+    a = (t.get("action") or "").split()
+    return a[0] if a else "?"
+
+
+def success_direction(success_rows: Any, failure_rows: Any, success_verbs: list[str] | None = None,
+                      failure_verbs: list[str] | None = None) -> Any:
+    """Unit "this works" direction from neutral-task residuals of determined successes and failures.
+
+    With verbs (amendment 2, B2): the weighted mean over verbs of (mean success residual - mean failure residual)
+    within the verb, weight n_s * n_f / (n_s + n_f), over verbs that have both. The determined successes include
+    verbs no failure has (examine, go to, close, use, inventory: 106 of the 292), so a plain difference of means would also carry
+    "which verb is this"; within verbs it cannot. Without verbs, the plain difference of means.
+    """
+    import numpy as np
+
+    Sx, Fx = np.asarray(success_rows, dtype=np.float64), np.asarray(failure_rows, dtype=np.float64)
+    if success_verbs is None or failure_verbs is None:
+        return _unit(Sx.mean(0) - Fx.mean(0))
+    sv, fv = np.asarray(success_verbs), np.asarray(failure_verbs)
+    num, den = np.zeros(Sx.shape[1]), 0.0
+    for v in sorted(set(sv.tolist()) & set(fv.tolist())):
+        a, b = sv == v, fv == v
+        w = a.sum() * b.sum() / (a.sum() + b.sum())
+        num += w * (Sx[a].mean(0) - Fx[b].mean(0))
+        den += w
+    if den == 0:
+        raise ValueError("no verb has both a success and a failure")
+    return _unit(num / den)
+
+
+def project_unit(v: Any, r: Any) -> Any:
+    """`v` with its component along `r` removed, renormalised."""
+    import numpy as np
+
+    v = np.asarray(v, dtype=np.float64)
+    rr = _unit(np.asarray(r, dtype=np.float64))
+    return _unit(v - (v @ rr) * rr)
+
+
+def estimate_directions(H: dict[str, Any], success_rows: Any, failure_rows: Any,
+                        success_verbs: list[str] | None = None, failure_verbs: list[str] | None = None,
+                        readout_dir: Any = None) -> dict:
     """Directions at one layer from one fold's answer-position residuals.
 
     `H[goal]` is (items, width) for the fold's failure items, paired across goals ("aligned", "swapped", and
     "swapped_plus" where it exists, rows aligned with H["aligned"] or NaN); `success_rows`/`failure_rows` are
-    (n, width) neutral-task residuals of the fold's determined successes and failures.
+    (n, width) neutral-task residuals of the fold's determined successes and failures, with their verbs.
 
     - task: unit mean of aligned minus swapped, with the midpoint of the mean projections (the mean-ablation
       value);
-    - success: unit mean of neutral successes minus neutral failures (the model's own "this works" direction);
+    - success: the within-verb success direction (`success_direction`);
     - task_perp_success: the task direction with its success component removed, renormalised, with its midpoint;
     - mention: unit mean of swapped_plus minus swapped (merely naming the action's object), with its midpoint;
     - steer_success: the mean projection of aligned minus swapped on the success direction (nats of residual),
-      the amount added along it to steer a swapped prompt.
+      the amount added along it to steer a swapped prompt;
+    - with `readout_dir` (amendment 2, B2): success_perp_readout, the success direction with its component along
+      the readout direction removed, and steer_success_perp_readout, the mean aligned-minus-swapped projection on
+      it. Steering along the raw success direction moves the readout through its readout component whatever the
+      mechanism; this one cannot.
     """
     import numpy as np
 
@@ -317,11 +442,15 @@ def estimate_directions(H: dict[str, Any], success_rows: Any, failure_rows: Any)
 
     A, S = np.asarray(H["aligned"], dtype=np.float64), np.asarray(H["swapped"], dtype=np.float64)
     task = diff_of_means(A, S)
-    s = _unit(np.asarray(success_rows, dtype=np.float64).mean(0) - np.asarray(failure_rows, dtype=np.float64).mean(0))
+    s = success_direction(success_rows, failure_rows, success_verbs, failure_verbs)
     perp = _unit(task["u"] - (task["u"] @ s) * s)
     out = {"task": task["u"], "task_mid": task["midpoint"], "task_norm": task["norm"], "success": s,
            "task_perp_success": perp, "task_perp_success_mid": midpoint_for(perp, A, S),
            "steer_success": float(((A - S) @ s).mean())}
+    if readout_dir is not None:
+        sp = project_unit(s, readout_dir)
+        out["success_perp_readout"] = sp
+        out["steer_success_perp_readout"] = float(((A - S) @ sp).mean())
     P = H.get("swapped_plus")
     if P is not None:
         P = np.asarray(P, dtype=np.float64)
@@ -333,13 +462,84 @@ def estimate_directions(H: dict[str, Any], success_rows: Any, failure_rows: Any)
 
 
 def direction_cosines(dirs: dict, lens_dir: Any) -> dict:
+    """Cosines of one fold's directions at one layer (amendment 1, A3; amendment 2, B2).
+
+    task_success_perp_readout is the H4 cosine: the task and success directions after the readout direction is
+    projected out of both, so that two directions that each move the answer cannot look alike only through the
+    answer. Its null baseline from the same fold is mention_success_perp_readout (merely naming the object, not
+    as the goal); the between-fold cosines are added by the caller.
+    """
     from wf.interp.directions import cosine
 
     out = {"task_success": cosine(dirs["task"], dirs["success"]), "task_readout": cosine(dirs["task"], lens_dir),
-           "success_readout": cosine(dirs["success"], lens_dir)}
+           "success_readout": cosine(dirs["success"], lens_dir),
+           "task_success_perp_readout": cosine(project_unit(dirs["task"], lens_dir),
+                                               project_unit(dirs["success"], lens_dir))}
     if "mention" in dirs:
         out["task_mention"] = cosine(dirs["task"], dirs["mention"])
+        out["mention_success"] = cosine(dirs["mention"], dirs["success"])
+        out["mention_success_perp_readout"] = cosine(project_unit(dirs["mention"], lens_dir),
+                                                     project_unit(dirs["success"], lens_dir))
     return out
+
+
+# ---------------- layers ----------------
+
+
+def profile_layers(n_layers: int) -> list[int]:
+    """The ablation depth profile (amendment 2, B1): every fourth layer from 4 up to 0.8 of depth (Qwen3-8B: 4, 8,
+    ..., 28; Llama-3.1-8B: 4, ..., 24). The last layer is excluded because there the ablation is tautological,
+    and the layer three before it because the network is close to linear from there on."""
+    return list(range(LAYER_STEP, int(PROFILE_MAX_DEPTH * n_layers) + 1, LAYER_STEP))
+
+
+def caveat_layers(n_layers: int) -> list[int]:
+    """Grid layers after the profile and before the last layer (Qwen3-8B: 32): ablated and reported, flagged as
+    near-linear, never in the onset, the layer choice or task_from."""
+    prof = set(profile_layers(n_layers))
+    return [m for m in range(LAYER_STEP, n_layers - 1, LAYER_STEP) if m not in prof]
+
+
+def h4_layers(layers: list[int], n_layers: int, arrival_index: float | None = None) -> list[int]:
+    """Layers at which the H4 rows are read (amendment 2, B2): profile layers at or below two thirds of depth
+    (Qwen3-8B: up to 24), and, once the patching arrival layer is known, strictly before it."""
+    keep = [m for m in layers if m <= int(H4_MAX_DEPTH * n_layers)]
+    if arrival_index is not None and arrival_index == arrival_index:
+        keep = [m for m in keep if m < arrival_index]
+    return keep
+
+
+def onset_layer(profile: dict[int, dict], threshold: float = ONSET_THRESHOLD) -> int | None:
+    """The earliest profile layer from which the removal's lower bound stays at or above `threshold` at every
+    later profile layer (amendment 2, B1); None if the deepest layer's bound is below it. Reading "every layer
+    from L on" is an intersection of per-layer tests, so the per-layer 95% bounds need no correction."""
+    layers = sorted(profile)
+    ok = [(profile[m].get("ci") or (float("nan"), float("nan")))[0] for m in layers]
+    onset = None
+    for m, lo in zip(reversed(layers), reversed(ok)):
+        if not (lo == lo and lo >= threshold):
+            break
+        onset = m
+    return onset
+
+
+def onset_versus_arrival(onset: int | None, arrival_index: float | None, step: int = LAYER_STEP) -> str:
+    """The restated outcome-table row (amendment 2, B1). The arrival layer is rounded up to the ablation grid
+    (the first grid layer at or after it), since the onset can only be a grid layer."""
+    if arrival_index is None or arrival_index != arrival_index:
+        return "arrival undefined"
+    if onset is None:
+        return "no onset within the profile (H1, H2)"
+    grid_arrival = step * math.ceil(arrival_index / step)
+    return "at or before arrival (H3, H4, H5)" if onset <= grid_arrival else "after arrival (H1, H2)"
+
+
+def n_for_half_width(n: int, se: float, half_width: float = TARGET_HALF_WIDTH, z: float = 1.96) -> int | None:
+    """Items needed for a 95% interval of the given half-width, from a pilot SE at n items (amendment 2, B3): the
+    SE scales as 1/sqrt(n), game clustering included, since the SE is a game-bootstrap one."""
+    if not n or se != se or se <= 0:
+        return None
+    return int(math.ceil(n * (z * se / half_width) ** 2))
 
 
 # ---------------- ablation ----------------
@@ -354,9 +554,10 @@ def _edit_value(rec: dict, name: str) -> tuple[float, float] | None:
 
 def removed_share(recs_by_goal: dict[str, dict[str, dict]], ids: list[str], name_for: Callable[[str], str],
                   games: dict[str, str], B: int = 2000, seed: int = 0, a: str = "aligned",
-                  b: str = "swapped") -> dict:
+                  b: str = "swapped", weights: dict[str, float] | None = None) -> dict:
     """1 - (sum over items of the edited a-minus-b effect) / (sum of the unedited effect), with `name_for(id)`
-    giving each item's edit (so each fold can use the layer chosen on the other); game bootstrap."""
+    giving each item's edit (so each fold can use the layer chosen on the other); game bootstrap; items
+    weighted by `weights` (amendment 2, B4)."""
     import numpy as np
 
     rows = []
@@ -367,37 +568,67 @@ def removed_share(recs_by_goal: dict[str, dict[str, dict]], ids: list[str], name
         va, vb = _edit_value(ra, name_for(i)), _edit_value(rb, name_for(i))
         if va is None or vb is None:
             continue
-        rows.append((va[0] - vb[0], va[1] - vb[1], games[i]))
+        rows.append((va[0] - vb[0], va[1] - vb[1], games[i], i))
     if not rows:
         return {"n": 0}
     before = np.array([[r[0] for r in rows]])
     after = np.array([[r[1] for r in rows]])
-    W = game_weights([r[2] for r in rows], B, seed)
+    W = game_weights([r[2] for r in rows], B, seed) * item_weights([r[3] for r in rows], weights)[None, :]
     with np.errstate(invalid="ignore", divide="ignore"):
         share = 1 - (W @ after.T)[:, 0] / (W @ before.T)[:, 0]
-    return {"n": len(rows), "share": float(share[0]), "ci": _interval(share[1:]),
+    return {"n": len(rows), "share": float(share[0]), "ci": _interval(share[1:]), "se": _se(share[1:]),
             "effect_before": float(before.mean()), "effect_after": float(after.mean())}
 
 
 def mean_shift(recs: dict[str, dict], ids: list[str], name_for: Callable[[str], str], games: dict[str, str],
-               B: int = 2000, seed: int = 0) -> dict:
+               B: int = 2000, seed: int = 0, weights: dict[str, float] | None = None) -> dict:
     """Mean of edited minus unedited readout over the items' prompts (collateral shift, or a steering gain)."""
     import numpy as np
 
-    rows = [(v[1] - v[0], games[i]) for i in ids if i in recs for v in [_edit_value(recs[i], name_for(i))] if v]
+    rows = [(v[1] - v[0], games[i], i) for i in ids if i in recs for v in [_edit_value(recs[i], name_for(i))] if v]
     if not rows:
         return {"n": 0}
     x = np.array([[r[0] for r in rows]])
-    W = game_weights([r[1] for r in rows], B, seed)
+    W = game_weights([r[1] for r in rows], B, seed) * item_weights([r[2] for r in rows], weights)[None, :]
     m = (W @ x.T)[:, 0] / W.sum(1)
     return {"n": len(rows), "mean": float(m[0]), "ci": _interval(m[1:])}
 
 
-def gap(recs_neutral: dict[str, dict], success_ids: list[str], failure_ids: list[str],
-        name_for: Callable[[str], str] | None, games: dict[str, str], B: int = 2000, seed: int = 0) -> dict:
-    """Success-versus-failure gap in nats on neutral prompts: mean D over successes minus mean D over failures,
-    unedited, and edited if `name_for` is given (amendment 1, A3: the AUC is at its ceiling, the gap is not)."""
+def steer_ratio(by: dict[str, dict[str, dict]], ids: list[str], name_for: Callable[[str], str],
+                games: dict[str, str], B: int = 2000, seed: int = 0,
+                weights: dict[str, float] | None = None) -> dict:
+    """Steering gain on swapped prompts as a share of the goal effect on the same items (amendment 1, A5): the
+    summed edited-minus-unedited readout of the swapped prompts over the summed unedited aligned-minus-swapped
+    effect."""
     import numpy as np
+
+    rows = []
+    for i in ids:
+        ra, rs = by["aligned"].get(i), by["swapped"].get(i)
+        v = _edit_value(rs, name_for(i)) if rs else None
+        if ra is None or v is None:
+            continue
+        rows.append((v[1] - v[0], ra["d"] - rs["d"], games[i], i))
+    if not rows:
+        return {"n": 0}
+    gain = np.array([[r[0] for r in rows]])
+    eff = np.array([[r[1] for r in rows]])
+    W = game_weights([r[2] for r in rows], B, seed) * item_weights([r[3] for r in rows], weights)[None, :]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ratio = (W @ gain.T)[:, 0] / (W @ eff.T)[:, 0]
+    return {"n": len(rows), "ratio": float(ratio[0]), "ci": _interval(ratio[1:])}
+
+
+def gap(recs_neutral: dict[str, dict], success_ids: list[str], failure_ids: list[str],
+        name_for: Callable[[str], str] | None, games: dict[str, str], B: int = 2000, seed: int = 0,
+        weights: dict[str, float] | None = None) -> dict:
+    """Success-versus-failure gap in nats on neutral prompts: mean D over successes minus mean D over failures,
+    unedited, and edited if `name_for` is given (amendment 1, A3: the AUC is at its ceiling, the gap is not).
+    Undefined (`defined` False) without successes, as at step 0, where no determined success exists."""
+    import numpy as np
+
+    if not success_ids:
+        return {"defined": False, "why": "no determined success in this stratum (none exists at step 0)"}
 
     def val(i: str, edited: bool) -> float | None:
         r = recs_neutral.get(i)
@@ -408,18 +639,19 @@ def gap(recs_neutral: dict[str, dict], success_ids: list[str], failure_ids: list
         v = _edit_value(r, name_for(i))
         return None if v is None else v[1]
 
-    out = {}
+    out: dict[str, Any] = {"defined": True}
     for label, edited in (("clean", False), ("edited", True)):
         if edited and name_for is None:
             continue
-        rows = [(val(i, edited), 1.0, games[i]) for i in success_ids] + [(val(i, edited), 0.0, games[i]) for i in failure_ids]
+        rows = [(val(i, edited), 1.0, games[i], i) for i in success_ids] + \
+            [(val(i, edited), 0.0, games[i], i) for i in failure_ids]
         rows = [r for r in rows if r[0] is not None]
         if not rows or not any(r[1] for r in rows) or all(r[1] for r in rows):
             out[label] = {"n": 0}
             continue
         x = np.array([r[0] for r in rows])
         y = np.array([r[1] for r in rows])
-        W = game_weights([r[2] for r in rows], B, seed)
+        W = game_weights([r[2] for r in rows], B, seed) * item_weights([r[3] for r in rows], weights)[None, :]
         with np.errstate(invalid="ignore", divide="ignore"):
             g = (W @ (x * y)) / (W @ y) - (W @ (x * (1 - y))) / (W @ (1 - y))
         from wf.interp.directions import auc
@@ -435,6 +667,87 @@ def choose_layer(shares_by_layer: dict[int, float]) -> int | None:
     """The layer with the largest removed share (ties to the earlier layer); None if none is finite."""
     ok = {k: v for k, v in shares_by_layer.items() if v == v}
     return min(ok, key=lambda k: (-ok[k], k)) if ok else None
+
+
+def ablation_summary(recs: list[dict], fold_of: dict[str, int], succ_ids: set[str], layers: list[int],
+                     caveat: list[int] = (), last: int | None = None, weights: dict[str, float] | None = None,
+                     B: int = 2000, seed: int = 0) -> dict:
+    """The ablation readouts per stratum (amendment 1, A3, A5; amendment 2, B1, B2) from edit records.
+
+    `layers` is the depth profile; `caveat` layers are ablated and reported but enter nothing else; `last` is
+    the last layer's sanity edit ("task_last", expected to remove about everything by construction). Every item
+    was edited with directions estimated on the other fold's games. Per stratum:
+
+    - profile: the task direction's removed share and 95% interval at every profile and caveat layer;
+    - onset_layer: the earliest profile layer from which the interval's lower bound stays at or above 0.6
+      (`onset_layer`), the pre-registered summary;
+    - by_layer: at every profile layer, the removal by the task direction without its success component, by the
+      mention direction and from that layer on; the steering gain along the success direction and along it
+      without its readout component, as shares of the goal effect; the collateral shift on neutral prompts; the
+      neutral success-versus-failure gap; the removal on determined successes;
+    - the same readouts at one chosen layer, the profile layer with the largest removal on the other fold's
+      failures (cross-fitted) or, when only one fold was edited (the minimal pilot, amendment 2, B3), on the
+      fold's own failures, flagged as in-sample.
+    """
+    by = index_records(recs)
+    meta = {r["id"]: r for r in recs}
+    games = {r["id"]: r["game_id"] for r in recs}
+
+    def ids_of(f: int | None, kind: str, s: str) -> list[str]:
+        return sorted(i for i, x in fold_of.items() if (f is None or x == f) and ((i in succ_ids) == (kind == "succ"))
+                      and i in meta and in_stratum(meta[i], s))
+
+    folds_edited = sorted({fold_of[i] for i in meta if i in fold_of})
+    chosen: dict[int, int | None] = {}
+    choice: dict[int, str] = {}
+    for f in folds_edited:
+        other, own = ids_of(1 - f, "fail", "all"), ids_of(f, "fail", "all")
+        src = other if other else own
+        choice[f] = "cross-fitted (other fold)" if other else "in-sample (only this fold was edited)"
+        shares = {m: removed_share(by, src, lambda _i, m=m: f"task|{m}", games, B=200, seed=seed,
+                                   weights=weights).get("share", float("nan")) for m in layers}
+        chosen[f] = choose_layer(shares)
+    name = lambda kind: (lambda i: f"{kind}|{chosen[fold_of[i]]}")  # noqa: E731
+    at = lambda kind, m: (lambda _i: f"{kind}|{m}")  # noqa: E731
+    out: dict[str, Any] = {"chosen_layer_by_fold": chosen, "layer_choice": choice, "layers": list(layers),
+                           "caveat_layers": list(caveat), "last_layer": last, "folds_edited": folds_edited}
+    for s in STRATA:
+        fails, succ = ids_of(None, "fail", s), ids_of(None, "succ", s)
+        row: dict[str, Any] = {"n_failures": len(fails), "n_successes": len(succ)}
+        row["profile"] = {m: removed_share(by, fails, at("task", m), games, B, seed, weights=weights)
+                          for m in list(layers) + list(caveat)}
+        row["onset_layer"] = onset_layer({m: row["profile"][m] for m in layers})
+        if last is not None:
+            row["task_last"] = removed_share(by, fails, at("task_last", last), games, B, seed, weights=weights)
+        row["by_layer"] = {m: {
+            "task_perp_success": removed_share(by, fails, at("task_perp_success", m), games, B, seed, weights=weights),
+            "mention": removed_share(by, fails, at("mention", m), games, B, seed, weights=weights),
+            "task_from": removed_share(by, fails, at("task_from", m), games, B, seed, weights=weights),
+            "steer_success": steer_ratio(by, fails, at("steer_success", m), games, B, seed, weights=weights),
+            "steer_success_perp_readout": steer_ratio(by, fails, at("steer_success_perp_readout", m), games, B,
+                                                      seed, weights=weights),
+            "collateral_neutral_shift": mean_shift(by["absent"], fails + succ, at("task", m), games, B, seed,
+                                                   weights=weights),
+            "gap_neutral": gap(by["absent"], succ, fails, at("task", m), games, B, seed, weights=weights),
+            "task_on_successes": (removed_share(by, succ, at("task", m), games, B, seed, weights=weights) if succ
+                                  else {"n": 0, "defined": False, "why": "no determined success in this stratum"}),
+        } for m in layers}
+        for kind in ("task", "task_perp_success", "mention", "task_from"):
+            row[kind] = removed_share(by, fails, name(kind), games, B, seed, weights=weights)
+        row["task_on_successes"] = (removed_share(by, succ, name("task"), games, B, seed, weights=weights) if succ
+                                    else {"n": 0, "defined": False, "why": "no determined success in this stratum"})
+        row["steer_success_gain_on_swapped"] = mean_shift(by["swapped"], fails, name("steer_success"), games, B, seed,
+                                                          weights=weights)
+        row["steer_success_ratio"] = steer_ratio(by, fails, name("steer_success"), games, B, seed, weights=weights)
+        row["steer_success_perp_readout_ratio"] = steer_ratio(by, fails, name("steer_success_perp_readout"), games, B,
+                                                              seed, weights=weights)
+        row["collateral_neutral_shift"] = mean_shift(by["absent"], fails + succ, name("task"), games, B, seed,
+                                                     weights=weights)
+        row["gap_neutral"] = gap(by["absent"], succ, fails, name("task"), games, B, seed, weights=weights)
+        row["random_sanity"] = {k: removed_share(by, fails, lambda _i, k=k: k, games, 200, seed).get("share")
+                                for k in sorted({k for r in recs for k in r["edits"] if k.startswith("random|")})}
+        out[s] = row
+    return out
 
 
 def index_records(records: Iterable[dict]) -> dict[str, dict[str, dict]]:

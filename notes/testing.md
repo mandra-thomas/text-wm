@@ -40,6 +40,51 @@ These were planned on 2026-11-17 and were all in use before any confirmatory ite
   - ICE's automatic `&cuda13` made the any-GPU constraint invalid.
 - **Part-wise verification.** A shard's items can be replayed in parts, each a separate job with a fresh server, because the server leaks memory per reset. The RQ2 gate accepts a complete set of passing parts made on the same file, with every item replayed once.
 
+## Interpretability pilot, review 2 (2026-11-20, branch `interp`)
+
+Review 2 put 35 bugs into the interpretability code (N1 to N35); 21 survived the tests, mostly because the end-to-end test of the minimal pilot checked the structure of its outputs and not their values. Fix round 2 added value checks on synthetic data with known answers, and 42 mutants of its own code (J1 to J42). All 109 interpretability mutants in `scripts/mutation_check.py` (review 1's R1 to R20 and I1 to I12, and these) are run with a CPU torch environment (`MUTANTS_MATCHING=interp`). The test that kills each of the review's survivors and each new mutant (files `tests/test_interp.py`, `tests/test_interp_pilot.py`):
+
+| Mutant | Killed by |
+|---|---|
+| N1 layer chosen on the item's own fold; N2 item read at the other fold's layer | `test_ablation_summary_chooses_each_folds_layer_on_the_other_fold` (folds with different best layers; exact shares) |
+| N4 success direction from the other fold | `test_fold_directions_use_each_folds_own_successes` |
+| N5 placebo target is the aligned prompt | `test_placebo_patching_targets_the_swapped_prompt` |
+| N7 effect sign flipped | `test_effects_sign_and_strata` |
+| N8 task_from only at its own layer; N25 random directions ablated to 0 | `test_ablation_edits_layers_and_targets` |
+| N10 maximum-over-layers interval with the layer fixed | `test_maximum_over_layers_rechooses_the_layer_in_every_resample` |
+| N11 signed placebo floor; N12 above-floor read on the upper bound; N13 early-span sign | `test_placebo_floor_bonferroni_and_early_span` |
+| N14 one-step histories counted as step 0 | `test_effects_sign_and_strata` |
+| N16 gate's median check dropped | `test_gate_median_check_hashes_and_first_token` |
+| N19 history-share verdict from the point estimate | `test_verdict_rows_read_interval_bounds_onset_and_h4` |
+| N21 answer projection without the success direction | `test_answer_projection_removes_readout_and_success` |
+| N24 lens direction without the norm weight | `test_lens_direction_carries_the_norm_weight` (random norm weights; the tiny model's are all 1) |
+| N26 gap on aligned prompts; N27 steering read on aligned prompts | `test_ablation_summary_chooses_each_folds_layer_on_the_other_fold` |
+| N29 identical-prefix check skipped | `test_patching_runs_the_identical_prefix_check` |
+| N32 norm epsilon dropped from the readout | `test_readout_of_a_zero_residual_is_finite` |
+| N33 between-fold cosine of task with success | `test_minimal_pilot_end_to_end` (value of the cosine) |
+| J1 profile includes the last layer; J6, J7 H4 layers | `test_profile_caveat_and_h4_layers` |
+| J2 onset on the point estimate; J3 onset need not stay; J4 inverted, J5 unrounded comparison with arrival | `test_onset_layer_needs_the_lower_bound_to_stay_above` |
+| J8 success direction pooled over verbs; J9 verbs weighted equally | `test_success_direction_is_estimated_within_verbs` |
+| J10 H4 cosine projected on one side; J11, J12 perp steering from the raw success direction | `test_h4_cosine_is_read_after_projecting_out_the_readout` |
+| J13 quotas ignored; J14 weights inverted; J40 mention stratum ignored | `test_selection_quotas_and_weights` |
+| J15, J16 weights ignored in curves and removed shares | `test_weights_enter_pooled_estimates` |
+| J17, J18 the analysis run drops the weights; J30 ablation step-0 quota ignored; J36 cross-fold cosine within one fold; J19 both folds edited; J25 first-token prompts keep activations (also `test_first_token_prompts_can_be_stored_without_activations`); J42 stage 0 gate without hashes | `test_minimal_pilot_end_to_end` |
+| J20 GPU check accepts any GPU | `test_gpu_check_refuses_a_different_gpu` |
+| J21, J41 patching or ablation run without the GPU check | `test_gpu_runs_refuse_before_any_work` |
+| J22 item-hash check dropped; J23 first-token gate on the yes/no arms | `test_gate_median_check_hashes_and_first_token` |
+| J24 stage 0 passes on the yes/no gate alone | `test_stage0_gate_fails_on_a_shifted_log` |
+| J26 realized edit read before the edit; J27 realized steering without the clean row; J39 logged on every prompt | `test_realized_edits_are_read_after_the_edit` |
+| J28 Bonferroni at alpha 0.05 | `test_placebo_floor_bonferroni_and_early_span` |
+| J29 onset reads the caveat layer | `test_ablation_summary_reports_caveat_and_last_layers_apart` |
+| J31 sample size not squared | `test_sample_size_for_a_half_width` |
+| J32 mention flag reads the whole history | `test_mention_flag_agrees_with_the_object_mention_group` |
+| J33 action object found from the receptacle; J34 grid without `hist_swap` | `test_action_line_splits_into_its_object_and_the_rest` |
+| J35 step-0 failures in the success direction | `test_fold_directions_use_each_folds_own_successes` |
+| J37 gap defined without successes | `test_ablation_summary_chooses_each_folds_layer_on_the_other_fold` |
+| J38 steering share over the aligned readout | `test_ablation_summary_chooses_each_folds_layer_on_the_other_fold` (swapped readout not zero) |
+
+The review's other 14 mutants (N3, N6, N9, N15, N17, N18, N20, N22, N23, N28, N30, N31, N34, N35) were already killed and stay in the list. Review 2's simulation of the last-layer tautology is a test (`test_last_layer_ablation_is_tautological_and_the_depth_profile_is_not`).
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:
