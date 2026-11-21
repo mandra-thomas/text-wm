@@ -661,4 +661,25 @@ Dn and Dc do not identify psychological mechanisms on their own. They are differ
 
 ### 14.C Checks rerun after the amendments
 
-*(Filled in below when the rerun is complete.)*
+**Records.** `r2_items.jsonl` (sha256 `e6da991f…7e47c22f0`): 2,982 records, 25,743 (record, arm) combinations per model. `python -m wf.textcraft.r2_items verify` marked the manifest verified:
+
+- *Per-record checks in three fresh processes* (hash seeds 0, 1 and 2), on all 2,982 records: no replay, checker, structure or prompt failure, no duplicate id, and no prompt-example goal. No record with a two-item line has a named goal already made or held (14.V1).
+- *Determinism.* Two fresh builds (8 and 3 worker processes) wrote the records byte for byte.
+
+**Tokenization with the anchored question, on ICE CPU** (checkout `text-wm-fix28` at e7ca0a2, jobs 7225166–7225170, the serve environment's transformers 4.51.3, each pinned tokenizer, offline; `wf/textcraft/data/r2_tokcheck_ice.json`, which supersedes the reports of jobs 7219636–7219640). Per model: 32,942 candidate checks (both candidates of 16,471 two-candidate prompts) and 9,272 yes/no prompts, every one with round 2's anchored question.
+
+| Model | Gate | Problems | Yes / No token ids | First tokens (success vs failure) | Longest input (tokens) | Over 4,096 | Plain join differs | Minutes |
+|---|---|---|---|---|---|---|---|---|
+| Qwen3-8B | pass | 0 | 9454 / 2753, single | "Craft" vs "Could" | 1,819 | 0 | 0 | 13 |
+| Llama-3.1-8B | pass | 0 | 9642 / 2822, single | "Craft" vs "Could" | 1,837 | 0 | 0 | 11 |
+| Gemma-2-9B-it | pass | 0 | 3553 / 1294, single | "C" vs "Could" | 1,706 | 0 | 0 | 8 |
+| Mistral-7B-v0.3 | pass | 0 | 6360 / 2538, single ("▁Yes", "▁No") | "Craft" vs "Could" | 2,054 | 0 | 32,942 (by design) | 9 |
+| Llama-3.2-3B | pass | 0 | 9642 / 2822, single | "Craft" vs "Could" | 1,837 | 0 | 0 | 11 |
+
+The anchored question keeps "Yes" and "No" as single tokens, equal to each template's reply after all 9,272 yes/no prompts. The golden renderings (`r2_chat_golden.json`) were remade from the same jobs.
+
+**Dry run without models.** Mock scoring of all five models (4 shards each) and the analysis on the amended records gave 128,715 scores with none missing. The analysis wrote every block: the overall and contrast-specific competence, the 50-test family, verdicts, interpretations, readings and the sensitivity analyses.
+
+**Tests and mutants.** `tests/test_textcraft_r2.py`: 102 tests pass. The full suite (`tests/`), run once at the end: 964 passed, 7 skipped. The round-2 test file was rerun after three of its tests were strengthened. `scripts/mutation_check.py` holds 102 round-2 mutants, and all are killed; `notes/testing.md` lists each with the test that killed it.
+
+**What has not been run.** No model has scored any round-2 record: there has been no smoke run and no GPU job. Next come the confirming review, the summary to the owner and the freeze tag; then smoke runs and scoring.

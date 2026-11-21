@@ -152,4 +152,115 @@ The amendments (design section 14) added tests for:
 - provenance (one commit, pinned revisions);
 - the role gap equalling naming plus completion.
 
-MUTATION_V2_PLACEHOLDER
+**Mutants after the amendments (2026-11-21).** `scripts/mutation_check.py` now holds 102 round-2 mutants: the 54 of the first campaign (two rewritten for the amended code, one dropped because its target, the "not interpretable" override, no longer exists), review 1's 18 non-equivalent survivors adapted to the amended code (R1-M…), 26 for the amended rules (A …), two for the anchored question (Q …) and six for the owner's final points (U …). M52 (a padded-prompt check that only repeated the expected-query check) was removed with its check instead of being tested. All 102 are killed:
+
+- 55 in the official run (four shards), stopped part-way when three of review 1's hash mutants and the padded-goal population mutant survived the covering tests because the hash test looped over the mutated field list and the population test did not count the padded goal; both tests were strengthened;
+- the other 46 in a screen against the round-2 tests (`MUTATION_FAST_ONLY=1`, which only skips the whole-suite rerun of survivors, so a kill is the same as in the official run), which left one survivor, the role-gap readout taking rows without a two-item line;
+- that one in the official mode, after its test was strengthened.
+
+The script now logs the first failing test of every kill:
+
+| Mutant | First test that failed |
+|---|---|
+| two-item line not sorted | `test_two_item_line_is_sorted_and_shared_by_a_couple` |
+| two-item line kept for names with and | `test_two_item_line_is_sorted_and_shared_by_a_couple` |
+| padding after the history | `test_every_arm_changes_only_what_its_name_says` |
+| ext arm shows the item's own list | `test_every_arm_changes_only_what_its_name_says` |
+| yes/no query keeps Next observation | `test_every_arm_changes_only_what_its_name_says` |
+| hash misses the system text | `test_item_hash_covers_fields_and_context` |
+| hash misses the extended list | `test_item_hash_covers_fields_and_context` |
+| Gemma not folded | `test_gemma_folds_the_system_text_and_the_others_do_not` |
+| yes/no candidates reversed | `test_candidates` |
+| eight look-ups become four | `test_parse_arm` |
+| parent may share craftables with the partner | `test_a_parent_sharing_a_craftable_with_the_partner_does_not_qualify` |
+| strict parent not preferred | `test_every_parent_is_the_rules_choice` |
+| added lines appended | `test_structure_check_catches_changes` |
+| padding on 9-12 steps too | `test_check_records_reports_and_passes` |
+| frozen items reused as parents | `test_rebuilding_two_pairs_gives_the_committed_records` |
+| parent draw seed drops the bin | `test_rebuilding_two_pairs_gives_the_committed_records` |
+| three failures per bin | `test_rebuilding_two_pairs_gives_the_committed_records` |
+| padded twin not checked | `test_padded_twin_and_class_checks` |
+| padded class not checked | `test_padded_twin_and_class_checks` |
+| text-only partner check off | `test_text_parent_check_catches_bad_parents` |
+| yes/no scored with two passes | `test_yes_no_arms_use_one_forward_pass` |
+| gate failure ignored | `test_scores_every_record_and_arm_then_resumes` |
+| resume ignores record hashes | `test_resume_refuses_scores_of_changed_records` |
+| golden problems ignored | `test_run_gate_requires_the_golden_and_the_attention` |
+| attention not checked | `test_run_gate_requires_the_golden_and_the_attention` |
+| shards by record not pair | `test_scores_every_record_and_arm_then_resumes` |
+| gate candidate check off | `test_gate_catches_a_candidate_written_differently_by_the_template` |
+| gate single-token check off | `test_gate_fails_on_each_tokenization_problem[tok1-not one token]` |
+| gate first-token check off | `test_gate_fails_on_each_tokenization_problem[tok2-share their first token]` |
+| gate unfolded for Gemma | `test_gate_folds_for_gemma` |
+| lift on the goal role | `test_planted_effects_are_recovered_exactly` |
+| penalty against the swapped line | `test_planted_effects_are_recovered_exactly` |
+| gap without the ingredient term | `test_planted_effects_are_recovered_exactly` |
+| completion lines reversed | `test_planted_effects_are_recovered_exactly` |
+| naming against neutral | `test_planted_effects_are_recovered_exactly` |
+| timing reversed | `test_planted_effects_are_recovered_exactly` |
+| timing always applicable | `test_timing_not_applicable_without_a_role_gap` |
+| family without Holm | `test_family_is_holm_adjusted` |
+| family shrinks with missing p | `test_family_is_fixed_at_fifty_and_pads_missing` |
+| margin half an SD | `test_margin_is_capped_at_four_tenths` |
+| TOST from the smaller side | `test_statistics_helpers` |
+| competence AUC 0.6 | `test_competence_gate_uses_wave_a_rule` |
+| competence on the two-candidate score | `test_competence_gate_uses_wave_a_rule` |
+| confirmed without the interval | `test_verdicts_are_statistical_and_never_withheld` |
+| naming reading only without completion | `test_reading_table[confirmed below zero-confirmed below zero-confirmed below zero-naming / partial-completion penalty]` |
+| stale scores accepted | `test_stale_unknown_duplicate_or_foreign_scores_stop` |
+| verdicts with missing scores | `test_missing_scores_withhold_verdicts` |
+| used-up goal items kept | `test_populations_on_the_full_records` |
+| bootstrap resamples items | `test_fast_draws_equal_the_general_path` |
+| sign flips single items | `test_sign_flip_flips_whole_pairs` |
+| heuristic H9 always true | `test_heuristics_agree_with_the_competence_script_on_every_item` |
+| heuristic H2 counts crafted units twice | `test_heuristics_agree_with_the_competence_script_on_every_item` |
+| used-up AUC not role-matched | `test_used_up_auc_is_role_matched` |
+| R1-M1 hash misses action | `test_hash_covers_every_field_and_context_key` |
+| R1-M2 hash misses swapped line | `test_hash_covers_every_field_and_context_key` |
+| R1-M3 hash misses recipe_lines | `test_hash_covers_every_field_and_context_key` |
+| R1-M4 hash context misses NEXT | `test_hash_covers_every_field_and_context_key` |
+| R1-M6 prompt check of system and examples off | `test_prompt_check_catches_a_changed_system_text` |
+| R1-M9 excluded goals allowed as parents | `test_excluded_goals_never_qualify_as_parents` |
+| R1-M10 text strict-word check off | `test_text_checks_catch_a_named_strict_parent_and_a_changed_list` |
+| R1-M11 padded verdict check off | `test_padded_reply_check` |
+| R1-M13 list-is-pair-list check off | `test_text_checks_catch_a_named_strict_parent_and_a_changed_list` |
+| R1-M14 NaN L not counted missing | `test_nan_scores_count_as_missing` |
+| R1-M15 timing applicable on the estimate | `test_timing_applicability_reads_the_interval` |
+| R1-M16 padded goal keeps used up | `test_populations_on_the_full_records` |
+| R1-M21 mass on failures only | `test_mass_criterion_uses_failures_and_successes` |
+| R1-M35 contrasts get twice the margin | `test_margin_is_capped_at_four_tenths` |
+| R1-M38 resume ignores the model | `test_resume_refuses_scores_of_another_model` |
+| R1-M40 shards from an unsorted pair set | `test_shards_are_sorted_pair_slices` |
+| R1-M48 sign-flip p unsmoothed | `test_sign_flip_p_is_smoothed` |
+| R1-M51 padded replay without the no-goal game | `test_padded_replay_covers_no_goal` |
+| A local AUC 0.6 | `test_local_auc_boundary_is_inclusive[4-False]` |
+| A local AUC strict boundary | `test_local_auc_boundary_is_inclusive[3-True]` |
+| A penalty competence without the parent population | `test_local_competence_rules_and_the_boundary` |
+| A naming competence on all ingredients | `test_local_competence_rules_and_the_boundary` |
+| A contrast competence ignores the other criteria | `test_local_competence_rules_and_the_boundary` |
+| A two-item rows use all ingredients | `test_contrasts_use_class_matched_ingredients` |
+| A padded rows use all ingredients | `test_contrasts_use_class_matched_ingredients` |
+| A margin not capped | `test_margin_is_capped_at_four_tenths` |
+| A interpretation ignores competence | `test_interpretation_separates_measurable_effects_from_distortions` |
+| A inconclusive naming counts as constrained | `test_reading_table[confirmed below zero-inconclusive-confirmed below zero-completion contributes; naming not constrained]` |
+| A timing comparison ignored | `test_timing_qualifier_and_no_partial_naming_rule` |
+| A F3 true when another model is below zero | `test_across_models_patterns_and_f3` |
+| A F3 never undecided | `test_across_models_patterns_and_f3` |
+| A provenance commit check off | `test_provenance_requires_one_commit_and_pinned_revisions` |
+| A provenance revision check off | `test_provenance_requires_one_commit_and_pinned_revisions` |
+| A family draws 4000 | `test_family_tests_use_at_least_20000_draws` |
+| A parent whole-name subset reversed | `test_parent_subsets_overlap_kinds_and_splits` |
+| A overlap kind by characters | `test_parent_subsets_overlap_kinds_and_splits` |
+| A power at the 0.05 level only | `test_equivalence_power` |
+| A parent records without the neutral question | `test_record_counts_and_arms` |
+| A fast bootstrap ignores the ingredient side | `test_fast_draws_equal_the_general_path` |
+| A fast bootstrap resamples items | `test_statistics_helpers` |
+| A role gap on all rows | `test_role_gap_descriptive_equals_naming_plus_completion` |
+| Q round-1 question in the prompts | `test_every_arm_changes_only_what_its_name_says` |
+| Q hash covers round 1's question | `test_hash_covers_every_field_and_context_key` |
+| U1 completed two-item records kept | `test_a_made_partner_is_detected_and_leaves_naming_and_completion` |
+| U1 partner-made check off | `test_a_made_partner_is_detected_and_leaves_naming_and_completion` |
+| U2 matched cells unweighted | `test_matched_sensitivity_removes_a_profile_confound` |
+| U2 matched cells of one item | `test_matched_sensitivity_removes_a_profile_confound` |
+| U2 craftable and raw swapped | `test_matched_sensitivity_removes_a_profile_confound` |
+| U4 strict against overlapping not pooled | `test_sensitivity_and_strict_comparison_are_reported` |

@@ -568,7 +568,9 @@ def main() -> int:
             # Fast path: the test files that name the mutated module. A mutant that survives them is run
             # against the whole suite before it counts as a survivor; a timeout is never counted as a kill.
             outcome = _run_tests(python, work, _covering_tests(work, rel), timeout)
-            if outcome == "survived":
+            # MUTATION_FAST_ONLY=1 (a screen, 2026-11-21): skip the whole-suite rerun of a covering-test survivor, so
+            # survivors show up quickly; the final run never sets it.
+            if outcome == "survived" and os.environ.get("MUTATION_FAST_ONLY") != "1":
                 outcome = _run_tests(python, work, ["tests"], timeout)
             path.write_text(source, encoding="utf-8")
             label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]

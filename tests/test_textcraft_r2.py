@@ -724,6 +724,8 @@ def test_populations_on_the_full_records(records):
     pops = A.populations(records)
     assert len(pops["goal"]) == 504 and len(pops["ingredient"]) == 990 and len(pops["padded"]) == 920
     assert len(pops["parent_failures"]) == 675 and len(pops["parent_successes"]) == 207
+    assert len(pops["ingredient_matched"]) == 496 and len(pops["padded_goal"]) == 336
+    assert len(pops["padded_ingredient_matched"]) == 332 and len(pops["goal_successes_padded_bins"]) == 200
     assert len(pops["main_failures"]) == 1500 and len(pops["successes"]) == 600
 
 
@@ -1037,7 +1039,9 @@ def test_parent_subsets_overlap_kinds_and_splits(records, small, fast):
 def test_hash_covers_every_field_and_context_key(small, monkeypatch):
     rec = _first(small, kind="parent")
     h = R.item_hash(rec, SHOTS)
-    for field in R.HASHED:
+    required = ("kind", "recipe_lines", "ext_recipe_lines", "history", "action", "task_line", "swapped_task_line",
+                "neutral_task_line", "both_task_line", "parent_task_line", "candidates", "arms")
+    for field in required:  # an explicit list, so a field dropped from R.HASHED is caught
         assert R.item_hash({**rec, field: "changed"}, SHOTS) != h, field
     for mod, name, value in ((P, "NEXT", "Next:"), (R, "YN_QUESTION", "Q?")):
         monkeypatch.setattr(mod, name, value)
@@ -1148,7 +1152,11 @@ def test_provenance_requires_one_commit_and_pinned_revisions(mock_runs, small):
 
 def test_role_gap_descriptive_equals_naming_plus_completion(small, fast):
     recs = copy.deepcopy(small)
-    by = A.index_scores(_planted(recs, "qwen3-8b"), recs, SHOTS, "qwen3-8b")[0]
+    no_both = {r["id"] for r in recs if r["kind"] == "main" and not r["both_task_line"] and r["population"] == "main"}
+    assert no_both  # the pair whose goal name contains "and"; its records must stay out of the role gap
+    sc = [{**x, "L": x["L"] + 3.0} if (x["transition_id"] in no_both and x["condition"] == "aligned") else x
+          for x in _planted(recs, "qwen3-8b")]
+    by = A.index_scores(sc, recs, SHOTS, "qwen3-8b")[0]
     pops = A.populations(recs)
     c = A.contrasts(by, pops, 0.4)
     d = A.descriptive(by, pops)

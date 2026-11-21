@@ -22,7 +22,8 @@
     "n_records": 2982,
     "prompt_failures": 0,
     "replay_failures": 0,
-    "structure_failures": 0
+    "structure_failures": 0,
+    "two_item_records_with_a_named_goal_already_made_or_held": {}
    },
    "1": {
     "checker_failures": 0,
@@ -33,7 +34,8 @@
     "n_records": 2982,
     "prompt_failures": 0,
     "replay_failures": 0,
-    "structure_failures": 0
+    "structure_failures": 0,
+    "two_item_records_with_a_named_goal_already_made_or_held": {}
    },
    "2": {
     "checker_failures": 0,
@@ -44,7 +46,8 @@
     "n_records": 2982,
     "prompt_failures": 0,
     "replay_failures": 0,
-    "structure_failures": 0
+    "structure_failures": 0,
+    "two_item_records_with_a_named_goal_already_made_or_held": {}
    }
   }
  },
