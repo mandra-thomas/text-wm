@@ -115,26 +115,40 @@ Llama's overall negative is this penalty without the lift. Qwen's positive total
 - The overall interval reaches zero when the empty start is stated (−0.11 [−0.23, +0.01]) and under the clean prompt with the inventory shown (−0.09 [−0.24, +0.06]).
 - The goal-role negative persists under every prompt tried.
 
-**Llama's competence in TextCraft, and what it implies.** Competence here is the AUC under the neutral goal line, the probability that the model scores a real success above a real failure (0.5 is chance).
+**Llama's competence in TextCraft, and what it implies.** Competence here is the AUC under the neutral goal line, the probability that the model scores a real success above a real failure (0.5 is chance). The full analysis is in `notes/textcraft_llama_competence.md` on branch `textcraft-llama-dx`. That note's heuristics were fixed and committed before they were fitted.
 
-- *The figures.*
-  - Overall: 0.68 [0.65, 0.72], against 0.87 for Qwen.
-  - By failure type: 0.86 where an input was never obtained, 0.67 where too few are held, and 0.31 where an input was used up earlier. The last is below chance: Llama ranks used-up failures above real successes.
-  - By action type: 0.84 on goal-item crafts, 0.58 on ingredient crafts.
-  - On counting items: 0.42, so the counting readout was withheld by rule.
-- *A lean toward failure.* Its mean L is −2.98 on failures and −0.33 on successes. On the yes/no question it answers "Yes" to 9.9% of failing and 11.3% of working main actions.
-- *Its free-text predictions.* These say failure for about 80% of goal crafts that succeed.
-- *Without the prompt examples.* Its AUC falls to 0.43.
-- *With the inventory shown.* Its AUC rises only modestly on a sample (0.54 to 0.62), and used-up failures stay below chance (0.35).
-- *Against ALFWorld.* There the same model discriminates well (AUC 0.97 on yes/no).
+*How well Llama discriminates.*
 
-Implications, all descriptive:
+- *Overall.* On the 1,500 main failures against the 600 successes, Llama's AUC is 0.61 [0.58, 0.64] on the two-candidate scale and 0.61 on yes/no. Qwen's is 0.86 and 0.85.
+- *Why the confirmatory 0.68 is higher.* The confirmatory gate's figure of 0.68 includes the easier usefulness failures.
+- *By role.*
+  - On goal-item crafts Llama is decent: 0.84, and 0.90 where an input was never obtained.
+  - On ingredient crafts it is near chance: 0.58, and 0.43 for used-up failures against ingredient successes.
+  - The earlier figure of 0.31 for used-up failures compared them with all successes, half of which are goal crafts that Llama scores low whether they work or not. It mostly reflects that mix of roles.
+- *By history length.* It discriminates well only at 1–3 steps (0.79), and at about 0.55 at 4–12 steps.
 
-- **The confirmatory reading stands.** By the pre-registered TextCraft gate, which asks that the AUC interval exclude 0.5, Llama is competent, so its row reads "negative". Under the stricter rule used in the model-families study (AUC at least 0.70), it would be classed as not competent. That is a disclosed difference between the two studies' rules, not a change of verdict.
-- **The absent positive effect fits the cross-model pattern.** In ALFWorld, every model that can do the task shows an effect and the only near-zero effects come from models that cannot (`textcraft_vs_alfworld.md`, section 9). Llama's absent positive effect on ingredient crafts, where it barely discriminates, fits that pattern.
-- **The goal-craft negative is not explained by incompetence.** It sits where Llama discriminates well.
-- **Round 2 fixes one rule in advance.** It applies the families rule to every model before any data.
-- **More to come.** A fuller analysis of what Llama does instead of tracking the inventory is in `notes/textcraft_llama_competence.md` on branch `textcraft-llama-dx`.
+*How well Llama's predictions match outcomes.*
+
+- *Accuracy.* Its balanced accuracy is 0.53 on the two-candidate scale and 0.51 on yes/no; Qwen's are 0.78 and 0.77. On yes/no Llama answers "Yes" to 9.9% of failing and 11.3% of working actions.
+- *Calibration.* Above a predicted probability of 0.1, the observed success rate is flat. Its Brier score is 0.34, against 0.20 for always predicting the base rate.
+
+*What Llama does instead of tracking the inventory.* Its scores follow simple cues better than the true outcome:
+
+- "every input's name appears in the history": tracking AUC 0.87;
+- "enough units were obtained at some point, ignoring later use, and goal crafts fail": agreement κ = 0.57 with its decisions;
+- the true inventory rule: 0.61.
+
+Given the cue, the true outcome adds nothing to Llama's score (slope −0.55 nats), while for Qwen it keeps a large weight (+12.6). Llama's scores fall with the number of missing units, but do not register that an input was used up unless an inventory reply shows it. With the inventory shown in the prompt, Llama still follows the cue (0.89) more than the truth (0.62).
+
+*Against ALFWorld.* The same model discriminates well there (AUC 0.97 yes/no, Brier 0.04) and passes the families rule. What it lacks in TextCraft is inventory arithmetic over a history.
+
+*Implications, all descriptive.*
+
+- **The confirmatory verdict stands.** Llama passes the pre-registered TextCraft gate, which asks that the AUC interval exclude 0.5, so its row reads "negative". Under the stricter rule of the model-families study (AUC at least 0.70, yes/no format), it would be classed as not interpretable. That is a disclosed difference between the two studies' rules, not a change of verdict. The headline would still be "confirmed for Qwen3-8B only".
+- **Llama's TextCraft result is not evidence about a working world model.** It should not be read as evidence about how a goal line biases a working world model, in either direction. Nor does it show that the ALFWorld finding fails to generalize, since the same model is competent in ALFWorld.
+- **Competence is necessary for a positive effect here, but not sufficient.** No competence comes with no positive effect, which fits the cross-model pattern (`textcraft_vs_alfworld.md`, section 9). But in the one ingredient cell where Llama is competent (never obtained, AUC 0.86), its effect is still null (−0.11), where Qwen's is +1.64.
+- **The goal-craft negative is not explained by incompetence.** It sits where Llama discriminates. Part of that discrimination is a prior that goal crafts fail: Llama predicts success for only 24% of goal crafts that work.
+- **Round 2 applies the families rule to every model before any data.** Llama-3.1-8B is expected to fail it.
 
 **The prompt matters.** The verified system text quotes the original agent's instructions ("Every round I will give you an observation, you have to respond an action…"). Removing them, with the world-model framing and the environment's rules kept, raises the goal-role effect by +0.39 for Llama and +1.66 for Qwen. Competence is left about unchanged (−0.016 and +0.002 AUC). From now on TextCraft runs use this clean system text, after the tokenization and golden-prompt checks pass. Results under it are a different quantity from the confirmatory one and are reported as such.
 
