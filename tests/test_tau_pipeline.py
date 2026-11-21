@@ -762,6 +762,25 @@ def test_matched_reading_for_a_main_null_is_the_prestated_text():
     assert P.matched_reading("replicates (ALFWorld direction)", "replicates (ALFWorld direction)") != want
 
 
+@pytest.mark.parametrize("witness,label", [
+    (_blk(0.2, 1.4), "toward success"),
+    (_blk(-1.4, -0.2), "toward failure"),
+    (_blk(-0.3, 0.6), "not shown to shift"),
+])
+def test_witness_label_has_three_cases(witness, label):
+    """Review 4: a witness interval below 0 is a shift toward failure, labelled as such and not read."""
+    r = P.outcome_reading("no effect larger than 0.5 nats", True, _blk(-0.2, 0.2), None, witness)
+    assert label in r["witness"]
+    assert ("reported, not read" in r["witness"]) == (label == "toward failure")
+
+
+def test_matched_reading_for_a_null_under_both_names_the_explicit_statement():
+    """Review 4: with 'and nothing else' in both arms, a null under both rests on no explicit statement only."""
+    got = P.matched_reading("no effect larger than 0.5 nats", "no effect larger than 0.5 nats")
+    assert got == ("no effect larger than 0.5 nats under either prompt: the null does not rest on the explicit statement "
+                   "that the backend does not see the task (both prompts keep 'and nothing else')")
+
+
 def test_matched_arm_scores_the_witness_first_token_under_three_task_lines(runs):
     cfg = _score_cfg()
     gen, _, _ = P.load_built({"build_run": "tau_build"})

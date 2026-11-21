@@ -278,7 +278,7 @@ The system message (`wf/tau/prompts.py`), fixed text, in this order:
 - **Instruction:** "You are a world model of the backend of a retail customer-service system. An agent is
   helping a user and calls the backend's tools. Given the user's task, the tool calls made so far with their
   outputs, and the agent's next tool call, predict the exact output of the tool call. Successful calls return
-  JSON; failed calls return a single line starting with "Error: ". Output only the tool output."
+  JSON; failed calls return a single line starting with "Error: ". Output only the tool output." *(Superseded: see C4, fix round 3.)*
 - **The policy:** "# Retail agent policy", then `policy.md` verbatim.
 - **The tool descriptions:** "# Tools", then `tools_openai.json` as compact JSON, one tool per line.
 
@@ -325,7 +325,7 @@ this. The yes/no variant replaces the final "Tool output:" with:
 
 "Question: will this tool call succeed, or will it return an error? Answer Yes if it succeeds and No if it
 returns an error.
-Answer:"
+Answer:" *(Superseded: see C1, fix round 3.)*
 
 ## 6. Readouts and analysis
 
@@ -988,7 +988,7 @@ within the arm). Its reading combines that verdict with the confirmatory main-ar
   state that the backend ignores the task; it cannot be separated from a belief that the backend checks calls against
   the user's request, so it is not read as goal leakage into the backend's state. (Replaced in fix round 3, C3; the
   earlier bullet read this pattern as the statement of the system's blindness suppressing a leak.)
-- a null under both: the null does not rest on the debiasing statement;
+- a null under both: the null does not rest on the explicit statement that the backend does not see the task (both prompts keep "and nothing else"; review 4);
 - an effect under the main prompt only: not predicted; reported, not interpreted;
 - anything else: inconclusive.
 
@@ -1383,3 +1383,14 @@ close to the limit on an A40 at half that speed. The smoke projection (B5) decid
   arm's witness (never scheduled, aligned only, scheduled in the main arm, also in the rules-only arm, its readout
   reading the main arm, fail − witness computed in the main arm). The 133 earlier mutants all still apply and are all
   killed.
+
+### C8. Review 4 (confirming review of fix round 3), wording fixes before any score (2026-11-20)
+
+Review 4 passed fix round 3 with no must-fix. Its wording fixes, none of which changes a prompt, a verdict category, the job set or the items:
+
+- **The matched arm's null-under-both reading.** With "and nothing else" in both arms, a null under both prompts shows only that the null does not rest on the explicit statement that the backend does not see the task, not that it rests on no debiasing cue. `matched_reading` and the B1 bullet now say so.
+- **The witness label has three cases.** A witness whose aligned − swapped interval lies below 0 was labelled "not shown to shift"; it is now labelled as shifting toward failure, and it is reported, not read. The null reading is unchanged: it switches only when the witness interval lies above 0 (C2).
+- **Superseded prompt text in sections 5.1 and 5.4** is marked as superseded by C4 and C1.
+- **The job script's sizing comment** now quotes the largest shard (C6).
+
+The full token check on the final prompts (C7) runs on ICE before the smoke run.

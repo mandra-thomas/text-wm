@@ -478,6 +478,10 @@ def _ci_above(block: dict | None) -> bool:
     return bool(block) and block.get("n_items", 0) > 0 and block["ci"][0] > 0
 
 
+def _ci_below(block: dict | None) -> bool:
+    return bool(block) and block.get("n_items", 0) > 0 and block["ci"][1] < 0
+
+
 def _ci_inside(block: dict | None) -> bool:
     return bool(block) and block.get("n_items", 0) > 0 and -SUPPORT < block["ci"][0] and block["ci"][1] < SUPPORT
 
@@ -493,8 +497,11 @@ def outcome_reading(verdict: str, disc: bool | None, fail_minus_witness: dict | 
     mention) and, for a null, the witness's own aligned - swapped effect."""
     out: dict[str, Any] = {"discrimination_holds": disc}
     if witness_effect is not None:
-        out["witness"] = ("the task shifts predictions for the working call (witness aligned minus swapped, CI above 0)"
-                          if _ci_above(witness_effect) else "the working call is not shown to shift with the task")
+        out["witness"] = ("the task shifts predictions for the working call toward success (witness aligned minus "
+                          "swapped, CI above 0)" if _ci_above(witness_effect)
+                          else "the task shifts predictions for the working call toward failure (witness aligned minus "
+                          "swapped, CI below 0); reported, not read" if _ci_below(witness_effect)
+                          else "the working call is not shown to shift with the task")
     if fail_minus_witness is not None:
         out["specificity"] = ("specific to failing calls (fail minus witness above 0)" if _ci_above(fail_minus_witness)
                               else "not specific to failing calls (fail minus witness about 0, negative or uncertain)")
@@ -593,7 +600,8 @@ def matched_reading(main_verdict: str, matched_verdict: str) -> str:
     if null(main_verdict) and eff(matched_verdict):
         return MATCHED_NULL_MAIN_EFFECT
     if null(main_verdict) and null(matched_verdict):
-        return "no effect larger than 0.5 nats under either prompt: the null does not rest on the debiasing statement"
+        return ("no effect larger than 0.5 nats under either prompt: the null does not rest on the explicit statement "
+                "that the backend does not see the task (both prompts keep 'and nothing else')")
     if eff(main_verdict) and null(matched_verdict):
         return "effect under the main prompt only: not predicted; reported, not interpreted"
     return "inconclusive"

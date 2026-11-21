@@ -9,7 +9,7 @@
 # plus 6 each for the 500 items of the rules-only and the ALFWorld-matched arm (the same items), and 3 more for the
 # matched arm's witness (first token; fix round 3). About 49.7k passes per model, 99k in all; with 16 shards about
 # 6.2k passes per shard on average. At ~1.5 s a pass (A100/L40S, 8B in bf16 at ~10k
-# tokens) that is ~2.5 h a shard, ~5 h on an A40. The limit is 8 h (tau_smoke_analysis.yaml time_limit_hours must
+# tokens) that is ~2.5 h for an average shard and ~3.4 h for the largest (4,053 passes per model; ~6.8 h on an A40). The limit is 8 h (tau_smoke_analysis.yaml time_limit_hours must
 # equal it; a test checks), and every score is saved as it finishes, so a shard cut off by the limit resumes:
 #   sbatch --dependency=afternotok:<job> ... --export=ALL,WF_RESUME=1,RQ2_RUN=tau_score,WF_SHARD=<i>,WF_N_SHARDS=16 pace/tau_score.sbatch
 # The smoke run (tau_score_smoke, then tau_smoke_analysis) measures the mean seconds per job and projects the hours
