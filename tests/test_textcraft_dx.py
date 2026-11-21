@@ -69,26 +69,33 @@ def test_outcome_of():
 
 def test_configs_registered_and_selection_sizes():
     items = V.read_items()
-    for run, n in (("textcraft_dx_zeroshot", 2 * (150 + 100)), ("textcraft_dx_generate", 2 * (60 + 30 + 30))):
+    for run, n in (("textcraft_dx_zeroshot", 2 * (150 + 100)), ("textcraft_dx_generate", 2 * (60 + 30 + 30)),
+                   ("textcraft_dx_objectgoal", 2 * (150 + 100))):
         assert run in RUNNERS
         cfg = load_config(run)
         assert len(X.selection(cfg, items)) == n
 
 
-@pytest.mark.parametrize("mode", ["zeroshot", "generate"])
+@pytest.mark.parametrize("mode", ["zeroshot", "generate", "objectgoal"])
 def test_run_mock_writes_every_record_and_resumes(mock_runs, mode):
     items = _small_items()
+    role = "ingredient" if mode == "objectgoal" else None
     cfg = {"run_id": f"dx_{mode}", "manifest": _manifest(mock_runs, items), "mode": mode,
-           "models": ["llama3.1-8b-fewshot"], "blocks": [{"population": "main", "couples": 3}]}
+           "models": ["llama3.1-8b-fewshot"], "blocks": [{"population": "main", "couples": 3, "role": role}]}
     assert X.run_textcraft_dx(cfg) == 0
-    out = mock_runs / "runs" / f"dx_{mode}" / ("scoring.jsonl" if mode == "zeroshot" else "generations.jsonl")
+    out = mock_runs / "runs" / f"dx_{mode}" / ("generations.jsonl" if mode == "generate" else "scoring.jsonl")
     recs = read_jsonl(out)
     chosen = X.selection(cfg, items)
-    assert len(recs) == len(chosen) * 3
-    assert {(r["transition_id"], r["condition"]) for r in recs} == {(t["id"], c) for t in chosen for c in X.CONDITIONS}
+    arms = X.arms_of(mode)
+    assert len(recs) == len(chosen) * len(arms) and len(arms) == (2 if mode == "objectgoal" else 3)
+    assert {(r["transition_id"], r["condition"]) for r in recs} == {(t["id"], c) for t in chosen for c in arms}
     shots = () if mode == "zeroshot" else P.fewshot_examples()
-    assert all(r["item_hash"] == S.item_hash(next(t for t in chosen if t["id"] == r["transition_id"]), shots, P.SYSTEM)
+    prep = X.object_goal_item if mode == "objectgoal" else (lambda t: t)
+    assert all(r["item_hash"] == S.item_hash(prep(next(t for t in chosen if t["id"] == r["transition_id"])), shots, P.SYSTEM)
                for r in recs)
+    if mode == "objectgoal":
+        assert all(r["task_line"] == f"Goal: craft {next(t for t in chosen if t['id'] == r['transition_id'])['object']}."
+                   for r in recs)
     if mode == "generate":
         assert all(r["outcome"] in ("success", "failure", "other_failure", "other") and r["top_first"] for r in recs)
     # resume: nothing is scored twice
@@ -125,3 +132,38 @@ def test_auc_and_field_diff_and_loo():
     assert r["est"] == -3.0 and r["n"] == 1  # item y has no scores and is skipped
     loo = m.leave_one_pair_out([1.0, 1.0, 4.0], ["a", "a", "b"])
     assert loo["min"] == ("b", 1.0) and loo["max"] == ("a", 4.0)
+
+
+def test_object_goal_prompt_differs_from_aligned_only_in_the_goal_line():
+    t = next(it for it in V.read_items() if it["population"] == "main" and it["role"] == "ingredient")
+    for arm in ("aligned", "yn_aligned"):
+        a, o = P.messages(t, arm), P.messages(X.object_goal_item(t), arm)
+        assert a[:-1] == o[:-1]
+        la, lo = a[-1]["content"].splitlines(), o[-1]["content"].splitlines()
+        diff = [(x, y) for x, y in zip(la, lo) if x != y]
+        assert len(la) == len(lo) and diff == [(t["task_line"], f"Goal: craft {t['object']}.")]
+
+
+def test_object_goal_arms_score_the_right_candidates(mock_runs, monkeypatch):
+    from wf.scoring.logodds import LogoddsScorer
+    calls = []
+    real = LogoddsScorer.score_pair
+
+    def spy(self, transition_id, condition, messages, o_plus, o_minus):
+        calls.append((condition, messages[-1]["content"], o_plus, o_minus))
+        return real(self, transition_id, condition, messages, o_plus, o_minus)
+
+    monkeypatch.setattr(LogoddsScorer, "score_pair", spy)
+    items = _small_items()
+    cfg = {"run_id": "dx_og", "manifest": _manifest(mock_runs, items), "mode": "objectgoal",
+           "models": ["llama3.1-8b-fewshot"], "blocks": [{"population": "main", "couples": 2, "role": "ingredient"}]}
+    assert X.run_textcraft_dx(cfg) == 0
+    chosen = {t["id"]: t for t in X.selection(cfg, items)}
+    assert calls and len(calls) == 2 * len(chosen)
+    for cond, query, plus, minus in calls:
+        assert f"Goal: craft " in query
+        if cond == "yn_object_goal":
+            assert (plus, minus) == ("Yes", "No") and query.endswith(P.YN_QUESTION)
+        else:
+            assert cond == "object_goal" and query.endswith(P.NEXT) and plus.startswith("Crafted ")
+            assert minus.startswith("Could not find enough items")

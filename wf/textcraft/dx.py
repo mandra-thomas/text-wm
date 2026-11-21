@@ -3,6 +3,9 @@
 `textcraft_dx_zeroshot`: the verified prompt without its in-context examples (system text, then the item's turn),
 both models, the aligned, swapped and neutral lines, two-candidate scores, on seeded whole couples of the main and
 success populations. Records have the fields of textcraft_score's, with `variant` "zeroshot".
+`textcraft_dx_objectgoal`: under the verified prompt, the aligned prompt with its goal line replaced by one naming the
+action's own object ("Goal: craft Y."), as the two-candidate score (`object_goal`) and the yes/no question
+(`yn_object_goal`), both models, on seeded whole ingredient couples. Read against the verified aligned and swapped scores.
 `textcraft_dx_generate`: under the verified prompt (examples included), greedy free generation and the most probable
 first tokens, Llama only by default, on seeded whole couples of given roles. One record per item and line.
 
@@ -45,6 +48,18 @@ def selection(cfg: dict, items: list[dict]) -> list[dict]:
             seen.add(t["id"])
             uniq.append(t)
     return uniq
+
+
+OBJECT_GOAL_ARMS = ("object_goal", "yn_object_goal")
+
+
+def object_goal_item(item: dict) -> dict:
+    """The item with its aligned goal line replaced by one naming the action's own object ("Goal: craft Y.")."""
+    return {**item, "task_line": f"Goal: craft {item['object']}."}
+
+
+def arms_of(mode: str) -> tuple[str, ...]:
+    return OBJECT_GOAL_ARMS if mode == "objectgoal" else CONDITIONS
 
 
 def zero_shot_messages(item: dict, condition: str) -> list[dict[str, str]]:
@@ -99,15 +114,17 @@ def run_textcraft_dx(cfg: dict) -> int:
         hashes = {t["id"]: item_hash(t, (), P.SYSTEM) for t in items}
     elif mode == "generate":
         hashes = {t["id"]: item_hash(t, shots, P.SYSTEM) for t in items}
+    elif mode == "objectgoal":
+        hashes = {t["id"]: item_hash(object_goal_item(t), shots, P.SYSTEM) for t in items}
     else:
         raise ValueError(mode)
-    out = d / ("scoring.jsonl" if mode == "zeroshot" else "generations.jsonl")  # both in RUN_OUTPUTS: wiped or repaired
+    out = d / ("generations.jsonl" if mode == "generate" else "scoring.jsonl")  # both in RUN_OUTPUTS: wiped or repaired
     saved = read_jsonl(out) if cfg.get("resume") and out.exists() else []
     if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):
         raise SystemExit(f"{run_id}: saved records belong to different items or prompts; rerun without --resume.")
     done = {(s["model"], s["transition_id"], s["condition"]) for s in saved}
     for model_name, tag in _models(cfg):
-        todo = [(t, c) for t in items for c in CONDITIONS if (tag, t["id"], c) not in done]
+        todo = [(t, c) for t in items for c in arms_of(mode) if (tag, t["id"], c) not in done]
         if not todo:
             continue
         scorer = LogoddsScorer(model_name, model_tag=tag)
@@ -119,6 +136,13 @@ def run_textcraft_dx(cfg: dict) -> int:
                 sc = scorer.score_pair(transition_id=t["id"], condition=c, messages=zero_shot_messages(t, c),
                                        o_plus=plus, o_minus=minus)
                 rec = {**sc.to_dict(), **base}
+            elif mode == "objectgoal":  # the aligned prompt with the object-goal line; yn_ arms ask the question
+                arm = "yn_aligned" if c == "yn_object_goal" else "aligned"
+                obj = object_goal_item(t)
+                plus, minus = P.candidates(obj, arm)
+                sc = scorer.score_pair(transition_id=t["id"], condition=c, messages=P.messages(obj, arm, shots),
+                                       o_plus=plus, o_minus=minus)
+                rec = {**sc.to_dict(), **base, "task_line": obj["task_line"]}
             else:
                 msgs = P.messages(t, c, shots)
                 text = scorer.free_generate(msgs, max_new_tokens=int(cfg.get("max_new_tokens", 40)))
@@ -132,6 +156,6 @@ def run_textcraft_dx(cfg: dict) -> int:
                 rec["nan"] = True
             append_jsonl(out, [rec])
         scorer.close()
-    write_status(run_id, f"{mode}: {len(items)} items, {len(_models(cfg))} model(s), {len(CONDITIONS)} lines",
+    write_status(run_id, f"{mode}: {len(items)} items, {len(_models(cfg))} model(s), {len(arms_of(mode))} arms",
                  ok=False, reported="dx complete")
     return 0

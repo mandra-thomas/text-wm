@@ -1,0 +1,11 @@
+run_id: textcraft_dx_objectgoal
+# Exploratory, post hoc (notes/textcraft_llama_dx.md, run 3): ingredient actions under the verified prompt with the
+# goal line naming the action's own object ("Goal: craft Y."), two-candidate and yes/no, both models, on 150 seeded
+# ingredient main couples and 100 seeded ingredient success couples. Read against the verified aligned and swapped
+# scores of the same items.
+manifest: wf/textcraft/data/manifest.json
+mode: objectgoal
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+blocks:
+  - {population: main, couples: 150, role: ingredient}
+  - {population: success, couples: 100, role: ingredient}
