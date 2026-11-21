@@ -17,7 +17,10 @@
 # swapped runs of an item, and stage 0 and the later stages, must not mix GPU types (deviations.md,
 # "Scores across GPU types"). The first job may take either type; every later stage, and every resumed stage,
 # refuses to start on a GPU type other than the one in stage 0's jobs.jsonl (wf.interp.pilot.check_gpu), so
-# resubmit with --constraint=gpu-a100 or --constraint=gpu-l40s, whichever stage 0 ran on.
+# resubmit with --constraint=gpu-a100 or --constraint=gpu-l40s, whichever stage 0 ran on. The check compares GPU
+# names exactly (amendment 3, C7): --constraint=gpu-a100 can land on another A100 model (40 GB against 80 GB, PCIe
+# against SXM) with a different name, which is refused; resubmit until the job lands on stage 0's exact GPU (the
+# refusal message names it). Ablation: 55 edits per prompt, still 4 batches of 16, so the estimate is unchanged.
 #SBATCH --constraint=(gpu-a100|gpu-l40s)
 #SBATCH --output=logs/interp_%j.out
 #SBATCH --error=logs/interp_%j.err
@@ -27,7 +30,8 @@
 #   bash pace/submit.sh interp_pilot.sbatch
 #   bash pace/submit.sh interp_pilot.sbatch --export=ALL,INTERP_STAGES="interp_pilot_patch interp_pilot_ablate"
 # Before the full patching run, a 10-item timing check is advisable (design section 10):
-#   python -m wf.runs interp_pilot_patch  with n_items: 10 in a copy of the config.
+#   python -m wf.runs interp_pilot_patch  with n_items: 10 in a copy of the config. Its stratum minimums are
+#   scaled to 10/100 of the configured ones (amendment 3, C6): 3 step-0 items and 3 with an object mention.
 # Then on a CPU node: sbatch --export=ALL,ANALYSIS_RUNS=interp_pilot_analysis pace/analysis_cpu.sbatch
 
 set -euo pipefail

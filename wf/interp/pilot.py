@@ -22,6 +22,7 @@ The GPU runs refuse to start on a GPU type other than the one stage 0 ran on (am
 from __future__ import annotations
 
 import json
+import math
 import shutil
 from pathlib import Path
 from typing import Any
@@ -214,6 +215,7 @@ def run_interp_pilot_stage0(cfg: dict) -> int:
                        "n_layers": p.n_layers, "d_model": p.d_model, "readout_ids": [plus, minus],
                        "batch_noise_nats": noise, "versions": _versions(), "n_failures": len(fails),
                        "n_successes": len(succs), "logged_scores_note": LOGGED_NOTE,
+                       "norm_eps": float(getattr(p.norm, "variance_epsilon", None) or getattr(p.norm, "eps", 1e-6)),
                        "first_token": bool(cfg.get("first_token", True))})
     min_gb = cfg.get("min_free_gb", 5.0)
     store = baseline(p, tok, fails, d / "acts", formats=("yn",), goals=FAIL_GOALS, min_free_gb=min_gb)
@@ -246,6 +248,15 @@ def run_interp_pilot_stage0(cfg: dict) -> int:
 # ---------------- stage 2 (minimal): patching ----------------
 
 
+def scaled_minimum(minimum: int, n: int, reference: int) -> int:
+    """A stratum minimum set for `reference` items, scaled down in proportion when fewer are drawn (amendment 3,
+    C6), rounded half up: the 10-item timing run of patching gets 3 step-0 items and 3 with an object mention
+    instead of minimums larger than the run."""
+    if n >= reference:
+        return int(minimum)
+    return int(math.floor(minimum * n / reference + 0.5))
+
+
 def patch_selection(cfg: dict, sets: dict, recs: list[dict]) -> tuple[list[dict], dict[str, str], dict[str, float]]:
     """The patching items (clear effect, calibration fold only, stratified, at least `min_step0` at step 0 and
     `min_mention` whose history names the action's object; amendment 2, B3, B4), placebo objects for the first
@@ -259,9 +270,11 @@ def patch_selection(cfg: dict, sets: dict, recs: list[dict]) -> tuple[list[dict]
     fails = sets["failures"]
     fold = folds(fails + sets["successes"], cfg.get("split_seed", 0))
     calib = {g for g, f in fold.items() if f == cfg.get("calibration_fold", 0)}
-    chosen, weights = select_stratified(fails, effects(recs), cfg.get("n_items", 100), cfg.get("min_effect", 1.0),
+    n, ref = cfg.get("n_items", 100), cfg.get("quota_reference_n", 100)
+    chosen, weights = select_stratified(fails, effects(recs), n, cfg.get("min_effect", 1.0),
                                         calib, f"interp|patch|{cfg.get('model_tag', MODEL_TAG)}",
-                                        min_step0=cfg.get("min_step0", 30), min_mention=cfg.get("min_mention", 25))
+                                        min_step0=scaled_minimum(cfg.get("min_step0", 30), n, ref),
+                                        min_mention=scaled_minimum(cfg.get("min_mention", 25), n, ref))
     pool = all_items(cfg) if not cfg.get("placebo_pool_from_sets") else fails
     by_game: dict[str, list[dict]] = {}
     for t in pool:
@@ -348,11 +361,11 @@ def fold_directions(cfg: dict, store: Any, sets: dict, fold: dict[str, int], lay
     The success direction is estimated within verbs, from the fold's determined successes and its failures
     after step 0 under the neutral task (amendment 2, B2): no determined success is at step 0, so step-0
     failures would add a step-0-versus-later contrast to it. With `lens_dir`, the success direction without its
-    readout component is added.
+    readout component is added, and every steering amount is also estimated per stratum (amendment 3, C4).
     """
     import numpy as np
 
-    from wf.interp.analysis import estimate_directions, verb
+    from wf.interp.analysis import estimate_directions, stratum, verb
     from wf.interp.directions import midpoint_for, random_units
 
     recs = store.records()
@@ -381,7 +394,7 @@ def fold_directions(cfg: dict, store: Any, sets: dict, fold: dict[str, int], lay
             out[f][layer] = estimate_directions(H, rows([t["id"] for t in succ], "absent"),
                                                 rows([t["id"] for t in neutral_f], "absent"),
                                                 [verb(t) for t in succ], [verb(t) for t in neutral_f],
-                                                readout_dir=lens_dir)
+                                                readout_dir=lens_dir, strata=[stratum(t) for t in fails])
             if layer in random_layers:
                 R = random_units(H["aligned"].shape[1], 2, seed + layer)
                 out[f][layer]["random"] = R
@@ -390,13 +403,15 @@ def fold_directions(cfg: dict, store: Any, sets: dict, fold: dict[str, int], lay
 
 
 def ablation_edits(dirs: dict[int, dict], layers: list[int], caveat: list[int] = (), last: int | None = None,
-                   checks: dict | None = None) -> dict[str, list[tuple[int, Any]]]:
+                   checks: dict | None = None, stratum: str | None = None) -> dict[str, list[tuple[int, Any]]]:
     """Named edits at the answer position, from one fold's directions.
 
     At every profile layer L: task|L, task_perp_success|L, mention|L, mean ablation at L; task_from|L, the task
     direction ablated at L and at every later profile layer (never at a caveat layer or the last); steer_success|L,
     add the mean aligned-minus-swapped projection on the success direction; steer_success_perp_readout|L, the
-    same along the success direction without its readout component (amendment 2, B2); random|L|k, a random unit
+    same along the success direction without its readout component (amendment 2, B2); steer_task|L, the same
+    along the task direction, the reference the H4 steering is read against (amendment 3, C3); with `stratum`,
+    every steering amount is that stratum's, estimated on the other fold (amendment 3, C4); random|L|k, a random unit
     direction, mean-ablated (sanity only, amendment 1 A7). At a caveat layer only task|L; at the last layer only
     task_last|L (amendment 2, B1: tautological there, sanity only). With `checks`, it is filled with
     {name: [(layer, unit vector, target, kind)]} for `run.edit_items` to log the realized edit (amendment 2, B9).
@@ -423,14 +438,17 @@ def ablation_edits(dirs: dict[int, dict], layers: list[int], caveat: list[int] =
 
     for layer in layers:
         x = dirs[layer]
+        amt = {**{k: x[k] for k in ("steer_success", "steer_task", "steer_success_perp_readout") if k in x},
+               **((x.get("steer_by_stratum") or {}).get(stratum) or {})}
         put(f"task|{layer}", [(layer, x["task"], x["task_mid"], "set")])
         put(f"task_perp_success|{layer}", [(layer, x["task_perp_success"], x["task_perp_success_mid"], "set")])
         if "mention" in x:
             put(f"mention|{layer}", [(layer, x["mention"], x["mention_mid"], "set")])
-        put(f"steer_success|{layer}", [(layer, x["success"], x["steer_success"], "add")])
+        put(f"steer_success|{layer}", [(layer, x["success"], amt["steer_success"], "add")])
+        put(f"steer_task|{layer}", [(layer, x["task"], amt["steer_task"], "add")])
         if "success_perp_readout" in x:
             put(f"steer_success_perp_readout|{layer}",
-                [(layer, x["success_perp_readout"], x["steer_success_perp_readout"], "add")])
+                [(layer, x["success_perp_readout"], amt["steer_success_perp_readout"], "add")])
         put(f"task_from|{layer}", [(m, dirs[m]["task"], dirs[m]["task_mid"], "set") for m in layers if m >= layer])
         for k, (u, c) in enumerate(zip(x.get("random", []), x.get("random_mid", []))):
             put(f"random|{layer}|{k}", [(layer, u, c, "set")])
@@ -455,8 +473,10 @@ def ablation_selection(cfg: dict, sets: dict, recs: list[dict], fold: dict[str, 
         fails = [t for t in sets["failures"] if all((t["id"], g) in have for g in ("aligned", "swapped", "absent"))]
         succ = [t for t in sets["successes"] if all((t["id"], g) in have for g in SUCC_GOALS)]
         anyeff = {t["id"]: 0.0 for t in fails + succ}
-        fl, wf_ = select_stratified(fails, anyeff, cfg.get("n_failures_per_fold", 75), float("-inf"), games,
-                                    f"interp|ablate|fail|{f}", min_step0=cfg.get("min_step0_per_fold", 20))
+        nf = cfg.get("n_failures_per_fold", 75)
+        fl, wf_ = select_stratified(fails, anyeff, nf, float("-inf"), games, f"interp|ablate|fail|{f}",
+                                    min_step0=scaled_minimum(cfg.get("min_step0_per_fold", 20), nf,
+                                                             cfg.get("quota_reference_n", 75)))
         sc, ws = select_stratified(succ, anyeff, cfg.get("n_successes_per_fold", 50), float("-inf"), games,
                                    f"interp|ablate|succ|{f}")
         out[f] = fl + sc
@@ -473,7 +493,7 @@ def fold_cosines(dirs: dict[int, dict], lens_dir: Any, layers: list[int]) -> dic
     noise). A random pair of directions in d dimensions has cosine about +-1/sqrt(d)."""
     import numpy as np
 
-    from wf.interp.analysis import direction_cosines, project_unit
+    from wf.interp.analysis import direction_cosines, disattenuated, project_unit
     from wf.interp.directions import cosine
 
     cos: dict[str, Any] = {f"{f}|{layer}": direction_cosines(dirs[f][layer], lens_dir) for f in dirs for layer in dirs[f]}
@@ -481,6 +501,21 @@ def fold_cosines(dirs: dict[int, dict], lens_dir: Any, layers: list[int]) -> dic
                 for layer in layers})
     cos.update({f"between_folds_success|{layer}": float(np.dot(dirs[0][layer]["success"], dirs[1][layer]["success"]))
                 for layer in layers})
+    # Amendment 3, C3: the reliabilities of the projected directions (each the cosine of its two folds'
+    # estimates after the readout direction is projected out) and the H4 cosine disattenuated by them.
+    for key in ("task", "success", "mention"):
+        cos.update({f"between_folds_{key}_perp_readout|{layer}":
+                    cosine(project_unit(dirs[0][layer][key], lens_dir), project_unit(dirs[1][layer][key], lens_dir))
+                    for layer in layers if key in dirs[0][layer] and key in dirs[1][layer]})
+    for f in (0, 1):
+        for layer in layers:
+            c = cos[f"{f}|{layer}"]
+            for a in ("task", "mention"):
+                rel_a = cos.get(f"between_folds_{a}_perp_readout|{layer}")
+                rel_s = cos.get(f"between_folds_success_perp_readout|{layer}")
+                if f"{a}_success_perp_readout" in c:
+                    c[f"{a}_success_perp_readout_disattenuated"] = disattenuated(c[f"{a}_success_perp_readout"],
+                                                                                 rel_a, rel_s)
     for f in (0, 1):
         cos.update({f"cross_fold_task_success_perp_readout|{f}|{layer}":
                     cosine(project_unit(dirs[f][layer]["task"], lens_dir),
@@ -490,10 +525,21 @@ def fold_cosines(dirs: dict[int, dict], lens_dir: Any, layers: list[int]) -> dic
     return cos
 
 
+def ablation_layer_sets(cfg: dict, n_layers: int) -> tuple[list[int], list[int], int | None]:
+    """(profile layers, caveat layers, last layer) for the ablation: the configured or default profile; caveat
+    layers that are neither profile layers nor the last layer; the last layer as the sanity edit."""
+    from wf.interp.analysis import caveat_layers
+
+    layers = cfg.get("layers") or ablate_layers(n_layers)
+    caveat = [m for m in cfg.get("caveat_layers", caveat_layers(n_layers)) if m not in layers and m < n_layers - 1]
+    last = n_layers - 1 if cfg.get("last_layer_sanity", True) else None
+    return layers, caveat, last
+
+
 def run_interp_pilot_ablate(cfg: dict) -> int:
     import numpy as np
 
-    from wf.interp.analysis import caveat_layers
+    from wf.interp.analysis import stratum
     from wf.interp.run import edit_items, write_manifest
     from wf.runs import _init_run, require_passed
 
@@ -511,9 +557,7 @@ def run_interp_pilot_ablate(cfg: dict) -> int:
     fold = folds(sets["failures"] + sets["successes"], cfg.get("split_seed", 0))
     s0 = json.loads((runs_root() / cfg.get("stage0", STAGE0) / "manifest.json").read_text())
     n_layers = s0["n_layers"]
-    layers = cfg.get("layers") or ablate_layers(n_layers)
-    caveat = [m for m in cfg.get("caveat_layers", caveat_layers(n_layers)) if m not in layers and m < n_layers - 1]
-    last = n_layers - 1 if cfg.get("last_layer_sanity", True) else None
+    layers, caveat, last = ablation_layer_sets(cfg, n_layers)
     default_random = [layers[len(layers) // 2], layers[-1]] if len(layers) >= 2 else layers
     random_layers = tuple(sorted({m for m in cfg.get("random_layers", default_random) if m in layers}))
     every = sorted(set(layers) | set(caveat) | ({last} if last is not None else set()))
@@ -533,12 +577,17 @@ def run_interp_pilot_ablate(cfg: dict) -> int:
     p, tok = load_model(cfg)
     realized: dict[str, Any] = {}
     for f in edit_folds:
-        checks: dict = {}
-        edits = ablation_edits(dirs[1 - f], layers, caveat, last, checks)
-        out = edit_items(p, tok, sel[f], d / "ablate.jsonl", edits, fmt="yn", goals=("aligned", "swapped", "absent"),
-                         positions="last", batch_size=cfg.get("batch_size", 16), checks=checks)
-        first = next((r for r in read_jsonl(out) if "edit_realized" in r), None)
-        realized[str(f)] = first["edit_realized"] if first else None
+        for st in ("step0", "later"):  # amendment 3, C4: each item is steered by its own stratum's amounts
+            items = [t for t in sel[f] if stratum(t) == st]
+            if not items:
+                continue
+            checks: dict = {}
+            edits = ablation_edits(dirs[1 - f], layers, caveat, last, checks, stratum=st)
+            out = edit_items(p, tok, items, d / "ablate.jsonl", edits, fmt="yn", goals=("aligned", "swapped", "absent"),
+                             positions="last", batch_size=cfg.get("batch_size", 16), checks=checks)
+            ids = {t["id"] for t in items}
+            first = next((r for r in read_jsonl(out) if "edit_realized" in r and r["id"] in ids), None)
+            realized[f"{f}|{st}"] = first["edit_realized"] if first else None
     worst = max((abs(v) for x in realized.values() if x for vals in x.values() for v in vals), default=float("nan"))
     write_json(d / "edit_checks.json", {"realized": realized, "max_abs": worst,
                                         "what": "u.h - target after each edit on the first edited prompt, at the "
@@ -553,7 +602,9 @@ def run_interp_pilot_ablate(cfg: dict) -> int:
 
 
 def run_interp_pilot_analysis(cfg: dict) -> int:
-    from wf.interp.analysis import STRATA, in_stratum, patch_summary
+    import numpy as np
+
+    from wf.interp.analysis import STRATA, h4_layers, in_stratum, patch_summary
     from wf.runs import _init_run, require_passed
 
     run_id = cfg["run_id"]
@@ -562,11 +613,13 @@ def run_interp_pilot_analysis(cfg: dict) -> int:
         require_passed(run_id, cfg, dep)
     d = _init_run(run_id, {**cfg, "resume": False})
     root = runs_root()
-    s0 = json.loads((root / cfg.get("stage0", STAGE0) / "manifest.json").read_text())
+    s0dir = root / cfg.get("stage0", STAGE0)
+    s0 = json.loads((s0dir / "manifest.json").read_text())
     n_layers = s0["n_layers"]
     B = cfg.get("bootstrap", 2000)
-    report: dict[str, Any] = {"stage0": json.loads((root / cfg.get("stage0", STAGE0) / "metrics.json").read_text()),
-                              "bootstrap": B, "bonferroni": "normal intervals from the bootstrap SE (amendment 2, B5)"}
+    report: dict[str, Any] = {"stage0": json.loads((s0dir / "metrics.json").read_text()), "bootstrap": B,
+                              "bonferroni": "normal intervals from the bootstrap SE (amendment 2, B5)",
+                              "note": "calibration readouts against provisional bands; no verdicts (section M)"}
 
     pdir = root / cfg.get("patch", "interp_pilot_patch")
     patch = read_jsonl(pdir / "patch.jsonl")
@@ -578,12 +631,26 @@ def run_interp_pilot_analysis(cfg: dict) -> int:
         plac = [r for r in patch if r["direction"] == direction and r["source_goal"] == "placebo"]
         pat[direction] = {s: patch_summary([r for r in goal if in_stratum(r, s)], [r for r in plac if in_stratum(r, s)],
                                            n_layers, B, C.RNG_SEED, weights=pw) for s in STRATA}
+        for s in STRATA:  # amendment 3, C1: the arrival layer under the onset's rule, on the answer position
+            pat[direction][s]["arrival_last_grid"] = arrival_on_answer_position(pat[direction][s], n_layers)
     report["patching"] = pat
-    report["ablation"] = ablation_report(cfg, B)
-    report["cosines"] = json.loads((root / cfg.get("ablate", "interp_pilot_ablate") / "manifest.json").read_text())["cosines"]
+
+    store = _stage0_store(cfg)
+    lens_dir = np.load(s0dir / "lens_dir.npy")
+    aman = json.loads((root / cfg.get("ablate", "interp_pilot_ablate") / "manifest.json").read_text())
+    sets = load_sets(cfg)
+    succ_ids = {t["id"] for t in sets["successes"]}
+    abl_fails = [t for t in sets["failures"] if any(t["id"] in ids for ids in aman["items"].values())]
+    report["direct_path"] = direct_path_report(store, abl_fails, aman["layers"], n_layers, lens_dir,
+                                               s0.get("norm_eps", 1e-6), aman.get("weights"), B)
+    report["ablation"] = ablation_report(cfg, B, report["direct_path"])
+    report["cosines"] = aman["cosines"]
+    fold = folds(sets["failures"] + sets["successes"], cfg.get("split_seed", 0))
+    report["h4_cosines"] = h4_cosine_report(store, sets, fold, h4_layers(aman["layers"], n_layers), lens_dir,
+                                            cfg.get("bootstrap_cosine", B))
     if cfg.get("hidden_probe", True):
         report["hidden_probe"] = hidden_probe_report(cfg)
-    report["verdicts"] = verdict_rows(report, n_layers)
+    report["table_rows"] = table_rows(report, n_layers)
     report["sample_size"] = sample_sizes(report)
     write_json(d / "metrics.json", report)
     lines = []
@@ -591,13 +658,92 @@ def run_interp_pilot_analysis(cfg: dict) -> int:
         hs = pat["noise"][s]["history_share"]
         ab = report["ablation"][s]
         lines.append(f"{s}: history share {hs.get('max', float('nan')) if hs.get('defined') else 'undefined'}; "
-                     f"arrival {pat['noise'][s]['arrival_layer']:.2f}; onset layer {ab.get('onset_layer')}; "
-                     f"{report['verdicts'][s]['onset_versus_arrival']}")
+                     f"arrival (answer position) {pat['noise'][s]['arrival_last_grid']}; onset layer "
+                     f"{ab.get('onset_layer')} (read on {ab.get('onset_layers')}); "
+                     f"{report['table_rows'][s]['onset_versus_arrival']}")
     write_status(run_id, "\n".join(lines), ok=False, reported="minimal interpretability pilot (calibration)")
     return 0
 
 
-def ablation_report(cfg: dict, B: int = 2000) -> dict:
+def arrival_on_answer_position(summary: dict, n_layers: int) -> int | None:
+    """The patching arrival layer compared with the onset (amendment 3, C1): the `last` group's noising curve
+    (the answer position, where the ablation acts) under the onset's rule, on the grid of every fourth layer."""
+    from wf.interp.analysis import grid_layers, patch_arrival_layer
+
+    return patch_arrival_layer(summary.get("curves", {}).get("last", {}), grid_layers(n_layers))
+
+
+def direct_path_report(store: Any, fails: list[dict], layers: list[int], n_layers: int, lens_dir: Any, eps: float,
+                       weights: dict[str, float] | None, B: int = 2000) -> dict:
+    """{stratum: {layer: direct-path share}} on the ablation's failure items (amendment 3, C2), from stage 0's
+    answer-position residuals: r.h at each profile layer over the prompt's last-layer RMS, aligned minus swapped,
+    summed, over the summed final readout effect (`analysis.direct_path_share`)."""
+    import numpy as np
+
+    from wf.interp.analysis import STRATA, direct_path_share, in_stratum
+
+    recs = {(r["id"], r["goal"]): r for r in store.records() if r.get("fmt", "yn") == "yn"}
+    fails = [t for t in fails if (t["id"], "aligned") in recs and (t["id"], "swapped") in recs]
+    if not fails:
+        return {}
+    sel = list(layers) + [n_layers - 1]
+    keys = [f"{t['id']}|yn|{g}" for t in fails for g in ("aligned", "swapped")]
+    _, arr = store.load("last", keys, sel=sel)
+    H = np.asarray(arr, dtype=np.float64).reshape(len(fails), 2, len(sel), -1)
+    rho = np.sqrt((H[:, :, -1] ** 2).mean(-1) + eps)  # (items, 2): the final norm's scale per prompt
+    proj = (H[:, :, :-1] @ np.asarray(lens_dir, dtype=np.float64)) / rho[:, :, None]  # (items, 2, layers)
+    D = np.array([[recs[(t["id"], g)]["d"] for g in ("aligned", "swapped")] for t in fails])
+    out: dict[str, Any] = {}
+    for s in STRATA:
+        idx = [k for k, t in enumerate(fails) if in_stratum(t, s)]
+        if not idx:
+            continue
+        ids = [fails[k]["id"] for k in idx]
+        games = [fails[k]["game_id"] for k in idx]
+        out[s] = {m: direct_path_share(proj[idx, 0, j], proj[idx, 1, j], D[idx, 0], D[idx, 1], games, ids, weights,
+                                       B, C.RNG_SEED) for j, m in enumerate(layers)}
+    return out
+
+
+def h4_cosine_report(store: Any, sets: dict, fold: dict[str, int], layers: list[int], lens_dir: Any,
+                     B: int = 2000) -> dict:
+    """Per fold and H4 layer (amendment 3, C3): the projected H4 cosine with a game-bootstrap interval, with the
+    readout direction projected out ("readout") and with the readout direction and the layer's own answer
+    direction projected out ("readout_and_answer"; `analysis.answer_direction`, fit on the fold's neutral
+    prompts within outcome and verb)."""
+    import numpy as np
+
+    from wf.interp.analysis import answer_direction, projected_cosine_boot, verb
+
+    recs = {(r["id"], r["goal"]): r for r in store.records() if r.get("fmt", "yn") == "yn"}
+    if not layers:
+        return {}
+    out: dict[str, Any] = {}
+    for f in (0, 1):
+        fl = [t for t in sets["failures"] if fold[t["game_id"]] == f and (t["id"], "aligned") in recs
+              and (t["id"], "swapped") in recs]
+        nf = [t for t in fl if (t["id"], "absent") in recs and (t.get("history_len") or 0) > 0]
+        sc = [t for t in sets["successes"] if fold[t["game_id"]] == f and (t["id"], "absent") in recs]
+        if not fl or not nf or not sc:
+            continue
+        keys = ([f"{t['id']}|yn|aligned" for t in fl] + [f"{t['id']}|yn|swapped" for t in fl]
+                + [f"{t['id']}|yn|absent" for t in nf] + [f"{t['id']}|yn|absent" for t in sc])
+        _, arr = store.load("last", keys, sel=list(layers))
+        n1, n2, n3 = len(fl), len(nf), len(sc)
+        for j, m in enumerate(layers):
+            X = np.asarray(arr[:, j], dtype=np.float64)
+            A_, S_, F_, Sc = X[:n1], X[n1:2 * n1], X[2 * n1:2 * n1 + n2], X[2 * n1 + n2:]
+            neutral = np.vstack([F_, Sc])
+            Dn = [recs[(t["id"], "absent")]["d"] for t in nf + sc]
+            ans = answer_direction(neutral, Dn, [False] * n2 + [True] * n3, [verb(t) for t in nf + sc])
+            out[f"{f}|{m}"] = projected_cosine_boot(
+                A_ - S_, [t["game_id"] for t in fl], Sc, [verb(t) for t in sc], [t["game_id"] for t in sc],
+                F_, [verb(t) for t in nf], [t["game_id"] for t in nf],
+                {"readout": [lens_dir], "readout_and_answer": [lens_dir, ans]}, B, C.RNG_SEED + f)
+    return out
+
+
+def ablation_report(cfg: dict, B: int = 2000, direct: dict | None = None) -> dict:
     """Cross-fitted ablation readouts per stratum (`analysis.ablation_summary`) from the ablation run's files."""
     from wf.interp.analysis import ablation_summary
 
@@ -609,7 +755,7 @@ def ablation_report(cfg: dict, B: int = 2000) -> dict:
     sets = load_sets(cfg)
     succ_ids = {t["id"] for t in sets["successes"]}
     return ablation_summary(recs, fold_of, succ_ids, man["layers"], man.get("caveat_layers", []),
-                            man.get("last_layer"), man.get("weights"), B, C.RNG_SEED)
+                            man.get("last_layer"), man.get("weights"), B, C.RNG_SEED, direct)
 
 
 def _median(xs: list[float]) -> float:
@@ -619,46 +765,76 @@ def _median(xs: list[float]) -> float:
     return float(np.median(v)) if v else float("nan")
 
 
-def h4_rows(ab: dict, cos: dict, layers: list[int]) -> dict:
-    """The restated H4 rows (amendment 2, B2) at `layers` (fixed now: up to two thirds of depth and before the
-    patching arrival layer), each next to its null baseline. Medians over the layers; cosines averaged over the
-    two folds' estimates where both exist."""
+def h4_rows(ab: dict, cos: dict, layers: list[int], boot: dict | None = None) -> dict:
+    """The H4 rows (amendment 2, B2; amendment 3, C3) at `layers` (up to two thirds of depth and strictly before
+    the patching arrival layer), each next to its null baselines. Medians over the layers; cosines averaged over
+    the two folds' estimates where both exist. The goal-role row (task against mention cosine) is reported apart:
+    a mention is itself an object match, so it is not a null for H4."""
+    boot = boot or {}
+
     def fold_mean(key: str, layer: int) -> float:
         v = [cos.get(f"{f}|{layer}", {}).get(key) for f in (0, 1)]
         v = [x for x in v if x is not None and x == x]
         return sum(v) / len(v) if v else float("nan")
 
     by = ab.get("by_layer", {})
-    prof = ab.get("profile", {})
 
-    def share(m: int, kind: str) -> float:
-        x = (by.get(m) or by.get(str(m)) or {}).get(kind, {})
-        return x.get("share", x.get("ratio", float("nan")))
+    def get(m: int, kind: str) -> dict:
+        return (by.get(m) or by.get(str(m)) or {}).get(kind, {}) or {}
 
-    def task_share(m: int) -> float:
-        return (prof.get(m) or prof.get(str(m)) or {}).get("share", float("nan"))
+    def boot_mean(m: int, which: str, part: str) -> Any:
+        v = [boot.get(f"{f}|{m}", {}).get(which, {}).get(part) for f in (0, 1)]
+        v = [x for x in v if x is not None]
+        if not v:
+            return float("nan") if part != "ci" else (float("nan"), float("nan"))
+        if part == "ci":
+            return (sum(x[0] for x in v) / len(v), sum(x[1] for x in v) / len(v))
+        return sum(v) / len(v)
 
-    perp_over_task = [share(m, "task_perp_success") / task_share(m) if task_share(m) else float("nan") for m in layers]
+    perp = [get(m, "perp_over_task_removal") for m in layers]
+    assessable = [x.get("ratio") for x in perp if x.get("assessable")]
     return {
         "layers": layers,
         "cos_task_success_perp_readout": _median([fold_mean("task_success_perp_readout", m) for m in layers]),
-        "null_mention_success_perp_readout": _median([fold_mean("mention_success_perp_readout", m) for m in layers]),
+        "cos_task_success_perp_readout_ci_by_layer": {m: boot_mean(m, "readout", "ci") for m in layers},
+        "cos_task_success_perp_readout_se": _median([boot_mean(m, "readout", "se") for m in layers]),
+        "cos_task_success_perp_readout_and_answer": _median([boot_mean(m, "readout_and_answer", "cos") for m in layers]),
+        "cos_task_success_perp_readout_and_answer_ci_by_layer": {m: boot_mean(m, "readout_and_answer", "ci")
+                                                                 for m in layers},
+        "cos_task_success_perp_readout_disattenuated": _median(
+            [fold_mean("task_success_perp_readout_disattenuated", m) for m in layers]),
         "null_between_folds_task": _median([cos.get(f"between_folds|{m}") for m in layers]),
+        "null_between_folds_task_perp_readout": _median([cos.get(f"between_folds_task_perp_readout|{m}") for m in layers]),
+        "null_between_folds_success_perp_readout": _median(
+            [cos.get(f"between_folds_success_perp_readout|{m}") for m in layers]),
+        "null_between_folds_mention_perp_readout": _median(
+            [cos.get(f"between_folds_mention_perp_readout|{m}") for m in layers]),
         "cross_fold_task_success_perp_readout": _median(
             [(cos.get(f"cross_fold_task_success_perp_readout|0|{m}", float("nan"))
               + cos.get(f"cross_fold_task_success_perp_readout|1|{m}", float("nan"))) / 2 for m in layers]),
         "null_random_pair_sd": cos.get("random_pair_sd"),
         "cos_task_success_raw": _median([fold_mean("task_success", m) for m in layers]),
-        "steer_success_perp_readout_share": _median([share(m, "steer_success_perp_readout") for m in layers]),
-        "steer_success_raw_share": _median([share(m, "steer_success") for m in layers]),
-        "perp_success_over_task_removal": _median(perp_over_task),
+        "steer_perp_over_task": _median([get(m, "steer_perp_over_task").get("ratio") for m in layers]),
+        "steer_perp_over_task_se": _median([get(m, "steer_perp_over_task").get("se") for m in layers]),
+        "steer_success_perp_readout_share": _median([get(m, "steer_success_perp_readout").get("ratio") for m in layers]),
+        "steer_task_share": _median([get(m, "steer_task").get("ratio") for m in layers]),
+        "steer_success_raw_share": _median([get(m, "steer_success").get("ratio") for m in layers]),
+        "perp_success_over_task_removal": _median(assessable) if assessable else "not assessable",
+        "perp_success_over_task_removal_layers": [m for m, x in zip(layers, perp) if x.get("assessable")],
+        "goal_role": {
+            "cos_mention_success_perp_readout": _median([fold_mean("mention_success_perp_readout", m) for m in layers]),
+            "cos_mention_success_perp_readout_disattenuated": _median(
+                [fold_mean("mention_success_perp_readout_disattenuated", m) for m in layers]),
+            "task_minus_mention": _median([fold_mean("task_success_perp_readout", m)
+                                           - fold_mean("mention_success_perp_readout", m) for m in layers]),
+        },
     }
 
 
-def verdict_rows(report: dict, n_layers: int | None = None) -> dict:
-    """The outcome-table rows the minimal pilot can fill, per stratum, read against the provisional thresholds
-    (amendment 1, A6; amendment 2, B1, B2: interval bounds against the bands). Rows it cannot fill are listed; no
-    verdict is drawn here."""
+def table_rows(report: dict, n_layers: int | None = None) -> dict:
+    """The outcome-table rows the minimal pilot can fill, per stratum, as readings against the provisional bands
+    (amendment 1, A6; amendment 2, B1, B2; amendment 3, C1). No hypothesis is named and no verdict drawn: the
+    minimal pilot only calibrates (section M). Rows it cannot fill are listed."""
     from wf.interp.analysis import h4_layers, onset_versus_arrival
 
     rows: dict[str, Any] = {}
@@ -667,23 +843,27 @@ def verdict_rows(report: dict, n_layers: int | None = None) -> dict:
         ab = report["ablation"].get(s, {})
         hs = noise["history_share"]
         arrival = noise["arrival_layer"]
-        arrival_index = (arrival * (n_layers - 1)) if n_layers and arrival == arrival else float("nan")
+        arrival_index = round(arrival * (n_layers - 1), 6) if n_layers and arrival == arrival else float("nan")
+        arrival_last = noise.get("arrival_last_grid")
         layers = report["ablation"].get("layers", [])
         onset = ab.get("onset_layer")
         task = ab.get("task", {})
         g = ab.get("gap_neutral", {})
-        h4l = h4_layers(layers, n_layers or 0, arrival_index) if n_layers else []
+        h4l = h4_layers(layers, n_layers or 0, arrival_last) if n_layers else []
         rows[s] = {
             "history_share": (None if not hs.get("defined") else
                               "high (>=0.3)" if hs["ci"][0] >= 0.3 else "low (<0.15)" if hs["ci"][1] < 0.15 else "between"),
-            "arrival_layer": arrival, "arrival_layer_index": arrival_index,
-            "single_direction_onset_layer": onset,
-            "onset_versus_arrival": onset_versus_arrival(onset, arrival_index),
+            "arrival_layer_final_group_half": arrival, "arrival_layer_final_group_half_index": arrival_index,
+            "arrival_layer_answer_position": arrival_last,
+            "single_direction_onset_layer": onset, "onset_read_on_layers": ab.get("onset_layers"),
+            "onset_versus_arrival": onset_versus_arrival(onset, arrival_last,
+                                                         ab["onset_layers"] if "onset_layers" in ab else layers,
+                                                         ab.get("deepest_upper")),
             "task_last_sanity_share": ab.get("task_last", {}).get("share"),
             "task_direction_removed_at_chosen_layer": task.get("share"),
             "neutral_gap_ratio": g.get("ratio"),
             "discrimination_kept": None if g.get("ratio") is None else g["ratio"] >= 0.9,
-            "h4": h4_rows(ab, report.get("cosines") or {}, h4l),
+            "h4": h4_rows(ab, report.get("cosines") or {}, h4l, report.get("h4_cosines")),
             "not_filled_by_minimal_pilot": ["belief shift (history-fact probes need stage 1)", "head-level rows",
                                             "policy-direction transfer", "described-goal transfer",
                                             "first-token and full-reply patching", "Llama"],
@@ -692,22 +872,36 @@ def verdict_rows(report: dict, n_layers: int | None = None) -> dict:
 
 
 def sample_sizes(report: dict) -> dict:
-    """The calibration rule's output (amendment 2, B3): per stratum, each summary measure's game-bootstrap SE at
-    the minimal pilot's n, and the n the full pilot needs for a 95% half-width of 0.075. The bands are not moved."""
-    from wf.interp.analysis import TARGET_HALF_WIDTH, n_for_half_width
+    """The calibration rule's output (amendment 2, B3; amendment 3, C6): per stratum, each summary measure's
+    game-bootstrap SE at the minimal pilot's n, and the n the full pilot needs for a 95% half-width of 0.075
+    (times the margin of 1.2). The bands are not moved."""
+    from wf.interp.analysis import SAMPLE_SIZE_MARGIN, TARGET_HALF_WIDTH, n_for_half_width
 
-    out: dict[str, Any] = {"target_half_width": TARGET_HALF_WIDTH}
+    def nn(n: Any, se: Any) -> dict:
+        se = float("nan") if se is None else se
+        return {"n": n, "se": se, "n_needed": n_for_half_width(n or 0, se)}
+
+    out: dict[str, Any] = {"target_half_width": TARGET_HALF_WIDTH, "margin": SAMPLE_SIZE_MARGIN}
     for s in ("step0", "later", "all"):
         noise = report["patching"]["noise"][s]
         ab = report["ablation"].get(s, {})
+        n_p = noise["n_items"]
         row: dict[str, Any] = {}
-        for name in ("history_share", "action_share"):
+        for name in ("history_share", "action_share", "object_mention_share"):
             x = noise.get(name, {})
-            se = x.get("se", float("nan")) if x.get("defined", True) else float("nan")
-            row[name] = {"n": noise["n_items"], "se": se, "n_needed": n_for_half_width(noise["n_items"], se)}
-        row["removal_by_layer"] = {m: {"n": v.get("n"), "se": v.get("se"),
-                                       "n_needed": n_for_half_width(v.get("n") or 0, v.get("se", float("nan")))}
-                                   for m, v in ab.get("profile", {}).items()}
+            row[name] = nn(n_p, x.get("se") if x.get("defined", True) else None)
+        last = noise.get("curves", {}).get("last", {})
+        a = noise.get("arrival_last_grid")
+        row["arrival_answer_position"] = nn(n_p, (last.get("se") or [None] * (a + 1))[a] if a is not None else None)
+        row["removal_by_layer"] = {m: nn(v.get("n"), v.get("se")) for m, v in ab.get("profile", {}).items()}
+        g = ab.get("gap_neutral", {})
+        row["gap_ratio"] = nn(ab.get("n_failures", 0) + ab.get("n_successes", 0), g.get("ratio_se"))
+        h4 = report.get("table_rows", {}).get(s, {}).get("h4", {})
+        by = ab.get("by_layer", {})
+        row["h4"] = {"cos_task_success_perp_readout": nn(ab.get("n_failures"), h4.get("cos_task_success_perp_readout_se")),
+                     "steer_perp_over_task": nn(ab.get("n_failures"), h4.get("steer_perp_over_task_se")),
+                     "perp_over_task_removal": nn(ab.get("n_failures"), _median(
+                         [(by.get(m) or {}).get("perp_over_task_removal", {}).get("se") for m in h4.get("layers", [])]))}
         out[s] = row
     return out
 

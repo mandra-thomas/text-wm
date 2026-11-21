@@ -50,6 +50,13 @@ H4_MAX_DEPTH = 2 / 3
 LAYER_STEP = 4
 ONSET_THRESHOLD = 0.6  # removal whose cross-fitted lower bound stays at or above this from the onset layer on
 TARGET_HALF_WIDTH = 0.075  # amendment 2, B3: the full pilot's sample size is set to reach this half-width
+SAMPLE_SIZE_MARGIN = 1.2  # amendment 3, C6: games as clusters make the 1/sqrt(n) scaling optimistic
+NO_DIRECTION_UPPER = 0.3  # amendment 3, C1: "no single direction" needs the deepest layer's upper bound below this
+# Amendment 3, C2: a profile layer whose direct-path share (the part of the effect already in readout form at that
+# layer, read at the final norm's scale) has a 95% upper bound at or above this is treated as a caveat layer.
+DIRECT_PATH_MAX = 0.3
+PERP_TASK_MIN_REMOVAL = 0.3  # amendment 3, C3: the perp/task removal ratio is read only where task removal's
+# lower bound reaches this
 
 
 def stratum(rec: dict) -> str:
@@ -271,6 +278,7 @@ def group_curve(records: list[dict], group: str, n_layers: int, B: int = 2000, s
         "n": int(pm["mask"].any(axis=1).sum()), "defined": True,
         "fraction": [float(x) for x in point],
         "ci": [_interval(R[1:, j]) for j in range(len(keys))],
+        "se": [_se(R[1:, j]) for j in range(len(keys))],
         "ci_bonferroni": [_interval_normal(float(point[j]), R[1:, j], bonf) for j in range(len(keys))],
         "removed_nats": [float(x) for x in removed_nats[0]],
         "removed_nats_ci_bonferroni": [_interval_normal(float(removed_nats[0, j]), removed_nats[1:, j], bonf)
@@ -333,7 +341,7 @@ def patch_summary(records: list[dict], placebo: list[dict], n_layers: int, B: in
                              "se": curves["hist_all"]["max_se"], "layer": curves["hist_all"]["argmax_layer"]})
     ho, hm = curves["hist_obj"], curves["hist_obj_matched"]
     out["object_mention_share"] = ({"defined": False} if not ho.get("defined") else
-                                   {"defined": True, "max": ho["max"], "ci": ho["max_ci"],
+                                   {"defined": True, "max": ho["max"], "ci": ho["max_ci"], "se": ho["max_se"],
                                     "matched_max": hm.get("max"), "matched_ci": hm.get("max_ci")})
     out["action_share"] = {"max": curves["action"].get("max"), "ci": curves["action"].get("max_ci"),
                            "se": curves["action"].get("max_se")}
@@ -417,7 +425,7 @@ def project_unit(v: Any, r: Any) -> Any:
 
 def estimate_directions(H: dict[str, Any], success_rows: Any, failure_rows: Any,
                         success_verbs: list[str] | None = None, failure_verbs: list[str] | None = None,
-                        readout_dir: Any = None) -> dict:
+                        readout_dir: Any = None, strata: list[str] | None = None) -> dict:
     """Directions at one layer from one fold's answer-position residuals.
 
     `H[goal]` is (items, width) for the fold's failure items, paired across goals ("aligned", "swapped", and
@@ -435,6 +443,11 @@ def estimate_directions(H: dict[str, Any], success_rows: Any, failure_rows: Any,
       the readout direction removed, and steer_success_perp_readout, the mean aligned-minus-swapped projection on
       it. Steering along the raw success direction moves the readout through its readout component whatever the
       mechanism; this one cannot.
+    - steer_task (amendment 3, C3): the mean aligned-minus-swapped projection on the task direction, the amount
+      of the reference edit `steer_task` (steering along the task direction itself);
+    - with `strata` (one label per failure row, "step0" or "later"; amendment 3, C4): `steer_by_stratum`, every
+      steering amount estimated on that stratum's rows only, so each item is steered by its own stratum's amount
+      (Qwen's effect is about twice as large at step 0).
     """
     import numpy as np
 
@@ -446,11 +459,17 @@ def estimate_directions(H: dict[str, Any], success_rows: Any, failure_rows: Any,
     perp = _unit(task["u"] - (task["u"] @ s) * s)
     out = {"task": task["u"], "task_mid": task["midpoint"], "task_norm": task["norm"], "success": s,
            "task_perp_success": perp, "task_perp_success_mid": midpoint_for(perp, A, S),
-           "steer_success": float(((A - S) @ s).mean())}
+           "steer_success": float(((A - S) @ s).mean()), "steer_task": float(((A - S) @ task["u"]).mean())}
+    steer_dirs = {"steer_success": s, "steer_task": task["u"]}
     if readout_dir is not None:
         sp = project_unit(s, readout_dir)
         out["success_perp_readout"] = sp
         out["steer_success_perp_readout"] = float(((A - S) @ sp).mean())
+        steer_dirs["steer_success_perp_readout"] = sp
+    if strata is not None:
+        lab = np.asarray(strata)
+        out["steer_by_stratum"] = {st: {k: float(((A[lab == st] - S[lab == st]) @ v).mean()) for k, v in steer_dirs.items()}
+                                   for st in sorted(set(lab.tolist()))}
     P = H.get("swapped_plus")
     if P is not None:
         P = np.asarray(P, dtype=np.float64)
@@ -481,6 +500,105 @@ def direction_cosines(dirs: dict, lens_dir: Any) -> dict:
         out["mention_success_perp_readout"] = cosine(project_unit(dirs["mention"], lens_dir),
                                                      project_unit(dirs["success"], lens_dir))
     return out
+
+
+def answer_direction(X: Any, D: Any, outcome: list[bool], verbs: list[str],
+                     alphas: tuple[float, ...] = (1e-2, 1e-1, 1.0, 10.0, 100.0, 1e3, 1e4)) -> Any:
+    """A layer-specific answer direction (amendment 3, C3): the unit coefficient vector of a ridge regression of
+    the final readout D on the layer's residual X, fit on neutral prompts after both are centred within each
+    (outcome, verb) cell, so that it follows how the answer varies at that layer within a cell and not the
+    success or verb contrast itself. Penalty by efficient leave-one-out (sklearn RidgeCV)."""
+    import numpy as np
+    from sklearn.linear_model import RidgeCV
+
+    X = np.asarray(X, dtype=np.float64).copy()
+    y = np.asarray(D, dtype=np.float64).copy()
+    cells = [f"{o}|{v}" for o, v in zip(outcome, verbs)]
+    for c in set(cells):
+        m = np.array([x == c for x in cells])
+        X[m] -= X[m].mean(0)
+        y[m] -= y[m].mean()
+    coef = RidgeCV(alphas=alphas, fit_intercept=False).fit(X, y).coef_
+    return _unit(coef)
+
+
+def project_out_all(v: Any, dirs: list[Any]) -> Any:
+    """`v` with its components along every direction in `dirs` removed (Gram-Schmidt), renormalised."""
+    import numpy as np
+
+    basis: list[Any] = []
+    for d in dirs:
+        d = np.asarray(d, dtype=np.float64)
+        for b in basis:
+            d = d - (d @ b) * b
+        basis.append(_unit(d))
+    v = np.asarray(v, dtype=np.float64)
+    for b in basis:
+        v = v - (v @ b) * b
+    return _unit(v)
+
+
+def projected_cosine_boot(diffs: Any, diff_games: list[str], succ: Any, succ_verbs: list[str], succ_games: list[str],
+                          fail: Any, fail_verbs: list[str], fail_games: list[str], removes: dict[str, list[Any]],
+                          B: int = 2000, seed: int = 0) -> dict:
+    """The H4 cosine cos(u_perp, s_perp) with a game-bootstrap interval (amendment 3, C3): games are resampled
+    with replacement (one draw for every item set of the fold), the task direction u (mean of `diffs`, aligned
+    minus swapped) and the within-verb success direction s are re-estimated in every resample, and for each
+    entry of `removes` ({name: directions, fixed, estimated once}) those directions are projected out of both
+    before the cosine. Returns {name: {cos, ci, se}}."""
+    import numpy as np
+
+    games = sorted(set(diff_games) | set(succ_games) | set(fail_games))
+    rng = np.random.default_rng(seed)
+    counts = np.vstack([np.ones(len(games))] + [np.bincount(rng.integers(0, len(games), len(games)),
+                                                            minlength=len(games)) for _ in range(B)])
+    gi = {g: k for k, g in enumerate(games)}
+
+    def wmean(rows: Any, gs: list[str], mask: Any = None) -> tuple[Any, Any]:
+        w = counts[:, [gi[g] for g in gs]]
+        if mask is not None:
+            w = w * mask[None, :]
+        tot = w.sum(1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            return (w @ np.asarray(rows, dtype=np.float64)) / tot[:, None], tot
+
+    U, _ = wmean(diffs, diff_games)
+    sv, fv = np.asarray(succ_verbs), np.asarray(fail_verbs)
+    num, den = 0.0, 0.0
+    for v in sorted(set(sv.tolist()) & set(fv.tolist())):
+        ms, ns = wmean(succ, succ_games, (sv == v).astype(float))
+        mf, nf = wmean(fail, fail_games, (fv == v).astype(float))
+        with np.errstate(invalid="ignore", divide="ignore"):
+            w = np.where((ns > 0) & (nf > 0), ns * nf / (ns + nf), 0.0)
+        num = num + w[:, None] * np.nan_to_num(ms - mf)
+        den = den + w
+    with np.errstate(invalid="ignore", divide="ignore"):
+        Sd0 = num / den[:, None]
+    out = {}
+    for name, remove in removes.items():
+        basis: list[Any] = []
+        for d in remove:
+            d = np.asarray(d, dtype=np.float64)
+            for b in basis:
+                d = d - (d @ b) * b
+            basis.append(d / np.linalg.norm(d))
+        Uu, Ss = U, Sd0
+        for b in basis:
+            Uu = Uu - np.outer(Uu @ b, b)
+            Ss = Ss - np.outer(Ss @ b, b)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            c = (Uu * Ss).sum(1) / (np.linalg.norm(Uu, axis=1) * np.linalg.norm(Ss, axis=1))
+        out[name] = {"cos": float(c[0]), "ci": _interval(c[1:]), "se": _se(c[1:])}
+    return out
+
+
+def disattenuated(cos: float, rel_a: float | None, rel_b: float | None) -> float:
+    """A cosine between two noisy direction estimates divided by the square root of their reliabilities (each
+    the cosine between its two folds' estimates; amendment 3, C3): what the cosine would be between noise-free
+    directions, to first order. NaN if a reliability is not positive; clipped to [-1, 1]."""
+    if rel_a is None or rel_b is None or not (rel_a > 0 and rel_b > 0) or cos != cos:
+        return float("nan")
+    return max(-1.0, min(1.0, cos / math.sqrt(rel_a * rel_b)))
 
 
 # ---------------- layers ----------------
@@ -523,23 +641,85 @@ def onset_layer(profile: dict[int, dict], threshold: float = ONSET_THRESHOLD) ->
     return onset
 
 
-def onset_versus_arrival(onset: int | None, arrival_index: float | None, step: int = LAYER_STEP) -> str:
-    """The restated outcome-table row (amendment 2, B1). The arrival layer is rounded up to the ablation grid
-    (the first grid layer at or after it), since the onset can only be a grid layer."""
+def onset_versus_arrival(onset: int | None, arrival_index: float | None, layers: list[int],
+                         deepest_upper: float | None = None, step: int = LAYER_STEP) -> str:
+    """The onset layer against the patching arrival layer (amendment 2, B1; amendment 3, C1), without hypothesis
+    labels (the minimal pilot reports no verdicts).
+
+    The arrival layer is rounded up to the ablation grid (after rounding to 6 decimals, so that 32.000000001
+    is 32). It is "not assessable" when there is no arrival or it lies after the deepest layer the onset was
+    read on (`layers`). Without an onset, "no single direction" only when the deepest layer's removal upper
+    bound is below 0.3; otherwise the interval is too wide to say."""
     if arrival_index is None or arrival_index != arrival_index:
-        return "arrival undefined"
+        return "not assessable (no arrival on the grid)"
+    grid_arrival = step * math.ceil(round(arrival_index, 6) / step)
+    if not layers:
+        return "not assessable (every profile layer excluded by the direct-path rule)"
+    if grid_arrival > max(layers):
+        return "not assessable (arrival after the profile)"
     if onset is None:
-        return "no onset within the profile (H1, H2)"
-    grid_arrival = step * math.ceil(arrival_index / step)
-    return "at or before arrival (H3, H4, H5)" if onset <= grid_arrival else "after arrival (H1, H2)"
+        if deepest_upper is not None and deepest_upper == deepest_upper and deepest_upper < NO_DIRECTION_UPPER:
+            return "no single direction"
+        return "inconclusive (no onset, interval too wide)"
+    return "at or before arrival" if onset <= grid_arrival else "after arrival"
 
 
-def n_for_half_width(n: int, se: float, half_width: float = TARGET_HALF_WIDTH, z: float = 1.96) -> int | None:
+def grid_layers(n_layers: int, step: int = LAYER_STEP) -> list[int]:
+    """Every fourth layer from 4 before the last (Qwen3-8B: 4, ..., 32), the grid both arrival and onset use."""
+    return list(range(step, n_layers - 1, step))
+
+
+def patch_arrival_layer(curve: dict, layers: list[int], threshold: float = ONSET_THRESHOLD) -> int | None:
+    """The patching arrival layer under the onset's rule (amendment 3, C1): the earliest grid layer from which the
+    noising fraction's pointwise 95% lower bound stays at or above `threshold`, on the `last` group (the answer
+    position, where the ablation acts). Replaces the final group at a point value of 0.5 for the comparison."""
+    ci = curve.get("ci") or []
+    return onset_layer({m: {"ci": ci[m]} for m in layers if m < len(ci)}, threshold)
+
+
+def direct_path_share(dA: Any, dS: Any, DA: Any, DS: Any, games: list[str], ids: list[str],
+                      weights: dict[str, float] | None = None, B: int = 2000, seed: int = 0) -> dict:
+    """The share of the goal effect already in readout form at one layer (amendment 3, C2):
+
+    sum_i (r.h_A/rho_A - r.h_S/rho_S) / sum_i (D_A - D_S), with r the readout direction gamma * (W_U[Yes] -
+    W_U[No]), h the layer's answer-position residual, rho the prompt's last-layer RMS (the final norm's scale)
+    and D the final readout. `dA`, `dS` are the per-item r.h/rho of the aligned and swapped prompts; weighted,
+    game bootstrap. A mean ablation at that layer removes this part by construction as far as the ablated
+    direction lies along it."""
+    import numpy as np
+
+    num = np.asarray(dA, dtype=float) - np.asarray(dS, dtype=float)
+    den = np.asarray(DA, dtype=float) - np.asarray(DS, dtype=float)
+    if not len(num):
+        return {"n": 0}
+    W = game_weights(games, B, seed) * item_weights(ids, weights)[None, :]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        lam = (W @ num) / (W @ den)
+    return {"n": len(num), "share": float(lam[0]), "ci": _interval(lam[1:]), "se": _se(lam[1:])}
+
+
+def direct_path_kept(layers: list[int], direct: dict | None, bound: float = DIRECT_PATH_MAX) -> list[int]:
+    """Profile layers on which the onset is read (amendment 3, C2): those whose direct-path share has a 95% upper
+    bound below `bound`. A layer without a direct-path estimate is kept."""
+    if not direct:
+        return list(layers)
+    out = []
+    for m in layers:
+        x = direct.get(m) or direct.get(str(m)) or {}
+        hi = (x.get("ci") or (float("nan"), float("nan")))[1]
+        if not (hi == hi and hi >= bound):
+            out.append(m)
+    return out
+
+
+def n_for_half_width(n: int, se: float, half_width: float = TARGET_HALF_WIDTH, z: float = 1.96,
+                     margin: float = SAMPLE_SIZE_MARGIN) -> int | None:
     """Items needed for a 95% interval of the given half-width, from a pilot SE at n items (amendment 2, B3): the
-    SE scales as 1/sqrt(n), game clustering included, since the SE is a game-bootstrap one."""
+    SE scales as 1/sqrt(n), game clustering included, since the SE is a game-bootstrap one; times `margin`
+    (amendment 3, C6: 1.2, because with games as clusters the SE falls more slowly than 1/sqrt(n))."""
     if not n or se != se or se <= 0:
         return None
-    return int(math.ceil(n * (z * se / half_width) ** 2))
+    return int(math.ceil(margin * n * (z * se / half_width) ** 2))
 
 
 # ---------------- ablation ----------------
@@ -619,6 +799,32 @@ def steer_ratio(by: dict[str, dict[str, dict]], ids: list[str], name_for: Callab
     return {"n": len(rows), "ratio": float(ratio[0]), "ci": _interval(ratio[1:])}
 
 
+def steer_relative(by: dict[str, dict[str, dict]], ids: list[str], name_num: Callable[[str], str],
+                   name_den: Callable[[str], str], games: dict[str, str], B: int = 2000, seed: int = 0,
+                   weights: dict[str, float] | None = None) -> dict:
+    """Summed steering gain of one edit over that of another on the same swapped prompts (amendment 3, C3: the
+    gain along the success direction without its readout component over the gain along the task direction at
+    the same layer); weighted, game bootstrap."""
+    import numpy as np
+
+    rows = []
+    for i in ids:
+        rs = by["swapped"].get(i)
+        a = _edit_value(rs, name_num(i)) if rs else None
+        b = _edit_value(rs, name_den(i)) if rs else None
+        if a is None or b is None:
+            continue
+        rows.append((a[1] - a[0], b[1] - b[0], games[i], i))
+    if not rows:
+        return {"n": 0}
+    x = np.array([[r[0] for r in rows]])
+    y = np.array([[r[1] for r in rows]])
+    W = game_weights([r[2] for r in rows], B, seed) * item_weights([r[3] for r in rows], weights)[None, :]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ratio = (W @ x.T)[:, 0] / (W @ y.T)[:, 0]
+    return {"n": len(rows), "ratio": float(ratio[0]), "ci": _interval(ratio[1:]), "se": _se(ratio[1:])}
+
+
 def gap(recs_neutral: dict[str, dict], success_ids: list[str], failure_ids: list[str],
         name_for: Callable[[str], str] | None, games: dict[str, str], B: int = 2000, seed: int = 0,
         weights: dict[str, float] | None = None) -> dict:
@@ -640,6 +846,7 @@ def gap(recs_neutral: dict[str, dict], success_ids: list[str], failure_ids: list
         return None if v is None else v[1]
 
     out: dict[str, Any] = {"defined": True}
+    draws: dict[str, Any] = {}
     for label, edited in (("clean", False), ("edited", True)):
         if edited and name_for is None:
             continue
@@ -658,8 +865,13 @@ def gap(recs_neutral: dict[str, dict], success_ids: list[str], failure_ids: list
 
         out[label] = {"n": len(rows), "gap": float(g[0]), "ci": _interval(g[1:]),
                       "auc": auc([r[0] for r in rows if r[1]], [r[0] for r in rows if not r[1]])}
+        draws[label] = (g, [r[3] for r in rows])
     if "edited" in out and out["clean"].get("n") and out["edited"].get("n"):
         out["ratio"] = out["edited"]["gap"] / out["clean"]["gap"] if out["clean"]["gap"] else float("nan")
+        if draws["clean"][1] == draws["edited"][1]:  # the same items in the same order: a paired ratio per draw
+            with np.errstate(invalid="ignore", divide="ignore"):
+                r = draws["edited"][0] / draws["clean"][0]
+            out["ratio_ci"], out["ratio_se"] = _interval(r[1:]), _se(r[1:])
     return out
 
 
@@ -671,8 +883,10 @@ def choose_layer(shares_by_layer: dict[int, float]) -> int | None:
 
 def ablation_summary(recs: list[dict], fold_of: dict[str, int], succ_ids: set[str], layers: list[int],
                      caveat: list[int] = (), last: int | None = None, weights: dict[str, float] | None = None,
-                     B: int = 2000, seed: int = 0) -> dict:
-    """The ablation readouts per stratum (amendment 1, A3, A5; amendment 2, B1, B2) from edit records.
+                     B: int = 2000, seed: int = 0, direct: dict[str, dict] | None = None) -> dict:
+    """The ablation readouts per stratum (amendment 1, A3, A5; amendment 2, B1, B2; amendment 3, C2, C3) from
+    edit records. `direct` ({stratum: {layer: direct_path_share}}) excludes from the onset every profile layer
+    whose direct-path share's upper bound reaches 0.3 (`direct_path_kept`).
 
     `layers` is the depth profile; `caveat` layers are ablated and reported but enter nothing else; `last` is
     the last layer's sanity edit ("task_last", expected to remove about everything by construction). Every item
@@ -680,10 +894,13 @@ def ablation_summary(recs: list[dict], fold_of: dict[str, int], succ_ids: set[st
 
     - profile: the task direction's removed share and 95% interval at every profile and caveat layer;
     - onset_layer: the earliest profile layer from which the interval's lower bound stays at or above 0.6
-      (`onset_layer`), the pre-registered summary;
+      (`onset_layer`), the pre-registered summary, read on the profile layers the direct-path rule keeps
+      (`onset_layers`), with the deepest of them's upper bound (`deepest_upper`);
     - by_layer: at every profile layer, the removal by the task direction without its success component, by the
       mention direction and from that layer on; the steering gain along the success direction and along it
-      without its readout component, as shares of the goal effect; the collateral shift on neutral prompts; the
+      without its readout component and along the task direction itself, as shares of the goal effect, and the
+      readout-free success steering over the task steering (`steer_perp_over_task`); the perp-over-task removal
+      ratio where the task removal's lower bound reaches 0.3; the collateral shift on neutral prompts; the
       neutral success-versus-failure gap; the removal on determined successes;
     - the same readouts at one chosen layer, the profile layer with the largest removal on the other fold's
       failures (cross-fitted) or, when only one fold was edited (the minimal pilot, amendment 2, B3), on the
@@ -716,7 +933,12 @@ def ablation_summary(recs: list[dict], fold_of: dict[str, int], succ_ids: set[st
         row: dict[str, Any] = {"n_failures": len(fails), "n_successes": len(succ)}
         row["profile"] = {m: removed_share(by, fails, at("task", m), games, B, seed, weights=weights)
                           for m in list(layers) + list(caveat)}
-        row["onset_layer"] = onset_layer({m: row["profile"][m] for m in layers})
+        kept = direct_path_kept(layers, (direct or {}).get(s))
+        row["onset_layers"] = kept
+        row["onset_layer"] = onset_layer({m: row["profile"][m] for m in kept})
+        row["deepest_upper"] = (row["profile"][max(kept)].get("ci") or (float("nan"),) * 2)[1] if kept else float("nan")
+        if direct and s in direct:
+            row["direct_path"] = direct[s]
         if last is not None:
             row["task_last"] = removed_share(by, fails, at("task_last", last), games, B, seed, weights=weights)
         row["by_layer"] = {m: {
@@ -726,6 +948,10 @@ def ablation_summary(recs: list[dict], fold_of: dict[str, int], succ_ids: set[st
             "steer_success": steer_ratio(by, fails, at("steer_success", m), games, B, seed, weights=weights),
             "steer_success_perp_readout": steer_ratio(by, fails, at("steer_success_perp_readout", m), games, B,
                                                       seed, weights=weights),
+            "steer_task": steer_ratio(by, fails, at("steer_task", m), games, B, seed, weights=weights),
+            "steer_perp_over_task": steer_relative(by, fails, at("steer_success_perp_readout", m), at("steer_task", m),
+                                                   games, B, seed, weights=weights),
+            "perp_over_task_removal": perp_over_task(row["profile"][m], by, fails, m, games, B, seed, weights),
             "collateral_neutral_shift": mean_shift(by["absent"], fails + succ, at("task", m), games, B, seed,
                                                    weights=weights),
             "gap_neutral": gap(by["absent"], succ, fails, at("task", m), games, B, seed, weights=weights),
@@ -748,6 +974,37 @@ def ablation_summary(recs: list[dict], fold_of: dict[str, int], succ_ids: set[st
                                 for k in sorted({k for r in recs for k in r["edits"] if k.startswith("random|")})}
         out[s] = row
     return out
+
+
+def perp_over_task(task_row: dict, by: dict, fails: list[str], m: int, games: dict[str, str], B: int, seed: int,
+                   weights: dict[str, float] | None) -> dict:
+    """Removal by the task direction without its success component over removal by the task direction at layer m
+    (amendment 3, C3), read only where the task direction's removal has a lower bound of at least 0.3; elsewhere
+    the ratio of two small numbers says nothing and it is "not assessable"."""
+    import numpy as np
+
+    lo = (task_row.get("ci") or (float("nan"),))[0]
+    if not (lo == lo and lo >= PERP_TASK_MIN_REMOVAL):
+        return {"assessable": False, "why": f"task removal's lower bound {lo:.3g} is below {PERP_TASK_MIN_REMOVAL}"}
+    rows = []
+    for i in fails:
+        ra, rb = by["aligned"].get(i), by["swapped"].get(i)
+        if not ra or not rb:
+            continue
+        vals = [(_edit_value(ra, f"{k}|{m}"), _edit_value(rb, f"{k}|{m}")) for k in ("task", "task_perp_success")]
+        if any(a is None or b is None for a, b in vals):
+            continue
+        (ta, tb), (pa, pb) = vals
+        rows.append((ta[0] - tb[0], ta[1] - tb[1], pa[1] - pb[1], games[i], i))
+    if not rows:
+        return {"assessable": False, "why": "no items"}
+    before = np.array([r[0] for r in rows])
+    W = game_weights([r[3] for r in rows], B, seed) * item_weights([r[4] for r in rows], weights)[None, :]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        rt = 1 - (W @ np.array([r[1] for r in rows])) / (W @ before)
+        rp = 1 - (W @ np.array([r[2] for r in rows])) / (W @ before)
+        ratio = rp / rt
+    return {"assessable": True, "ratio": float(ratio[0]), "ci": _interval(ratio[1:]), "se": _se(ratio[1:])}
 
 
 def index_records(records: Iterable[dict]) -> dict[str, dict[str, dict]]:

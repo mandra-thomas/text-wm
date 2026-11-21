@@ -85,6 +85,33 @@ Review 2 put 35 bugs into the interpretability code (N1 to N35); 21 survived the
 
 The review's other 14 mutants (N3, N6, N9, N15, N17, N18, N20, N22, N23, N28, N30, N31, N34, N35) were already killed and stay in the list. Review 2's simulation of the last-layer tautology is a test (`test_last_layer_ablation_is_tautological_and_the_depth_profile_is_not`).
 
+## Interpretability pilot, review 3 (2026-11-21, branch `interp`)
+
+Review 3 put 40 bugs into the code (K1 to K40); 19 survived, most of them in the weighted estimators, whose tests checked point estimates with equal weights. K19 (weights computed over n instead of the number chosen) is equivalent and left out: with more eligible items than n the selection always takes exactly n. Fix round 3 added value tests and 28 mutants of its own code (L1 to L28). All 176 interpretability mutants in `scripts/mutation_check.py` are run with a CPU torch environment (`MUTANTS_MATCHING=interp`). Killing tests (files `tests/test_interp_pilot.py`, `tests/test_interp.py`):
+
+| Mutant | Killed by |
+|---|---|
+| K2 H4 layers include the arrival layer; K23 discrimination at 0.8; K27 cross-fold cosine of fold 0 twice; K4, K5 arrival index or arrival kind in the table | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| K6, K7 weights on the point estimate only; K8 steering share, K9 mean shift, K10 gap without weights; K11 mean shift over the count | `test_weighted_bootstrap_rows_carry_the_weights` (every bootstrap draw recomputed by hand) |
+| K12 verbs weighted by successes only; K33 mention rows without a mention prompt; K35 first-token gate reads the neutral arm; K20 a minimum above its stratum; K15 GPU overlap accepted; K18 two GPU types on record; K38 caveat layers keep profile layers | `test_review_3_survivors_on_small_cases` |
+| K36 successes without weights; K37 random directions at the first layer | `test_minimal_pilot_end_to_end` |
+| K26 perp over task inverted (now in `analysis.perp_over_task`) | `test_steering_relative_to_the_task_direction_and_the_perp_over_task_rule` |
+| K32 sample size at a fixed n | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| L1 arrival not rounded; L2 arrival beyond the profile read anyway; L3 no single direction without the upper bound | `test_onset_layer_needs_the_lower_bound_to_stay_above` |
+| L4 arrival from the final group | `test_patch_arrival_on_the_answer_position_under_the_onset_rule` |
+| L5 direct path without the swapped prompt; L8 at the first layer's scale | `test_direct_path_report_is_the_readout_lens_at_the_final_scale` |
+| L6 direct-path rule on the lower bound; L7 rule strict at 0.3 | `test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it` |
+| L9 onset ignores the direct path | `test_ablation_summary_reads_the_onset_on_layers_free_of_the_direct_path` |
+| L10 steering relative inverted; L11 perp over task always assessable | `test_steering_relative_to_the_task_direction_and_the_perp_over_task_rule` |
+| L12 per-stratum steering from every row; L13 edits ignore the stratum; L14 steer_task along the success direction | `test_steering_amounts_per_stratum_and_the_task_reference` |
+| L15 ablation run steers with pooled amounts; L23, L24 minimums not scaled; L25 disattenuated by the raw between-fold cosine; L26 analysis without the direct path; L27 no answer direction | `test_minimal_pilot_end_to_end` |
+| L16 cosine bootstrap projects nothing; L17 answer direction not centred; L18 disattenuation without the square root | `test_answer_direction_projections_and_the_cosine_bootstrap` |
+| L19 H4 layers cut at the final-group arrival; L20 perp-over-task median over unassessable layers; L28 every layer excluded falls back to the profile | `test_table_rows_read_interval_bounds_onset_and_h4` (L28 by a case with every layer excluded) |
+| L21 sample size without the margin | `test_sample_size_for_a_half_width` |
+| L22 scaled minimum truncated | `test_minimums_scale_with_a_smaller_draw` |
+
+The other 21 of review 3's mutants were already killed by earlier tests and stay in the list. From 2026-11-21 the mutation check counts a mutant as killed only when pytest exits with code 1 (a named test failed); a collection error, an internal error or a run stopped from outside is reported as inconclusive, never as a kill. All 176 interpretability mutants were rerun under that rule. Review 3's direct-path simulation is a test (`test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it`).
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:
