@@ -34,8 +34,11 @@ def _manifest(tmp_path, items):
 
 
 def _small_items():
+    """Every item of a few pairs, chosen so that both roles have main couples (a test on an empty draw is vacuous)."""
     items = V.read_items()
-    pairs = sorted({it["pair_id"] for it in items if it["population"] == "main"})[:6]
+    pairs = set()
+    for role in ("goal", "ingredient"):
+        pairs |= set(sorted({it["pair_id"] for it in items if it["population"] == "main" and it["role"] == role})[:4])
     return [it for it in items if it["pair_id"] in pairs]
 
 
@@ -86,6 +89,7 @@ def test_run_mock_writes_every_record_and_resumes(mock_runs, mode):
     out = mock_runs / "runs" / f"dx_{mode}" / ("generations.jsonl" if mode == "generate" else "scoring.jsonl")
     recs = read_jsonl(out)
     chosen = X.selection(cfg, items)
+    assert len(chosen) == 6
     arms = X.arms_of(mode)
     assert len(recs) == len(chosen) * len(arms) and len(arms) == (2 if mode == "objectgoal" else 3)
     assert {(r["transition_id"], r["condition"]) for r in recs} == {(t["id"], c) for t in chosen for c in arms}
@@ -159,6 +163,7 @@ def test_object_goal_arms_score_the_right_candidates(mock_runs, monkeypatch):
            "models": ["llama3.1-8b-fewshot"], "blocks": [{"population": "main", "couples": 2, "role": "ingredient"}]}
     assert X.run_textcraft_dx(cfg) == 0
     chosen = {t["id"]: t for t in X.selection(cfg, items)}
+    assert len(chosen) == 4 and all(t["role"] == "ingredient" for t in chosen.values())
     assert calls and len(calls) == 2 * len(chosen)
     for cond, query, plus, minus in calls:
         assert f"Goal: craft " in query
