@@ -3,6 +3,7 @@ tokenization gate on a stand-in tokenizer, the scoring run in mock mode, and the
 from __future__ import annotations
 
 import copy
+import math
 import json
 import re
 import types
@@ -164,10 +165,12 @@ def test_item_hash_covers_fields_and_context(small, monkeypatch):
 def test_record_counts_and_arms(records):
     kinds = Counter(r["kind"] for r in records)
     assert kinds == {"main": 2100, "parent": 882}
-    assert sum(len(r["arms"]) for r in records) == 24008 - 20
+    assert sum(len(r["arms"]) for r in records) == 25743  # amended before freeze: + yn_neutral and ext_both on parents
     padded = [r for r in records if "pad8_aligned" in r["arms"]]
     assert len(padded) == 920 and all(r["population"] == "main" and r["length_bin"] in ("1-3", "4-8") for r in padded)
-    assert all(r["arms"] == list(R.PARENT_ARMS) for r in records if r["kind"] == "parent")
+    parents = [r for r in records if r["kind"] == "parent"]
+    assert all(r["arms"] == [a for a in R.PARENT_ARMS if r["both_task_line"] or a != "ext_both"] for r in parents)
+    assert sum("ext_both" in r["arms"] for r in parents) == 873 and all("yn_neutral" in r["arms"] for r in parents)
 
 
 def test_main_records_are_the_frozen_items_unchanged(records):
@@ -604,88 +607,6 @@ def test_competence_gate_uses_wave_a_rule(small, fast):
     assert "role_goal" in g["descriptive"]["yes_no"] and "role_ingredient" in g["descriptive"]["two_candidate"]
 
 
-def test_failed_gate_makes_every_contrast_not_interpretable(small, fast):
-    recs = copy.deepcopy(small)
-    scores = {t: _planted(recs, t) for t in R.TAGS}
-    scores["mistral-7b-v0.3"] = [{**s, "L": abs(s["L"]) + 1} if s["condition"] == "yn_neutral" else s
-                                 for s in scores["mistral-7b-v0.3"]]
-    out = A.analyse(recs, SHOTS, scores, list(R.TAGS))
-    v = out["verdicts"]["mistral-7b-v0.3"]
-    assert v["competence"] is False and set(v["contrasts"].values()) == {"not interpretable"}
-    assert v["reading"]["penalty"] == "not interpretable"
-    assert "mistral-7b-v0.3" not in out["across_models"]["models_passing_gate"]
-
-
-def test_verdict_rules():
-    fam = {f"m:{c}:{t}": {"p_holm": 0.5} for c in A.CONTRASTS for t in A.TESTS}
-    rec = {"estimate": -0.5, "ci95": [-0.8, -0.2], "applicable": True}
-    assert A.verdict(rec, fam, "m", "parent_penalty", True) == "inconclusive"
-    fam["m:parent_penalty:differs"]["p_holm"] = 0.01
-    assert A.verdict(rec, fam, "m", "parent_penalty", True) == "confirmed below zero"
-    assert A.verdict({**rec, "ci95": [-0.8, 0.1]}, fam, "m", "parent_penalty", True) == "inconclusive"
-    assert A.verdict({"estimate": 0.5, "ci95": [0.2, 0.8]}, fam, "m", "parent_penalty", True) == "confirmed above zero"
-    fam["m:lift:equivalent"]["p_holm"] = 0.049
-    assert A.verdict({"estimate": 0.01, "ci95": [-0.1, 0.1]}, fam, "m", "lift", True) == "equivalent to zero"
-    fam["m:lift:equivalent"]["p_holm"] = 0.05
-    assert A.verdict({"estimate": 0.01, "ci95": [-0.1, 0.1]}, fam, "m", "lift", True) == "inconclusive"
-    assert A.verdict(rec, fam, "m", "parent_penalty", False) == "not interpretable"
-    assert A.verdict({**rec, "applicable": False}, fam, "m", "timing", True) == "not applicable"
-    assert A.verdict(None, fam, "m", "lift", True) == "waiting"
-
-
-@pytest.mark.parametrize("p,dn,dc,want", [
-    ("confirmed below zero", "inconclusive", "confirmed below zero", "completion penalty"),
-    ("confirmed below zero", "confirmed above zero", "confirmed below zero", "completion penalty"),
-    ("confirmed below zero", "equivalent to zero", "confirmed below zero", "completion penalty"),
-    ("confirmed below zero", "confirmed below zero", "confirmed below zero", "naming penalty"),
-    ("confirmed below zero", "confirmed below zero", "inconclusive", "naming penalty"),
-    ("confirmed below zero", "inconclusive", "inconclusive", "penalty present, mechanism unresolved"),
-    ("equivalent to zero", "confirmed below zero", "inconclusive", "no penalty under the clean prompt"),
-    ("confirmed above zero", "inconclusive", "inconclusive", "completing a named goal raises predicted success"),
-    ("inconclusive", "confirmed below zero", "confirmed below zero", "inconclusive on the penalty"),
-])
-def test_reading_table(p, dn, dc, want):
-    r = A.reading({"lift": "inconclusive", "parent_penalty": p, "naming": dn, "completion": dc, "timing": "inconclusive"})
-    assert r["penalty"].startswith(want)
-
-
-def test_timing_and_lift_readings():
-    base = {"lift": "equivalent to zero", "parent_penalty": "inconclusive", "naming": "inconclusive", "completion": "inconclusive"}
-    assert A.reading({**base, "timing": "confirmed above zero"})["timing"] == "timing"
-    assert A.reading({**base, "timing": "equivalent to zero"})["timing"] == "content"
-    assert A.reading({**base, "timing": "not applicable"})["timing"] == "not applicable"
-    assert A.reading({**base, "timing": "confirmed below zero"})["timing"].endswith("(F4)")
-    assert A.reading({**base, "timing": "inconclusive"})["lift"] == "no lift"
-
-
-def test_across_models_patterns():
-    v = lambda p: {"parent_penalty": p}
-    gates = {t: True for t in R.TAGS}
-    allb = {t: v("confirmed below zero") for t in R.TAGS}
-    assert A.across(allb, gates)["penalty_pattern"] == "penalty general across the models that pass"
-    only = {t: v("confirmed below zero" if t == "llama3.1-8b" else "inconclusive") for t in R.TAGS}
-    a = A.across(only, gates)
-    assert a["penalty_pattern"].endswith("(F3)") and a["F3_penalty_not_shared"] is True
-    mixed = {t: v("confirmed below zero" if t in ("qwen3-8b", "llama3.1-8b") else "equivalent to zero") for t in R.TAGS}
-    assert A.across(mixed, gates)["penalty_pattern"] == "penalty model-specific"
-    one = {t: (t == "qwen3-8b") for t in R.TAGS}
-    assert A.across(allb, one)["penalty_pattern"].startswith("fewer than two")
-    assert A.across(allb, {**gates, "llama3.1-8b": False})["F1_llama_no_penalty"].startswith("not testable")
-    eq = {**allb, "llama3.1-8b": v("equivalent to zero")}
-    assert A.across(eq, gates)["F1_llama_no_penalty"] is True
-
-
-def test_margin_is_three_tenths_of_the_item_sd(small, fast):
-    recs = copy.deepcopy(small)
-    scores = _planted(recs, "qwen3-8b", noise=1.0, seed=3)
-    by, _ = A.index_scores(scores, recs, SHOTS, "qwen3-8b")
-    pops = A.populations(recs)
-    m = A.margin_of(by, pops)
-    import statistics
-    d = [A.L(by, r["id"], "aligned") - A.L(by, r["id"], "swapped") for r in pops["main_failures"]]
-    assert m["margin"] == pytest.approx(0.3 * statistics.stdev(d))
-
-
 def test_statistics_helpers():
     assert A.bootstrap_p([1.0] * 99) == pytest.approx(1 / 100)
     assert A.bootstrap_p([-1.0, 1.0] * 50) == 1.0
@@ -844,7 +765,8 @@ def test_used_up_auc_is_role_matched(records, fast):
     pops = A.populations(records)
     uu = [r for r in pops["main_failures"] if r["failure_class"] == "used_up" and r["role"] == "ingredient"][:40]
     succ = [r for r in pops["successes"] if r["role"] == "ingredient"][:40] + [r for r in pops["successes"] if r["role"] == "goal"][:40]
-    sub = {"main_failures": uu, "successes": succ, "parent_failures": [], "parent_successes": []}
+    sub = {k: [] for k in pops}
+    sub.update({"main_failures": uu, "successes": succ, "ingredient": uu, "ingredient_successes": succ[:40]})
     by = {}
     for r in uu + succ:
         L = 0.0 if r["population"] == "main" else (5.0 if r["role"] == "ingredient" else -10.0)
@@ -861,3 +783,376 @@ def test_gate_catches_a_candidate_written_differently_by_the_template(small):
     rep = T.gate(_fake_scorer(FakeTok(reply_prefix="▁ ")), R.MODELS["qwen3-8b"], recs, SHOTS)
     assert not rep["ok"] and any(" o_plus: alone " in p for p in rep["problems"])
     assert rep["n_yes_no_prompts_checked"] == 0
+
+
+# ---------------- amendments before freeze (user decisions and review 1, 2026-11-21) ----------------
+
+
+def test_verdicts_are_statistical_and_never_withheld():
+    fam = {f"m:{c}:{t}": {"p_holm": 0.5} for c in A.CONTRASTS for t in A.TESTS}
+    rec = {"estimate": -0.5, "ci95": [-0.8, -0.2], "applicable": True}
+    assert A.verdict(rec, fam, "m", "parent_penalty") == "inconclusive"
+    fam["m:parent_penalty:differs"]["p_holm"] = 0.01
+    assert A.verdict(rec, fam, "m", "parent_penalty") == "confirmed below zero"
+    assert A.verdict({**rec, "ci95": [-0.8, 0.1]}, fam, "m", "parent_penalty") == "inconclusive"
+    assert A.verdict({"estimate": 0.5, "ci95": [0.2, 0.8]}, fam, "m", "parent_penalty") == "confirmed above zero"
+    fam["m:lift:equivalent"]["p_holm"] = 0.049
+    assert A.verdict({"estimate": 0.01, "ci95": [-0.1, 0.1]}, fam, "m", "lift") == "equivalent to zero"
+    fam["m:lift:equivalent"]["p_holm"] = 0.05
+    assert A.verdict({"estimate": 0.01, "ci95": [-0.1, 0.1]}, fam, "m", "lift") == "inconclusive"
+    assert A.verdict({**rec, "applicable": False}, fam, "m", "timing") == "not applicable"
+    assert A.verdict(None, fam, "m", "lift") == "waiting"
+
+
+def test_interpretation_separates_measurable_effects_from_distortions():
+    assert A.interpretation("confirmed below zero", True, {}) == "distortion in a competent predictor"
+    assert A.interpretation("confirmed above zero", False, {}).startswith("statistically measurable goal effect")
+    assert A.interpretation("equivalent to zero", True, {}).startswith("no effect larger than the margin, in a competent")
+    assert "limited interpretation" in A.interpretation("equivalent to zero", False, {})
+    assert A.interpretation("inconclusive", True, {"equivalence_underpowered": True}) == "inconclusive (equivalence underpowered)"
+    assert A.interpretation("inconclusive", False, {"equivalence_underpowered": False}) == "inconclusive"
+    assert "no effect" not in A.interpretation("inconclusive", True, {"equivalence_underpowered": True})
+
+
+@pytest.mark.parametrize("p,dn,dc,want", [
+    ("confirmed below zero", "inconclusive", "confirmed below zero", "completion contributes; naming not constrained"),
+    ("confirmed below zero", "confirmed above zero", "confirmed below zero", "completion penalty, naming constrained"),
+    ("confirmed below zero", "equivalent to zero", "confirmed below zero", "completion penalty, naming constrained"),
+    ("confirmed below zero", "confirmed below zero", "confirmed below zero", "naming or sub-goal-completion penalty"),
+    ("confirmed below zero", "confirmed below zero", "inconclusive", "naming or sub-goal-completion penalty"),
+    ("confirmed below zero", "inconclusive", "inconclusive", "penalty present, mechanism unresolved"),
+    ("confirmed below zero", "equivalent to zero", "inconclusive", "penalty present, mechanism unresolved"),
+    ("equivalent to zero", "confirmed below zero", "inconclusive", "no penalty larger than the margin"),
+    ("confirmed above zero", "inconclusive", "inconclusive", "completing a named goal raises predicted success"),
+    ("inconclusive", "confirmed below zero", "confirmed below zero", "inconclusive on the penalty"),
+])
+def test_reading_table(p, dn, dc, want):
+    r = A.reading({"lift": "inconclusive", "parent_penalty": p, "naming": dn, "completion": dc, "timing": "inconclusive"})
+    assert r["penalty"].startswith(want)
+
+
+def test_partial_naming_and_timing_qualifiers():
+    v = {"lift": "inconclusive", "parent_penalty": "confirmed below zero", "naming": "inconclusive",
+         "completion": "inconclusive", "timing": "confirmed above zero"}
+    r = A.reading(v, partial_naming_flag=True, timing_comparable=True)
+    assert r["penalty"].endswith("penalty possibly carried by partial naming (the strict parents' estimate is not negative)")
+    assert r["timing"].startswith("sensitivity to added empty-inventory steps") and r["timing"].endswith("not read as timing")
+    r2 = A.reading(v)
+    assert "partial naming" not in r2["penalty"] and "not read as timing" not in r2["timing"]
+    base = {**v, "parent_penalty": "inconclusive"}
+    assert A.reading({**base, "timing": "equivalent to zero"})["timing"].startswith("no sensitivity")
+    assert A.reading({**base, "timing": "not applicable"})["timing"] == "not applicable"
+    assert A.reading({**base, "timing": "confirmed below zero"})["timing"].endswith("(F4)")
+    assert A.reading({**base, "lift": "equivalent to zero"})["lift"] == "no lift larger than the margin"
+
+
+def test_partial_naming_flag_follows_the_strict_subset():
+    block = {"contrasts": {c: {"estimate": -1.0, "ci95": [-2, -0.5], "applicable": True} for c in A.CONTRASTS},
+             "competence": {"interpretable": True, "local": {"per_contrast": {c: {"competent": True} for c in A.CONTRASTS}}},
+             "descriptive": {"parent": {"penalty_by_subset": {"strict": {"estimate": 0.2}}}}}
+    block["contrasts"]["timing"]["comparable_to_one_lookup_change"] = False
+    fam = {f"m:{c}:{t}": {"p_holm": 0.001 if t == "differs" else 1.0} for c in A.CONTRASTS for t in A.TESTS}
+    v = A.model_verdicts(block, fam, "m")
+    assert "partial naming" in v["reading"]["penalty"]
+    block["descriptive"]["parent"]["penalty_by_subset"]["strict"]["estimate"] = -0.3
+    assert "partial naming" not in A.model_verdicts(block, fam, "m")["reading"]["penalty"]
+    block["competence"]["local"]["per_contrast"]["lift"]["competent"] = False
+    out = A.model_verdicts(block, fam, "m")
+    assert out["contrasts"]["lift"] == "confirmed below zero" and out["interpretation"]["lift"].startswith("statistically measurable")
+
+
+def test_across_models_patterns_and_f3():
+    v = lambda p: {"parent_penalty": p}
+    comp = {t: True for t in R.TAGS}
+    allb = {t: v("confirmed below zero") for t in R.TAGS}
+    a = A.across(allb, comp)
+    assert a["penalty_pattern"] == "penalty general across the competent models" and a["F3_penalty_not_shared"] is False
+    only = {t: v("confirmed below zero" if t == "llama3.1-8b" else "inconclusive") for t in R.TAGS}
+    a = A.across(only, comp)
+    assert a["penalty_pattern"] == "penalty below zero for Llama-3.1 only" and a["F3_penalty_not_shared"] == "undecided"
+    one_eq = {**only, "gemma2-9b-it": v("equivalent to zero")}
+    assert A.across(one_eq, comp)["F3_penalty_not_shared"] is True
+    mixed = {**one_eq, "qwen3-8b": v("confirmed below zero")}
+    a = A.across(mixed, comp)
+    assert a["F3_penalty_not_shared"] is False and a["penalty_pattern"] == "penalty model-specific"
+    above = {**only, "mistral-7b-v0.3": v("confirmed above zero")}
+    assert A.across(above, comp)["F3_penalty_not_shared"] is True
+    # a model not competent for the penalty does not count either way
+    assert A.across(one_eq, {**comp, "gemma2-9b-it": False})["F3_penalty_not_shared"] == "undecided"
+    assert A.across(allb, {t: t == "qwen3-8b" for t in R.TAGS})["penalty_pattern"].startswith("fewer than two")
+    assert A.across(allb, {**comp, "llama3.1-8b": False})["F1_llama_no_penalty"].startswith("not testable")
+    assert A.across({**allb, "llama3.1-8b": v("equivalent to zero")}, comp)["F1_llama_no_penalty"] is True
+    assert "top-item status" in A.across(allb, comp)["F1_note"]
+
+
+def test_margin_is_capped_at_four_tenths(small, fast):
+    import statistics
+    recs = copy.deepcopy(small)
+    pops = A.populations(recs)
+    for noise, seed in ((0.3, 3), (5.0, 4)):
+        scores = _planted(recs, "qwen3-8b", noise=noise, seed=seed)
+        by, _ = A.index_scores(scores, recs, SHOTS, "qwen3-8b")
+        d = [A.L(by, r["id"], "aligned") - A.L(by, r["id"], "swapped") for r in pops["main_failures"]]
+        m = A.margin_of(by, pops)
+        assert m["margin"] == pytest.approx(min(0.3 * statistics.stdev(d), 0.4)) and m["cap_nats"] == 0.4
+    assert m["margin"] == 0.4  # a wide spread hits the cap
+    c = A.contrasts(by, pops, m["margin"])
+    assert all(c[k]["margin"] == m["margin"] for k in A.CONTRASTS)  # every contrast uses margin_of's value
+
+
+def test_equivalence_power():
+    assert A.equivalence_power(0.08, 0.4, 3.090232) == pytest.approx(0.94, abs=0.01)
+    assert A.equivalence_power(0.24, 0.4, 3.090232) == 0.0
+    assert A.equivalence_power(0.04, 0.4, 1.644854) == pytest.approx(1.0, abs=1e-6)
+    blk = A._power_block([0.0, 0.5, -0.5, 0.2, -0.2] * 10, 0.4)
+    assert blk["equivalence_underpowered"] is True
+    assert A.Z_HOLM_FIRST == pytest.approx(3.090232) and A.POWER_MIN == 0.8
+
+
+def test_family_tests_use_at_least_20000_draws():
+    assert A.B_DRAWS >= 20000 and A.N_FLIPS >= 20000
+
+
+def test_fast_draws_equal_the_general_path():
+    import random
+    rng = random.Random(1)
+    rows = [("goal" if i % 3 else "ingredient", rng.gauss(0, 1)) for i in range(60)]
+    cl = [f"p{i % 11}" for i in range(60)]
+    fast = A.draws(A._gap, rows, cl, B=200)
+    slow = A.draws(lambda r: A._gap(r), rows, cl, B=200)
+    assert fast == pytest.approx(slow)
+    vals = [x for _r, x in rows]
+    assert A.draws(A.mean, vals, cl, B=200) == pytest.approx(A.draws(lambda v: A.mean(v), vals, cl, B=200))
+
+
+def _yn_by(recs, value):
+    by = {}
+    for r in recs:
+        L = value(r)
+        m = 0.9
+        by[(r["id"], "yn_neutral")] = {"L": L, "logp_plus": math.log(m / 2), "logp_minus": math.log(m / 2),
+                                       "logp_first_plus": math.log(m / 2), "logp_first_minus": math.log(m / 2)}
+    return by
+
+
+def test_local_competence_rules_and_the_boundary(records, fast):
+    pops = A.populations(records)
+    every = pops["main_failures"] + pops["successes"] + pops["parent_failures"] + pops["parent_successes"]
+    base = lambda r: 3.0 if r["population"] == "success" else -3.0
+    by = _yn_by(every, base)
+    overall = A.gate_checks(by, pops["main_failures"], pops["successes"])
+    lc = A.local_competence(by, pops, overall)
+    assert all(lc["per_contrast"][c]["competent"] for c in A.CONTRASTS)
+    assert lc["per_contrast"]["parent_penalty"]["populations"].keys() == {"parent", "goal_main"}
+    assert lc["per_contrast"]["naming"]["populations"].keys() == {"goal_main", "ingredient_matched"}
+    assert lc["per_contrast"]["timing"]["populations"].keys() == {"goal_padded", "ingredient_padded_matched"}
+    assert lc["per_contrast"]["lift"]["populations"].keys() == {"ingredient_all"}
+    # the parent population alone failing makes the penalty not competent, and nothing else
+    bad_parent = _yn_by(every, lambda r: -base(r) if r["kind"] == "parent" else base(r))
+    lc2 = A.local_competence(bad_parent, pops, overall)
+    assert not lc2["per_contrast"]["parent_penalty"]["competent"]
+    assert all(lc2["per_contrast"][c]["competent"] for c in A.CONTRASTS if c != "parent_penalty")
+    # used-up ingredient failures do not enter the class-matched populations
+    uu = _yn_by(every, lambda r: 5.0 if (r["population"] == "main" and r.get("failure_class") == "used_up") else base(r))
+    lc3 = A.local_competence(uu, pops, A.gate_checks(uu, pops["main_failures"], pops["successes"]))
+    assert lc3["populations"]["ingredient_matched"]["passes"] and not lc3["populations"]["ingredient_all"]["passes"]
+    assert lc3["per_contrast"]["naming"]["competent"] and not lc3["per_contrast"]["lift"]["competent"]
+    # the other three criteria on the full population
+    yes_all = _yn_by(every, lambda r: abs(base(r)) + (1.0 if r["population"] == "success" else 0.5))
+    lc4 = A.local_competence(yes_all, pops, A.gate_checks(yes_all, pops["main_failures"], pops["successes"]))
+    assert not lc4["other_criteria_on_full_population_pass"] and not any(v["competent"] for v in lc4["per_contrast"].values())
+    assert lc["populations"]["parent"]["classification"]["yes_no"]["success_classification_rate"] == 1.0
+    assert "H6" in lc["populations"]["goal_main"]["heuristics"]["yes_no"]
+
+
+@pytest.mark.parametrize("n_low,want", [(3, True), (4, False)])
+def test_local_auc_boundary_is_inclusive(records, n_low, want, fast):
+    """10 successes at 1 against 10 failures, 7 at 0 and 3 at 2: AUC 0.70 passes; one more failure at 2 fails."""
+    pops = A.populations(records)
+    succ, fail = pops["ingredient_successes"][:10], pops["ingredient"][:10]
+    sub = {k: list(v) for k, v in pops.items()}
+    sub["ingredient"], sub["ingredient_successes"] = fail, succ
+    every = pops["main_failures"] + pops["successes"] + pops["parent_failures"] + pops["parent_successes"]
+    vals = {r["id"]: (3.0 if r["population"] == "success" else -3.0) for r in every}
+    vals.update({r["id"]: 1.0 for r in succ})
+    vals.update({r["id"]: (2.0 if i < n_low else 0.0) for i, r in enumerate(fail)})
+    by = _yn_by(every, lambda r: vals[r["id"]])
+    lc = A.local_competence(by, sub, A.gate_checks(by, pops["main_failures"], pops["successes"]))
+    assert lc["populations"]["ingredient_all"]["yes_no_auc"] == pytest.approx(1 - n_low / 10)
+    assert lc["per_contrast"]["lift"]["competent"] is want
+
+
+def test_contrasts_use_class_matched_ingredients(small, fast):
+    recs = copy.deepcopy(small)
+    base = _planted(recs, "qwen3-8b")
+    uu = {r["id"] for r in recs if r.get("failure_class") == "used_up" and r["role"] == "ingredient"}
+    assert uu
+    shifted = [{**s, "L": s["L"] + 5.0} if (s["transition_id"] in uu and s["condition"] in ("both", "pad8_aligned")) else s
+               for s in base]
+    pops = A.populations(recs)
+    a = A.contrasts(A.index_scores(base, recs, SHOTS, "qwen3-8b")[0], pops, 0.4)
+    b = A.contrasts(A.index_scores(shifted, recs, SHOTS, "qwen3-8b")[0], pops, 0.4)
+    for c in ("naming", "completion", "timing"):
+        assert a[c]["estimate"] == pytest.approx(b[c]["estimate"])
+    assert a["lift"]["estimate"] == pytest.approx(b["lift"]["estimate"])
+
+
+def test_timing_applicability_reads_the_interval(small, fast):
+    recs = copy.deepcopy(small)
+    pops = A.populations(recs)
+    for seed in range(20):
+        sc = _planted(recs, "qwen3-8b", lam=0.0, nu=-0.03, kappa=0.0, tau=0.0, noise=1.0, seed=seed)
+        c = A.contrasts(A.index_scores(sc, recs, SHOTS, "qwen3-8b")[0], pops, 0.4)
+        g = c["timing"]["role_gap_at_one_lookup"]
+        if g["estimate"] < 0 < g["ci95"][1]:
+            assert c["timing"]["applicable"] is False
+            break
+    else:
+        pytest.fail("no seed gave a negative estimate with an interval across zero")
+
+
+def test_timing_reports_the_one_lookup_change(small, fast):
+    recs = copy.deepcopy(small)
+    c = A.contrasts(A.index_scores(_planted(recs, "qwen3-8b"), recs, SHOTS, "qwen3-8b")[0], A.populations(recs), 0.4)
+    one = c["timing"]["one_lookup_vs_none"]
+    assert one["estimate"] == pytest.approx(0.0, abs=1e-9)  # planted: one look-up changes nothing
+    assert c["timing"]["comparable_to_one_lookup_change"] is False  # T = +0.5 with no noise
+
+
+def test_parent_subsets_overlap_kinds_and_splits(records, small, fast):
+    pf = [r for r in records if r["kind"] == "parent" and r["population"] == "main"]
+    cnt = Counter(A.parent_subset(r) for r in pf)
+    assert cnt == {"strict": 176, "word_only": 298, "full_name": 201}
+    assert len({r["pair_id"] for r in pf if A.parent_subset(r) == "full_name"}) == 33
+    assert A.word_contained("oak planks", "oak planks sign") and not A.word_contained("stone stairs", "smooth sandstone stairs")
+    assert A.overlap_kind("stone stairs", "smooth sandstone stairs") == "word_only"
+    assert A.overlap_kind("melon", "glistering melon slice") == "full_name" and A.overlap_kind("stick", "lantern") == "none"
+    ing = [r for r in records if r["kind"] == "main" and r["population"] == "main" and r["role"] == "ingredient"]
+    assert Counter(A.overlap_kind(r["object"], r["goal"]) for r in ing) == {"word_only": 503, "none": 307, "full_name": 180}
+    recs = copy.deepcopy(small)
+    d = A.descriptive(A.index_scores(_planted(recs, "qwen3-8b"), recs, SHOTS, "qwen3-8b")[0], A.populations(recs))["parent"]
+    assert d["split_completion_ext_aligned_minus_ext_both"]["estimate"] + d["split_naming_ext_both_minus_ext_parent"]["estimate"] \
+        == pytest.approx(0.4 - 1.1)
+    assert d["penalty_on_own_displays"]["estimate"] == pytest.approx(0.4 - 1.1 + 0.2)
+    assert set(d["penalty_subset_differences"]) == {"strict_minus_word_only", "strict_minus_full_name", "word_only_minus_full_name"}
+
+
+def test_hash_covers_every_field_and_context_key(small, monkeypatch):
+    rec = _first(small, kind="parent")
+    h = R.item_hash(rec, SHOTS)
+    for field in R.HASHED:
+        assert R.item_hash({**rec, field: "changed"}, SHOTS) != h, field
+    for name, value in (("NEXT", "Next:"), ("YN_QUESTION", "Q?")):
+        monkeypatch.setattr(P, name, value)
+        assert R.item_hash(rec, SHOTS) != h, name
+        monkeypatch.undo()
+
+
+def test_prompt_check_catches_a_changed_system_text(small, monkeypatch):
+    rec = next(r for r in small if r["kind"] == "main" and r["both_task_line"])
+    orig = R.messages
+
+    def changed(r, arm, shots, system=R.SYSTEM):
+        m = orig(r, arm, shots, system)
+        return ([{**m[0], "content": m[0]["content"] + " "}] + m[1:]) if arm == "both" else m
+    monkeypatch.setattr(R, "messages", changed)
+    assert any("both: system text or examples differ" in p for p in I.prompt_problems(rec, SHOTS))
+
+
+def test_excluded_goals_never_qualify_as_parents():
+    z = "blue dye"
+    g = next(n for n, outs in I.consumers().items() if z in outs)
+    p = next(pp.goals[0] for pp in I.B.all_pairs()
+             if not (W.tree_craftables(W.item_id(z)) & W.tree_craftables(W.item_id(pp.goals[0]))) and pp.goals[0] != g)
+    assert not I.qualifies(g, p, z)
+
+
+def test_text_checks_catch_a_named_strict_parent_and_a_changed_list(small):
+    frozen = {t["id"]: t for t in (json.loads(x) for x in I.B.ITEMS.read_text().splitlines() if x.strip())}
+    rec = next(r for r in small if r["kind"] == "parent" and r["parent_rule"] == "word_overlap")
+    assert any("strict parent shares a word" in p for p in I.text_parent_problems({**rec, "parent_rule": "strict"}))
+    moved = {**rec, "recipe_lines": rec["recipe_lines"][1:] + rec["recipe_lines"][:1]}
+    assert any("list is not the pair's list" in p for p in I.structure_problems(moved, frozen))
+
+
+def test_padded_reply_check(small):
+    rec = next(x for x in small if "pad8_aligned" in x["arms"])
+    bad = {**rec, "reply": rec["reply"].replace("Could not find enough items", "Could not find any items")}
+    assert any("padded history changes the verdict" in p for p in I.checker_problems(bad))
+
+
+def test_padded_replay_covers_no_goal(small, monkeypatch):
+    rec = next(x for x in small if "pad8_aligned" in x["arms"])
+    orig = W.replay
+
+    def odd(lines, goal_iid, actions):
+        env, hist = orig(lines, goal_iid, actions)
+        if goal_iid is None and actions[:1] == ["inventory"]:
+            hist = [[hist[0][0], hist[0][1] + " "]] + hist[1:]
+        return env, hist
+    monkeypatch.setattr(W, "replay", odd)
+    assert any("goal None" in p for p in I.replay_problems(rec))
+
+
+def test_nan_scores_count_as_missing(small):
+    recs = copy.deepcopy(small)
+    sc = _planted(recs, "qwen3-8b")
+    sc[0] = {**sc[0], "L": float("nan")}
+    _by, missing = A.index_scores(sc, recs, SHOTS, "qwen3-8b")
+    assert (sc[0]["transition_id"], sc[0]["condition"]) in missing
+
+
+def test_mass_criterion_uses_failures_and_successes(records):
+    pops = A.populations(records)
+    f, s = pops["main_failures"][:5], pops["successes"][:10]
+    by = {}
+    for r, m in [(r, 0.4) for r in f] + [(r, 0.9) for r in s]:
+        by[(r["id"], "yn_neutral")] = {"L": 1.0 if r in s else -1.0, "logp_plus": math.log(m / 2), "logp_minus": math.log(m / 2)}
+    assert A.gate_checks(by, f, s)["median_yes_no_mass_neutral"]["pass"] is True
+
+
+def test_resume_refuses_scores_of_another_model(mock_runs, small):
+    _score_all(mock_runs, small, ["qwen3-8b"], n_shards=1)
+    d = mock_runs / "runs" / "textcraft_r2_score_qwen3-8b" / "shard_00_of_01" / "scoring.jsonl"
+    lines = d.read_text().splitlines()
+    rec = json.loads(lines[0])
+    rec["model"] = "llama3.1-8b"
+    d.write_text("\n".join([json.dumps(rec)] + lines[1:-3]) + "\n")
+    cfg = {"run_id": "textcraft_r2_score_qwen3-8b", "model": "qwen3-8b", "manifest": str(mock_runs / "r2_manifest.json"),
+           "n_shards": 1, "resume": True}
+    with pytest.raises(SystemExit):
+        S.run_textcraft_r2_score(cfg)
+
+
+def test_shards_are_sorted_pair_slices():
+    recs = [{"pair_id": f"p{i:03d}", "id": str(i)} for i in (7, 3, 9, 1, 5, 2, 8, 4, 6, 10)]
+    assert {r["pair_id"] for r in S.shard_records(recs, 0, 2)} == {"p001", "p003", "p005", "p007", "p009"}
+    assert {r["pair_id"] for r in S.shard_records(recs, 1, 3)} == {"p002", "p005", "p008"}
+
+
+def test_sign_flip_p_is_smoothed():
+    p = A.sign_flip_p([1.0] * 30, [str(i) for i in range(30)], n=50)
+    assert p == pytest.approx(1 / 51)
+
+
+def test_provenance_requires_one_commit_and_pinned_revisions(mock_runs, small):
+    _score_all(mock_runs, small, ["qwen3-8b", "gemma2-9b-it"])
+    root = mock_runs / "runs"
+    assert A.provenance(["qwen3-8b", "gemma2-9b-it"], root) == []
+    (root / "textcraft_r2_score_gemma2-9b-it" / "shard_01_of_02" / "git_sha").write_text("deadbeef\n")
+    assert any("commits" in p for p in A.provenance(["qwen3-8b", "gemma2-9b-it"], root))
+    (root / "textcraft_r2_score_gemma2-9b-it" / "shard_01_of_02" / "git_sha").write_text(
+        (root / "textcraft_r2_score_qwen3-8b" / "shard_00_of_02" / "git_sha").read_text())
+    f = root / "textcraft_r2_score_qwen3-8b" / "shard_00_of_02" / "scoring.jsonl"
+    lines = f.read_text().splitlines()
+    f.write_text("\n".join([json.dumps({**json.loads(lines[0]), "model_revision": "other"})] + lines[1:]) + "\n")
+    assert any("model revisions" in p for p in A.provenance(["qwen3-8b"], root))
+
+
+def test_role_gap_descriptive_equals_naming_plus_completion(small, fast):
+    recs = copy.deepcopy(small)
+    by = A.index_scores(_planted(recs, "qwen3-8b"), recs, SHOTS, "qwen3-8b")[0]
+    pops = A.populations(recs)
+    c = A.contrasts(by, pops, 0.4)
+    d = A.descriptive(by, pops)
+    assert d["role_gap_main"]["estimate"] == pytest.approx(c["naming"]["estimate"] + c["completion"]["estimate"])

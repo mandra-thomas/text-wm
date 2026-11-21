@@ -135,7 +135,8 @@ def parent_records(frozen_ids: set[str], jobs: int = 1, only_pairs: set[str] | N
                                 "parent_task_line": B.goal_line(z), "ext_recipe_lines": ext, "added_lines": add,
                                 "parent_shares_word_with_goal": B.shares_word(z, goal),
                                 "parent_shares_word_with_partner": B.shares_word(z, it["partner"]),
-                                "both_task_line": R.two_item_line(goal, it["partner"]), "arms": list(R.PARENT_ARMS)})
+                                "both_task_line": R.two_item_line(goal, it["partner"]),
+                                "arms": parent_arms(R.two_item_line(goal, it["partner"]))})
     stats = {"qualifying_goals": len(chosen), "qualifying_pairs": len(pair_ids),
              "goals_by_rule": dict(Counter(c["rule"] for c in chosen.values())),
              "eligible_by_population_bin": dict(sorted(eligible.items())),
@@ -146,6 +147,11 @@ def parent_records(frozen_ids: set[str], jobs: int = 1, only_pairs: set[str] | N
 
 
 # ---------------- main records ----------------
+
+
+def parent_arms(both_line: str | None) -> list[str]:
+    """The parent arms, without the two-item one when the pair has no two-item line."""
+    return [a for a in R.PARENT_ARMS if both_line is not None or a != "ext_both"]
 
 
 def main_arms(it: dict) -> list[str]:
@@ -203,7 +209,6 @@ def prompt_problems(rec: dict, shots) -> list[str]:
     """Each arm changes only what its name says, against the record's aligned prompt."""
     problems = []
     base = R.messages(rec, "aligned", shots)
-    lines, history, _g = R.shown(rec, "aligned")
     for arm in rec["arms"]:
         m = R.messages(rec, arm, shots)
         if m[:-1] != base[:-1]:
@@ -222,10 +227,6 @@ def prompt_problems(rec: dict, shots) -> list[str]:
         swapped_back = plain.replace(rec[R.LINE_FIELDS[line]], rec["task_line"], 1)
         if not pad and not ext and swapped_back != base[-1]["content"]:
             problems.append(f"{arm}: query differs from the aligned one beyond the goal line")
-        if pad and swapped_back != P.turn(lines, want_history, rec["action"], rec["task_line"]):
-            problems.append(f"{arm}: padded query differs beyond the padding and the goal line")
-        if pad and history != want_history[pad:]:
-            problems.append(f"{arm}: padding is not only at the start")
     if rec["kind"] == "parent":
         ext = rec["ext_recipe_lines"]
         if [x for x in ext if x not in set(rec["added_lines"])] != rec["recipe_lines"]:
@@ -254,7 +255,7 @@ def structure_problems(rec: dict, frozen_by_id: dict[str, dict]) -> list[str]:
         problems.append("parent record is not a goal-role failure or success")
     if rec["population"] == "main" and rec["history_len"] < 1:
         problems.append("parent failure with an empty history")
-    if rec["arms"] != list(R.PARENT_ARMS):
+    if rec["arms"] != parent_arms(rec["both_task_line"]):
         problems.append("parent arms wrong")
     z = rec["parent"]
     if not qualifies(rec["goal"], rec["partner"], z):

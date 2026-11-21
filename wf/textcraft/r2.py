@@ -10,7 +10,8 @@ in wf/textcraft/data/r2_items.jsonl (built by wf/textcraft/r2_items.py):
   before its first step, under the aligned and swapped lines.
 - *parent*: new goal-role items (an action crafting the goal G) from the frozen builder's pool, with a parent goal Z
   whose recipe consumes G. Arms: the aligned line on the item's own list, and the aligned ("craft G"), parent
-  ("craft Z") and swapped ("craft P") lines on the extended list (the item's list with Z's tree lines added).
+  ("craft Z"), swapped ("craft P") and two-item lines on the extended list (the item's list with Z's tree lines
+  added); and the yes/no question under the neutral line on the item's own list, for goal-crafting competence.
 
 An arm name is `[yn_][padK_|ext_]<line>`; every arm of a record changes only what its name says (tests and
 r2_items.prompt_problems check this).
@@ -35,7 +36,11 @@ PAD_BINS = ("1-3", "4-8")
 MAIN_ARMS = ("aligned", "swapped", "neutral", "both", "yn_aligned", "yn_swapped", "yn_neutral", "yn_both")
 BOTH_ARMS = ("both", "yn_both")
 PAD_ARMS = tuple(f"pad{k}_{line}" for k in PAD_LEVELS for line in ("aligned", "swapped"))
-PARENT_ARMS = ("aligned", "ext_aligned", "ext_parent", "ext_swapped")
+# Amendments before freeze (2026-11-21, design section 14): `yn_neutral` on the item's own list gives the parent
+# population its own competence data (one forward pass); `ext_both`, the two-item line on the extended list, splits the
+# within-item penalty exactly into ext_aligned - ext_both and ext_both - ext_parent (descriptive). A parent record of
+# a pair with no two-item line has no ext_both arm.
+PARENT_ARMS = ("aligned", "ext_aligned", "ext_parent", "ext_swapped", "ext_both", "yn_neutral")
 
 # The five models, each with its own chat template at its pinned revision (wf.constants.REVISIONS). Gemma 2 has no
 # system role: the system text opens the first user turn (families.fold_system). Mistral's template places the system

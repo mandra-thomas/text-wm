@@ -3,6 +3,7 @@
   "aligned": 2982,
   "both": 2090,
   "ext_aligned": 882,
+  "ext_both": 873,
   "ext_parent": 882,
   "ext_swapped": 882,
   "neutral": 2100,
@@ -13,7 +14,7 @@
   "swapped": 2100,
   "yn_aligned": 2100,
   "yn_both": 2090,
-  "yn_neutral": 2100,
+  "yn_neutral": 2982,
   "yn_swapped": 2100
  },
  "parent": {
@@ -180,5 +181,5 @@
   "main": 2100,
   "parent": 882
  },
- "scores_per_model": 23988
+ "scores_per_model": 25743
 }

@@ -461,3 +461,18 @@ Three of four verification jobs on one node failed to bind their own ALFWorld se
 ## Scores across GPU types (2026-11-18)
 
 The RQ2 smoke items were scored twice: on an A100 with the bfloat16-rounding scorer, and on an A40 with the float32 scorer. Most per-item differences are larger than rounding can explain, so they come from the GPU type: bfloat16 forward passes differ across hardware. The change in an item's aligned-minus-swapped L had SD 0.55 nats for Qwen3 and 0.17 for Llama. The item-to-item SD of L is 10.1 and 1.9, so the GPU adds under 1% to the variance. The mean change was −0.09 and −0.03 nats, 1.3 and 1.4 standard errors from zero over 65 items, so there is no sign of bias. The aligned and swapped versions of an item are scored in the same job on the same GPU, unless a job was cut off between them and a resume finished the item (2026-11-20 above). The confirmatory scoring jobs may land on different GPU types; each job's log records its GPU. Individual scores reproduce only on the same GPU type.
+
+## TextCraft round 2: amendments before the freeze (2026-11-21)
+
+Before any round-2 score, and before the design was frozen, the round-2 design (`notes/textcraft_r2_design.md`, first committed at 4656ec0 and built at f8dd14e) was amended by the owner's decisions and by review 1. All changes are in its section 14.
+
+- **Competence.** It is read per contrast: the yes/no neutral-line AUC is required to be at least 0.70 in each contrast's own action categories, and the other wave-A criteria hold on the full population. It no longer withholds estimates. The first version used one overall gate, which is still reported. These rules were chosen with knowledge of round-1 data, and the note says so.
+- **Parent goal.** Three subsets (strict, word overlap only, whole name contained) are reported beside the pooled P, with a partial-naming reading rule.
+- **Margin.** The equivalence margin is min(0.3 × SD, 0.4 nats), with each test's power reported.
+- **Mechanism readings.** These are tightened: no completion-only reading unless naming is constrained; the assumptions behind the two-item split are stated; padding is read as sensitivity to added steps.
+- **Controls.** The ingredient controls of the naming, completion and timing contrasts are class-matched (too few, never obtained).
+- **Predictions.** The ALFWorld-based predictions were corrected (the goal-directed part maps to completion, not to the lift).
+- **New arms.** Two arms were added to the parent records (the yes/no question under the neutral line; the two-item line on the extended list), so each model scores 25,743 instead of 23,988.
+- **Statistics and provenance.** Family tests use 20,000 resamples, and the analysis checks provenance (one commit, pinned revisions).
+
+The records were rebuilt and re-verified, and the ICE tokenization check was rerun on them. None of this affects the confirmatory TextCraft result, which stays as reported.

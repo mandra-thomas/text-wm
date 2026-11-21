@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=4
 # Gemma 2 9B in bf16 is about 18.5 GB of weights; loading goes through CPU memory first.
 #SBATCH --mem=48G
-# One shard of one model (24,008 / 4 records-and-arms per model, design section 11): about 25 minutes for the 7-8B
+# One shard of one model (25,743 / 4 records-and-arms per model, design section 11): about 25 minutes for the 7-8B
 # models, 15 for Llama 3.2 3B, 50 for Gemma 2 with eager attention. Estimates, not timings; 2 h leaves room for the
 # gate, which renders every prompt of the shard before any score.
 #SBATCH --time=2:00:00

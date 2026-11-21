@@ -6,6 +6,14 @@ parent penalty, naming without completion, completion with naming held, timing),
 two one-sided equivalence test, all 50 in one Holm family of fixed size; the verdicts and readings of the design's
 tables; and the descriptive readouts. Scores are joined to records by id and record hash; a stale or unknown score
 stops the analysis, and with any score missing the verdicts are withheld.
+
+Amended before the freeze (user decisions, 2026-11-21; design section 14): each contrast is read against the
+competence of the model in its own action categories (`local_competence`: goal crafting for the parent penalty,
+ingredient crafting for the lift, both for naming, completion and timing), with wave A's criteria applied within each
+population; the overall gate stays reported. A failed local gate no longer hides a verdict: the statistical verdict
+stands and its interpretation is limited ("a measurable goal effect", not "a distortion in a competent predictor").
+The equivalence margin is min(0.3 x SD, 0.4 nats), with the power of each equivalence test reported; the mechanism
+readings need the naming contribution to be constrained before any completion-only reading.
 """
 from __future__ import annotations
 
@@ -24,12 +32,24 @@ from wf.textcraft import r2 as R
 from wf.textcraft.r2_score import load_records, verified_files
 from wf.util import read_jsonl, runs_root, write_json, write_status
 
-B_DRAWS = 4000
-N_FLIPS = 4000
+B_DRAWS = 20000  # review 1: at least 20,000 for the 50 family tests
+N_FLIPS = 20000
 DESC_DRAWS = 2000  # descriptive intervals
 AUC_DRAWS = 1000
 ALPHA = 0.05
-MARGIN_SD = 0.3  # equivalence margin: 0.3 x the item SD of ΔL (aligned - swapped) on the main failures
+MARGIN_SD = 0.3  # equivalence margin: min(0.3 x the item SD of ΔL (aligned - swapped) on the main failures, 0.4 nats)
+MARGIN_CAP = 0.4  # amendment A3 (2026-11-21), fixed before the freeze; two-candidate nats, every contrast
+Z_HOLM_FIRST = 3.090232  # one-sided normal quantile at 0.05 / 50, the most stringent Holm step
+Z_ALPHA = 1.644854  # one-sided normal quantile at 0.05, the least stringent
+POWER_MIN = 0.8  # an equivalence test with less power at a true zero (at the first Holm step) is "underpowered"
+# Contrast-specific competence (amendment A1; design section 14): the yes/no neutral-line AUC, point estimate, at
+# least LOCAL_AUC_MIN within every population a contrast is read in; the other three wave-A criteria stay on the
+# full population (overall gate). No fallback to another scale.
+LOCAL_AUC_MIN = 0.70
+CONTRAST_POPULATIONS = {"lift": ("ingredient_all",), "parent_penalty": ("parent", "goal_main"),
+                        "naming": ("goal_main", "ingredient_matched"), "completion": ("goal_main", "ingredient_matched"),
+                        "timing": ("goal_padded", "ingredient_padded_matched")}
+MATCHED_CLASSES = ("too_few", "never_obtained")  # review 1: the ingredient control of Dn, Dc and T, class-matched
 CONTRASTS = ("lift", "parent_penalty", "naming", "completion", "timing")
 TESTS = ("differs", "equivalent")
 COMPETENCE = {"auc_neutral_min": 0.70, "yes_share_neutral_failures_max": 0.95, "yes_share_neutral_successes_min": 0.05,
@@ -85,12 +105,41 @@ def _clusters(rows: list[Any], clusters: list[str]) -> tuple[list[str], dict[str
 
 def draws(stat: Callable[[list], float], rows: list, clusters: list[str], B: int | None = None, seed: int = C.RNG_SEED) -> list[float]:
     B = B_DRAWS if B is None else B
+    if stat is mean or stat is _gap:  # the same resamples as the general path, from per-pair sums
+        return _fast_draws(stat is _gap, rows, clusters, B, seed)
     keys, by = _clusters(rows, clusters)
     rng = random.Random(seed)
     out = []
     for _ in range(B):
         out.append(stat([r for k in rng.choices(keys, k=len(keys)) for r in by[k]]))
     return [x for x in out if x == x]
+
+
+def _fast_draws(gap: bool, rows: list, clusters: list[str], B: int, seed: int) -> list[float]:
+    """mean or _gap over pair resamples, from each pair's sums and counts; identical draws to the general path."""
+    keys, by = _clusters(rows, clusters)
+    agg = {}
+    for k in keys:
+        if gap:
+            g = [x for r, x in by[k] if r == "goal"]
+            i = [x for r, x in by[k] if r == "ingredient"]
+            agg[k] = (sum(g), len(g), sum(i), len(i))
+        else:
+            agg[k] = (sum(by[k]), len(by[k]), 0.0, 0)
+    rng = random.Random(seed)
+    out = []
+    for _ in range(B):
+        sg = ng = si = ni = 0
+        for k in rng.choices(keys, k=len(keys)):
+            a = agg[k]
+            sg += a[0]; ng += a[1]; si += a[2]; ni += a[3]
+        if gap:
+            v = (sg / ng if ng else float("nan")) - (si / ni if ni else float("nan"))
+        else:
+            v = sg / ng if ng else float("nan")
+        if v == v:
+            out.append(v)
+    return out
 
 
 def pct(v: list[float], q: float) -> float:
@@ -129,6 +178,24 @@ def sign_flip_p(values: list[float], clusters: list[str], n: int | None = None, 
     return (hits + 1) / (n + 1)
 
 
+def _phi(x: float) -> float:
+    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+
+
+def equivalence_power(se: float, margin: float, z: float) -> float:
+    """Approximate power of the two one-sided tests at a true effect of zero: P(|estimate| + z se < margin)."""
+    if not (se == se and margin == margin) or se <= 0:
+        return float("nan")
+    return max(0.0, 2 * _phi((margin - z * se) / se) - 1)
+
+
+def _power_block(d: list[float], margin: float) -> dict[str, Any]:
+    se = statistics.stdev(d) if len(d) > 1 else float("nan")
+    first, last = equivalence_power(se, margin, Z_HOLM_FIRST), equivalence_power(se, margin, Z_ALPHA)
+    return {"bootstrap_se": se, "equivalence_power_at_zero_holm_first_step": first,
+            "equivalence_power_at_zero_alpha_05": last, "equivalence_underpowered": not (first >= POWER_MIN)}
+
+
 def mean(v: list[float]) -> float:
     return sum(v) / len(v) if v else float("nan")
 
@@ -138,7 +205,8 @@ def within(values: list[float], clusters: list[str], margin: float) -> dict[str,
     d = draws(mean, values, clusters)
     return {"estimate": mean(values), "ci95": [pct(d, 0.025), pct(d, 0.975)], "ci90": [pct(d, 0.05), pct(d, 0.95)],
             "n_items": len(values), "n_pairs": len(set(clusters)), "p_differs": sign_flip_p(values, clusters),
-            "p_equivalent": tost_p(d, margin), "margin": margin, "p_method": "sign-flip of whole pairs"}
+            "p_equivalent": tost_p(d, margin), "margin": margin, "p_method": "sign-flip of whole pairs",
+            **_power_block(d, margin)}
 
 
 def _gap(rows: list[tuple[str, float]]) -> float:
@@ -152,7 +220,7 @@ def between(rows: list[tuple[str, float]], clusters: list[str], margin: float) -
             "goal_mean": mean([x for r, x in rows if r == "goal"]), "ingredient_mean": mean([x for r, x in rows if r == "ingredient"]),
             "n_goal": sum(r == "goal" for r, _ in rows), "n_ingredient": sum(r == "ingredient" for r, _ in rows),
             "n_pairs": len(set(clusters)), "p_differs": bootstrap_p(d), "p_equivalent": tost_p(d, margin),
-            "margin": margin, "p_method": "pair bootstrap"}
+            "margin": margin, "p_method": "pair bootstrap", **_power_block(d, margin)}
 
 
 def describe(values: list[float], clusters: list[str]) -> dict[str, Any]:
@@ -192,15 +260,55 @@ def auc_ci(pos: list[tuple[str, float]], neg: list[tuple[str, float]]) -> dict[s
 # ---------------- populations ----------------
 
 
+def word_contained(a: str, b: str) -> bool:
+    """a's words appear, in order and contiguous, among b's words (so "stone stairs" is not inside "smooth sandstone
+    stairs", although it is a character substring of it)."""
+    x, y = a.split(), b.split()
+    return any(y[i:i + len(x)] == x for i in range(len(y) - len(x) + 1))
+
+
+def overlap_kind(obj: str, goal: str) -> str:
+    """full_name: the object's whole name inside the goal's; word_only: a shared word but not the whole name; none."""
+    if word_contained(obj, goal):
+        return "full_name"
+    return "word_only" if set(obj.split()) & set(goal.split()) else "none"
+
+
+def parent_subset(r: dict) -> str:
+    """Review 1: strict (the parent shares no word with G), full_name (G's whole name inside Z's), word_only."""
+    if r["parent_rule"] == "strict":
+        return "strict"
+    return "full_name" if word_contained(r["goal"], r["parent"]) else "word_only"
+
+
 def populations(records: list[dict]) -> dict[str, list[dict]]:
     main = [r for r in records if r["kind"] == "main"]
-    return {"main_failures": [r for r in main if r["population"] == "main"],
-            "successes": [r for r in main if r["population"] == "success"],
-            "goal": [r for r in main if r["population"] == "main" and r["role"] == "goal" and r["failure_class"] != "used_up"],
-            "ingredient": [r for r in main if r["population"] == "main" and r["role"] == "ingredient"],
-            "padded": [r for r in main if "pad8_aligned" in r["arms"]],
+    mf = [r for r in main if r["population"] == "main"]
+    ms = [r for r in main if r["population"] == "success"]
+    goal = [r for r in mf if r["role"] == "goal" and r["failure_class"] != "used_up"]
+    ingredient = [r for r in mf if r["role"] == "ingredient"]
+    padded = [r for r in mf if "pad8_aligned" in r["arms"]]
+    pad_bins = set(R.PAD_BINS)
+    return {"main_failures": mf, "successes": ms, "goal": goal, "ingredient": ingredient,
+            "ingredient_matched": [r for r in ingredient if r["failure_class"] in MATCHED_CLASSES],
+            "padded": padded,
+            "padded_goal": [r for r in padded if r["role"] == "goal" and r["failure_class"] != "used_up"],
+            "padded_ingredient_matched": [r for r in padded if r["role"] == "ingredient" and r["failure_class"] in MATCHED_CLASSES],
             "parent_failures": [r for r in records if r["kind"] == "parent" and r["population"] == "main"],
-            "parent_successes": [r for r in records if r["kind"] == "parent" and r["population"] == "success"]}
+            "parent_successes": [r for r in records if r["kind"] == "parent" and r["population"] == "success"],
+            "goal_successes": [r for r in ms if r["role"] == "goal"],
+            "ingredient_successes": [r for r in ms if r["role"] == "ingredient"],
+            "goal_successes_padded_bins": [r for r in ms if r["role"] == "goal" and r["length_bin"] in pad_bins],
+            "ingredient_successes_padded_bins": [r for r in ms if r["role"] == "ingredient" and r["length_bin"] in pad_bins]}
+
+
+# The competence populations (amendment A1): name -> (failures key, successes key)
+COMPETENCE_POPULATIONS = {"ingredient_all": ("ingredient", "ingredient_successes"),
+                          "ingredient_matched": ("ingredient_matched", "ingredient_successes"),
+                          "goal_main": ("goal", "goal_successes"),
+                          "parent": ("parent_failures", "parent_successes"),
+                          "goal_padded": ("padded_goal", "goal_successes_padded_bins"),
+                          "ingredient_padded_matched": ("padded_ingredient_matched", "ingredient_successes_padded_bins")}
 
 
 def L(by: dict, rid: str, arm: str) -> float:
@@ -223,21 +331,65 @@ def _first_mass(s: dict) -> float:
     return math.exp(s["logp_first_plus"]) + math.exp(s["logp_first_minus"])
 
 
-def competence(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
-    """Wave A's gate on the yes/no question under the neutral line (main failures against the 600 successes), and
-    the descriptive role-, class- and parent-level AUCs on both scales."""
-    f, s = pops["main_failures"], pops["successes"]
+def gate_checks(by: dict, failures: list[dict], successes: list[dict]) -> dict[str, dict]:
+    """Wave A's four criteria (families.COMPETENCE) on the yes/no question under the neutral line, within the given
+    failures and successes."""
     yn = lambda rs: [by[(r["id"], "yn_neutral")] for r in rs if (r["id"], "yn_neutral") in by]
-    fs, ss = yn(f), yn(s)
+    fs, ss = yn(failures), yn(successes)
     a = auc([x["L"] for x in ss], [x["L"] for x in fs])
     yes_f = mean([x["L"] > 0 for x in fs])
     yes_s = mean([x["L"] > 0 for x in ss])
     masses = [_mass(x) for x in fs + ss]
     m = statistics.median(masses) if masses else float("nan")
-    checks = {"auc_neutral": {"value": a, "pass": a >= COMPETENCE["auc_neutral_min"]},
-              "yes_share_neutral_failures": {"value": yes_f, "pass": yes_f <= COMPETENCE["yes_share_neutral_failures_max"]},
-              "yes_share_neutral_successes": {"value": yes_s, "pass": yes_s >= COMPETENCE["yes_share_neutral_successes_min"]},
-              "median_yes_no_mass_neutral": {"value": m, "pass": m >= COMPETENCE["median_yes_no_mass_neutral_min"]}}
+    return {"auc_neutral": {"value": a, "pass": a >= COMPETENCE["auc_neutral_min"]},
+            "yes_share_neutral_failures": {"value": yes_f, "pass": yes_f <= COMPETENCE["yes_share_neutral_failures_max"]},
+            "yes_share_neutral_successes": {"value": yes_s, "pass": yes_s >= COMPETENCE["yes_share_neutral_successes_min"]},
+            "median_yes_no_mass_neutral": {"value": m, "pass": m >= COMPETENCE["median_yes_no_mass_neutral_min"]}}
+
+
+def classification(by: dict, failures: list[dict], successes: list[dict]) -> dict[str, Any]:
+    """Under the neutral line, on each scale the records have: the share of successes predicted to succeed and of
+    failures predicted to fail (L above or below zero), and the AUC with a pair-bootstrap interval."""
+    out = {}
+    for scale, arm in (("yes_no", "yn_neutral"), ("two_candidate", "neutral")):
+        val = lambda rs: [(r["pair_id"], by[(r["id"], arm)]["L"]) for r in rs if (r["id"], arm) in by]
+        sv, fv = val(successes), val(failures)
+        if not sv and not fv:
+            continue  # the parent records have the neutral line on the yes/no scale only
+        out[scale] = {"success_classification_rate": mean([L > 0 for _p, L in sv]),
+                      "failure_classification_rate": mean([L < 0 for _p, L in fv]), "auc": auc_ci(sv, fv)}
+    return out
+
+
+def local_competence(by: dict, pops: dict[str, list[dict]], overall_checks: dict[str, dict]) -> dict[str, Any]:
+    """Amendment A1 (user decision and review 1, 2026-11-21). For each competence population: the yes/no
+    neutral-line AUC (point estimate; passes at LOCAL_AUC_MIN or above), the classification rates and AUCs on both
+    scales, and the heuristic tracking within it. Per contrast: competent when every one of its populations passes
+    and the other three wave-A criteria pass on the full population (the overall gate's yes shares and mass)."""
+    pop_out: dict[str, Any] = {}
+    for name, (fk, sk) in COMPETENCE_POPULATIONS.items():
+        f, s = pops[fk], pops[sk]
+        a = gate_checks(by, f, s)["auc_neutral"]["value"]
+        pop_out[name] = {"yes_no_auc": a, "passes": bool(a >= LOCAL_AUC_MIN), "n_failures": len(f), "n_successes": len(s),
+                         "classification": classification(by, f, s), "heuristics": heuristic_fits(by, f + s)}
+    others = all(overall_checks[k]["pass"] for k in ("yes_share_neutral_failures", "yes_share_neutral_successes",
+                                                       "median_yes_no_mass_neutral"))
+    per_contrast = {}
+    for c, names in CONTRAST_POPULATIONS.items():
+        aucs = {n: pop_out[n]["yes_no_auc"] for n in names}
+        per_contrast[c] = {"populations": aucs, "smallest_auc": min(aucs.values()),
+                           "competent": bool(all(pop_out[n]["passes"] for n in names) and others)}
+    return {"populations": pop_out, "other_criteria_on_full_population_pass": others, "per_contrast": per_contrast,
+            "rule": f"yes/no neutral-line AUC >= {LOCAL_AUC_MIN} in every population of the contrast (point estimate), "
+                    "and the other three wave-A criteria on the full population"}
+
+
+def competence(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
+    """Wave A's overall gate on the yes/no question under the neutral line (main failures against the 600
+    successes), kept visible for every model (amendment A1), and the descriptive role-, class- and parent-level AUCs
+    on both scales."""
+    f, s = pops["main_failures"], pops["successes"]
+    checks = gate_checks(by, f, s)
     detail: dict[str, Any] = {}
     for scale, arm in (("yes_no", "yn_neutral"), ("two_candidate", "neutral")):
         val = lambda rs: [(r["pair_id"], by[(r["id"], arm)]["L"]) for r in rs if (r["id"], arm) in by]
@@ -256,11 +408,18 @@ def competence(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
     pf, ps = pops["parent_failures"], pops["parent_successes"]
     pv = lambda rs, arm: [(r["pair_id"], by[(r["id"], arm)]["L"]) for r in rs if (r["id"], arm) in by]
     detail["parent_two_candidate_aligned"] = auc_ci(pv(ps, "aligned"), pv(pf, "aligned"))
+    for scale, arm in (("yes_no", "yn_neutral"), ("two_candidate", "neutral")):
+        val = lambda rs: [(r["pair_id"], by[(r["id"], arm)]["L"]) for r in rs if (r["id"], arm) in by]
+        detail[scale]["ingredient_class_" + "_".join(MATCHED_CLASSES)] = auc_ci(val(pops["ingredient_successes"]),
+                                                                                val(pops["ingredient_matched"]))
+        for c in ("used_up", "too_few", "never_obtained"):
+            detail[scale][f"ingredient_class_{c}"] = auc_ci(val(pops["ingredient_successes"]),
+                                                            val([r for r in pops["ingredient"] if r["failure_class"] == c]))
     fm = [_first_mass(by[(r["id"], "neutral")]) for r in f if (r["id"], "neutral") in by]
     detail["two_candidate_first_token_mass_neutral_median"] = statistics.median(fm) if fm else float("nan")
-    detail["heuristics"] = heuristic_fits(by, pops)
+    detail["heuristics"] = heuristic_fits(by, f + s)
     return {"interpretable": all(c["pass"] for c in checks.values()), "checks": checks, "rule": COMPETENCE,
-            "descriptive": detail}
+            "local": local_competence(by, pops, checks), "descriptive": detail}
 
 
 def kappa(a: list[int], b: list[int]) -> float:
@@ -274,15 +433,14 @@ def kappa(a: list[int], b: list[int]) -> float:
     return (po - pe) / (1 - pe) if pe < 1 else float("nan")
 
 
-def heuristic_fits(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
+def heuristic_fits(by: dict, items: list[dict]) -> dict[str, Any]:
     """Descriptive (design section 9): how closely each model's neutral-line scores follow the competence note's
     heuristics H1, H2, H6 (the truth) and H2 and H9 (definitions fixed at 9a83738; wf/textcraft/r2_heuristics.py),
-    on the main failures and the 600 successes, on both scales: the tracking AUC (the model's L between the items a
+    on the given failures and successes, on both scales: the tracking AUC (the model's L between the items a
     heuristic calls a success and those it calls a failure), the same within the true failures and within the true
     successes, and the agreement and Cohen's kappa between the model's decision (L above 0) and the heuristic."""
     from wf.textcraft.r2_heuristics import HEURISTICS, features
 
-    items = pops["main_failures"] + pops["successes"]
     feats = {r["id"]: features(r) for r in items}
     out: dict[str, Any] = {}
     for scale, arm in (("two_candidate", "neutral"), ("yes_no", "yn_neutral")):
@@ -313,7 +471,8 @@ def margin_of(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
     d = [L(by, r["id"], "aligned") - L(by, r["id"], "swapped") for r in pops["main_failures"]]
     d = [x for x in d if x == x]
     sd = statistics.stdev(d) if len(d) > 1 else float("nan")
-    return {"sd_delta_L_main": sd, "margin": MARGIN_SD * sd, "rule": f"{MARGIN_SD} x item SD of ΔL on the main failures"}
+    return {"sd_delta_L_main": sd, "margin": min(MARGIN_SD * sd, MARGIN_CAP), "margin_sd_rule": MARGIN_SD * sd,
+            "cap_nats": MARGIN_CAP, "rule": f"min({MARGIN_SD} x item SD of ΔL on the main failures, {MARGIN_CAP} nats)"}
 
 
 def diff_rows(by: dict, recs: list[dict], a: str, b: str) -> tuple[list[float], list[str]]:
@@ -337,9 +496,13 @@ def gap_rows(by: dict, recs: list[dict], value: Callable[[str], float]) -> tuple
 
 
 def contrast_inputs(by: dict, pops: dict[str, list[dict]]) -> dict[str, tuple]:
-    roles = pops["goal"] + pops["ingredient"]
-    padded = [r for r in pops["padded"] if not (r["role"] == "goal" and r["failure_class"] == "used_up")]
-    delta = lambda rid, k: L(by, rid, f"pad{k}_aligned") - L(by, rid, f"pad{k}_swapped")
+    """Rows of the five contrasts. Dn, Dc and T compare goal-role failures with class-matched ingredient failures
+    (too few and never obtained; review 1), so the difference in differences is not also a difference in failure
+    class; Λ keeps all 990 ingredient failures."""
+    roles = pops["goal"] + pops["ingredient_matched"]
+    padded = pops["padded_goal"] + pops["padded_ingredient_matched"]
+    delta = lambda rid, k: (L(by, rid, f"pad{k}_aligned") - L(by, rid, f"pad{k}_swapped")) if k else \
+        (L(by, rid, "aligned") - L(by, rid, "swapped"))
     return {
         "lift": ("within", *diff_rows(by, pops["ingredient"], "aligned", "swapped")),
         "parent_penalty": ("within", *diff_rows(by, pops["parent_failures"], "ext_aligned", "ext_parent")),
@@ -347,6 +510,7 @@ def contrast_inputs(by: dict, pops: dict[str, list[dict]]) -> dict[str, tuple]:
         "completion": ("between", *gap_rows(by, roles, lambda i: L(by, i, "aligned") - L(by, i, "both"))),
         "timing": ("between", *gap_rows(by, padded, lambda i: delta(i, 8) - delta(i, 1))),
         "timing_role_gap_at_one": ("between", *gap_rows(by, padded, lambda i: delta(i, 1))),
+        "timing_one_vs_none": ("between", *gap_rows(by, padded, lambda i: delta(i, 1) - delta(i, 0))),
     }
 
 
@@ -355,8 +519,15 @@ def contrasts(by: dict, pops: dict[str, list[dict]], margin: float) -> dict[str,
     for name, (kind, rows, cl) in contrast_inputs(by, pops).items():
         out[name] = within(rows, cl, margin) if kind == "within" else between(rows, cl, margin)
     gap1 = out.pop("timing_role_gap_at_one")
-    out["timing"]["role_gap_at_one_lookup"] = {k: gap1[k] for k in ("estimate", "ci95", "n_goal", "n_ingredient")}
+    one = out.pop("timing_one_vs_none")
+    keep = ("estimate", "ci95", "goal_mean", "ingredient_mean", "n_goal", "n_ingredient")
+    out["timing"]["role_gap_at_one_lookup"] = {k: gap1[k] for k in keep}
     out["timing"]["applicable"] = bool(gap1["ci95"][1] < 0)
+    # Review 1: the change from no look-up to one, goal minus ingredient, beside T. A T whose 95% interval holds this
+    # change is comparable to it and is not read as timing.
+    out["timing"]["one_lookup_vs_none"] = {k: one[k] for k in keep}
+    lo, hi = out["timing"]["ci95"]
+    out["timing"]["comparable_to_one_lookup_change"] = bool(lo <= one["estimate"] <= hi)
     return out
 
 
@@ -378,11 +549,10 @@ def family(per_model: dict[str, dict], expected: list[str]) -> dict[str, dict]:
     return {k: {**info[k], "p_in_family": p[k], "p_holm": adj[k]} for k in p}
 
 
-def verdict(rec: dict | None, fam: dict, tag: str, contrast: str, interpretable: bool | None) -> str:
+def verdict(rec: dict | None, fam: dict, tag: str, contrast: str) -> str:
+    """The statistical verdict (amendment A1: never withheld for competence; read with `interpretation`)."""
     if rec is None:
         return "waiting"
-    if not interpretable:
-        return "not interpretable"
     if contrast == "timing" and not rec.get("applicable", False):
         return "not applicable"
     lo, hi = rec["ci95"]
@@ -396,51 +566,89 @@ def verdict(rec: dict | None, fam: dict, tag: str, contrast: str, interpretable:
     return "inconclusive"
 
 
-def reading(v: dict[str, str]) -> dict[str, str]:
-    """The design's per-model reading tables (section 8)."""
-    if "not interpretable" in v.values():
-        return {"penalty": "not interpretable", "timing": "not interpretable", "lift": "not interpretable"}
+def interpretation(v: str, competent: bool, rec: dict | None) -> str:
+    """How far a verdict can be read (design section 14): a statistically measurable goal effect, or a distortion in
+    a competent predictor; an equivalence is "no effect larger than the margin", never "no effect"."""
+    if v in ("confirmed above zero", "confirmed below zero"):
+        return ("distortion in a competent predictor" if competent else
+                "statistically measurable goal effect; the model is not competent in this contrast's populations, so "
+                "it is not read as a distortion of a working state judgement")
+    if v == "equivalent to zero":
+        return ("no effect larger than the margin, in a competent predictor" if competent else
+                "no effect larger than the margin; limited interpretation (not competent in these populations)")
+    if v == "inconclusive":
+        return "inconclusive" + (" (equivalence underpowered)" if rec and rec.get("equivalence_underpowered") else "")
+    return v
+
+
+def reading(v: dict[str, str], partial_naming_flag: bool = False, timing_comparable: bool = False) -> dict[str, str]:
+    """The design's per-model reading rules, as amended before the freeze (section 14)."""
     p, dn, dc, t = v["parent_penalty"], v["naming"], v["completion"], v["timing"]
+    naming_constrained = dn in ("equivalent to zero", "confirmed above zero")
     if p == "confirmed below zero":
         if dn == "confirmed below zero":
-            pen = "naming penalty (a completion part cannot be separated from the dilution of naming)"
+            pen = ("naming or sub-goal-completion penalty (naming the crafted item, or completing a named sub-goal, "
+                   "lowers predicted success; a completion part cannot be separated from the dilution of naming)")
+        elif dc == "confirmed below zero" and naming_constrained:
+            pen = "completion penalty, naming constrained"
         elif dc == "confirmed below zero":
-            pen = "completion penalty"
-        elif dn == "inconclusive" and dc == "inconclusive":
-            pen = "penalty present, mechanism unresolved"
+            pen = "completion contributes; naming not constrained (no completion-only conclusion)"
         else:
-            pen = "penalty present; pattern of naming and completion not in the table (inconclusive)"
+            pen = "penalty present, mechanism unresolved"
+        if partial_naming_flag:
+            pen += "; penalty possibly carried by partial naming (the strict parents' estimate is not negative)"
     elif p == "equivalent to zero":
-        pen = "no penalty under the clean prompt"
+        pen = "no penalty larger than the margin under the clean prompt"
     elif p == "confirmed above zero":
         pen = "completing a named goal raises predicted success (no penalty)"
     else:
         pen = "inconclusive on the penalty"
-    tim = {"confirmed above zero": "timing", "equivalent to zero": "content", "not applicable": "not applicable",
-           "confirmed below zero": "padding deepens the penalty (F4)"}.get(t, "inconclusive")
-    lift = {"confirmed above zero": "lift present", "equivalent to zero": "no lift", "confirmed below zero": "negative lift"}.get(v["lift"], "inconclusive")
+    if t == "confirmed above zero":
+        tim = ("sensitivity to added empty-inventory steps (elapsed turns or repeated emphasis; not separable from "
+               "prompt length, repetition or attention)")
+        if timing_comparable:
+            tim += "; comparable to the one-look-up change, so not read as timing"
+    elif t == "equivalent to zero":
+        tim = "no sensitivity to added empty-inventory steps larger than the margin"
+    elif t == "confirmed below zero":
+        tim = "added steps deepen the penalty (F4)"
+    else:
+        tim = t if t in ("not applicable", "waiting") else "inconclusive"
+    lift = {"confirmed above zero": "lift present", "equivalent to zero": "no lift larger than the margin",
+            "confirmed below zero": "negative lift"}.get(v["lift"], "inconclusive")
     return {"penalty": pen, "timing": tim, "lift": lift}
 
 
-def across(verdicts: dict[str, dict], gates: dict[str, bool | None]) -> dict[str, Any]:
-    passing = [t for t, ok_ in gates.items() if ok_]
+def across(verdicts: dict[str, dict], competent_for_penalty: dict[str, bool | None]) -> dict[str, Any]:
+    """Across models, among the models competent for the penalty contrast (its two goal-crafting populations)."""
+    passing = [t for t, ok_ in competent_for_penalty.items() if ok_]
     below = [t for t in passing if verdicts[t]["parent_penalty"] == "confirmed below zero"]
     equiv = [t for t in passing if verdicts[t]["parent_penalty"] == "equivalent to zero"]
+    above = [t for t in passing if verdicts[t]["parent_penalty"] == "confirmed above zero"]
     if len(passing) < 2:
-        pattern = "fewer than two models pass the gate: no statement across families"
+        pattern = "fewer than two models are competent for the penalty: no statement across families"
     elif below and len(below) == len(passing):
-        pattern = "penalty general across the models that pass"
+        pattern = "penalty general across the competent models"
     elif below == ["llama3.1-8b"]:
-        pattern = "penalty below zero for Llama-3.1 only (F3)"
-    elif below and equiv:
+        pattern = "penalty below zero for Llama-3.1 only"
+    elif below and (equiv or above):
         pattern = "penalty model-specific"
     else:
         pattern = "no clear pattern"
-    return {"models_passing_gate": passing, "penalty_below_zero": below, "penalty_equivalent_to_zero": equiv,
-            "penalty_pattern": pattern,
-            "F1_llama_no_penalty": ("not testable (Llama-3.1 fails the gate)" if "llama3.1-8b" not in passing else
+    others = [t for t in passing if t != "llama3.1-8b"]
+    if [t for t in others if t in below]:
+        f3 = False
+    elif [t for t in others if t in equiv or t in above]:
+        f3 = True
+    else:
+        f3 = "undecided"
+    return {"models_competent_for_penalty": passing, "penalty_below_zero": below, "penalty_equivalent_to_zero": equiv,
+            "penalty_above_zero": above, "penalty_pattern": pattern,
+            "F1_llama_no_penalty": ("not testable (Llama-3.1 is not competent for the penalty contrast)"
+                                    if "llama3.1-8b" not in passing else
                                     verdicts["llama3.1-8b"]["parent_penalty"] in ("equivalent to zero", "confirmed above zero")),
-            "F3_penalty_not_shared": bool(len(passing) >= 2 and not [t for t in below if t != "llama3.1-8b"])}
+            "F1_note": "if F1 holds, top-item status of the round-1 goal crafts (recipe structure) is a candidate explanation",
+            "F3_penalty_not_shared": f3}
 
 
 # ---------------- descriptive readouts ----------------
@@ -457,8 +665,10 @@ def descriptive(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
                            **{f"bin_{x}": d([r for r in mf if r["length_bin"] == x], "aligned", "swapped") for x in ("1-3", "4-8", "9-12")}}
     out["neutral_contrasts"] = {f"{a}_minus_neutral": d(mf, a, "neutral") for a in ("aligned", "swapped", "both")}
     out["successes_delta_L"] = d(pops["successes"], "aligned", "swapped")
-    roles = pops["goal"] + pops["ingredient"]
+    roles = pops["goal"] + pops["ingredient_matched"]
     yn = lambda f: describe_gap(*gap_rows(by, roles, f))
+    # yes/no arms exist for the main records only: the lift, naming and completion contrasts have yes/no versions,
+    # the parent penalty and timing do not (design section 9, corrected by review 1)
     out["yes_no"] = {"lift": d(pops["ingredient"], "yn_aligned", "yn_swapped"),
                      "naming": yn(lambda i: L(by, i, "yn_both") - L(by, i, "yn_swapped")),
                      "completion": yn(lambda i: L(by, i, "yn_aligned") - L(by, i, "yn_both")),
@@ -472,6 +682,16 @@ def descriptive(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
         "penalty_by_inputs_held": {"none": d([r for r in pf if held_none(r)], "ext_aligned", "ext_parent"),
                                    "some": d([r for r in pf if not held_none(r)], "ext_aligned", "ext_parent")},
         "penalty_by_rule": {x: d([r for r in pf if r["parent_rule"] == x], "ext_aligned", "ext_parent") for x in ("strict", "word_overlap")},
+        # review 1: the three pre-registered subsets and their differences (the pooled P is not free of partial naming)
+        "penalty_by_subset": {x: d([r for r in pf if parent_subset(r) == x], "ext_aligned", "ext_parent")
+                              for x in ("strict", "word_only", "full_name")},
+        "penalty_subset_differences": {f"{a}_minus_{b}": _subset_diff(by, pf, a, b)
+                                       for a, b in (("strict", "word_only"), ("strict", "full_name"), ("word_only", "full_name"))},
+        # each line on its own faithful display: "craft G" on the item's list against "craft Z" on the extended list
+        "penalty_on_own_displays": d(pf, "aligned", "ext_parent"),
+        # the two-item line on the extended list splits P exactly (descriptive)
+        "split_completion_ext_aligned_minus_ext_both": d([r for r in pf if "ext_both" in r["arms"]], "ext_aligned", "ext_both"),
+        "split_naming_ext_both_minus_ext_parent": d([r for r in pf if "ext_both" in r["arms"]], "ext_both", "ext_parent"),
         "penalty_successes": d(pops["parent_successes"], "ext_aligned", "ext_parent"),
         "lift_as_intermediate": d(pf, "ext_parent", "ext_swapped"),
         "goal_effect_extended": d(pf, "ext_aligned", "ext_swapped"),
@@ -483,9 +703,22 @@ def descriptive(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
             sub = [r for r in roles if first(r) == keep]
             pos[f"{name}|{side}"] = describe_gap(*gap_rows(by, sub, f))
     out["two_item_by_position"] = pos
-    out["lift_by_overlap"] = {f"overlap_{x}": d([r for r in pops["ingredient"] if r["object_goal_overlap"] is x], "aligned", "swapped")
-                              for x in (True, False)}
-    padded = pops["padded"]
+    # the round-2 role gap on the rows both two-item contrasts use (equals naming plus completion exactly; 14.R3)
+    has_both = lambda i: L(by, i, "both") == L(by, i, "both")
+    out["role_gap_main"] = describe_gap(*gap_rows(by, roles, lambda i: (L(by, i, "aligned") - L(by, i, "swapped"))
+                                                  if has_both(i) else float("nan")))
+    ing = pops["ingredient"]
+    out["lift_by_class"] = {c: d([r for r in ing if r["failure_class"] == c], "aligned", "swapped")
+                            for c in ("used_up", "too_few", "never_obtained")}
+    # review 1: the ingredient's name against the goal's: whole name inside it, a shared word only, or no shared word
+    kinds = ("full_name", "word_only", "none")
+    out["lift_by_overlap"] = {k: d([r for r in ing if overlap_kind(r["object"], r["goal"]) == k], "aligned", "swapped") for k in kinds}
+    im = pops["ingredient_matched"]
+    out["two_item_ingredient_controls_by_overlap"] = {
+        f"{name}|{k}": describe(*_vals([r for r in im if overlap_kind(r["object"], r["goal"]) == k], f))
+        for name, f in (("naming", lambda i: L(by, i, "both") - L(by, i, "swapped")),
+                        ("completion", lambda i: L(by, i, "aligned") - L(by, i, "both"))) for k in kinds}
+    padded = pops["padded_goal"] + pops["padded_ingredient_matched"]
     delta = lambda i, k: L(by, i, f"pad{k}_aligned") - L(by, i, f"pad{k}_swapped")
     pad_parts = {}
     for role in ("goal", "ingredient"):
@@ -494,6 +727,18 @@ def descriptive(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
         pad_parts[f"{role}_one_minus_none"] = describe(*_vals(sub, lambda i: delta(i, 1) - (L(by, i, "aligned") - L(by, i, "swapped"))))
     out["padding"] = pad_parts
     return out
+
+
+def _subset_diff(by: dict, recs: list[dict], a: str, b: str) -> dict[str, Any]:
+    """Mean P in parent subset a minus subset b, pair bootstrap (the subsets play the goal and ingredient slots)."""
+    rows, cl = [], []
+    for r in recs:
+        k = parent_subset(r)
+        x = L(by, r["id"], "ext_aligned") - L(by, r["id"], "ext_parent")
+        if k in (a, b) and x == x:
+            rows.append(("goal" if k == a else "ingredient", x))
+            cl.append(r["pair_id"])
+    return describe_gap(rows, cl)
 
 
 def _vals(recs: list[dict], f: Callable[[str], float]) -> tuple[list[float], list[str]]:
@@ -514,6 +759,18 @@ def model_block(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
     m = margin_of(by, pops)
     return {"competence": gate, "equivalence_margin": m, "contrasts": contrasts(by, pops, m["margin"]),
             "descriptive": descriptive(by, pops)}
+
+
+def model_verdicts(block: dict[str, Any], fam: dict, tag: str) -> dict[str, Any]:
+    v = {c: verdict(block["contrasts"][c], fam, tag, c) for c in CONTRASTS}
+    comp = {c: block["competence"]["local"]["per_contrast"][c]["competent"] for c in CONTRASTS}
+    strict = block["descriptive"]["parent"]["penalty_by_subset"]["strict"]["estimate"]
+    partial = bool(v["parent_penalty"] == "confirmed below zero" and not (strict == strict and strict < 0))
+    timing = block["contrasts"]["timing"]
+    return {"contrasts": v, "competent": comp,
+            "interpretation": {c: interpretation(v[c], comp[c], block["contrasts"][c]) for c in CONTRASTS},
+            "reading": reading(v, partial, bool(timing.get("comparable_to_one_lookup_change"))),
+            "overall_gate_interpretable": block["competence"]["interpretable"]}
 
 
 def analyse(records: list[dict], shots, scores_by_tag: dict[str, list[dict]], expected: list[str]) -> dict[str, Any]:
@@ -537,11 +794,25 @@ def analyse(records: list[dict], shots, scores_by_tag: dict[str, list[dict]], ex
         out["verdicts"] = "withheld: " + ("models not scored: " + str([t for t in expected if t not in per_model])
                                          if len(per_model) < len(expected) else f"missing scores {missing}")
         return out
-    gates = {t: per_model[t]["competence"]["interpretable"] for t in expected}
-    verdicts = {t: {c: verdict(per_model[t]["contrasts"][c], fam, t, c, gates[t]) for c in CONTRASTS} for t in expected}
-    out["verdicts"] = {t: {"contrasts": verdicts[t], "reading": reading(verdicts[t]), "competence": gates[t]} for t in expected}
-    out["across_models"] = across(verdicts, gates)
+    out["verdicts"] = {t: model_verdicts(per_model[t], fam, t) for t in expected}
+    out["across_models"] = across({t: out["verdicts"][t]["contrasts"] for t in expected},
+                                  {t: out["verdicts"][t]["competent"]["parent_penalty"] for t in expected})
     return out
+
+
+def provenance(tags: list[str], root: Path | None = None) -> list[str]:
+    """Review 1 (as families.py): every shard of every model scored at one git commit, and every score carries its
+    model's pinned revision. Returns the problems."""
+    root = root or runs_root()
+    shas = {(root / score_run(t) / p.name / "git_sha").read_text(encoding="utf-8").strip()
+            for t in tags for p in sorted((root / score_run(t)).glob("shard_*"))
+            if (root / score_run(t) / p.name / "git_sha").exists()}
+    problems = [f"shards were scored at {len(shas)} commits: {sorted(shas)}"] if len(shas) > 1 else []
+    for t in tags:
+        revs = {s.get("model_revision") for s in load_scores(t, root)}
+        if revs and revs != {R.MODELS[t].revision}:
+            problems.append(f"{t}: model revisions {sorted(map(str, revs))}, pinned {R.MODELS[t].revision}")
+    return problems
 
 
 def run_textcraft_r2_analysis(cfg: dict) -> int:
@@ -556,6 +827,10 @@ def run_textcraft_r2_analysis(cfg: dict) -> int:
     shots = P.fewshot_examples(spath)
     expected = list(cfg.get("models", R.TAGS))
     scores = {t: s for t in expected if (s := load_scores(t))}
+    bad = provenance([t for t in expected if t in scores])
+    if bad:
+        write_status(run_id, f"provenance: {bad}", ok=False)
+        return 1
     try:
         metrics = analyse(records, shots, scores, expected)
     except StaleScore as e:
@@ -565,7 +840,8 @@ def run_textcraft_r2_analysis(cfg: dict) -> int:
     if isinstance(metrics["verdicts"], str):
         write_status(run_id, f"{metrics['verdicts']}", ok=False)
         return 1
-    lines = [f"{t}: gate {'pass' if v['competence'] else 'fail'}; " + "; ".join(f"{c} {x}" for c, x in v["contrasts"].items())
+    lines = [f"{t}: overall gate {'pass' if v['overall_gate_interpretable'] else 'fail'}; "
+             + "; ".join(f"{c} {x} ({'competent' if v['competent'][c] else 'not competent'})" for c, x in v["contrasts"].items())
              for t, v in metrics["verdicts"].items()]
     write_status(run_id, "\n".join(lines + [f"across: {metrics['across_models']['penalty_pattern']}"]), ok=True)
     return 0

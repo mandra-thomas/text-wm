@@ -53,6 +53,7 @@
    "aligned": 2982,
    "both": 2090,
    "ext_aligned": 882,
+   "ext_both": 873,
    "ext_parent": 882,
    "ext_swapped": 882,
    "neutral": 2100,
@@ -63,7 +64,7 @@
    "swapped": 2100,
    "yn_aligned": 2100,
    "yn_both": 2090,
-   "yn_neutral": 2100,
+   "yn_neutral": 2982,
    "yn_swapped": 2100
   },
   "parent": {
@@ -230,13 +231,13 @@
    "main": 2100,
    "parent": 882
   },
-  "scores_per_model": 23988
+  "scores_per_model": 25743
  },
  "fewshot_file": "wf/textcraft/data/fewshot.json",
  "fewshot_sha256": "e6ddab93966981f9a6bfa70cd26ce0a1552c733a1ac46142f306ea41adfb1253",
  "frozen_db_sha256": "5216d3a58a708a6181d3b948cc45e81c8f3ea6197246b4657fffd302df26d65f",
  "records_file": "wf/textcraft/data/r2_items.jsonl",
- "records_sha256": "ac971f15a61e12e327b38a32e141e222a5077189c06197f5a6404bd4f32ea837",
+ "records_sha256": "e6da991f9eb6c927213d31a6c22814c8080db1945543060e67779eb7e47c22f0",
  "verified": true,
  "why_not": []
 }

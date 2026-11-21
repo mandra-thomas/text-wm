@@ -4,6 +4,8 @@ This note fixes, before any model scores a round-2 record, what round 2 asks, wh
 
 The design must be independently reviewed and then frozen at a git tag (`textcraft-r2-design-frozen-<date>`) before any scoring. Any change after the tag is a reported deviation.
 
+**Amended before the freeze.** Section 14 records the amendments made on 2026-11-21, before any round-2 score, from the owner's decisions and from review 1. Where an earlier section disagrees with section 14, section 14 governs. Factual errors found by review 1 are corrected in place, each marked "(corrected, 14.Rn)".
+
 ## 1. Background and the question
 
 **Terms.** Throughout, an *item* is a TextCraft state (a displayed recipe list, a history of actions and replies) plus a test action. *L* is the log-odds of the success reply against the failure reply, both teacher-forced after the prompt (the two-candidate score), or of "Yes" against "No" after the question "Will this action succeed?" (the yes/no score). A *goal line* is the line "Goal: craft X." that the environment prints under the recipe list; the *aligned* line names the goal whose recipe tree contains the action's object, the *swapped* line names the other goal of the item's pair (whose tree is also on screen), and the *neutral* line is "Goal: explore the crafting commands.". The *goal effect* of an item is
@@ -36,6 +38,8 @@ Round 2 asks four questions about the account:
 - Is the penalty a *naming* term or a *completion* term (the *two-item goal* arm)?
 - Is "largest early" about *time* (how many steps the history has) or *content* (what the history has gathered) (the *padding* arm)?
 - Does the picture hold in three more model families, under one clean world-model prompt?
+
+**What round 2 is, and is not (14.U5).** The round-1 TextCraft replication across models failed under its preregistered rule (confirmed for Qwen3-8B, not for Llama-3.1-8B), and round 2 changes nothing about that result. The diagnostics that motivated round 2 were exploratory and post hoc. Round 2 tests the explanations they suggested, prospectively, on a new prompt and new records, with rules fixed before any round-2 score. Its central question: *does Llama's negative TextCraft effect arise from a goal-completion or naming mechanism, from poor reasoning about the environment's state, or from a combination?* Section 14 states which results would reject the two-component decomposition.
 
 **Confirmatory and descriptive.** The confirmatory part is five contrasts per model (section 6), each with a test of difference and a test of equivalence, in one Holm family of fixed size 50 (section 8). Everything else is descriptive: estimates with 95% intervals and no p-values, including the overall goal effect under the clean prompt.
 
@@ -83,14 +87,14 @@ Any failure stops the job before it writes a score. Also recorded, for informati
 
 **CPU check on ICE before freezing.** The same gate, run with the five pinned tokenizers on every record and arm (`wf/textcraft/r2_tokcheck.py`, job `pace/textcraft_r2_tokcheck.sbatch`, CPU partition), plus the golden renderings and the longest prompt in tokens for each model. The results are recorded in section 13 and in `wf/textcraft/data/r2_tokcheck_ice.json`. Gemma 2 attends locally within a 4,096-token sliding window on alternate layers; the check records whether any prompt exceeds it.
 
-**Competence gate: one rule for every model, fixed now.** This is wave A's rule (`families.COMPETENCE`, `notes/families_metrics.json`, `rules.competence`), computed on the round-2 main records under the neutral line, with the yes/no question. A model is interpretable for round 2 only if all four conditions hold:
+**Competence (amended, 14.U1).** The overall gate below is kept and reported for every model, but it no longer decides how a contrast is read: each contrast is read against its own competence rule (14.U1), and no estimate is withheld. The overall gate is wave A's rule (`families.COMPETENCE`, `notes/families_metrics.json`, `rules.competence`), computed on the round-2 main records under the neutral line, with the yes/no question. A model is interpretable for round 2 only if all four conditions hold:
 
 - the AUC of the yes/no L between the 600 determined successes and the 1,500 main failures is at least 0.70;
 - it answers Yes (L above 0) to at most 95% of the failures;
 - it answers Yes to at least 5% of the successes;
 - the median of P(Yes) plus P(No) is at least 0.5.
 
-A model that fails the gate is reported as *not interpretable* for every confirmatory contrast and every effect estimate in this note. Its estimates are shown but not read, and its tests stay in the Holm family with their p-values, so the family's size does not change.
+*(Superseded by 14.U1.)* The first version reported a model that fails this gate as not interpretable for every contrast. Now every model's estimates and verdicts are reported, read through the contrast-specific competence rules, and all tests stay in the Holm family.
 
 **Role-level competence (descriptive, pre-registered).** Llama's round-1 competence differed sharply by role (two-candidate neutral AUC 0.84 on the goal role, 0.58 on ingredients). For every model, the neutral-line AUC is reported on the goal role (goal-role successes against goal-role failures) and on the ingredient role, on both scales, with pair-bootstrap intervals. It is also reported per failure class (each class against all successes), per history-length bin (the bin's failures against the bin's successes), role-matched for the used-up class (used-up ingredient failures against the 300 ingredient-role successes; the confirmatory used-up AUC set mostly-ingredient failures against successes of both roles), and on the parent records' successes against their failures. These readouts do not change the gate's verdict. The two-candidate neutral AUC, overall and per role, and the median first-token mass of the two-candidate score (the probability of the two candidates' first tokens) are reported too.
 
@@ -98,7 +102,7 @@ A model that fails the gate is reported as *not interpretable* for every confirm
 
 ## 4. Records
 
-All records are in `wf/textcraft/data/r2_items.jsonl`, built by `python -m wf.textcraft.r2_items build` from the frozen items (`items.jsonl`, sha256 `3b81ac3f…5e421a6`) and the frozen builder. There are 2,982 records: 2,100 main and 882 parent. Each model scores 23,988 (record, arm) combinations.
+All records are in `wf/textcraft/data/r2_items.jsonl`, built by `python -m wf.textcraft.r2_items build` from the frozen items (`items.jsonl`, sha256 `3b81ac3f…5e421a6`) and the frozen builder. There are 2,982 records: 2,100 main and 882 parent. Each model scores 25,743 (record, arm) combinations (23,988 before the parent arms of 14.R8 were added).
 
 ### 4.1 Main records and the two-item goal line
 
@@ -151,7 +155,7 @@ Among the qualifying Z, the parent is one that shares no word with G's name if a
 
 **Counts.** 118 goals in 111 pairs qualify: 31 by the strict rule, 87 by word overlap (for example "pink dye" with parent "pink terracotta"). Most pair goals have no qualifying parent, because no recipe consumes them (signs, tools, blocks): 401 of the 510 main goal-role items have such a goal. That is why the parent records are newly drawn rather than taken from the main sample. The records hold 675 failures (522 never obtained, 150 too few, 3 used up; 370 with none of the goal recipe's inputs held) and 207 successes, in 111 pairs. 250 records (176 failures, 29 pairs) have a strict parent. 72 goals add one line, 8 add two, 35 add three, one adds four and two add eleven.
 
-**Arms (two-candidate only, four arms).**
+**Arms (four two-candidate arms; amended, 14.R8: plus `ext_both`, the two-item line on the extended list, on the 873 records whose pair has one, and `yn_neutral`, the yes/no question under the neutral line on the item's own list, for competence).**
 
 | Arm | List | Goal line | G is |
 |---|---|---|---|
@@ -189,7 +193,7 @@ All are computed on two-candidate L, on failures, with goal pairs as clusters. T
 
 $$\Lambda = \overline{L(\text{aligned}) - L(\text{swapped})}_{\text{ingredient}}.$$
 
-An ingredient serves the aligned goal without completing it. The aligned line never names the ingredient's own object, although in 635 of the 990 items the object shares a word with the goal's name. So Λ estimates λ, plus any partial naming through shared words, which is reported as a stratum.
+An ingredient serves the aligned goal without completing it. *(Corrected, 14.R1.)* The aligned line can name the ingredient in part: 683 of the 990 ingredient objects share a word with the goal's name, and in 180 of them the ingredient's whole name lies inside the goal's name (for example a planks ingredient of a goal named after its wood). So Λ estimates λ plus whatever partial naming does; it is reported separately for whole name contained, word overlap only and no shared word (section 14).
 
 **2. Within-item penalty (P), on the parent failures** (675 records, 111 pairs):
 
@@ -197,7 +201,7 @@ $$P = \overline{L(\text{ext\_aligned}) - L(\text{ext\_parent})}.$$
 
 The action, the history and the displayed list are identical. G is relevant under both lines, so the intermediate lift cancels. Only whether the goal line names G and makes its craft complete the task changes. P estimates the sum of the naming and completion terms on one item. *What it separates:* the penalty from item structure. Round 1's goal-versus-ingredient comparison compared different crafts (goal crafts more often lack craftable inputs and have more short inputs); P compares one craft with itself. *What it does not separate:* naming from completion, because "craft G" does both, like the round-1 object-goal run in the opposite direction.
 
-**3. Naming without completion (Dn), on main failures.** The difference in differences
+**3. Naming without completion (Dn), on main failures.** *(Ingredient rows class-matched, 14.R2: only too-few and never-obtained ingredient failures, 496 items, enter Dn, Dc and T.)* The difference in differences
 
 $$D_n = \overline{L(\text{both}) - L(\text{swapped})}_{\text{goal}} - \overline{L(\text{both}) - L(\text{swapped})}_{\text{ingredient}}.$$
 
@@ -213,11 +217,11 @@ Both lines name G; only the one-item line makes its craft complete the task. The
 
 $$D_n + D_c = \overline{\Delta L}_{\text{goal}} - \overline{\Delta L}_{\text{ingredient}}:$$
 
-the two-item line splits the round-1 role gap (unmatched) exactly into a naming part and a completion part, as ALFWorld's 2×2 split its effect into mention and goal-directed parts.
+*(Corrected, 14.R3.)* The identity holds exactly only on the items that enter both sides: the 500 goal-role failures that have a two-item line and, after 14.R2, the 496 class-matched ingredient failures. It splits the *round-2* role gap under the clean prompt, unmatched on item structure, into a naming part and a completion part. It does not split round 1's gap, which was measured under another prompt. The split is algebraic; reading its parts as causal effects needs the assumptions of 14.U4.
 
 *What the two-item contrasts separate.* Naming from completion, holding the action and the history fixed: Dn varies naming with completion held off, and Dc varies completion with naming held on. *What they do not separate, and how each caveat bears on the reading:*
 
-- (a) In the two-item line G is one of two named items, so a naming effect may be diluted. Under a pure naming account with dilution, Dn is negative and Dc is also negative but smaller in size than the naming effect itself. So *Dn's sign is the deciding contrast*: a pure completion account predicts Dn not below zero, and any naming penalty makes Dn negative.
+- (a) In the two-item line G is one of two named items, so a naming effect may be diluted. Under a pure naming account with dilution, Dn is negative and Dc is also negative but smaller in size than the naming effect itself. Crafting G under "craft A and B" also completes a named sub-goal. *(Qualified, 14.R5.)* So a negative Dn reads as a *naming or sub-goal-completion* penalty, not as naming alone. A pure completion account of the whole task predicts Dn not below zero; an inconclusive Dn is not evidence that naming has no effect (14.U4).
 - (b) The difference in differences compares goal-role with ingredient items, which differ in structure. Structure's main effect cancels because each item is compared with itself; an interaction between structure and goal line does not cancel. P has no such caveat.
 - (c) The two-item line is off-template in wording (section 4.1).
 - (d) Position: the object is named first in half the goal-role items. Dn and Dc are reported by position as a description.
@@ -226,7 +230,7 @@ the two-item line splits the round-1 role gap (unmatched) exactly into a naming 
 
 $$T = \overline{\Delta L^{(8)} - \Delta L^{(1)}}_{\text{goal}} - \overline{\Delta L^{(8)} - \Delta L^{(1)}}_{\text{ingredient}},$$
 
-where ΔL with superscript k is aligned minus swapped with k inventory look-ups prepended. Under the account, the goal-role ΔL is the lift plus the penalty and the ingredient ΔL is the lift, so T is the change in the penalty when the history is seven steps longer with exactly the same content. *Timing reading:* the penalty depends on how many steps have passed, so it shrinks with padding and T is above zero. *Content reading:* the penalty depends on what has been gathered, so T is zero. T is only read where there is a penalty to shrink: if the goal-minus-ingredient ΔL at one look-up does not have a 95% interval below zero, T is reported as "not applicable" for that model. Padding lengthens the transcript in steps and tokens together, so T cannot separate those two; and look-ups are not progress, so a timing effect here would be about elapsed turns, not effort.
+where ΔL with superscript k is aligned minus swapped with k inventory look-ups prepended. *(Reading amended, 14.U4 and 14.R9: T above zero reads as sensitivity to added empty-inventory steps, not as timing; the goal-role and ingredient rows are class-matched, 14.R2.)* Under the account, the goal-role ΔL is the lift plus the penalty and the ingredient ΔL is the lift, so T is the change in the penalty when the history is seven steps longer with exactly the same content. *Timing reading:* the penalty depends on how many steps have passed, so it shrinks with padding and T is above zero. *Content reading:* the penalty depends on what has been gathered, so T is zero. T is only read where there is a penalty to shrink: if the goal-minus-ingredient ΔL at one look-up does not have a 95% interval below zero, T is reported as "not applicable" for that model. Padding lengthens the transcript in steps and tokens together, so T cannot separate those two; and look-ups are not progress, so a timing effect here would be about elapsed turns, not effort.
 
 **Statistics.** Λ and P are means of per-item differences: estimate, 95% percentile pair bootstrap, and a two-sided sign-flip permutation p with whole pairs flipped. Dn, Dc and T compare two groups of items: estimate, 95% percentile pair bootstrap (the goal and ingredient items of a resampled pair go together), and a two-sided bootstrap p, equal to twice the smaller share of resamples on either side of zero, computed as
 
@@ -236,9 +240,9 @@ $$p = \min\left(1,\ \frac{2\min(\#\{b \le 0\},\ \#\{b \ge 0\}) + 1}{B + 1}\right
 
 The predictions follow from round 1 and from ALFWorld, not from what would make the account look good. Where the evidence does not support a direction, none is made. The *account's* predictions (what it must get right) are separated from our *expectations* (what we think will happen, which may be against the account).
 
-**Which models are expected to show an intermediate lift.** The suggestion was to expect a positive ingredient-role effect for models with an ALFWorld *mention* effect. We do not use that criterion. A TextCraft ingredient action is not named by the goal line (apart from shared words), so the ALFWorld quantity that corresponds to Λ is the *goal-directed* part of ALFWorld's 2×2 (the action serves the task without being its named object), not the mention part. That part was measured only for the two reference models: +0.72 [0.05, 1.38] for Qwen and −0.18 [−0.31, −0.05] for Llama-3.1 (`rq2_results.md`). Their mention parts were +6.93 and +1.04. Gemma 2, Mistral and Llama 3.2 3B have positive ALFWorld goal effects (`families_results.md`: two-candidate 0.80, 1.06 and 0.98 nats; yes/no 1.23, 2.67 and 0.70), but no 2×2 was run for them. In both reference models the ALFWorld effect was mostly mention, so a positive total says little about the goal-directed part. Only Qwen qualifies for a positive prediction on Λ, Llama-3.1 is predicted null, and the three new models get no directional prediction. The word-overlap ingredient stratum is where a mention-like effect could act, and it is reported descriptively.
+**Which models are expected to show an intermediate lift.** *(Corrected, 14.R4: the paragraph below mapped ALFWorld's goal-directed part to Λ. That part holds naming fixed and varies whether the action advances the task, so it corresponds to Dc, not Λ. Λ predictions now rest on TextCraft round 1 only; see the revised table.)* The suggestion was to expect a positive ingredient-role effect for models with an ALFWorld *mention* effect. We do not use that criterion. A TextCraft ingredient action is not named by the goal line (apart from shared words), so the ALFWorld quantity that corresponds to Λ is the *goal-directed* part of ALFWorld's 2×2 (the action serves the task without being its named object), not the mention part. That part was measured only for the two reference models: +0.72 [0.05, 1.38] for Qwen and −0.18 [−0.31, −0.05] for Llama-3.1 (`rq2_results.md`). Their mention parts were +6.93 and +1.04. Gemma 2, Mistral and Llama 3.2 3B have positive ALFWorld goal effects (`families_results.md`: two-candidate 0.80, 1.06 and 0.98 nats; yes/no 1.23, 2.67 and 0.70), but no 2×2 was run for them. In both reference models the ALFWorld effect was mostly mention, so a positive total says little about the goal-directed part. Only Qwen qualifies for a positive prediction on Λ, Llama-3.1 is predicted null, and the three new models get no directional prediction. The word-overlap ingredient stratum is where a mention-like effect could act, and it is reported descriptively.
 
-**Which reading of the penalty we expect.** In ALFWorld's 2×2, naming the action's object in a goal the action does not advance *raised* L for both reference models (mention +6.93 Qwen, +1.04 Llama). A naming *penalty* in TextCraft would contradict that, unless the verbatim item name works differently from an ALFWorld object. So for Qwen and Llama-3.1 we expect the completion reading: Dn not below zero, Dc below zero. For the three new models there is no 2×2 and no expectation; both readings are stated.
+**Which reading of the penalty we expect.** *(Revised, 14.R4: Dc expectations now come from the goal-directed part on completing moves, and the Dn expectation is softened; see the revised table.)* In ALFWorld's 2×2, naming the action's object in a goal the action does not advance *raised* L for both reference models (mention +6.93 Qwen, +1.04 Llama). A naming *penalty* in TextCraft would contradict that, unless the verbatim item name works differently from an ALFWorld object. So for Qwen and Llama-3.1 we expect the completion reading: Dn not below zero, Dc below zero. For the three new models there is no 2×2 and no expectation; both readings are stated.
 
 **The penalty under the clean prompt.** For Llama-3.1 round 1 supports P below zero: the object-goal run, which tests the same contrast in the other direction, gave −1.40 on failures. The clean prompt shrank Llama's goal-role effect by about 40%, so we expect roughly −0.5 to −0.9. For Qwen the evidence conflicts. Under the verified prompt the object-goal run gave −1.23 on failures, almost all of it on never-obtained items (−4.00), and +0.80 on successes. Under the clean prompt Qwen's goal-role effect (+3.03) exceeded its ingredient effect (+0.77) on the diagnostic sample. That comparison is unmatched, but it points the other way. 77% of the parent failures are never obtained, the class where Qwen's object-goal drop was concentrated. We therefore make no directional prediction for Qwen overall, and expect P to be more negative on never-obtained than on too-few records (descriptive). For the new models the account predicts P below zero, because it calls the penalty "not specific to Llama in kind". That is the account's generality claim, not an expectation backed by data.
 
@@ -251,16 +255,18 @@ The predictions follow from round 1 and from ALFWorld, not from what would make 
 
 This is a disclosed observation. It does not change the confirmatory verdicts, which were read under the confirmatory design's own competence rule. It does mean that **Llama-3.1-8B is likely to fail the round-2 gate**: the clean prompt lowered its two-candidate AUC by a further 0.016 on the diagnostic sample. If it fails, every round-2 contrast for Llama-3.1, the model the account was built on, is reported as not interpretable, and the account can be tested only on the models that pass. The role-level readout will show whether Llama discriminates on the goal role, as in round 1, but it does not change the verdict.
 
-**Predictions table** (two-candidate, failures; "none" means no directional prediction; the account's own predictions are in the last row):
+**Predictions table** (two-candidate, failures; "none" means no directional prediction; the account's own predictions are in the last row). *Revised before the freeze (14.R4).* Λ rests on TextCraft round 1 only. Dc rests on ALFWorld's goal-directed part on completing moves (`notes/textcraft_vs_alfworld.md`, branch `xenv-compare`, section 10: the 2×2 part that holds naming fixed, on the moves that would complete the task). Dn has no directional expectation: ALFWorld's mention part names the object in a goal the action does *not* advance, while in Dn crafting G completes a named sub-goal.
 
 | Model | Intermediate lift Λ | Within-item penalty P | Naming without completion Dn | Completion with naming held Dc | Timing T |
 |---|---|---|---|---|---|
-| Qwen3-8B | above zero (round 1 +0.88; clean sample +0.77; ALFWorld goal-directed +0.72) | none overall; more negative on never-obtained than too-few records | not below zero (expected above: ALFWorld mention +6.93) | below zero (expected, completion reading) | none |
-| Llama-3.1-8B (likely to fail the gate) | equivalent to zero (round 1 +0.03; ALFWorld goal-directed −0.18) | below zero (object-goal run −1.40; expected about −0.5 to −0.9 under the clean prompt) | not below zero (ALFWorld mention +1.04) | below zero (expected, completion reading) | none |
-| Gemma-2-9B-it | none (no ALFWorld 2×2) | below zero (the account's generality claim only) | none | none | none |
-| Mistral-7B-v0.3 | none (no ALFWorld 2×2) | below zero (the account's generality claim only) | none | none | none |
-| Llama-3.2-3B | none (no ALFWorld 2×2) | below zero (the account's generality claim only) | none | none | none |
-| The account, any model | differs across models and carries the between-model difference in the total effect | below zero | completion reading: not below zero; naming reading: below zero | completion reading: below zero; naming reading: at or near zero, below zero only by dilution | timing reading: above zero; content reading: equivalent to zero |
+| Qwen3-8B | above zero (TextCraft round 1 +0.88; clean sample +0.77) | none overall; more negative on never-obtained than too-few records | none | not below zero (ALFWorld goal-directed part on completing moves +0.56 [0.17, 0.95]) | none |
+| Llama-3.1-8B (likely to fail competence) | equivalent to zero (TextCraft round 1 +0.03 [−0.07, +0.13]) | below zero (object-goal run −1.40; expected about −0.5 to −0.9 under the clean prompt) | none | below zero (ALFWorld goal-directed part on completing moves −0.81 [−1.02, −0.60]) | none |
+| Gemma-2-9B-it | none | below zero (the account's generality claim only) | none | none | none |
+| Mistral-7B-v0.3 | none | below zero (the account's generality claim only) | none | none | none |
+| Llama-3.2-3B | none | below zero (the account's generality claim only) | none | none | none |
+| The account, any model | differs across models and carries the between-model difference in the total effect | below zero | completion reading: not below zero; naming or sub-goal-completion reading: below zero | completion reading: below zero; naming reading: at or near zero, below zero only by dilution | sensitivity reading: above zero; no-sensitivity reading: equivalent to zero |
+
+*The first version of this table* predicted Λ for Qwen and Llama from ALFWorld's goal-directed part (+0.72, −0.18), Dn "not below zero" for both from ALFWorld's mention part, and Dc "below zero" for both. Those mappings were wrong (14.R4).
 
 **Descriptive expectations** (not tested):
 
@@ -273,7 +279,7 @@ This is a disclosed observation. It does not change the confirmatory verdicts, w
 
 - **F1, no within-item penalty in its home model.** For Llama-3.1-8B, P is equivalent to zero or confirmed above zero. The round-1 penalty would then reflect item structure or the agent-instruction prompt, not the goal line. If Llama-3.1 fails the gate, F1 cannot be tested, and that is reported.
 - **F2, the lift does not explain the model difference.** Llama-3.1's Λ is confirmed above zero and at least Qwen's estimate, or, among the models that pass, the ordering of Λ is unrelated to the ordering of the total goal effect. The second half is descriptive (five models).
-- **F3, the penalty is not shared.** P is confirmed below zero for no model that passes the gate other than Llama-3.1. The account's generality claim then fails; its Llama part could stand.
+- **F3, the penalty is not shared.** *(Rule corrected, 14.R6: F3 holds only if at least one competent model other than Llama-3.1 has P equivalent to zero or confirmed above zero, and none is confirmed below zero; if one is confirmed below zero, F3 does not hold; otherwise F3 is undecided.)* P is confirmed below zero for no model that passes the gate other than Llama-3.1. The account's generality claim then fails; its Llama part could stand.
 - **F4, "largest early" is wrong in kind.** If T is confirmed below zero (padding *deepens* the penalty), neither the timing nor the content reading holds.
 
 The mechanism contrasts (Dn, Dc, T) choose between readings of the account; they do not falsify it except as in F4.
@@ -287,54 +293,78 @@ The mechanism contrasts (Dn, Dc, T) choose between readings of the account; they
 
 That makes 50 tests, Holm-adjusted together at a familywise 0.05 level. The family's size is fixed at 50. A test whose model has not been scored, or whose p is missing or not a number, enters with p = 1.
 
-**Equivalence margin.** For model m,
+**Equivalence margin (amended, 14.U3).** For model m, on the two-candidate scale, the same for all five contrasts,
 
-$$\delta_m = 0.3 \times \mathrm{SD}_m,$$
+$$\delta_m = \min\left(0.3 \times \mathrm{SD}_m,\ 0.4\ \text{nats}\right),$$
 
-where SD is the item standard deviation of ΔL (aligned minus swapped) over the 1,500 main failures under the clean prompt. It is computed once per model from the point estimate, before any equivalence test is read. A standardized margin is used because the models' log-odds scales differ several-fold (on round 1's verified prompt the SD was 1.38 for Llama and 4.74 for Qwen; δ would have been 0.41 and 1.42). For Llama 0.41 is about half the round-1 matched penalty. For Qwen 1.42 is larger than its round-1 matched penalty (0.82), so for Qwen an "equivalent" verdict cannot exclude an effect of the round-1 size; this limit is reported with any Qwen equivalence.
+where SD is the item standard deviation of ΔL (aligned minus swapped) over the 1,500 main failures under the clean prompt, computed once per model from the point estimate before any equivalence test is read. On round 1's spreads, 0.3 × SD was 0.41 for Llama and 1.42 for Qwen, so the cap of 0.4 nats applies to both, and probably to every model. An equivalence verdict means "no effect larger than δ", never "no effect". Each test also reports its power at a true zero (14.U3, section 10). Where equivalence is underpowered and not reached, the verdict is "inconclusive", never "no effect".
 
-**Verdicts per contrast and model.**
+**Statistical verdicts per contrast and model.**
 
 | Verdict | Rule |
 |---|---|
 | confirmed above zero | estimate above zero, 95% interval above zero, Holm-adjusted differs-p below 0.05 |
 | confirmed below zero | the same, below zero |
 | equivalent to zero | Holm-adjusted TOST p below 0.05 |
-| inconclusive | none of the above |
-| not interpretable | the model fails the competence gate (whatever the numbers) |
+| inconclusive | none of the above ("inconclusive (equivalence underpowered)" when the test's power at a true zero, at Holm's first step, is below 0.8) |
 | not applicable | T only: no role gap at one look-up (section 6) |
 
-**Readings per model** (models that pass the gate):
+**How a verdict is read: competence (amended, 14.U1).** Competence no longer withholds a verdict. Every estimate and test is reported for every model, and all 50 tests stay in the Holm family. Each contrast has its own competence rule (14.U1). The verdict is read as follows:
+
+| Verdict | Competent for this contrast | Reading |
+|---|---|---|
+| confirmed (either sign) | yes | a **distortion in a competent predictor**: the goal line shifts the predictions of a model that separates successes from failures in these action categories |
+| confirmed (either sign) | no | a **statistically measurable goal effect** only: the model does not separate successes from failures in these action categories, so the shift is not read as a distortion of a working state judgement |
+| equivalent to zero | yes | no effect larger than δ, in a competent predictor |
+| equivalent to zero | no | no effect larger than δ; limited interpretation |
+| inconclusive | either | inconclusive; not evidence of no effect |
+
+**Mechanism readings per model (amended, 14.U4 and 14.R5).**
 
 | P | Dn | Dc | Reading |
 |---|---|---|---|
-| below zero | not below zero (above, equivalent or inconclusive) | below zero | **Completion penalty.** Crafting the item that finishes the named task lowers predicted success; naming the object alone does not. |
-| below zero | below zero | any | **Naming penalty.** Naming the action's object lowers predicted success even when its craft does not finish the task. Whether a completion part adds to it cannot be separated from the dilution of naming in the two-item line. |
-| below zero | inconclusive | inconclusive | **Penalty present, mechanism unresolved** at this power. |
-| equivalent to zero | any | any | **No penalty** under the clean prompt for this model: the round-1 role gap does not reappear when the item is held fixed. |
-| above zero | any | any | **Completing a named goal raises predicted success** for this model (the ALFWorld-like direction); no penalty. |
+| below zero | below zero | any | **Naming or sub-goal-completion penalty.** Naming the crafted item, or completing a named sub-goal, lowers predicted success. Whether completing the whole task adds to it cannot be separated from the dilution of naming in the two-item line. |
+| below zero | equivalent to zero or confirmed above zero | below zero | **Completion penalty, naming constrained.** Crafting the item that finishes the named task lowers predicted success, and naming the object alone does not lower it by more than δ. |
+| below zero | inconclusive | below zero | **Completion contributes; naming not constrained.** No completion-only conclusion. |
+| below zero | inconclusive or equivalent | inconclusive or equivalent | **Penalty present, mechanism unresolved.** |
+| equivalent to zero | any | any | **No penalty larger than δ** under the clean prompt: the round-1 role gap does not reappear when the craft is held fixed. |
+| above zero | any | any | **Completing a named goal raises predicted success** (the ALFWorld-like direction); no penalty. |
 | inconclusive | any | any | Inconclusive on the penalty; Dn and Dc are reported but not read as a mechanism. |
 
-The timing reading is read alongside: T confirmed above zero means **timing** (the penalty shrinks with elapsed steps at fixed content); T equivalent to zero means **content** (steps that add nothing leave the penalty unchanged, so "largest early" is about what has been gathered); otherwise inconclusive or not applicable.
+*Completion-only rule.* A reading that the penalty is about completion and not naming needs the naming contribution to be constrained: Dn equivalent to zero (within δ) or confirmed above zero. An inconclusive Dn is not evidence that naming has no effect.
 
-The lift: Λ confirmed above zero means the model raises predicted success for intermediate crafts of the named goal; Λ equivalent to zero means it does not (Llama's round-1 pattern).
+*Partial-naming rule (14.U2).* If the pooled P is confirmed below zero but the strict parents' estimate is not negative, the reading adds "penalty possibly carried by partial naming".
 
-**Across models** (descriptive, read from the per-model verdicts):
+*The parts are read causally only under assumptions (14.U4).* The two-item split is an algebraic decomposition. Reading Dn and Dc as the effects of naming and of completion needs four assumptions:
+
+- the goal line's effects add up without interacting with the action's role, except through completion;
+- adding a second item to the goal line (the conjunctive goal) dilutes the goal line equally for goal-role and ingredient actions;
+- recipe structure does not interact with the goal line;
+- the object's position in the two-item line does not matter.
+
+The two-item goals are constructed counterfactual prompts, not native TextCraft tasks.
+
+**Padding (amended, 14.U4 and 14.R9).** T confirmed above zero reads as **sensitivity to added empty-inventory steps** (elapsed turns, or the repeated emphasis of the look-ups). It does not by itself separate elapsed time from prompt length, repetition or attention effects. The change from no look-up to one (goal role minus class-matched ingredient) is reported beside T. A T whose 95% interval contains that change is "comparable to the one-look-up change" and is not read as timing. T equivalent to zero reads as **no sensitivity to added empty-inventory steps larger than δ**, consistent with the content reading but not proof of it. T confirmed below zero is F4.
+
+**The lift.** Λ confirmed above zero: the model raises predicted success for intermediate crafts of the named goal (including any partial naming, 14.R1). Λ equivalent to zero: no lift larger than δ (Llama's round-1 pattern).
+
+**Across models** (descriptive, among the models competent for the penalty contrast).
 
 | Pattern | Reading |
 |---|---|
-| P confirmed below zero in every model that passes the gate | The penalty is general across these families under the clean prompt. |
-| P confirmed below zero in some models, equivalent to zero in others | The penalty is model-specific; the models are named. |
-| P below zero for Llama-3.1 only | The penalty is a Llama-3.1 property (F3). |
-| The same reading of the penalty (completion or naming) in every model where it is read | One mechanism across families. |
+| P confirmed below zero in every competent model | The penalty is general across these families under the clean prompt. |
+| P confirmed below zero in some competent models, equivalent to zero or above in others | The penalty is model-specific; the models are named. |
+| P below zero for Llama-3.1 only | The penalty is a Llama-3.1 property; F3 is read by its corrected rule (14.R6). |
+| The same mechanism reading in every model where it is read | One mechanism across families. |
 | Λ ordering matches the ordering of the overall goal effect | Consistent with the lift carrying the between-model difference; with five models this is a description, not a test. |
-| Fewer than two models pass the gate | Round 2 cannot speak across families; per-model results are reported as they are. |
+| Fewer than two models competent for the penalty | Round 2 cannot speak across families; per-model results are reported as they are. |
 
 **What each pattern does not show.**
 
-- A confirmed P shows that the goal line's naming-and-completing status changes L for a fixed craft. It does not show that the model "thinks" the task is premature.
-- A completion reading rests on Dn's sign and on the two-item line, which is off-template in wording.
-- An equivalence verdict for Qwen cannot exclude round-1-sized effects (δ above 0.82).
+- A confirmed P shows that the goal line's naming-and-completing status changes L for a fixed craft. It does not show that the model "thinks" the task is premature. If P is not negative (F1), the top-item status of round 1's goal crafts, a property of recipe structure, is a candidate explanation of the round-1 role gap.
+- The pooled P is not free of lexical contamination: 499 of the 675 parent failures have a parent sharing a word with G (201 with G's whole name inside Z's). The strict subset is reported beside it (14.U2).
+- A completion reading rests on Dn and on the two-item line, a constructed prompt.
+- An equivalence verdict means no effect larger than δ = 0.4 nats on the two-candidate scale. For Qwen it is out of reach for P, Dn, Dc and T at this sample size (section 10).
 - Nothing here bears on the confirmatory TextCraft verdicts. The clean prompt measures a different quantity.
 - All items are failures and successes from goal-blind scripted walks, not agent histories.
 
@@ -342,11 +372,11 @@ The lift: Λ confirmed above zero means the model raises predicted success for i
 
 1. The overall goal effect ΔL on the 1,500 main failures, and by role, class and length bin, per model. For Qwen and Llama it is also compared with the confirmatory (verified-prompt) scores on the same items: the per-item difference, clean minus verified.
 2. The aligned-minus-neutral and swapped-minus-neutral contrasts; the two-item line against neutral.
-3. Every confirmatory contrast on the yes/no scale.
+3. *(Corrected, 14.R7.)* The yes/no versions of the contrasts that have yes/no arms: Λ, Dn and Dc (on the main records). P and T are two-candidate only: the parent records have the yes/no question under the neutral line only, for competence, and the padded arms are two-candidate.
 4. P by failure class, by length bin, by inputs held (none against some), by parent rule (strict against word overlap), on the parent successes, and on the strict subset alone.
 5. The lift on parent records: L under the parent line minus L under the swapped line, against Λ.
 6. The list control: L under the aligned line on the extended list minus on the item's own list.
-7. Dn and Dc by the object's position in the two-item line, by class, by length bin, and on successes. Λ on ingredients that share a word with the goal and on those that share none.
+7. Dn and Dc by the object's position in the two-item line, by class, by length bin, and on successes. Λ by failure class (used up, too few, never obtained) and by the ingredient's name against the goal's (whole name contained, word overlap only, no shared word; 14.R1), and the ingredient controls of Dn and Dc by the same three kinds.
 8. T's two parts (goal-role and ingredient changes) separately, by length bin. The empty-start contrast: the effect with one look-up against none, per role.
 9. Competence: the gate's four values; the role-level, class-level, length-bin and role-matched used-up AUCs on both scales (section 3); the two-candidate first-token mass per arm; and the AUC cost of each goal line.
 10. Heuristic tracking (added 2026-11-21, before any round-2 score). For every model, on the 1,500 main failures and 600 successes under the neutral line, on both scales, the fits of four heuristics of the competence note, with their definitions exactly as committed at 9a83738:
@@ -368,32 +398,49 @@ Planning uses the confirmatory TextCraft item spreads of ΔL (verified prompt) a
 
 Each contrast's standard error comes from the design effect of its items per pair. The minimum detectable effect is for a two-sided test at Holm's first step (0.05/50) with 80% power. These assume the contrasts spread like ΔL. P, Dn and Dc compare two lines that share more of the prompt than aligned and swapped do, so their spread is probably smaller; T is a difference of differences, so its spread could be larger.
 
-| Contrast | Items (pairs) | Llama MDE (nats) | Qwen MDE (nats) |
-|---|---|---|---|
-| Λ | 990 (162) | 0.18 | 0.69 |
-| P | 675 (111) | 0.33 | 0.99 |
-| Dn, Dc | 500 goal (158) and 990 ingredient (162) | 0.38 | 1.25 |
-| T | 336 goal (129; the two used-up goal-role items are left out, as everywhere) and 582 ingredient (128) | 0.45 | 1.52 |
+| Contrast | Items (pairs) | Llama SE | Llama MDE (nats) | Qwen SE | Qwen MDE (nats) |
+|---|---|---|---|---|---|
+| Λ | 990 (162) | 0.044 | 0.18 | 0.168 | 0.69 |
+| P | 675 (111) | 0.080 | 0.33 | 0.24 | 0.99 |
+| Dn, Dc | 500 goal (158) and 496 class-matched ingredient (116) | 0.099 | 0.41 | 0.33 | 1.38 |
+| T | 336 goal (129) and 332 class-matched ingredient (95) | 0.118 | 0.49 | 0.40 | 1.65 |
 
-For Llama-sized spreads, the expected P (−0.5 to −0.9) and an F1 equivalence verdict (|estimate| below about 0.15 with δ near 0.41) are both reachable. For Qwen-sized spreads, only large effects are detectable, and equivalence is reachable only for estimates near zero. The new models' spreads are unknown; in ALFWorld their effects were on Llama's scale (0.8–1.1 nats two-candidate).
+(Amended for the class-matched ingredient rows, 14.R2.)
+
+**Equivalence power and reachable bounds (14.U3).** With δ = 0.4 nats, a TOST verdict needs the estimate's distance from zero plus z standard errors to be below δ. Here z = 3.09 at Holm's first step (0.05/50, the most stringent level a test can face) and 1.645 at the least stringent step. The table gives, for each planning SE, the largest |estimate| that can still be declared equivalent at each level, and the power of the equivalence test at a true zero.
+
+| Model, contrast | Largest equivalent \|estimate\|, Holm first step | at 0.05 | Power at a true zero, first step | at 0.05 |
+|---|---|---|---|---|
+| Llama, Λ | 0.26 | 0.33 | 1.00 | 1.00 |
+| Llama, P | 0.15 | 0.27 | 0.94 | 1.00 |
+| Llama, Dn or Dc | 0.09 | 0.24 | 0.66 | 0.98 |
+| Llama, T | 0.04 | 0.21 | 0.24 | 0.92 |
+| Qwen, Λ | unreachable | 0.12 | 0.00 | 0.54 |
+| Qwen, P | unreachable | 0.01 | 0.00 | 0.02 |
+| Qwen, Dn or Dc | unreachable | unreachable | 0.00 | 0.00 |
+| Qwen, T | unreachable | unreachable | 0.00 | 0.00 |
+
+"Unreachable" means z × SE exceeds δ, so no estimate can be declared equivalent. For Qwen, P, Dn, Dc and T are therefore "inconclusive" unless confirmed, and never "no effect". The analysis reports, for every model and contrast, the realized bootstrap SE and these two powers, and flags an equivalence test as underpowered when its power at a true zero at the first Holm step is below 0.8. The new models' spreads are unknown; in ALFWorld their effects were on Llama's scale (0.8–1.1 nats two-candidate), so Llama's rows are the closer guide for them.
+
+For Llama-sized spreads the expected P (−0.5 to −0.9) is detectable, and an F1 equivalence verdict is reachable for |P| below about 0.15. For Qwen-sized spreads only large effects are detectable.
 
 ## 11. Cost
 
-Each model scores 23,988 (record, arm) combinations:
+*(Updated for the amended arms, 14.R8.)* Each model scores 25,743 (record, arm) combinations:
 
 - main: 2,090 × 8 + 10 × 6 = 16,780;
 - padding: 920 × 4 = 3,680;
-- parent: 882 × 4 = 3,528.
+- parent: 882 × 5 + 873 = 5,283 (aligned, the three extended-list lines and the yes/no neutral question on every record, and the extended-list two-item line on the 873 that have one).
 
-That is 119,940 scores over five models. The yes/no arms (8,390 per model) are read from one forward pass each (`score_one_token_pair`, equal to `score_pair` by construction for one-token candidates). Two-candidate arms take two passes.
+That is 128,715 scores over five models. The yes/no arms (9,272 per model: 8,390 main and 882 parent) are read from one forward pass each (`score_one_token_pair`, equal to `score_pair` by construction for one-token candidates). The 16,471 two-candidate arms take two passes each, so each model needs about 42,200 forward passes.
 
 Round 1's rate was 51,200 scores (both models, all arms through `score_pair`) in about 4 GPU-hours on four shards, about 12,800 scores per GPU-hour; the diagnostics ran about 15,000 scores in 98 GPU-minutes. Prompts are of similar length. Estimated GPU time:
 
-- Qwen3-8B, Llama-3.1-8B and Mistral-7B: about 1.6 hours each;
+- Qwen3-8B, Llama-3.1-8B and Mistral-7B: about 1.65 hours each (round 1 ran about 25,600 forward passes per GPU-hour);
 - Llama-3.2-3B: about 0.9 hours;
-- Gemma-2-9B with eager attention (slower; taken as twice the rate's time): about 3.2 hours.
+- Gemma-2-9B with eager attention (slower; taken as twice the rate's time): about 3.3 hours.
 
-That totals about **9 GPU-hours**, plus about 0.5 for a 20-record smoke run per model and model loading; budget **10–12 GPU-hours**. Each model runs as 4 shards by goal pair, one job per shard of under 1.5 hours (Gemma's under 2 hours), saving every score as it is made, with resume. The CPU tokenization check took 9 to 12 minutes per model (section 13).
+That totals about **9.2 GPU-hours**, plus about 0.5 for a 20-record smoke run per model and model loading; budget **10–12 GPU-hours**. Each model runs as 4 shards by goal pair, one job per shard of under 1.5 hours (Gemma's under 2 hours), saving every score as it is made, with resume. The CPU tokenization check took 9 to 12 minutes per model (section 13).
 
 ## 12. Code (built after this note; see section 13 for the checks' results)
 
@@ -408,6 +455,8 @@ That totals about **9 GPU-hours**, plus about 0.5 for a 20-record smoke run per 
 - Tests `tests/test_textcraft_r2.py`; mutants in `scripts/mutation_check.py`, with their killing tests listed in `notes/testing.md`.
 
 ## 13. Checks run before scoring (2026-11-21; no model has scored a round-2 record)
+
+*These are the checks on the records before the amendments of section 14 (23,988 scores per model, records sha256 `ac971f15…`). The rerun on the amended records is in 14.C.*
 
 **Records.** `r2_items.jsonl` (sha256 `ac971f15…f32ea837`): 2,982 records, 23,988 (record, arm) combinations per model. `python -m wf.textcraft.r2_items verify` marked the manifest verified:
 
@@ -435,3 +484,129 @@ The clean prompt therefore passes the tokenization checks for all five models, t
 **Tests and mutants.** `tests/test_textcraft_r2.py`: 72 passed (no model, no real tokenizer; the golden test reads the stored renderings). Full suite (`tests/`): 934 passed, 7 skipped. `scripts/mutation_check.py` holds 54 round-2 mutants, covering the prompts and arms, the item hash, the record builder and its checks, the scoring run and its gate, the tokenization gate, the analysis's contrasts, family, margins, competence gate, verdicts and readings, and the heuristics. The final run against the final tests killed all 54. In the first run two survived and were killed by tests added for them, and one equivalent mutant was removed (`notes/testing.md` lists each mutant with the test that killed it). The scope of this claim is these 54 mutants against the test suite.
 
 **What has not been run.** No model has scored any round-2 record: there has been no smoke run and no GPU job. The design is to be reviewed and frozen at a tag before the smoke runs.
+
+## 14. Amendments before freeze (user decisions and review 1, 2026-11-21)
+
+These changes were made on 2026-11-21, before any round-2 score. No model has scored a round-2 record, and no round-2 effect has been computed or looked at. Each item is tagged by its source: **U** for a decision of the owner, **R** for review 1 (engineering and science, "pass with fixes", at f8dd14e), **S** for review 1's should-fix list. Sections 1 to 11 were corrected in place where they were wrong, with a pointer here; this section states the final rules.
+
+### 14.U1 Competence by contrast (user decision; populations and thresholds from review 1)
+
+The first version read every contrast through one overall gate, and a model that failed it was "not interpretable" for everything. Round 1 showed that Llama-3.1's competence differs by action category, so one gate would hide where it is and is not competent. **These rules were chosen with knowledge of round-1 data.** That knowledge includes Llama's round-1 role AUCs (yes/no 0.85 on the goal role, 0.55 on ingredients), its class profile and the competence note's heuristic fits. The disclosure table at the end of this item gives the values the rules would have produced on the confirmatory scores.
+
+**The final competence rules (verbatim).**
+
+1. *Overall gate (wave A's rule, unchanged, reported for every model).* On the 1,500 main failures and the 600 determined successes, under the neutral line, on the yes/no question, all four must hold:
+   - the AUC is at least 0.70;
+   - Yes (L above 0) on at most 95% of the failures;
+   - Yes on at least 5% of the successes;
+   - the median of P(Yes) plus P(No) is at least 0.5.
+2. *Contrast-specific competence.* A model is competent for a contrast when both of these hold:
+   - the yes/no neutral-line AUC (point estimate; no interval; no fallback to the two-candidate scale) is at least 0.70 in every population listed for that contrast;
+   - the other three criteria of rule 1 (the two Yes shares and the mass) hold on the full population.
+
+   The populations (failures against successes, each from the round-2 records):
+   - *Λ:* ingredient-role main failures (990) against ingredient-role successes (300).
+   - *P:* both (a) parent failures (675) against parent successes (207), on the parent records' new yes/no neutral arm, and (b) goal-role main failures without used up (504) against goal-role successes (300).
+   - *Dn and Dc:* goal-role main failures (504) against goal-role successes (300), and class-matched ingredient failures (too few and never obtained, 496) against ingredient successes (300). The smaller of the two AUCs is the one compared with 0.70.
+   - *T:* padded goal-role failures (336) against goal-role successes at 1 to 8 steps (200), and padded class-matched ingredient failures (332) against ingredient successes at 1 to 8 steps (200). The smaller AUC is compared with 0.70.
+3. *Use.* Competence never withholds an estimate, a test or a verdict, and all 50 tests stay in the fixed Holm family. It decides how a verdict is read (section 8):
+   - a confirmed effect in a competent model is a **distortion in a competent predictor**;
+   - in a model that is not competent for that contrast it is a **statistically measurable goal effect** only.
+
+**Reported for every model and population:**
+- the success classification rate (Yes, or L above 0, on successes) and the failure classification rate (No, or L below 0, on failures), on the yes/no scale and, for the main records, on the two-candidate scale;
+- both AUCs with pair-bootstrap intervals;
+- the heuristic tracking of H1, H2, H6 and H2∧H9, with the definitions as committed at 9a83738, within that population.
+
+Review 1 notes that Llama's goal-role competence in round 1 was largely "input names seen" (H1) coinciding with the truth there. The tracking within each population shows whether that recurs.
+
+**Disclosure: these rules on the confirmatory scores** (verified prompt, round 1; yes/no neutral-line AUC; the parent population did not exist then):
+
+| Population | Llama-3.1-8B | Qwen3-8B |
+|---|---|---|
+| ingredient, all (Λ) | 0.55 | 0.85 |
+| ingredient, class-matched (Dn, Dc) | 0.68 (never obtained 0.81, too few 0.55; used up 0.42) | 0.80 |
+| goal role (P, Dn, Dc) | 0.85 | 0.87 |
+| padded goal role (T) | 0.85 | 0.89 |
+| padded class-matched ingredient (T) | 0.67 | 0.85 |
+
+Under these rules Llama-3.1 would have been competent for the goal-role part of P (its parent part is unknown) and not competent for Λ, Dn, Dc or T. Qwen would have been competent for all. The class-matched control changes Llama's ingredient competence population: its AUC there is 0.68, against 0.55 over all ingredients (14.R2).
+
+### 14.U2 The parent goal (user decision; subsets from review 1)
+
+The pooled P over all 675 parent failures stays the primary contrast. It is **not free of lexical contamination**: 499 of the 675 failures have a parent sharing a word with G. Three subsets are pre-registered, each with its estimate and 95% pair-bootstrap interval, plus the three pairwise differences (descriptive, no p-values):
+
+- *strict*: the parent shares no word with G (176 failures, 29 pairs);
+- *word overlap only*: a shared word but not G's whole name (298 failures, 52 pairs);
+- *whole name*: G's whole name, as a contiguous word sequence, inside Z's name (201 failures, 33 pairs).
+
+*Rule.* If the pooled P is confirmed below zero but the strict subset's estimate is not negative, the reading says "penalty possibly carried by partial naming".
+
+*Also reported (S):*
+- P on each line's own faithful display: L under "craft G" on the item's own list minus L under "craft Z" on the extended list, which is P plus the list control.
+- The within-item split from the new extended-list two-item arm, "Goal: craft A and B." on the extended list (873 parent records; the pair whose goal name contains "and" has none). L(ext_aligned) − L(ext_both) and L(ext_both) − L(ext_parent) add up to P exactly on those records. This split is descriptive.
+
+### 14.U3 The equivalence margin (user decision; fixed by review 1)
+
+The margin is δ = min(0.3 × SD, 0.4 nats). It is fixed now (not provisional), applies on the two-candidate scale, and is the same for all five contrasts (section 8). On round 1's spreads the cap binds for both reference models. Section 10 gives each contrast's power at a true zero and the largest estimate that can still be declared equivalent. Every test also reports its realized bootstrap SE and power, and is flagged underpowered when its power at Holm's first step is below 0.8. When equivalence is not reached, the verdict is "inconclusive" (with "equivalence underpowered" where flagged), never "no effect". For Qwen, equivalence on P, Dn, Dc and T is unreachable at this sample size.
+
+### 14.U4 Mechanism claims, tightened (user decision)
+
+1. An inconclusive Dn is not evidence that naming has no effect. A completion-only reading needs the naming contribution to be constrained: Dn equivalent to zero (within δ) or confirmed above zero (section 8, completion-only rule). Otherwise the reading is "completion contributes; naming not constrained".
+2. The two-item split is an algebraic decomposition. Reading its parts causally needs four assumptions:
+   - the goal line's effects add up without interacting with the action's role, except through completion;
+   - the conjunctive goal (a second named item) dilutes the line equally for goal-role and ingredient actions;
+   - recipe structure does not interact with the goal line;
+   - the object's position in the two-item line does not matter.
+
+   None of these is tested here. Position is reported as a description.
+3. Padding shows sensitivity to added inventory-check steps. It does not by itself distinguish elapsed time from prompt length, repetition or attention effects (section 8, padding).
+4. Two-item goals are constructed counterfactual prompts, not native TextCraft tasks (section 4.1).
+
+### 14.U5 The round-1 result and the central question (user decision)
+
+The round-1 replication across models failed under its preregistered rule, and that verdict stands. Round 2 tests, prospectively, explanations that round 1's exploratory analyses suggested. The central question is whether Llama's negative TextCraft effect arises from:
+
+- a goal-completion or naming mechanism;
+- poor reasoning about the environment's state;
+- or a combination.
+
+The results map to it as follows (for Llama-3.1-8B; the same reading applies to any model):
+
+- *Mechanism:* Llama is competent for P (both goal-crafting populations), P is confirmed below zero, and the mechanism reading of section 8 applies.
+- *Poor state reasoning:* Llama is not competent in the populations where its effect sits, and its scores there track H1 or H2∧H9 more closely than H6. Any confirmed contrast is then a measurable effect, not a distortion of a working state judgement.
+- *Combination:* P is confirmed below zero where Llama is competent (goal crafting), and Λ is null where it is not (ingredients). This was round 1's descriptive pattern.
+
+**The two-component decomposition is rejected:**
+
+- for a model competent for P, if P is equivalent to zero or confirmed above zero (F1 for Llama-3.1);
+- across families, if F3 holds by its corrected rule (14.R6);
+- for a model competent for P, Dn and Dc, if P and the round-2 role gap (Dn plus Dc, reported as `role_gap_main`) are both clearly signed but opposite. That is, P confirmed in one direction while the role gap's 95% interval lies on the other side: the within-item and between-item measures of the same penalty then disagree.
+
+If P is confirmed below zero only through the partially named parents (14.U2), the penalty component survives, but its completion reading does not.
+
+### Review 1: must-fix items
+
+- **14.R1 Ingredient overlap.** 683 of the 990 ingredient objects share a word with the goal's name (the first version said 635), and in 180 the ingredient's whole name lies inside the goal's. "Never names" was dropped (section 6). Λ and the ingredient controls of Dn and Dc are reported separately for whole name contained (180), word overlap only (503) and no shared word (307).
+
+  Containment is word-wise: "stone stairs" is a character substring of "smooth sandstone stairs" but not a word sequence in it, so it counts as word overlap only.
+- **14.R2 Class-matched controls.** The ingredient rows of Dn, Dc and T are restricted to too-few and never-obtained failures: 496 main and 332 padded. Without this, the difference in differences also compared failure classes, since goal-role failures are never used up. Λ keeps all 990 and is also reported by class. This changes Llama's ingredient competence population (14.U1).
+- **14.R3 The identity's scope.** Dn + Dc equals the goal-minus-ingredient ΔL exactly only on the 500 goal-role and 496 class-matched ingredient failures with a two-item line. It splits the round-2 role gap under the clean prompt, unmatched, and not round 1's (section 6).
+- **14.R4 The ALFWorld mapping.** ALFWorld's goal-directed part, (aligned − mention) − (swapped − fourth), holds naming fixed and varies whether the action advances the task, so it maps to Dc, not Λ. Λ predictions now rest on TextCraft round 1 only. The Dc predictions use the goal-directed part on completing moves (`notes/textcraft_vs_alfworld.md`, branch `xenv-compare`, section 10): Llama −0.81 [−1.02, −0.60] gives below zero; Qwen +0.56 [0.17, 0.95] gives not below zero. The Dn expectation was softened to none, because ALFWorld's mention part names the object in a goal the action does not advance, while in Dn crafting G completes a named sub-goal. The predictions table in section 7 is the revised one.
+- **14.R5 Reading a negative Dn.** It reads "naming or sub-goal-completion penalty" (section 6, caveat a; section 8).
+- **14.R6 F3.** F3 holds only if at least one model competent for P, other than Llama-3.1, has P equivalent to zero or confirmed above zero, and none is confirmed below zero. If one is confirmed below zero, F3 does not hold. Otherwise F3 is "undecided".
+- **14.R7 Section 9's yes/no claim.** Only Λ, Dn and Dc have yes/no versions. P and T are two-candidate only. The wording is corrected rather than adding yes/no arms.
+- **14.R8 The parent's neutral arm.** Each parent record gets `yn_neutral` on its own list (882 single-pass scores per model), so P's competence can be read on the neutral line. With the extended-list two-item arm (S, 873 two-candidate scores per model) each model now scores 25,743 (record, arm) combinations, 128,715 in all, about 9.2 GPU-hours (section 11).
+- **14.R9 Padding's reading.** T above zero reads as sensitivity to added empty-inventory steps (elapsed turns or repeated emphasis). The change from no look-up to one, goal minus class-matched ingredient, is reported beside T, and a T whose 95% interval contains it is "comparable to the one-look-up change" and is not read as timing.
+
+### Review 1: should-fix items (adopted)
+
+- **Bootstrap size.** The 50 family tests use 20,000 pair resamples and 20,000 sign flips, computed from per-pair sums. These are the same resamples as the item-level computation; a test checks that.
+- **Provenance.** The analysis refuses scores unless every shard of every model was scored at one git commit and every score carries its model's pinned revision, as `families.py` does.
+- **The parent display and F1.** The penalty on each line's own display and the extended-list two-item split are reported (14.U2). If F1 holds, the top-item status of round 1's goal crafts, a property of recipe structure, is named as a candidate explanation of the round-1 role gap.
+- **Counts in the scoring job.** The sbatch comment now gives 25,743 scores per model.
+- **Mutants.** Review 1's surviving mutants M1–M4, M6, M9–M11, M13–M16, M21, M35, M38, M40, M48 and M51 now have killing tests, and are in `scripts/mutation_check.py` adapted to the amended code. M9 (excluded goals allowed as parents) is not equivalent: a test calls the rule with an excluded goal that consumes a real item. M52 targeted a check that repeated the expected-query check; that check was removed rather than tested. Results are in 14.C.
+
+### 14.C Checks rerun after the amendments
+
+*(Filled in below when the rerun is complete.)*
