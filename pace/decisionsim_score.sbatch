@@ -6,13 +6,14 @@
 #SBATCH --cpus-per-task=4
 # Gemma 2 9B in bf16 is about 18.5 GB of weights; loading goes through CPU memory first.
 #SBATCH --mem=48G
-# One model per job. The census (all 761 eligible states, 9,930 candidates; aligned and neutral everywhere, swapped
-# at the 709 states where it is defined) is 29,056 single-token forward passes. Wave A ran about 43,700 passes of a
-# 7-9B model in 103-107 minutes on an A40 or L40S (about 0.15 s a pass), so expect about 73 minutes for an 8B model
-# plus a few minutes of loading, about 25 for Llama 3.2 3B; 4.5-5 GPU-hours for all five. Estimates, not timings.
-# 4 h per job (about three times the estimate) so a slow node cannot cut a job off; scores resume if it does
+# One model per job. The census (all 761 eligible states, 9,930 candidates; aligned, neutral and task-blind
+# everywhere, swapped at the 709 states where it is defined, 9,196 candidates) is 38,986 single-token forward passes
+# (29,056 before Stage 1a added the task-blind arm). Wave A ran about 43,700 passes of a 7-9B model in 103-107
+# minutes on an A40 or L40S (about 0.15 s a pass), so expect about 97 minutes for a 7-9B model plus a few minutes of
+# loading (about 100), about 30 for Llama 3.2 3B; about 7 GPU-hours for all five. Estimates, not timings.
+# 5 h per job (about three times the estimate) so a slow node cannot cut a job off; scores resume if it does
 # (WF_RESUME=1).
-#SBATCH --time=4:00:00
+#SBATCH --time=5:00:00
 #SBATCH --gres=gpu:1
 # Any free L40S, A40 or A100 (every model here fits in 40 GB); brackets because ICE appends &cuda13.
 #SBATCH --constraint=(gpu-l40s|gpu-a40|gpu-a100)

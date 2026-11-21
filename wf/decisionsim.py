@@ -8,15 +8,18 @@ end-to-end planning harm: nothing is executed after the choice.
 At eligible states of the collected episodes (the agent's own next action is among the candidates and known, at
 least one candidate succeeds and at least one is a failure the history determines), every candidate is scored with
 the yes/no feasibility score L = log P(Yes) - log P(No) under the aligned (real) task, the neutral task ("explore the
-room") and one state-level swapped task. The candidate set is fixed across conditions. Scores are rounded to 1/64
+room"), one state-level swapped task and no task at all (the task-blind verifier: the first observation's task
+sentence removed, added in Stage 1a before any score). The candidate set is fixed across conditions. Scores are rounded to 1/64
 nat (the bf16 resolution of the logit difference) before any comparison. Three rules choose an action: (1) the
 largest L; (2) verification: the agent's proposal if L > 0, else the largest L among the other candidates; (3) the
 largest L among goal-relevant candidates (secondary, only where one of them succeeds). Ties go to a seeded per-state
 hash of the action, the same under every condition. The analysis compares the chosen-failure rate and the choices
 themselves between conditions, by game, on even-step states only: at odd steps the collector ran the broad generator
 only when the agent's proposal failed, so those states are selected on the outcome (they enter only rule 2's false
-acceptance, which is conditional on a failing proposal, reported by parity). Amendments after review 1 are listed in
-the design note.
+acceptance, which is conditional on a failing proposal, reported by parity). Every verifier is also read against two
+reference points: no verifier (the agent's proposal executed as is; a uniformly random choice for rules 1 and 3) and a
+simulator oracle that knows the true outcomes. Amendments after review 1 and the Stage 1a additions are listed in the
+design note.
 
 `decisionsim_score_<tag>` scores one model (yes/no only, pinned revision, every condition of a state in one job);
 `decisionsim_analysis` reads them all.
@@ -44,8 +47,13 @@ from wf.util import append_jsonl, read_jsonl, require_filed, write_json, write_s
 
 NOTHING = "Nothing happens."
 YN_ARMS = rq1v.YN_ARMS  # yn_aligned, yn_swapped, yn_absent
-DEFAULT_ARMS = ("yn_aligned", "yn_absent", "yn_swapped")  # amended after review 1: swapped scored for every model
 ALIGNED, NEUTRAL, SWAPPED = "yn_aligned", "yn_absent", "yn_swapped"
+# Stage 1a (before any score): the task-blind verifier, the aligned prompt with the first observation's task sentence
+# removed (not replaced). Scored only here, so it is not one of rq1v's arms.
+BLIND = "yn_blind"
+ARMS = YN_ARMS + (BLIND,)
+# amended after review 1: swapped scored for every model; Stage 1a: the task-blind arm too
+DEFAULT_ARMS = ("yn_aligned", "yn_absent", "yn_swapped", "yn_blind")
 PRIMARY = ("qwen3-8b", "llama3.1-8b")
 # tag: Hugging Face id. Family models take their prompts and loading settings from wf/families.py.
 REFERENCE_MODELS = {"qwen3-8b": C.WM_FEWSHOT_MODEL, "llama3.1-8b": C.WM_FEWSHOT_LLAMA}
@@ -54,6 +62,12 @@ MODEL_TAGS = tuple(REFERENCE_MODELS) + FAMILY_MODELS
 RULES = ("rule1_with_proposal", "rule1_generated_only", "rule2_verification", "rule3_goal_relevant")
 # The Option C rule (design note, amended after review 1 and before any score): rule 2 only, even-step states.
 OPTION_C_RULE = "rule2_verification"
+# Stage 1a (before any score): the gate compares the aligned verifier with the task-blind one, the remedy a deployment
+# would use; the same rule with the neutral task as the comparison is reported as a secondary verdict and never decides.
+OPTION_C_BASE = BLIND
+OPTION_C_SECONDARY_BASE = NEUTRAL
+BASE_NAME = {NEUTRAL: "neutral", BLIND: "blind"}
+DECOMPOSITION_KEY = {NEUTRAL: "decomposition", BLIND: "decomposition_vs_blind"}
 OPTION_C_HARM = 0.05  # task-induced harm rate (aligned choice fails, neutral choice succeeds), share of states
 OPTION_C_P = 0.05  # game sign-flip permutation p of the aligned-minus-neutral difference in failure rates
 OPTION_C_SWAP_SHARE = 0.5  # aligned-minus-swapped difference, at least this share of aligned-minus-neutral
@@ -160,11 +174,49 @@ def score_hash(t: dict, arm: str, state: dict) -> str:
     return hashlib.sha256(f"{_item_hash(item)}|{arm}".encode()).hexdigest()[:16] if item else ""
 
 
+TASK_PREFIX = "Your task is to:"
+
+
+def blind_history(history_text: str, task_line: str) -> str:
+    """The history with the task sentence removed, and nothing else. ALFWorld's first observation is the room
+    description, a line break, then "Your task is to: ..." (wf/env/server.py keeps it whole; checked on every
+    candidate of the census: the task is always the second line, before the first action). The sentence and the line
+    break before it go, so no empty line is left; every other byte stays."""
+    lines = history_text.split("\n")
+    at = [i for i, ln in enumerate(lines) if ln.startswith(TASK_PREFIX)]
+    first_action = next((i for i, ln in enumerate(lines) if ln.startswith("> ")), len(lines))
+    if len(at) != 1:
+        raise ValueError(f"expected exactly one task sentence in the history, found {len(at)}")
+    i = at[0]
+    if i == 0 or i > first_action or lines[i] != task_line:
+        raise ValueError("the task sentence is not the real task line at the end of the first observation")
+    return "\n".join(lines[:i] + lines[i + 1:])
+
+
+def blind_messages(aligned: list[dict[str, str]] | None, t: dict) -> list[dict[str, str]] | None:
+    """The task-blind prompt: the aligned prompt with the task sentence removed from the query's history. The system
+    text and the few-shot examples (whose own task lines are part of the fixed prompt, about other games, and the
+    same in every arm) are untouched."""
+    if aligned is None:
+        return None
+    last = aligned[-1]
+    old = f"History:\n{t['history_text']}\n\nAction: "
+    if last["content"].count(old) != 1:
+        raise ValueError(f"{t['id']}: the query's history is not in the aligned prompt exactly once")
+    new = f"History:\n{blind_history(t['history_text'], t['task_line'])}\n\nAction: "
+    return aligned[:-1] + [{**last, "content": last["content"].replace(old, new)}]
+
+
 def messages_for(tag: str) -> Callable[[dict, str], list[dict[str, str]] | None]:
     if tag in REFERENCE_MODELS:
-        return sizes.arm_messages
-    spec = families.MODELS[tag]
-    return lambda t, arm: families.family_messages(spec, t, arm)
+        base: Callable[[dict, str], list[dict[str, str]] | None] = sizes.arm_messages
+    else:
+        spec = families.MODELS[tag]
+        base = lambda t, arm: families.family_messages(spec, t, arm)
+
+    def build(t: dict, arm: str) -> list[dict[str, str]] | None:
+        return blind_messages(base(t, ALIGNED), t) if arm == BLIND else base(t, arm)
+    return build
 
 
 def score_jobs(states: list[dict], arms: tuple[str, ...]) -> list[tuple[dict, dict, str]]:
@@ -208,8 +260,8 @@ def run_decisionsim_score(cfg: dict) -> int:
     if tag not in MODEL_TAGS:
         raise SystemExit(f"unknown model {tag!r}; known: {MODEL_TAGS}")
     arms = tuple(cfg.get("arms", DEFAULT_ARMS))
-    if not set(arms) <= set(YN_ARMS) or ALIGNED not in arms or NEUTRAL not in arms:
-        raise SystemExit(f"arms must include {ALIGNED} and {NEUTRAL}, from {YN_ARMS}; got {arms}")
+    if not set(arms) <= set(ARMS) or ALIGNED not in arms or NEUTRAL not in arms:
+        raise SystemExit(f"arms must include {ALIGNED} and {NEUTRAL}, from {ARMS}; got {arms}")
     run_id = cfg["run_id"]
     require_filed(run_id)
     i = int(os.environ.get("WF_SHARD") or cfg.get("shard", 0))
@@ -563,25 +615,108 @@ def lure_rate(states: list[dict], La: dict[str, float], Lb: dict[str, float]) ->
             "difference": _paired(a, b, games) if rows else {"n_states": 0}}
 
 
-def decomposition(states: list[dict], L: dict[str, dict[str, float]]) -> dict[str, Any]:
-    """aligned - neutral = (aligned - swapped) + (swapped - neutral) in the chosen-failure rate, per rule, on the
-    even-step states where the swapped task is defined (all three on the same states, so the identity is exact)."""
+def decomposition(states: list[dict], L: dict[str, dict[str, float]], base: str = NEUTRAL) -> dict[str, Any]:
+    """aligned - base = (aligned - swapped) + (swapped - base) in the chosen-failure rate, per rule, on the even-step
+    states where the swapped task is defined (all three on the same states, so the identity is exact). The base is
+    the neutral task or, from Stage 1a, the task-blind verifier."""
+    name = BASE_NAME[base]
     sts = [s for s in states if even_step(s) and s["swap"]]
     out: dict[str, Any] = {}
     for rule in RULES:
         rs = [s for s in sts if rule_applies(rule, s)]
-        f = {a: _mean([float(not succeeded(rule_choice(rule, s, L[a]))) for s in rs]) for a in (ALIGNED, NEUTRAL, SWAPPED)}
-        an, as_, sn = f[ALIGNED] - f[NEUTRAL], f[ALIGNED] - f[SWAPPED], f[SWAPPED] - f[NEUTRAL]
-        out[rule] = {"n_states": len(rs), "fail_rates": f, "aligned_minus_neutral": an, "aligned_minus_swapped": as_,
-                     "swapped_minus_neutral": sn, "identity_holds": (not rs) or abs(an - (as_ + sn)) < 1e-12}
+        f = {a: _mean([float(not succeeded(rule_choice(rule, s, L[a]))) for s in rs]) for a in (ALIGNED, base, SWAPPED)}
+        ab, as_, sb = f[ALIGNED] - f[base], f[ALIGNED] - f[SWAPPED], f[SWAPPED] - f[base]
+        out[rule] = {"n_states": len(rs), "fail_rates": f, f"aligned_minus_{name}": ab, "aligned_minus_swapped": as_,
+                     f"swapped_minus_{name}": sb, "identity_holds": (not rs) or abs(ab - (as_ + sb)) < 1e-12}
     return out
 
 
 def contrasts_for(arms: set[str]) -> list[tuple[str, str]]:
-    out = [(ALIGNED, NEUTRAL)]
+    """Aligned against the task-blind verifier (the primary comparison from Stage 1a), against the neutral task and
+    against the swapped task; the swapped task against the blind and neutral ones (the decompositions' other parts);
+    and the neutral task against no task (is "explore the room" a stand-in for no task?)."""
+    out = [(ALIGNED, BLIND)] if BLIND in arms else []
+    out += [(ALIGNED, NEUTRAL)]
     if SWAPPED in arms:
-        out += [(ALIGNED, SWAPPED), (SWAPPED, NEUTRAL)]
+        out += [(ALIGNED, SWAPPED)] + ([(SWAPPED, BLIND)] if BLIND in arms else []) + [(SWAPPED, NEUTRAL)]
+    if BLIND in arms:
+        out += [(NEUTRAL, BLIND)]
     return out
+
+
+# ---------------- reference points: no verifier and a simulator oracle (Stage 1a) ----------------
+
+
+def oracle_scores(states: list[dict]) -> dict[str, float]:
+    """A simulator oracle as a verifier: +1 for a candidate that truly succeeds, -1 for one that fails. Fed to the
+    same rules, it accepts exactly the succeeding proposals and falls back to (or, under rule 1, picks) a true
+    success wherever the menu has one."""
+    return {t["id"]: (1.0 if succeeded(t) else -1.0) for s in states for t in s["candidates"]}
+
+
+def no_verifier_fail(rule: str, state: dict) -> float:
+    """The failure (expected failure) with no verifier: rule 2's proposal executed as is; for rules 1 and 3, a
+    uniformly random choice from the rule's set (its share of failures)."""
+    if rule == "rule2_verification":
+        return float(not succeeded(_proposal(state)))
+    return _mean([float(not succeeded(t)) for t in rule_set(rule, state)])
+
+
+def rule2_partial_oracles(state: dict, L: dict[str, float], O: dict[str, float]) -> tuple[float, float]:
+    """Rule 2 with one half replaced by the oracle: (perfect accept/reject with the model's fallback, the model's
+    accept/reject with a perfect fallback), each as a failure indicator. The first fails only where a failing
+    proposal is rejected and the model's fallback fails; the second only where the model accepts a failing one."""
+    p = _proposal(state)
+    oracle_accept = choose_max([p] if succeeded(p) else _generated(state), L)
+    oracle_fallback = choose_max([p] if accepts(L, p) else _generated(state), O)
+    return float(not succeeded(oracle_accept)), float(not succeeded(oracle_fallback))
+
+
+def reference_points(states: list[dict], L: dict[str, dict[str, float]]) -> dict[str, Any]:
+    """Every rule's failure rate with no verifier and with a simulator oracle, the headroom between them (how much
+    feasibility checking could help at all), and each arm's verifier against both: its failure rate minus the
+    no-verifier one (paired by state; below zero, the verifier helps), and the share of the headroom it realises.
+    Even-step states; the swapped arm on those with a swap. Analysis only: no reference point enters the Option C
+    rule."""
+    even = [s for s in states if even_step(s)]
+    O = oracle_scores(states)
+
+    def rows(rule: str, sts: list[dict], La: dict[str, float] | None) -> list[tuple[str, float, float, float]]:
+        out = []
+        for s in sts:
+            if rule_applies(rule, s):
+                fa = float(not succeeded(rule_choice(rule, s, La))) if La is not None else float("nan")
+                out.append((s["game_id"], no_verifier_fail(rule, s), float(not succeeded(rule_choice(rule, s, O))), fa))
+        return out
+
+    by_rule = {}
+    for rule in RULES:
+        rs = rows(rule, even, None)
+        games = [r[0] for r in rs]
+        none, orc = [r[1] for r in rs], [r[2] for r in rs]
+        by_rule[rule] = {"n_states": len(rs), "no_verifier_fail_rate": _boot(none, games),
+                         "oracle_fail_rate": _boot(orc, games), "headroom": _mean(none) - _mean(orc)}
+    by_arm: dict[str, Any] = {}
+    for arm in sorted(L):
+        sts = [s for s in even if s["swap"]] if arm == SWAPPED else even
+        entry: dict[str, Any] = {"n_states": len(sts)}
+        for rule in RULES:
+            rs = rows(rule, sts, L[arm])
+            games = [r[0] for r in rs]
+            none, orc, fa = [r[1] for r in rs], [r[2] for r in rs], [r[3] for r in rs]
+            head = _mean(none) - _mean(orc)
+            entry[rule] = {"n_states": len(rs), "fail_rate": _boot(fa, games),
+                           "no_verifier_fail_rate": _mean(none), "oracle_fail_rate": _mean(orc),
+                           "minus_no_verifier": _paired(fa, none, games) if rs else {"n_states": 0},
+                           "minus_oracle": _mean(fa) - _mean(orc),
+                           "share_of_headroom_realised": (_mean(none) - _mean(fa)) / head if head > 0 else float("nan")}
+        part = [(s["game_id"], *rule2_partial_oracles(s, L[arm], O)) for s in sts]
+        games = [r[0] for r in part]
+        entry["rule2_partial_oracles"] = {
+            "oracle_accept_model_fallback": _boot([r[1] for r in part], games),
+            "model_accept_oracle_fallback": _boot([r[2] for r in part], games)}
+        by_arm[arm] = entry
+    return {"n_states": len(even), "by_rule": by_rule, "by_arm": by_arm}
 
 
 def model_report(states: list[dict], L: dict[str, dict[str, float]],
@@ -597,10 +732,8 @@ def model_report(states: list[dict], L: dict[str, dict[str, float]],
         "n_states": {"all": len(states), "even_step": len(even), "odd_step": len(states) - len(even),
                      "even_step_with_swap": len(even_swap)},
         "baseline": {a: baseline(even_swap if a == SWAPPED else even, L[a], raw[a]) for a in sorted(arms)},
-        "baseline_shifts": {f"{ALIGNED}_minus_{NEUTRAL}": baseline_shifts(even, L[ALIGNED], L[NEUTRAL], raw[ALIGNED], raw[NEUTRAL])}}
-    for a, b in contrasts_for(arms):
-        if SWAPPED in (a, b):
-            rep["baseline_shifts"][f"{a}_minus_{b}"] = baseline_shifts(even_swap, L[a], L[b], raw[a], raw[b])
+        "baseline_shifts": {f"{a}_minus_{b}": baseline_shifts(even_swap if SWAPPED in (a, b) else even, L[a], L[b], raw[a], raw[b])
+                            for a, b in contrasts_for(arms)}}
     for a, b in contrasts_for(arms):
         sts = [s for s in states if s["swap"]] if SWAPPED in (a, b) else states
         key = f"{a}_vs_{b}"
@@ -608,21 +741,28 @@ def model_report(states: list[dict], L: dict[str, dict[str, float]],
         rep[key]["rule2_errors"] = verification_errors(sts, L[a], L[b])
         rep[key]["lure"] = lure_rate(sts, L[a], L[b])
     rep["calibration"] = calibration(states, L[ALIGNED], L[NEUTRAL])
+    if BLIND in arms:
+        rep["calibration_vs_blind"] = calibration(states, L[ALIGNED], L[BLIND])
     if SWAPPED in arms:
-        rep["decomposition"] = decomposition(states, L)
+        rep["decomposition"] = decomposition(states, L, NEUTRAL)
+        if BLIND in arms:
+            rep["decomposition_vs_blind"] = decomposition(states, L, BLIND)
+    rep["reference_points"] = reference_points(states, L)
     return rep
 
 
-def option_c_model(rep: dict[str, Any]) -> dict[str, Any]:
-    """One primary model's category under the Option C rule (rule 2, even-step states, aligned against neutral)."""
-    c = rep[f"{ALIGNED}_vs_{NEUTRAL}"][OPTION_C_RULE]
+def option_c_model(rep: dict[str, Any], base: str = OPTION_C_BASE) -> dict[str, Any]:
+    """One primary model's category under the Option C rule (rule 2, even-step states, aligned against the base: the
+    task-blind verifier for the deciding verdict, the neutral task for the secondary one)."""
+    c = rep[f"{ALIGNED}_vs_{base}"][OPTION_C_RULE]
     lo, hi = c["fail_rate_difference"]["ci"]
     p = c["fail_rate_difference"]["p"]
     harm = c["harm_rate"]["estimate"]
-    dec = rep["decomposition"][OPTION_C_RULE]
+    dec = rep[DECOMPOSITION_KEY[base]][OPTION_C_RULE]
+    aligned_minus_base = dec[f"aligned_minus_{BASE_NAME[base]}"]
     toward_failure = lo > 0 and p < OPTION_C_P
     attributable = (dec["aligned_minus_swapped"] > 0
-                    and dec["aligned_minus_swapped"] >= OPTION_C_SWAP_SHARE * dec["aligned_minus_neutral"])
+                    and dec["aligned_minus_swapped"] >= OPTION_C_SWAP_SHARE * aligned_minus_base)
     if toward_failure and harm >= OPTION_C_HARM and attributable:
         category = "worth doing"
     elif toward_failure and harm >= OPTION_C_HARM:
@@ -633,12 +773,12 @@ def option_c_model(rep: dict[str, Any]) -> dict[str, Any]:
         category = "changes toward success"
     else:
         category = "no reliable change in failures"
-    r1 = rep[f"{ALIGNED}_vs_{NEUTRAL}"]["rule1_with_proposal"]
-    return {"category": category, "harm_rate": harm, "fail_rate_difference": c["fail_rate_difference"]["estimate"],
+    r1 = rep[f"{ALIGNED}_vs_{base}"]["rule1_with_proposal"]
+    return {"category": category, "comparison": base, "harm_rate": harm, "fail_rate_difference": c["fail_rate_difference"]["estimate"],
             "fail_rate_difference_ci": [lo, hi], "p": p, "toward_failure": toward_failure,
             "harm_enough": harm >= OPTION_C_HARM, "attributable": attributable,
             "aligned_minus_swapped": dec["aligned_minus_swapped"],
-            "aligned_minus_neutral_same_states": dec["aligned_minus_neutral"],
+            "aligned_minus_comparison_same_states": aligned_minus_base,
             "change_rate": c["change_rate"]["estimate"],
             "change_rate_outcome_changing": c["change_rate_outcome_changing"],
             "change_rate_success_to_success": c["change_rate_success_to_success"],
@@ -648,26 +788,30 @@ def option_c_model(rep: dict[str, Any]) -> dict[str, Any]:
                                     "harm_rate": r1["harm_rate"]["estimate"], "change_rate": r1["change_rate"]["estimate"]}}
 
 
-def option_c(reports: dict[str, dict], primary: tuple[str, ...] = PRIMARY) -> dict[str, Any]:
-    """The rule in the design note (amended after review 1, before any score). Option C is worth doing if, for at
-    least one primary model, on even-step states, under rule 2 (verification of the agent's own proposal, with
-    fallback), the task-induced harm rate is at least 5% of states, the aligned-minus-neutral difference in failure
-    rates has a 95% game-bootstrap interval above zero and a game-permutation p below 0.05, and the aligned-minus-
-    swapped difference under the same rule is positive and at least half the aligned-minus-neutral one."""
+def option_c(reports: dict[str, dict], primary: tuple[str, ...] = PRIMARY, base: str = OPTION_C_BASE) -> dict[str, Any]:
+    """The rule in the design note (amended after review 1 and in Stage 1a, before any score). Option C is worth doing
+    if, for at least one primary model, on even-step states, under rule 2 (verification of the agent's own proposal,
+    with fallback), the task-induced harm rate (aligned choice fails, task-blind choice succeeds) is at least 5% of
+    states, the aligned-minus-blind difference in failure rates has a 95% game-bootstrap interval above zero and a
+    game-permutation p below 0.05, and the aligned-minus-swapped difference under the same rule is positive and at
+    least half the aligned-minus-blind one. With base=NEUTRAL the same rule gives the secondary verdict."""
     per: dict[str, Any] = {}
     for tag in primary:
         if tag not in reports:
             per[tag] = "waiting"
-        elif "decomposition" not in reports[tag]:
+        elif f"{ALIGNED}_vs_{base}" not in reports[tag]:
+            per[tag] = f"waiting: {base} arm not scored"
+        elif DECOMPOSITION_KEY[base] not in reports[tag]:
             per[tag] = "waiting: swapped arm not scored"
         else:
-            per[tag] = option_c_model(reports[tag])
+            per[tag] = option_c_model(reports[tag], base)
     if any(isinstance(v, str) for v in per.values()):
         verdict = "waiting for a primary model"
     else:
         reached = {v["category"] for v in per.values()}
         verdict = next(c for c in OPTION_C_CATEGORIES if c in reached)
     return {"verdict": verdict, "worth_doing": verdict == "worth doing", "per_model": per, "rule": OPTION_C_RULE,
+            "comparison": base, "decides": base == OPTION_C_BASE,
             "thresholds": {"harm_rate": OPTION_C_HARM, "p": OPTION_C_P, "swap_share": OPTION_C_SWAP_SHARE}}
 
 
@@ -710,7 +854,7 @@ def state_counts(all_states: list[dict], states: list[dict]) -> dict[str, Any]:
             "n_failing_goal_object_proposals": sum(not succeeded(_proposal(s)) and bool(_proposal(s).get("targets_goal_object"))
                                                    for s in states),
             "n_rule3_states_even_step": sum(rule_applies("rule3_goal_relevant", s) for s in even),
-            "n_scores_per_model": sum(len(s["candidates"]) * (3 if s["swap"] else 2) for s in states)}
+            "n_scores_per_model": len(score_jobs(states, DEFAULT_ARMS))}
 
 
 def run_decisionsim_analysis(cfg: dict) -> int:
@@ -723,8 +867,8 @@ def run_decisionsim_analysis(cfg: dict) -> int:
     states = select_states(all_states, cfg.get("n_states", "all"), seed)
     digest = sample_digest(states)
     report: dict[str, Any] = {
-        "design": "notes/decisionsim_design.md (committed before any decision result, amended after review 1 before "
-                  "any score); decision-level diagnostic, not end-to-end planning harm",
+        "design": "notes/decisionsim_design.md (committed before any decision result, amended after review 1 and in "
+                  "Stage 1a before any score); decision-level diagnostic, not end-to-end planning harm",
         "states": {**state_counts(all_states, states), "sample_digest": digest},
         "models": {}, "waiting": {}}
     folders_all = {}
@@ -743,15 +887,18 @@ def run_decisionsim_analysis(cfg: dict) -> int:
             report["waiting"][tag] = problems
             continue
         report["models"][tag] = rep
-    report["option_c"] = option_c(report["models"], tuple(cfg.get("primary", PRIMARY)))
+    primary = tuple(cfg.get("primary", PRIMARY))
+    report["option_c"] = option_c(report["models"], primary, OPTION_C_BASE)  # decides
+    report["option_c_secondary_neutral"] = option_c(report["models"], primary, OPTION_C_SECONDARY_BASE)  # never decides
     report["provenance"] = analysis_provenance(None, [p for fs in folders_all.values() for p in fs], sources)
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Decision simulation, Option A (exploratory)", report)
-    key = f"{ALIGNED}_vs_{NEUTRAL}"
-    lines = [f"{tag}: rule 2 harm {m[key][OPTION_C_RULE]['harm_rate']['estimate']:.3f}, "
-             f"ΔF {m[key][OPTION_C_RULE]['fail_rate_difference']['estimate']:+.3f}"
-             for tag, m in report["models"].items()]
-    write_status(run_id, f"Option C: {report['option_c']['verdict']}\n" + "\n".join(lines)
+    lines = [f"{tag} {BASE_NAME[b]}: rule 2 harm {m[k][OPTION_C_RULE]['harm_rate']['estimate']:.3f}, "
+             f"ΔF {m[k][OPTION_C_RULE]['fail_rate_difference']['estimate']:+.3f}"
+             for tag, m in report["models"].items() for b in (OPTION_C_BASE, OPTION_C_SECONDARY_BASE)
+             for k in [f"{ALIGNED}_vs_{b}"] if k in m]
+    write_status(run_id, f"Option C (against the task-blind verifier): {report['option_c']['verdict']}\n"
+                 f"secondary, against the neutral task: {report['option_c_secondary_neutral']['verdict']}\n" + "\n".join(lines)
                  + (f"\nwaiting: {sorted(report['waiting'])}" if report["waiting"] else ""),
                  ok=False, reported="decision simulation report")
     return 0

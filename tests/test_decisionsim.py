@@ -124,6 +124,55 @@ def test_prompts_are_the_yes_no_prompts_of_the_earlier_runs(mock_score):
     assert D.messages_for("llama3.1-8b")(t, "yn_aligned")[-1]["content"].endswith("Answer:")
 
 
+# ---------------- the task-blind verifier (Stage 1a) ----------------
+
+
+def test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else():
+    room = "You are in the middle of a room. Looking quickly around you, you see a cabinet 1, and a shelf 1."
+    later = "> go to shelf 1\nYou arrive at shelf 1. On the shelf 1, you see a saltshaker 1."
+    assert D.blind_history(f"{room}\n{TASK}\n{later}", TASK) == f"{room}\n{later}"
+    assert D.blind_history(f"{room}\n{TASK}", TASK) == room  # step 0: the first observation alone
+    for bad in (f"{room}\n{later}",  # no task sentence
+                f"{room}\n{TASK}\n{TASK}\n{later}",  # two
+                f"{TASK}\n{room}\n{later}",  # not at the end of the first observation
+                f"{room}\n{later}\n{TASK}"):  # after an action
+        with pytest.raises(ValueError):
+            D.blind_history(bad, TASK)
+    with pytest.raises(ValueError):  # another game's task
+        D.blind_history(f"{room}\n{TASK}\n{later}", "Your task is to: put some mug on cabinet.")
+
+
+def test_blind_prompt_refuses_a_prompt_that_does_not_hold_the_querys_history(mock_score):
+    t = _item()
+    aligned = D.messages_for("qwen3-8b")(t, "yn_aligned")
+    with pytest.raises(ValueError, match="exactly once"):  # would otherwise return the aligned prompt unchanged
+        D.blind_messages(aligned, {**t, "history_text": t["history_text"] + "\n> look\nNothing happens."})
+    assert D.blind_messages(None, t) is None
+
+
+@pytest.mark.parametrize("tag", D.MODEL_TAGS)
+def test_task_blind_prompt_differs_from_the_aligned_one_only_by_the_task_sentence(mock_score, tag):
+    """The blind prompt is the aligned prompt minus the query's task sentence (and the line break before it): the
+    system text and the few-shot examples, with their own task lines, are untouched."""
+    from wf import rq1v
+    from wf.scoring.prompts import WM_FEWSHOT_SETS
+    t = _item()
+    build = D.messages_for(tag)
+    aligned, blind = build(t, "yn_aligned"), build(t, "yn_blind")
+    assert len(aligned) == len(blind) and aligned[:-1] == blind[:-1]
+    shots = "\n".join(m["content"] for m in blind[:-1])
+    assert all(ex["history"].splitlines()[0] in shots for ex in WM_FEWSHOT_SETS[1])  # examples keep their tasks
+    a, b = aligned[-1]["content"], blind[-1]["content"]
+    assert a.count(t["task_line"]) == 1 and "Your task is to" not in b
+    assert a.replace("\n" + t["task_line"], "", 1) == b and len(a) - len(b) == len(t["task_line"]) + 1
+    assert "History:\nYou are in the middle of a room.\n> go to shelf 1\n" in b
+    assert b.endswith(rq1v.YN_QUESTION) and f"Action: {t['action']}" in b
+    # the other arms are built as before
+    ref = (sizes.arm_messages if tag in D.REFERENCE_MODELS
+           else lambda x, arm: families.family_messages(families.MODELS[tag], x, arm))
+    assert all(build(t, arm) == ref(t, arm) for arm in D.YN_ARMS)
+
+
 # ---------------- rules ----------------
 
 
@@ -452,6 +501,126 @@ def test_model_report_adds_swapped_contrasts_only_where_scored():
     assert rep["decomposition"]["rule2_verification"]["n_states"] == 5
 
 
+def test_contrasts_with_the_task_blind_verifier():
+    A, N, S, B = D.ALIGNED, D.NEUTRAL, D.SWAPPED, D.BLIND
+    assert D.contrasts_for({A, N}) == [(A, N)]
+    assert D.contrasts_for({A, N, B}) == [(A, B), (A, N), (N, B)]
+    assert D.contrasts_for({A, N, S, B}) == [(A, B), (A, N), (A, S), (S, B), (S, N), (N, B)]
+
+
+def test_decomposition_against_the_task_blind_verifier_adds_up():
+    """aligned - blind = (aligned - swapped) + (swapped - blind), on the even-step states with a swap."""
+    states, L_a, L_n = _contrast_data()
+    L_s = {k: (2.0 if k.startswith("w") else -1.0) for k in L_a}  # swapped: always the working examine action
+    L_b = {k: (2.0 if k.startswith("p") else -1.0) for k in L_a}  # blind: always the working proposal
+    L_b["p0"], L_b["f0"] = -1.0, 2.0  # except at the first state, where it picks the failure
+    states[1]["swap"] = None  # drops out of all three differences
+    L = {"yn_aligned": L_a, "yn_absent": L_n, "yn_swapped": L_s, "yn_blind": L_b}
+    d = D.decomposition(states, L, D.BLIND)["rule1_with_proposal"]
+    assert d["n_states"] == 5
+    # aligned fails at the first and fourth states, blind at the first, swapped nowhere
+    assert d["fail_rates"] == {"yn_aligned": pytest.approx(2 / 5), "yn_blind": pytest.approx(1 / 5), "yn_swapped": 0.0}
+    assert d["aligned_minus_blind"] == pytest.approx(1 / 5) and d["aligned_minus_swapped"] == pytest.approx(2 / 5)
+    assert d["swapped_minus_blind"] == pytest.approx(-1 / 5) and d["identity_holds"]
+    assert "aligned_minus_neutral" not in d
+    assert D.decomposition(states, L)["rule1_with_proposal"]["aligned_minus_neutral"] == pytest.approx(1 / 5)
+
+
+def test_model_report_with_the_task_blind_arm():
+    states, L_a, L_n = _contrast_data()
+    states[0]["swap"] = None
+    L_b = {k: -v for k, v in L_a.items()}
+    rep = D.model_report(states, {"yn_aligned": L_a, "yn_absent": L_n, "yn_swapped": L_n, "yn_blind": L_b})
+    for key in ("yn_aligned_vs_yn_blind", "yn_absent_vs_yn_blind"):  # blind is defined at every state
+        assert rep[key]["rule1_with_proposal"]["n_states"] == 6 and set(D.RULES) <= set(rep[key])
+    assert rep["yn_swapped_vs_yn_blind"]["rule1_with_proposal"]["n_states"] == 5
+    assert rep["baseline"]["yn_blind"]["n_candidates"] == 18
+    assert rep["baseline_shifts"]["yn_aligned_minus_yn_blind"]["generated/goal_object/failure"]["n"] == 6
+    assert rep["baseline_shifts"]["yn_swapped_minus_yn_blind"]["generated/goal_object/failure"]["n"] == 5
+    assert rep["calibration_vs_blind"] == D.calibration(states, L_a, L_b)
+    assert rep["decomposition_vs_blind"]["rule2_verification"]["n_states"] == 5
+    c = rep["yn_aligned_vs_yn_blind"]["rule1_with_proposal"]
+    want = D.contrast("rule1_with_proposal", states, L_a, L_b)
+    assert c["fail_rate_difference"]["estimate"] == want["fail_rate_difference"]["estimate"]
+    assert set(rep["reference_points"]["by_arm"]) == {"yn_aligned", "yn_absent", "yn_swapped", "yn_blind"}
+
+
+def _reference_states():
+    """Four even-step states in four games and one odd-step state. s0: the proposal works (p), with a failing
+    goal-object action (f) and a working one (w). s1-s3: the proposal fails (q), with a failing goal-object action (h)
+    and a working action (v)."""
+    s0 = _three(step=0, game="g0", suffix="0")
+    bad = []
+    for k in (1, 2, 3):
+        g = f"g{k}"
+        bad.append(_state([_t(f"q{k}", "go to shelf 1", False, game=g, step=2 * k),
+                           _t(f"h{k}", "take saltshaker 1 from shelf 1", False, goal=True, game=g, step=2 * k),
+                           _t(f"v{k}", "look", True, game=g, step=2 * k)], "go to shelf 1", game=g, step=2 * k))
+    odd = _state([_t("q9", "go to shelf 1", False, game="g9", step=3), _t("v9", "look", True, game="g9", step=3)],
+                 "go to shelf 1", game="g9", step=3)
+    # aligned: s0 accepts p (rule 1 takes f); s1 accepts the failing q; s2 rejects q and falls back to the failing h;
+    # s3 rejects q and falls back to the working v
+    La = {"p0": 1.0, "f0": 2.0, "w0": -1.0, "q1": 1.0, "h1": -1.0, "v1": 0.5, "q2": -1.0, "h2": 1.0, "v2": 0.0,
+          "q3": -1.0, "h3": -1.0, "v3": 1.0, "q9": 5.0, "v9": -5.0}
+    return [s0] + bad + [odd], La
+
+
+def test_no_verifier_and_oracle_reference_points_on_synthetic_scores():
+    states, La = _reference_states()
+    O = D.oracle_scores(states)
+    assert O["p0"] == 1.0 and O["f0"] == -1.0 and O["q9"] == -1.0
+    # the oracle accepts exactly the working proposals and otherwise picks a true success
+    assert D.rule_choice("rule2_verification", states[0], O)["id"] == "p0"
+    assert D.rule_choice("rule2_verification", states[1], O)["id"] == "v1"
+    assert all(D.succeeded(D.rule_choice(r, s, O)) for s in states[:4] for r in D.RULES if r != "rule3_goal_relevant")
+    # no verifier: rule 2 executes the proposal; rule 1 is a uniformly random choice from its set
+    assert [D.no_verifier_fail("rule2_verification", s) for s in states[:4]] == [0.0, 1.0, 1.0, 1.0]
+    assert D.no_verifier_fail("rule1_with_proposal", states[0]) == pytest.approx(1 / 3)
+    assert D.no_verifier_fail("rule1_generated_only", states[1]) == pytest.approx(1 / 2)
+    assert D.no_verifier_fail("rule3_goal_relevant", states[0]) == 1.0  # f0 is its only goal-relevant candidate
+    Ln = dict(O)  # a perfect verifier under the neutral task
+    r = D.reference_points(states, {"yn_aligned": La, "yn_absent": Ln})
+    assert r["n_states"] == 4  # the odd-step state never enters
+    r2 = r["by_rule"]["rule2_verification"]
+    assert r2["n_states"] == 4 and r2["no_verifier_fail_rate"]["estimate"] == pytest.approx(3 / 4)
+    assert r2["oracle_fail_rate"]["estimate"] == 0.0 and r2["headroom"] == pytest.approx(3 / 4)
+    r1 = r["by_rule"]["rule1_with_proposal"]
+    assert r1["no_verifier_fail_rate"]["estimate"] == pytest.approx((1 / 3 + 2 / 3 * 3) / 4)
+    assert r["by_rule"]["rule3_goal_relevant"]["n_states"] == 0  # no goal-relevant candidate works anywhere
+    a = r["by_arm"]["yn_aligned"]
+    # rule 2 fails at s1 (false acceptance) and s2 (failing fallback): 1/2 against 3/4 executed as is
+    assert a["rule2_verification"]["fail_rate"]["estimate"] == pytest.approx(1 / 2)
+    assert a["rule2_verification"]["minus_no_verifier"]["estimate"] == pytest.approx(-1 / 4)
+    assert a["rule2_verification"]["minus_oracle"] == pytest.approx(1 / 2)
+    assert a["rule2_verification"]["share_of_headroom_realised"] == pytest.approx(1 / 3)
+    # rule 1 does worse than a random choice: f0, q1, h2 fail, v3 works
+    assert a["rule1_with_proposal"]["fail_rate"]["estimate"] == pytest.approx(3 / 4)
+    assert a["rule1_with_proposal"]["minus_no_verifier"]["estimate"] == pytest.approx(3 / 4 - 7 / 12)
+    assert a["rule1_with_proposal"]["share_of_headroom_realised"] == pytest.approx((7 / 12 - 3 / 4) / (7 / 12))
+    assert a["rule1_generated_only"]["fail_rate"]["estimate"] == pytest.approx(1 / 2)
+    assert a["rule1_generated_only"]["minus_no_verifier"]["estimate"] == pytest.approx(0)
+    # rule 2 with one half perfect: a perfect accept/reject leaves only s2's failing fallback; a perfect fallback
+    # leaves only s1's false acceptance
+    po = a["rule2_partial_oracles"]
+    assert po["oracle_accept_model_fallback"]["estimate"] == pytest.approx(1 / 4)
+    assert po["model_accept_oracle_fallback"]["estimate"] == pytest.approx(1 / 4)
+    assert D.rule2_partial_oracles(states[2], La, O) == (1.0, 0.0)
+    assert D.rule2_partial_oracles(states[1], La, O) == (0.0, 1.0)
+    # a perfect verifier realises all the headroom
+    n = r["by_arm"]["yn_absent"]
+    assert n["rule2_verification"]["fail_rate"]["estimate"] == 0.0
+    assert n["rule2_verification"]["share_of_headroom_realised"] == pytest.approx(1.0)
+    assert n["rule1_with_proposal"]["share_of_headroom_realised"] == pytest.approx(1.0)
+
+
+def test_reference_points_for_the_swapped_arm_read_only_states_with_a_swap():
+    states, La = _reference_states()
+    states[3]["swap"] = None
+    r = D.reference_points(states, {"yn_aligned": La, "yn_absent": La, "yn_swapped": La})
+    assert r["by_arm"]["yn_swapped"]["n_states"] == 3 and r["by_arm"]["yn_aligned"]["n_states"] == 4
+    assert r["by_arm"]["yn_swapped"]["rule2_verification"]["no_verifier_fail_rate"] == pytest.approx(2 / 3)
+
+
 def test_complete_states_drop_a_state_with_any_unscored_candidate():
     states, L_a, L_n = _contrast_data()
     L_n = dict(L_n)
@@ -473,13 +642,18 @@ def test_complete_states_keep_a_state_without_a_swap_when_swapped_is_scored():
 # ---------------- the Option C rule ----------------
 
 
-def _rep(harm=0.08, ci=(0.02, 0.12), p=0.01, a_s=0.05, a_n=0.07, rule1=None):
+def _rep(harm=0.08, ci=(0.02, 0.12), p=0.01, a_s=0.05, a_n=0.07, rule1=None, bases=(D.BLIND, D.NEUTRAL)):
+    """A model report with the same rule 2 numbers against each base (a_n: aligned minus the base)."""
     r2 = {"harm_rate": {"estimate": harm}, "fail_rate_difference": {"estimate": sum(ci) / 2, "ci": list(ci), "p": p},
           "change_rate": {"estimate": 0.2}, "change_rate_outcome_changing": 0.1, "change_rate_success_to_success": 0.1}
     r1 = rule1 or {"harm_rate": {"estimate": 0.0}, "fail_rate_difference": {"estimate": 0.0, "ci": [-0.1, 0.1], "p": 1.0},
                    "change_rate": {"estimate": 0.0}}
-    return {"yn_aligned_vs_yn_absent": {"rule2_verification": r2, "rule1_with_proposal": r1},
-            "decomposition": {"rule2_verification": {"aligned_minus_swapped": a_s, "aligned_minus_neutral": a_n}}}
+    out = {}
+    for b in bases:
+        out[f"yn_aligned_vs_{b}"] = {"rule2_verification": r2, "rule1_with_proposal": r1}
+        out[D.DECOMPOSITION_KEY[b]] = {"rule2_verification": {"aligned_minus_swapped": a_s,
+                                                              f"aligned_minus_{D.BASE_NAME[b]}": a_n}}
+    return out
 
 
 NULL = dict(harm=0.01, ci=(-0.02, 0.02), p=0.9, a_s=0.0, a_n=0.0)
@@ -498,9 +672,40 @@ NULL = dict(harm=0.01, ci=(-0.02, 0.02), p=0.9, a_s=0.0, a_n=0.0)
     (NULL, "no reliable change in failures"),
 ])
 def test_option_c_categories(kw, category):
-    assert D.option_c_model(_rep(**kw))["category"] == category
-    assert D.option_c({"qwen3-8b": _rep(**kw), "llama3.1-8b": _rep(**NULL)})["verdict"] == category
-    assert D.option_c({"qwen3-8b": _rep(**kw), "llama3.1-8b": _rep(**NULL)})["worth_doing"] == (category == "worth doing")
+    for base in (D.BLIND, D.NEUTRAL):  # the deciding rule (task-blind) and the secondary one (neutral) alike
+        assert D.option_c_model(_rep(**kw, bases=(base,)), base)["category"] == category
+        o = D.option_c({"qwen3-8b": _rep(**kw, bases=(base,)), "llama3.1-8b": _rep(**NULL, bases=(base,))}, base=base)
+        assert o["verdict"] == category and o["worth_doing"] == (category == "worth doing")
+        assert o["comparison"] == base and o["decides"] == (base == D.BLIND)
+
+
+def _mixed(blind_kw, neutral_kw):
+    """A report whose rule 2 numbers against the task-blind verifier and against the neutral task differ."""
+    return {**_rep(**blind_kw, bases=(D.BLIND,)), **_rep(**neutral_kw, bases=(D.NEUTRAL,))}
+
+
+def test_option_c_decides_against_the_task_blind_verifier_and_reports_neutral_second():
+    assert D.OPTION_C_BASE == D.BLIND == "yn_blind" and D.OPTION_C_SECONDARY_BASE == D.NEUTRAL
+    reports = {"qwen3-8b": _mixed(NULL, {}), "llama3.1-8b": _rep(**NULL)}
+    assert D.option_c(reports)["verdict"] == "no reliable change in failures"  # the default base is task-blind
+    assert D.option_c(reports, base=D.NEUTRAL)["verdict"] == "worth doing"
+    reports = {"qwen3-8b": _mixed({}, NULL), "llama3.1-8b": _rep(**NULL)}
+    assert D.option_c(reports)["worth_doing"] and not D.option_c(reports, base=D.NEUTRAL)["worth_doing"]
+    # the attribution check reads aligned minus the same base: half of 0.2 is not reached, half of 0.07 is
+    rep = _mixed(dict(a_s=0.05, a_n=0.2), dict(a_s=0.05, a_n=0.07))
+    assert D.option_c_model(rep)["category"] == "toward failure, not attributable to the real task"
+    assert D.option_c_model(rep, D.NEUTRAL)["category"] == "worth doing"
+    assert D.option_c_model(rep)["aligned_minus_comparison_same_states"] == 0.2
+
+
+def test_option_c_waits_for_the_task_blind_arm():
+    no_blind = _rep(bases=(D.NEUTRAL,))
+    o = D.option_c({"qwen3-8b": _rep(), "llama3.1-8b": no_blind})
+    assert o["verdict"] == "waiting for a primary model" and "yn_blind" in o["per_model"]["llama3.1-8b"]
+    assert D.option_c({"qwen3-8b": _rep(), "llama3.1-8b": no_blind}, base=D.NEUTRAL)["verdict"] == "worth doing"
+    no_dec = {k: v for k, v in _rep().items() if k != "decomposition_vs_blind"}
+    o = D.option_c({"qwen3-8b": _rep(), "llama3.1-8b": no_dec})
+    assert o["verdict"] == "waiting for a primary model" and "swapped" in o["per_model"]["llama3.1-8b"]
 
 
 def test_option_c_reads_rule2_only_and_primary_models_only():
@@ -517,7 +722,7 @@ def test_option_c_reads_rule2_only_and_primary_models_only():
 
 def test_option_c_waits_for_both_primary_models_and_their_swapped_arm():
     assert D.option_c({"qwen3-8b": _rep()})["verdict"] == "waiting for a primary model"
-    no_swap = {k: v for k, v in _rep().items() if k != "decomposition"}
+    no_swap = {k: v for k, v in _rep().items() if not k.startswith("decomposition")}
     o = D.option_c({"qwen3-8b": _rep(), "llama3.1-8b": no_swap})
     assert o["verdict"] == "waiting for a primary model" and "swapped" in o["per_model"]["llama3.1-8b"]
 
@@ -528,12 +733,17 @@ def test_option_c_on_a_real_report():
     for s in states:  # rule 2 falls back: the proposal is rejected under both tasks
         L_a[_p(s)] = L_n[_p(s)] = -5.0
     L_s = dict(L_n)
-    rep = D.model_report(states, {"yn_aligned": L_a, "yn_absent": L_n, "yn_swapped": L_s})
-    m = D.option_c_model(rep)
-    assert m["harm_rate"] == 1.0 and m["fail_rate_difference"] == 1.0 and m["p"] < 0.05
-    assert m["aligned_minus_swapped"] == 1.0 and m["category"] == "worth doing"
-    rep = D.model_report(states, {"yn_aligned": L_a, "yn_absent": L_n, "yn_swapped": L_a})
+    rep = D.model_report(states, {"yn_aligned": L_a, "yn_absent": L_n, "yn_swapped": L_s, "yn_blind": L_n})
+    for base in (D.BLIND, D.NEUTRAL):
+        m = D.option_c_model(rep, base)
+        assert m["harm_rate"] == 1.0 and m["fail_rate_difference"] == 1.0 and m["p"] < 0.05
+        assert m["aligned_minus_swapped"] == 1.0 and m["category"] == "worth doing" and m["comparison"] == base
+    rep = D.model_report(states, {"yn_aligned": L_a, "yn_absent": L_n, "yn_swapped": L_a, "yn_blind": L_n})
     assert D.option_c_model(rep)["category"] == "toward failure, not attributable to the real task"
+    # the task-blind verifier chooses as the aligned one does: no change against it, whatever neutral does
+    rep = D.model_report(states, {"yn_aligned": L_a, "yn_absent": L_n, "yn_swapped": L_s, "yn_blind": L_a})
+    assert D.option_c_model(rep)["category"] == "no reliable change in failures"
+    assert D.option_c_model(rep, D.NEUTRAL)["category"] == "worth doing"
 
 
 def _p(s):
@@ -571,20 +781,20 @@ def test_every_model_is_registered_and_configured():
         assert f"decisionsim_score_{tag}" in RUNNERS
         cfg = yaml.safe_load((root / f"decisionsim_score_{tag}.yaml").read_text())
         assert cfg["model"] == tag and cfg["n_states"] == "all"
-        assert cfg["arms"] == ["yn_aligned", "yn_absent", "yn_swapped"] == list(D.DEFAULT_ARMS)
+        assert cfg["arms"] == ["yn_aligned", "yn_absent", "yn_swapped", "yn_blind"] == list(D.DEFAULT_ARMS)
     ana = yaml.safe_load((root / "decisionsim_analysis.yaml").read_text())
     assert set(ana["models"]) == set(D.MODEL_TAGS) and ana["n_states"] == "all"
     assert "llama3.2-1b" not in D.MODEL_TAGS  # failed wave A's competence gate
 
 
 def test_end_to_end_score_resume_and_analysis(mock_root):
-    assert D.run_decisionsim_score(_score_cfg(arms=["yn_aligned", "yn_absent", "yn_swapped"])) == 0
+    assert D.run_decisionsim_score(_score_cfg(arms=list(D.DEFAULT_ARMS))) == 0
     d = mock_root / "decisionsim_score_qwen3-8b" / "shard_00_of_01"
     recs = [json.loads(x) for x in (d / "scoring.jsonl").read_text().splitlines()]
     states = json.loads((d / "states.json").read_text())
-    assert states["states"] and recs and {r["condition"] for r in recs} == {"yn_aligned", "yn_absent", "yn_swapped"}
+    assert states["states"] and recs and {r["condition"] for r in recs} == set(D.DEFAULT_ARMS)
     # a resume scores nothing new
-    assert D.run_decisionsim_score(_score_cfg(arms=["yn_aligned", "yn_absent", "yn_swapped"], resume=True)) == 0
+    assert D.run_decisionsim_score(_score_cfg(arms=list(D.DEFAULT_ARMS), resume=True)) == 0
     assert len((d / "scoring.jsonl").read_text().splitlines()) == len(recs)
     assert D.run_decisionsim_score(_score_cfg("llama3.1-8b", arms=["yn_aligned", "yn_absent"])) == 0
     cfg = {"run_id": "decisionsim_analysis", "sources": ["rq12_transitions_smoke"], "n_states": "all",
@@ -595,13 +805,20 @@ def test_end_to_end_score_resume_and_analysis(mock_root):
     assert set(m["models"]) == {"qwen3-8b", "llama3.1-8b"} and "mistral-7b-v0.3" in m["waiting"]
     q = m["models"]["qwen3-8b"]
     assert q["n_states_incomplete"] == 0 and "yn_aligned_vs_yn_swapped" in q
+    assert {"yn_aligned_vs_yn_blind", "yn_swapped_vs_yn_blind", "yn_absent_vs_yn_blind", "decomposition_vs_blind",
+            "calibration_vs_blind", "reference_points"} <= set(q)
+    assert set(q["reference_points"]["by_arm"]) == set(D.DEFAULT_ARMS)
     assert "yn_aligned_vs_yn_swapped" not in m["models"]["llama3.1-8b"]
+    assert "yn_aligned_vs_yn_blind" not in m["models"]["llama3.1-8b"]
     assert q["yn_aligned_vs_yn_absent"]["rule1_with_proposal"]["n_states"] == m["states"]["n_even_step"] > 0
     assert m["states"]["n_odd_step"] > 0 and m["states"]["n_selected"] == m["states"]["n_eligible"]
     assert q["yn_aligned_vs_yn_absent"]["rule2_errors"]["false_acceptance"]["odd_steps"]["n_states"] == m["states"]["n_odd_step"]
-    # llama was scored without the swapped arm, so the rule waits for it
-    assert m["option_c"]["verdict"] == "waiting for a primary model"
+    # llama was scored without the swapped and task-blind arms, so both verdicts wait for it
+    assert m["option_c"]["verdict"] == "waiting for a primary model" and m["option_c"]["comparison"] == "yn_blind"
     assert m["option_c"]["per_model"]["qwen3-8b"]["category"] in D.OPTION_C_CATEGORIES
+    sec = m["option_c_secondary_neutral"]
+    assert sec["comparison"] == "yn_absent" and not sec["decides"] and sec["verdict"] == "waiting for a primary model"
+    assert m["states"]["n_scores_per_model"] == len(recs)
     # an analysis over another sample waits instead of reading these scores
     assert D.run_decisionsim_analysis({**cfg, "n_states": 1}) == 0
     m1 = json.loads((mock_root / "decisionsim_analysis" / "metrics.json").read_text())
@@ -667,6 +884,7 @@ def test_each_condition_gets_its_own_prompt(mock_root, monkeypatch):
     from wf.rq2 import load_items
     seen = []
     real = D.LogoddsScorer.score_one_token_pair
+    assert D.BLIND in D.DEFAULT_ARMS
 
     def record(self, *, transition_id, condition, messages, o_plus, o_minus):
         seen.append((transition_id, condition, messages, o_plus, o_minus))
@@ -678,19 +896,25 @@ def test_each_condition_gets_its_own_prompt(mock_root, monkeypatch):
     where = {t["id"]: (t, s) for s in states for t in s["candidates"]}
     assert len(seen) == len({(x[0], x[1]) for x in seen}) == len(D.score_jobs(states, D.DEFAULT_ARMS))
     arms = {}
+    sent = {(tid, cond): msgs for tid, cond, msgs, _, _ in seen}
     for tid, cond, msgs, plus, minus in seen:
         t, s = where[tid]
         last = msgs[-1]["content"]
         assert (plus, minus) == ("Yes", "No") and last.endswith(rq1v.YN_QUESTION)
         assert f"Action: {t['action']}" in last
-        line = {"yn_aligned": t["task_line"], "yn_absent": "Your task is to: explore the room.",
-                "yn_swapped": make_swapped_task_line(t["task_line"], t["goal_object"], s["swap"] or "")}[cond]
-        assert line in last
+        if cond == "yn_blind":  # no task line at all: the aligned prompt minus its task sentence
+            aligned = sent[(tid, "yn_aligned")]
+            assert "Your task is to:" not in last and msgs[:-1] == aligned[:-1]
+            assert aligned[-1]["content"].replace("\n" + t["task_line"], "", 1) == last
+        else:
+            line = {"yn_aligned": t["task_line"], "yn_absent": "Your task is to: explore the room.",
+                    "yn_swapped": make_swapped_task_line(t["task_line"], t["goal_object"], s["swap"] or "")}[cond]
+            assert line in last
         if cond != "yn_aligned":
             assert t["task_line"] not in last
         arms.setdefault(tid, set()).add(cond)
-    assert all(arms[t] == ({"yn_aligned", "yn_absent", "yn_swapped"} if s["swap"] else {"yn_aligned", "yn_absent"})
-               for t, (_, s) in where.items())
+    every = {"yn_aligned", "yn_absent", "yn_blind"}
+    assert all(arms[t] == (every | {"yn_swapped"} if s["swap"] else every) for t, (_, s) in where.items())
 
 
 def test_shards_split_the_states_by_game(mock_root):

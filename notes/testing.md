@@ -92,7 +92,7 @@ Fix round 1 (after review 1, before any score) adds tests for: odd-step states l
 | fix1 Option C ignores p | `test_option_c_categories (p exactly 0.05)` |
 | fix1 Option C p at the bound passes | `test_option_c_categories (p exactly 0.05)` |
 | fix1 Option C reads rule 1 | `test_option_c_categories (default case, worth doing)` |
-| fix1 Option C without the swapped arm | `test_option_c_waits_for_both_primary_models_and_their_swapped_arm` |
+| fix1 Option C without the swapped arm | `test_option_c_waits_for_the_task_blind_arm` (from Stage 1a) |
 | fix1 a secondary model decides Option C | `test_option_c_reads_rule2_only_and_primary_models_only` |
 | fix1 acceptance cells swapped | `test_rule2_difference_splits_by_acceptance_cell` |
 | fix1 acceptance contributions per cell | `test_rule2_difference_splits_by_acceptance_cell` |
@@ -142,6 +142,52 @@ Fix round 1 (after review 1, before any score) adds tests for: odd-step states l
 | tie goes to the last action | `test_rule1_takes_the_largest_score_and_breaks_ties_by_a_seeded_state_hash` |
 | verification accepts a score of zero | `test_rule2_accepts_a_proposal_only_above_zero_and_falls_back_to_the_others` |
 | verification falls back to the rejected proposal | `test_rule2_accepts_a_proposal_only_above_zero_and_falls_back_to_the_others` |
+
+### Stage 1a additions (2026-11-20, before any score)
+
+New tests in `tests/test_decisionsim.py` (67 collected, from 53; 54 test functions, from 44): the task-blind history (the first observation's task sentence and the line break before it removed and nothing else, at step 0 and later; refused with no task sentence, two, one outside the first observation, or another game's task); the task-blind prompt for each of the five models (identical to the aligned prompt except for that one deletion, with the system text and the few-shot examples, task lines included, unchanged; the other arms built as before) and its refusal of a prompt that does not hold the query's history; the recorded prompts of a mock run (every candidate scored once under each of the four arms, the blind prompt equal to that candidate's aligned prompt minus its task sentence); the contrasts with the blind arm, the decomposition aligned − blind = (aligned − swapped) + (swapped − blind) on synthetic scores, the blind arm in the model report (baseline, shifts, calibration against blind, reference points); the Option C rule against the task-blind verifier with the neutral version as a secondary verdict (each category under both bases, a case where they disagree, the attribution check reading aligned minus the same base, waiting when the blind arm or its decomposition is missing, a real report where only the comparison differs); and the no-verifier and simulator-oracle reference points on synthetic scores (rule 2's proposal executed as is, random choice over each rule's own set, the oracle's choices, headroom, each verifier minus no verifier, the share of headroom realised, the two half-oracles for rule 2, odd-step states and rule-3 states left out, the swapped arm only where a swap exists). The configuration test now requires the four arms.
+
+`scripts/mutation_check.py` holds 37 new Stage 1a mutants, and three earlier ones were adapted to the changed code (fix1 "attribution ignores the half", "Option C without the swapped arm", "swapped arm not scored by default"); 109 decision-simulation mutants in all. All 37 new mutants are caught (`MUTANTS_MATCHING="decisionsim stage1a"`, six shards, 2026-11-20); the three adapted ones are caught too (first failing test checked for each), and a rerun of all 109 decision-simulation mutants on the final code caught every one (`MUTANTS_MATCHING=decisionsim`, six shards, 2026-11-20). The table gives the first test that fails with each new mutant in place (run with `-x`).
+
+| Mutant | First test that fails |
+|---|---|
+| stage1a Option C attribution read against neutral | `test_option_c_categories` (default case, worth doing) |
+| stage1a Option C decides against neutral | `test_option_c_categories` (default case, worth doing) |
+| stage1a Option C does not wait for the blind arm | `test_option_c_waits_for_the_task_blind_arm` |
+| stage1a Option C harm and difference read against neutral | `test_option_c_categories` (default case, worth doing) |
+| stage1a aligned-vs-blind contrast missing | `test_contrasts_with_the_task_blind_verifier` |
+| stage1a aligned-vs-blind contrast reversed | `test_contrasts_with_the_task_blind_verifier` |
+| stage1a blind arm is the neutral prompt | `test_task_blind_prompt_differs_from_the_aligned_one_only_by_the_task_sentence` (qwen3-8b) |
+| stage1a blind arm keeps the task sentence | `test_task_blind_prompt_differs_from_the_aligned_one_only_by_the_task_sentence` (qwen3-8b) |
+| stage1a blind arm not scored by default | `test_every_model_is_registered_and_configured` |
+| stage1a blind arm refused by the scoring run | `test_end_to_end_score_resume_and_analysis` |
+| stage1a blind arm strips the examples' task lines | `test_task_blind_prompt_differs_from_the_aligned_one_only_by_the_task_sentence` (qwen3-8b) |
+| stage1a blind history accepts a task sentence after an action | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
+| stage1a blind history accepts another game's task | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
+| stage1a blind history accepts two task sentences | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
+| stage1a blind history drops the room description | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
+| stage1a blind history leaves an empty line | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
+| stage1a blind prompt not checked for the query's history | `test_blind_prompt_refuses_a_prompt_that_does_not_hold_the_querys_history` |
+| stage1a blind shifts only where a swap exists | `test_model_report_with_the_task_blind_arm` |
+| stage1a calibration against blind uses neutral | `test_model_report_with_the_task_blind_arm` |
+| stage1a decomposition against blind uses neutral | `test_option_c_on_a_real_report` |
+| stage1a decomposition labels every base neutral | `test_decomposition_against_the_task_blind_verifier_adds_up` |
+| stage1a every verdict marked deciding | `test_option_c_categories` (default case, worth doing) |
+| stage1a half-oracle accept/reject reads the model | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
+| stage1a half-oracle fallback reads the model | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
+| stage1a headroom share inverted | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
+| stage1a neutral-vs-blind contrast missing | `test_contrasts_with_the_task_blind_verifier` |
+| stage1a no verifier for rule 2 is a random choice | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
+| stage1a oracle knows nothing | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
+| stage1a pass count without the blind arm | `test_end_to_end_score_resume_and_analysis` |
+| stage1a random choice over all candidates | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
+| stage1a reference points at odd steps | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
+| stage1a reference points ignore where rule 3 applies | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
+| stage1a reference points left out of the report | `test_model_report_with_the_task_blind_arm` |
+| stage1a secondary verdict decides | `test_end_to_end_score_resume_and_analysis` |
+| stage1a swapped reference points where no swap exists | `test_reference_points_for_the_swapped_arm_read_only_states_with_a_swap` |
+| stage1a swapped-vs-blind contrast missing | `test_contrasts_with_the_task_blind_verifier` |
+| stage1a verifier minus no verifier reversed | `test_no_verifier_and_oracle_reference_points_on_synthetic_scores` |
 
 ## Model families, wave A (2026-11-20)
 
