@@ -10,6 +10,28 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided or found 2026-11-21
+
+- **TextCraft follow-ups (exploratory).** These are the cross-environment comparison (`xenv-compare`) and the Llama diagnostics (`textcraft-llama-dx`); summary in `textcraft_results.md`, "Follow-up analyses". Every diagnostic GPU run had a dated plan committed before its data. The runs used new checkouts on the cluster and left the confirmatory runs untouched.
+- **Clean TextCraft prompt adopted for later runs.** The world-model system text without the original agent's instructions becomes the default for all later TextCraft runs, once its tokenization and golden-prompt checks pass for every model. The confirmatory result stays reported under the prompt it was frozen with.
+- **TextCraft round 2 planned (branch `textcraft-r2`).** It is a pre-registered test of the two-component account (a lift on intermediate crafts and a penalty on crafting the named goal that shrinks as inputs accumulate), run under the clean prompt.
+  - Models: Gemma-2-9B, Mistral-7B and Llama-3.2-3B, with Qwen3-8B and Llama-3.1-8B rescored.
+  - Arms that separate naming the object from completing the task: a parent goal, and a two-item goal line if it can be made faithful to the environment.
+  - A padding arm separates timing from history content.
+  - The design is frozen at a tag and reviewed before any score.
+- **τ-bench smoke run recorded before the full run.** Format passes for both models, and the projection fits the time limit (largest shard 3.1 h of 8). Qwen's projected half-width exceeds the 0.5-nat equivalence margin, so a Qwen result that is not positive will read as inconclusive, not as no effect (`tau_design.md` on branch `taubench`). The items were rebuilt and verified at the commit that records this, and full scoring was submitted.
+- **Decision simulation, fixed menus.** Branch `decisionsim`. Stage 1a adds a literal task-blind verifier (the task sentence deleted from the first observation; the prompt examples keep theirs), a no-verifier baseline (the agent's proposal fails at 5.8% of even-step states) and a simulator oracle. The gate for a closed-loop study is now evaluated against the task-blind verifier; the neutral version is reported as a secondary verdict that never decides. A confirming review is running.
+- **Decision simulation, agent-generated candidates.** Branch `decisionsim-agent`, built, not run.
+  - Candidates: at each of the 2,973 decisions of the RQ3 no-foresight episodes, rank 1 is the agent's actual action, and ranks 2 to 8 come from 20 samples at temperature 1.
+  - Verifiers: none, task-aware, task-blind, oracle and swapped.
+  - Primary measure: the failure rate of the chosen action, task-aware minus task-blind.
+  - The agent's own greedy action falls in the RQ2 regime at only 61 states (2.1%, in 15 games), and under the strict RQ2 definition at 4.
+  - The design is under review.
+- **Follow-up designs revised again before any score.**
+  - *Mechanism battery, review 3.* A mention component, computed from arms already scored, separates "task as evidence" from "salience plus normal reading of explicit claims". A contrast counts as consistent only when the prediction it confirms excludes zero. A negation placebo arm is added. A completing-versus-intermediate split of the aligned effect is added.
+  - *Interpretability pilot, review 2.* See the 2026-11-20 entry; now in a confirming review.
+- **Test suite.** TextCraft's recipe file is Mojang game data and is not committed. In a clone without it, TextCraft tests that error are now skipped with the rebuild instruction (`tests/conftest.py`); with the file present nothing is skipped.
+
 ## Decided or found 2026-11-20, later (replications and follow-up designs)
 
 None of this changes a preregistered threshold or the RQ2 result.
