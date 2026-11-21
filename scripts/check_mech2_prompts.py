@@ -6,11 +6,16 @@ Checks, for every (item, arm, format) the run would score:
 - a content arm's prompt equals the aligned prompt with only the task line replaced (every other message and every
   other byte of the query turn identical);
 - a position arm's prompt equals the plain prompt of its goal with only the task line's position changed, and the
-  task line is the first (start) or last (end) line of the history; aliases (step 0, end) are not scored;
+  task line is the first line of the history; position arms are built for step-0 items only (amendment after review 2);
 - the yes/no prompt equals the two-candidate prompt up to the final question;
 - the item's real task line appears in the query turn only for the aligned, done and cancelled arms;
 - task-line form: one sentence-final period, no doubled spaces or periods, articles agree, no object or receptacle
-  instance except the action's receptacle in desire_check and negated; negated only on take items.
+  instance except the action's receptacle in desire_check, desire_check_can, negated and affirmed; negated and affirmed
+  only on take items;
+- the minimal pairs (amendment after review 2): desire_keep_sw and mention_ignore are the same swapped line plus one
+  sentence; desire_check and desire_check_can differ only in "cannot"/"can"; negated and affirmed differ only in
+  "no"/the article.
+Prints the jobs per model (Mistral: the arms the primary contrasts read).
 Prints counts by task type and action verb, the share of items whose "done" claim the history contradicts, and,
 with --examples, one task line per arm and task type.
 """
@@ -37,11 +42,11 @@ def query(msgs):
 def own_text(line: str, arm: str, t: dict) -> str:
     """The part of a task line this battery writes; the rest is inherited unchanged from earlier runs (RQ2's swapped
     line, rq1x's descriptions, the real task), whose wording, ALFWorld's "a apple" included, is kept for comparability."""
-    if arm in ("mention_ignore", "mention_exists", "negated"):
+    if arm in ("mention_ignore", "mention_exists", "negated", "affirmed", "desire_keep_sw"):
         return line[len(t["swapped_task_line"]):].strip()
     if arm in ("done", "cancelled"):
         return line.split(mech2._task_text(t["task_line"]), 1)[1].strip()
-    if arm in ("desire_keep", "desire_check"):
+    if arm in ("desire_keep", "desire_check", "desire_check_can"):
         return line
     return ""
 
@@ -57,7 +62,8 @@ def form(line: str, arm: str, t: dict) -> list[str]:
         if (m[1] == "an") != (m[2][0] in "aeiou"):
             out.append(f"article: {m[0]}")
     inst = set(re.findall(r"\b[a-z]+ \d+\b", line))
-    allowed = {mech2.parse_action(t["action"])[2]} if arm in ("desire_check", "negated") else set()
+    allowed = ({mech2.parse_action(t["action"])[2]} if arm in ("desire_check", "desire_check_can", "negated", "affirmed")
+               else set())
     if inst - allowed:
         out.append(f"instance named: {sorted(inst - allowed)}")
     return out
@@ -79,8 +85,8 @@ for t, arm, fmt in mech2.jobs(union):
         hist = query(msgs).split("History:\n", 1)[1].split("\n\nAction:", 1)[0].split("\n")
         if (hist[0] if where == "start" else hist[-1]) != line:
             problems[f"{arm}/{fmt}: task line not at the {where}"] += 1
-        if mech2.alias_of(t, arm):
-            problems[f"{arm}: alias scored"] += 1
+        if t.get("history_len", 0) != 0:
+            problems[f"{arm}: position arm after step 0"] += 1
     else:
         aligned_q = query(plain)
         if aligned_q.count(t["task_line"]) != 1 or query(msgs) != aligned_q.replace(t["task_line"], line):
@@ -88,7 +94,7 @@ for t, arm, fmt in mech2.jobs(union):
         for p in form(line, arm, t):
             problems[f"{arm}: {p}"] += 1
     shows_real = t["task_line"] in query(msgs) or mech2._task_text(t["task_line"]) in query(msgs)
-    if shows_real != (arm in ("aligned", "done", "cancelled", "aligned_start", "aligned_end")):
+    if shows_real != (arm in ("aligned", "done", "cancelled", "aligned_start")):
         problems[f"{arm}/{fmt}: real task shown or missing"] += 1
     if fmt == "yn":
         cand = mech2.arm_messages(t, arm, "cand")
@@ -103,8 +109,42 @@ for t, arm, fmt in mech2.jobs(union):
 
 print(f"items: primary {len(primary)}, sample {len(sets['sample'])}, step-0 {len(sets['step0'])}, union {len(union)}, "
       f"games {len({t['game_id'] for t in union})}")
-print(f"jobs per model: {dict(n_jobs)}")
-print("problems:", dict(problems) or "none")
+print(f"jobs per model (Qwen3-8B, Llama-3.1-8B): {dict(n_jobs)}")
+for tag in mech2.PRIMARY_MODELS + mech2.SECONDARY_MODELS:
+    j = mech2.jobs(union, mech2.model_arms(tag))
+    print(f"  {tag}: {dict(Counter(f for _, _, f in j))} on {len(mech2.model_arms(tag))} arms")
+
+
+def _diff(a: str, b: str) -> list[tuple[str, str]] | None:
+    wa, wb = a.split(), b.split()
+    return [(x, y) for x, y in zip(wa, wb) if x != y] if len(wa) == len(wb) else None
+
+
+n_pairs = Counter()
+for t in union:  # the minimal pairs of the amendment after review 2
+    sw = t["swapped_task_line"]
+    keep_sw, ignore = mech2.task_line(t, "desire_keep_sw"), mech2.task_line(t, "mention_ignore")
+    if keep_sw is not None:
+        n_pairs["P1"] += 1
+        keep = mech2.task_line(t, "desire_keep")[len(mech2.TASK_PREFIX):]
+        if not (keep_sw == f"{sw} {keep[0].upper()}{keep[1:]}" and ignore == f"{sw} Ignore the {t['goal_object']}."):
+            problems["P1 pair: not the same swapped line plus one sentence"] += 1
+        check, can = mech2.task_line(t, "desire_check"), mech2.task_line(t, "desire_check_can")
+        n_pairs["P2"] += 1
+        if _diff(check, can) != [("cannot.", "can.")]:
+            problems["P2 pair: differs beyond the hope's polarity"] += 1
+    neg, aff = mech2.task_line(t, "negated"), mech2.task_line(t, "affirmed")
+    if (neg is None) != (aff is None):
+        problems["negated and affirmed built on different items"] += 1
+    if neg is not None:
+        n_pairs["P8"] += 1
+        d = _diff(neg, aff)
+        if not d or len(d) != 1 or d[0][0] != "no" or d[0][1] != mech2.rq1._article(t["goal_object"]):
+            problems["P8 pair: differs beyond no/article"] += 1
+    for arm in mech2.POSITION_ARMS:
+        if (mech2.task_line(t, arm) is None) != (t.get("history_len", 0) > 0):
+            problems[f"{arm}: built after step 0 or missing at step 0"] += 1
+print("minimal pairs checked on the union:", dict(n_pairs))
 by_arm = defaultdict(Counter)
 for (arm, ttype, verb), c in coverage.items():
     by_arm[arm][ttype] += c
@@ -124,15 +164,16 @@ print(f"P5: placement items {len(placement)}; take from a target-type receptacle
       f"{sum(mech2.done_contradicted(t) for t in placement)}; both {sum(mech2.done_contradicted(t) for t in ftt)}; "
       f"P5 items {sum(mech2.p5_eligible(t) for t in sample)}")
 take = [t for t in sample if mech2.is_take(t)]
-neg_built = sum(mech2.task_line(t, "negated") is not None for t in union)
-if neg_built != sum(mech2.is_take(t) for t in union):
-    problems["negated: built on an item that is not a take of the goal object, or missing on one that is"] += 1
+for arm in ("negated", "affirmed"):
+    if sum(mech2.task_line(t, arm) is not None for t in union) != sum(mech2.is_take(t) for t in union):
+        problems[f"{arm}: built on an item that is not a take of the goal object, or missing on one that is"] += 1
 
 
 print(f"P7 (negated, take items): {len(take)} sample items; claim status (scene at start, history):",
       dict(Counter(mech2.negated_status(t) for t in take)))
 print("P7 take items by reason:", dict(Counter(t["determination_reason"] for t in take)), "; P7 items (history does not show the object there):", sum(mech2.p7_eligible(t) for t in sample))
 print("sample step-0 items:", sum(t.get("history_len", 0) == 0 for t in sample), "games in sample:", len({t["game_id"] for t in sample}))
+print("problems:", dict(problems) or "none")
 if "--examples" in sys.argv:
     for (arm, ttype), line in sorted(examples.items()):
         print(f"{arm:18s} {ttype:9s} {line}")

@@ -2,7 +2,7 @@ run_id: mech2_score
 # Exploratory mechanism battery (decided 2026-11-20, before any of its scores; notes/mechanism2_design.md): task-line
 # arms on a stratified sample of RQ2's primary items plus every step-0 item, two-candidate and yes/no formats, the two
 # few-shot models at their pinned revisions, plus Mistral-7B-Instruct-v0.3 as a secondary model (amendment after
-# review 1). Sharded by game: WF_SHARD / WF_N_SHARDS.
+# review 1), scored only on the arms the primary contrasts read (amendment after review 2). Sharded by game: WF_SHARD / WF_N_SHARDS.
 sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot, mistral-7b-v0.3]
 sample_n: 1000

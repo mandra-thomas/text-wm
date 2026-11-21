@@ -1,21 +1,28 @@
 """Exploratory mechanism battery (decided 2026-11-20, before any of its scores; notes/mechanism2_design.md, amended
-after review 1, still before any score).
+after review 1 and after review 2, still before any score).
 
 Why does naming the action's object in the task push the world model toward success on determined failures? Candidate
 accounts, not exclusive (H1 no state tracking, H2 task as evidence, H3 referent salience, H4 wishful prediction, H5
 policy blending, H6 prompt artefacts, split into H6_lexical, i.e. name salience or word overlap, and H6_position),
 predict different size zones for a set of task lines. Every arm differs from the others only in the task line, or, for
-the position arms, only in where the task line sits in the history. Each arm is scored in two formats: the
+the position arms (step 0 only), only in where the task line sits in the history. After review 2 the primary contrasts
+are minimal pairs where the design allows: P1 and P2 compare lines that differ only in the desire (the swapped task
+kept in both, or only the hope's polarity changed), and P8 compares the user's report that the object is or is not in
+the receptacle (the same words but "no"). Each arm is scored in two formats: the
 two-candidate log-odds of the success text against "Nothing happens." (`cand`) and the yes/no question of rq1v (`yn`,
 condition name prefixed "yn_").
 
 Items: a seeded sample of RQ2's primary items stratified by game and failure reason (SAMPLE_N), plus every step-0
-item, so the position test covers all of them. Every arm is scored on every item of that union (the negated arm on take
-items only); the primary contrasts read the sample, a restriction of it (P5, P7) or the step-0 items (P6).
+item, so the position test covers all of them. Every content arm is scored on every item of that union (the negated
+and affirmed arms on take items only, the position arms on step-0 items only); the primary contrasts read the sample, a
+restriction of it (P5, P7, P8) or the step-0 items (P6).
 
-Models: Qwen3-8B and Llama-3.1-8B (primary) and Mistral-7B-Instruct-v0.3 (secondary, descriptive), at pinned revisions.
+Models: Qwen3-8B and Llama-3.1-8B (primary, every arm) and Mistral-7B-Instruct-v0.3 (secondary, descriptive, only the
+arms the primary contrasts need), at pinned revisions.
 
-`mech2_analysis` reports the seven primary contrasts per model and format (Holm within each), each contrast's size
+`mech2_analysis` checks every score against the current items (item hashes, expected against present scores per model,
+arm and format) and refuses a mismatch; it reports the eight primary contrasts per model and format (Holm within each,
+family of eight), each contrast's size
 zones and category, the readout per format and under the two-format rule, every arm against the swapped, neutral and
 aligned tasks, plus two analysis-only checks on earlier runs: few-shot task overlap (rq1_score) and the knowledge
 split (mech_score).
@@ -48,9 +55,13 @@ from wf.util import append_jsonl, read_jsonl, require_filed, runs_root, sigmoid,
 SAMPLE_N = 1000
 SAMPLE_SEED = "20261120|mech2"
 FORMATS = ("cand", "yn")
-CONTENT_ARMS = ("aligned", "swapped", "neutral", "desire_keep", "desire_check", "mention_ignore", "mention_exists",
-                "described", "swapped_described", "done", "cancelled", "negated")
-POSITION_ARMS = ("aligned_start", "swapped_start", "aligned_end", "swapped_end")
+# Amendment after review 2 (2026-11-20, before any score): desire_keep_sw, desire_check_can and affirmed added (the
+# minimal-pair partners of mention_ignore, desire_check and negated); swapped_described dropped (rq1x measured it); the
+# position arms are scored at step 0 only, and the `_end` arms are gone (at step 0 `_end` repeated the plain prompt,
+# after step 0 no primary contrast read it).
+CONTENT_ARMS = ("aligned", "swapped", "neutral", "desire_keep", "desire_keep_sw", "desire_check", "desire_check_can",
+                "mention_ignore", "mention_exists", "described", "done", "cancelled", "negated", "affirmed")
+POSITION_ARMS = ("aligned_start", "swapped_start")
 ARMS = CONTENT_ARMS + POSITION_ARMS
 TASK_PREFIX = "Your task is to: "
 
@@ -61,6 +72,11 @@ PREPOSITION = {"take": "from", "move": "to", "heat": "with", "cool": "with", "cl
 DESIRE_KEEP = "Your task is to: make sure that the {obj} is not {pp}; leave it where it is."
 DESIRE_CHECK = "Your task is to: find out whether {a} {obj} can be {pp} {prep} the {rec}; the user hopes it cannot."
 MENTION_IGNORE = "{swapped} Ignore the {obj}."
+# Amendment after review 2: minimal-pair partners. desire_keep_sw is desire_keep's sentence after the swapped task line,
+# so it differs from mention_ignore only in what the sentence asks (P1); desire_check_can differs from desire_check only
+# in the hope's polarity ("can" for "cannot", P2).
+DESIRE_KEEP_SW = "{swapped} Make sure that the {obj} is not {pp}; leave it where it is."
+DESIRE_CHECK_CAN = "Your task is to: find out whether {a} {obj} can be {pp} {prep} the {rec}; the user hopes it can."
 DONE = "Your task was to: {task} It is already done; nothing is left to do."
 CANCELLED = "Your task was to: {task} The user has cancelled it; nothing is left to do."
 # Amendment after review 1 (2026-11-20, before any score): the negated-existence arm, built for take actions only (the
@@ -68,6 +84,9 @@ CANCELLED = "Your task was to: {task} The user has cancelled it; nothing is left
 # narrator's: on many items an instance of {obj} is in {rec}, so a bare "There is no ..." would state a falsehood.
 # "in" for every receptacle type, as ALFWorld's own task lines write it ("put a mug in countertop.").
 NEGATED = "{swapped} The user says there is no {obj} in the {rec}."
+# Amendment after review 2: the user's report that the object IS in the receptacle, on the negated arm's items; the
+# same words as NEGATED but the article for "no" (P8 = negated - affirmed).
+AFFIRMED = "{swapped} The user says there is {a} {obj} in the {rec}."
 _ACTION = re.compile(r"^(take|move|heat|cool|clean) ([a-z]+) (\d+) (?:from|to|with) ([a-z]+ \d+)$")
 
 # Task types, for template coverage and the placement-task population of P5.
@@ -107,6 +126,8 @@ def _task_text(task_line: str) -> str:
 
 def task_line(t: dict, arm: str) -> str | None:
     """The task line an arm shows for item `t`, or None when the item cannot carry the arm."""
+    if arm in POSITION_ARMS and t.get("history_len", 0) > 0:
+        return None  # amendment after review 2: position arms at step 0 only (P6 reads no other item)
     base = arm.rsplit("_", 1)[0] if arm in POSITION_ARMS else arm
     obj = t.get("goal_object") or ""
     if base == "aligned":
@@ -117,28 +138,30 @@ def task_line(t: dict, arm: str) -> str | None:
         return None
     if base == "swapped":
         return t["swapped_task_line"]
-    if base in ("desire_keep", "desire_check"):
+    if base in ("desire_keep", "desire_keep_sw", "desire_check", "desire_check_can"):
         p = parse_action(t["action"])
         if not p or p[1] != obj:
             return None
         verb, _, rec = p
         if base == "desire_keep":
             return DESIRE_KEEP.format(obj=obj, pp=PARTICIPLE[verb])
-        return DESIRE_CHECK.format(a=rq1._article(obj), obj=obj, pp=PARTICIPLE[verb], prep=PREPOSITION[verb], rec=rec)
+        if base == "desire_keep_sw":
+            return DESIRE_KEEP_SW.format(swapped=t["swapped_task_line"], obj=obj, pp=PARTICIPLE[verb])
+        hope = DESIRE_CHECK if base == "desire_check" else DESIRE_CHECK_CAN
+        return hope.format(a=rq1._article(obj), obj=obj, pp=PARTICIPLE[verb], prep=PREPOSITION[verb], rec=rec)
     if base == "mention_ignore":
         return MENTION_IGNORE.format(swapped=t["swapped_task_line"], obj=obj)
-    if base == "negated":
+    if base in ("negated", "affirmed"):
         p = parse_action(t["action"])
         if not p or p[0] != "take" or p[1] != obj:
             return None
-        return NEGATED.format(swapped=t["swapped_task_line"], obj=obj, rec=p[2])
+        if base == "negated":
+            return NEGATED.format(swapped=t["swapped_task_line"], obj=obj, rec=p[2])
+        return AFFIRMED.format(swapped=t["swapped_task_line"], a=rq1._article(obj), obj=obj, rec=p[2])
     if base == "mention_exists":
         return rq1.goal_line(t, "swapped_plus")
-    if base in ("described", "swapped_described"):
-        if not rq1x.desc_ok(t):
-            return None
-        return (rq1x.describe_line(t["task_line"], obj) if base == "described"
-                else rq1x.describe_line(t["swapped_task_line"], t["swapped_goal_object"]))
+    if base == "described":
+        return rq1x.describe_line(t["task_line"], obj) if rq1x.desc_ok(t) else None
     if base == "done":
         return DONE.format(task=_task_text(t["task_line"]))
     if base == "cancelled":
@@ -173,14 +196,6 @@ def history_for(t: dict, arm: str) -> str:
     if arm in POSITION_ARMS:
         return move_task_line(t["history_text"], arm.rsplit("_", 1)[1])
     return t["history_text"]
-
-
-def alias_of(t: dict, arm: str) -> str | None:
-    """The plain arm whose prompt a position arm repeats exactly for this item (step 0: `_end` is the usual place),
-    so it is not scored again and the analysis reads the plain score; None when the prompts differ."""
-    if arm in POSITION_ARMS and history_for(t, arm) == t["history_text"]:
-        return arm.rsplit("_", 1)[0]
-    return None
 
 
 def _yes_no(msgs: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -244,12 +259,12 @@ def battery_items(primary: list[dict], n: int = SAMPLE_N) -> dict[str, Any]:
     return {"sample": sample, "step0": step0, "union": [t for t in primary if t["id"] in sample | step0]}
 
 
-def jobs(items: list[dict]) -> list[tuple[dict, str, str]]:
-    """(item, arm, format) for every arm that builds for an item and is not an alias of a plain arm."""
+def jobs(items: list[dict], arms: tuple[str, ...] = ARMS) -> list[tuple[dict, str, str]]:
+    """(item, arm, format) for every arm of `arms` that builds for an item (position arms: step 0 only)."""
     out = []
     for t in items:
-        for arm in ARMS:
-            if alias_of(t, arm) or task_line(t, arm) is None:
+        for arm in arms:
+            if task_line(t, arm) is None:
                 continue
             out += [(t, arm, fmt) for fmt in FORMATS]
     return out
@@ -332,6 +347,12 @@ def model_entry(tag: str) -> tuple[str, dict[str, Any], Callable[[list[dict]], l
         kw = {"attn_implementation": spec.attn_implementation, "template_kwargs": dict(spec.template_kwargs)}
         return spec.hf_id, kw, (families.fold_system if spec.system == "fold" else (lambda msgs: msgs))
     raise SystemExit(f"unknown model {tag!r}; the battery scores {PRIMARY_MODELS + SECONDARY_MODELS}")
+
+
+def model_arms(tag: str) -> tuple[str, ...]:
+    """The arms a model is scored on: every arm for the primary models; for the secondary model only the arms the
+    primary contrasts (and their reference effect) read (amendment after review 2, GPU budget)."""
+    return ARMS if tag in PRIMARY_MODELS else PRIMARY_ARMS
 
 
 def model_messages(tag: str, t: dict, arm: str, fmt: str = "cand") -> list[dict[str, str]] | None:
@@ -450,18 +471,20 @@ def run_mech2_score(cfg: dict, open_scorer: Callable[[str, str], LogoddsScorer] 
     cfg = {**cfg, "run_id": run_id, "shard": i, "n_shards": n,
            "revisions": {e[0]: C.REVISIONS.get(e[0]) for e in entries.values()},
            "scorer_settings": {tag: e[1] for tag, e in entries.items()}}
-    d = _init_run(run_id, cfg, inputs=())
+    # the item files' hashes are recorded (and checked on a resume) with the run's inputs (amendment after review 2)
+    d = _init_run(run_id, cfg, inputs=tuple(runs_root() / s / "transitions.jsonl" for s in sources))
     primary = rq1.rq1_sets(load_items(sources))["primary"]
     sets = battery_items(primary, int(cfg.get("sample_n", SAMPLE_N)))
-    work = jobs(shard_items(sets["union"], i, n))
-    hashes = {t["id"]: _item_hash(t) for t, _, _ in work}
+    shard = shard_items(sets["union"], i, n)
+    work = {tag: jobs(shard, model_arms(tag)) for tag in tags}
+    hashes = {t["id"]: _item_hash(t) for t in shard}
     saved = read_jsonl(d / "scoring.jsonl") if cfg.get("resume") else []
     if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):
         raise SystemExit(f"{run_id}: saved records belong to different items; rerun without --resume.")
     done = {(s["model"], s["transition_id"], s["condition"]) for s in saved}
     for tag in tags:
         model_name, kw, prompt = entries[tag]
-        todo = [(t, a, f) for t, a, f in work if (tag, t["id"], condition(a, f)) not in done]
+        todo = [(t, a, f) for t, a, f in work[tag] if (tag, t["id"], condition(a, f)) not in done]
         if not todo:
             continue
         scorer = open_scorer(model_name, tag) if open_scorer else LogoddsScorer(model_name, model_tag=tag, **kw)
@@ -482,20 +505,23 @@ def run_mech2_score(cfg: dict, open_scorer: Callable[[str, str], LogoddsScorer] 
                                                 "arm": arm, "format": fmt, "in_sample": t["id"] in sets["sample"],
                                                 "step0": t["id"] in sets["step0"]}])
         scorer.close()
-    write_status(run_id, f"shard {i} of {n}: {len(work)} scores per model", ok=False, reported="shard complete")
+    write_status(run_id, f"shard {i} of {n}: " + ", ".join(f"{tag} {len(work[tag])} scores" for tag in tags), ok=False,
+                 reported="shard complete")
     return 0
 
 
 # ---------------- analysis ----------------
 
-# Primary contrasts (amended after review 1, 2026-11-20, before any score): a weighted sum of arms, its population
-# and its reference effect (the aligned-minus-swapped effect on the same items and in the same format, the denominator
-# of the size ratio r). Seven per model and format, Holm within each.
+# Primary contrasts (amended after review 1 and after review 2, 2026-11-20, before any score): a weighted sum of arms,
+# its population and its reference effect (the aligned-minus-swapped effect on the same items and in the same format,
+# the denominator of the size ratio r). Eight per model and format, Holm within each at a fixed family size of eight.
 _REF = ((1, "aligned"), (-1, "swapped"))
 PRIMARY: dict[str, dict[str, Any]] = {
-    # same presupposed object ("the {obj}") in both lines; only the desire differs: salience against wishful
-    "P1_keep_vs_ignore": {"terms": ((1, "desire_keep"), (-1, "mention_ignore")), "population": "sample", "reference": _REF},
-    "P2_desire_check": {"terms": ((1, "desire_check"), (-1, "swapped")), "population": "sample", "reference": _REF},
+    # review 2: a minimal pair. Both lines are the swapped task plus one sentence about "the {obj}"; only what the
+    # sentence asks differs (keep it untouched, or ignore it).
+    "P1_keep_vs_ignore": {"terms": ((1, "desire_keep_sw"), (-1, "mention_ignore")), "population": "sample", "reference": _REF},
+    # review 2: a minimal pair. The same line but the hope's polarity ("cannot" against "can").
+    "P2_hope_polarity": {"terms": ((1, "desire_check"), (-1, "desire_check_can")), "population": "sample", "reference": _REF},
     "P3_mention_without_need": {"terms": ((1, "mention_ignore"), (-1, "swapped")), "population": "sample", "reference": _REF},
     "P4_need_without_name": {"terms": ((1, "described"), (-1, "swapped")), "population": "sample", "reference": _REF},
     # placement items, without those taking from a target-type receptacle and those whose history contradicts "done"
@@ -504,7 +530,11 @@ PRIMARY: dict[str, dict[str, Any]] = {
                           "population": "step0", "reference": _REF},
     # the object named and its presence in the action's receptacle denied, take items only: mention against evidence
     "P7_negated_existence": {"terms": ((1, "negated"), (-1, "swapped")), "population": "sample_take", "reference": _REF},
+    # review 2: a minimal pair on P7's items. The user's report, the same words but "no" for the article.
+    "P8_negated_vs_affirmed": {"terms": ((1, "negated"), (-1, "affirmed")), "population": "sample_take", "reference": _REF},
 }
+PRIMARY_ARMS = tuple(a for a in ARMS if any(a == arm for spec in PRIMARY.values()
+                                            for _, arm in spec["terms"] + spec["reference"]))
 ALPHA = 0.05
 DROPPED_DRAWS_MAX = 0.02  # r is not estimable when more than 2% of its bootstrap draws are undefined (as in families)
 
@@ -532,27 +562,23 @@ def zones_of(lo: float, hi: float) -> tuple[str, ...]:
 
 
 # Predicted zones of each primary contrast under each account (the design note's prediction table, as amended after
-# review 1). H1 makes no prediction here (it is read from the knowledge split only). H3 is referent salience (the
-# object made salient, by name or description); name salience is the lexical part of H6 (H6_lexical), which this
-# battery cannot tell from word overlap. P6 counts only for H6_position, whose reading needs |r| beyond the band.
+# review 2, section 12). H1 makes no prediction here (it is read from the knowledge split only). H3 is referent
+# salience (the object made salient, by name or description); H6_lexical is word overlap between the task line and the
+# action string (both formats); H6_position reads P6 alone, and only beyond the band. One line per account.
 _P = POSITIVE
+_N, _Z, _NZ, _ZS = frozenset({"N"}), frozenset({"Z"}), frozenset({"N", "Z"}), frozenset({"Z", "S"})
+_ZSL = frozenset({"Z", "S", "L"})
 PREDICTIONS: dict[str, dict[str, frozenset[str]]] = {
-    "H2_evidence": {"P1_keep_vs_ignore": frozenset({"Z", "S"}), "P2_desire_check": _P, "P3_mention_without_need": _P,
-                    "P4_need_without_name": frozenset({"L"}), "P5_done_vs_cancelled": frozenset({"N"}),
-                    "P7_negated_existence": frozenset({"N"})},
-    "H3_salience": {"P1_keep_vs_ignore": frozenset({"Z", "S"}), "P2_desire_check": _P, "P3_mention_without_need": _P,
-                    "P4_need_without_name": _P, "P5_done_vs_cancelled": frozenset({"Z"}), "P7_negated_existence": _P},
-    "H4_wishful": {"P1_keep_vs_ignore": frozenset({"N"}), "P2_desire_check": frozenset({"N"}),
-                   "P3_mention_without_need": frozenset({"Z"}), "P4_need_without_name": frozenset({"L"}),
-                   "P5_done_vs_cancelled": frozenset({"Z"}), "P7_negated_existence": frozenset({"Z"})},
-    "H5_policy_blend": {"P1_keep_vs_ignore": frozenset({"N", "Z"}), "P2_desire_check": _P,
-                        "P3_mention_without_need": frozenset({"N", "Z"}), "P4_need_without_name": frozenset({"L"}),
-                        "P5_done_vs_cancelled": frozenset({"Z"}), "P7_negated_existence": frozenset({"Z"})},
-    "H6_lexical": {"P1_keep_vs_ignore": frozenset({"Z", "S"}), "P2_desire_check": _P, "P3_mention_without_need": _P,
-                   "P4_need_without_name": frozenset({"Z"}), "P5_done_vs_cancelled": frozenset({"Z"}),
-                   "P7_negated_existence": _P},
+    "H2_evidence": {"P1_keep_vs_ignore": _ZSL, "P2_hope_polarity": _Z, "P3_mention_without_need": _P, "P4_need_without_name": _P, "P5_done_vs_cancelled": _N, "P7_negated_existence": _NZ, "P8_negated_vs_affirmed": _N},
+    "H3_salience": {"P1_keep_vs_ignore": _ZS, "P2_hope_polarity": _Z, "P3_mention_without_need": _P, "P4_need_without_name": _P, "P5_done_vs_cancelled": _Z, "P7_negated_existence": _P, "P8_negated_vs_affirmed": _Z},
+    "H4_wishful": {"P1_keep_vs_ignore": _N, "P2_hope_polarity": _N, "P3_mention_without_need": _NZ, "P4_need_without_name": _P, "P5_done_vs_cancelled": _NZ, "P7_negated_existence": _Z, "P8_negated_vs_affirmed": _Z},
+    "H5_policy_blend": {"P1_keep_vs_ignore": _NZ, "P2_hope_polarity": _Z, "P3_mention_without_need": _NZ, "P4_need_without_name": _P, "P5_done_vs_cancelled": _Z, "P7_negated_existence": _Z, "P8_negated_vs_affirmed": _Z},
+    "H6_lexical": {"P1_keep_vs_ignore": _ZS, "P2_hope_polarity": _Z, "P3_mention_without_need": _P, "P4_need_without_name": _Z, "P5_done_vs_cancelled": _Z, "P7_negated_existence": _P, "P8_negated_vs_affirmed": _Z},
     "H6_position": {"P6_position_step0": frozenset({"N", "S", "L"})},
 }
+# A contrast only one account predicts gets the plain rival reading "no effect" (P6: position does not matter), so an
+# account can be called consistent only where a rival reading fails (amendment after review 2).
+RIVAL_READINGS: dict[str, dict[str, frozenset[str]]] = {"no_position_effect": {"P6_position_step0": _Z}}
 CONTENT_ACCOUNTS = ("H2_evidence", "H3_salience", "H4_wishful", "H5_policy_blend", "H6_lexical")
 
 
@@ -561,11 +587,8 @@ def _lookup(scores: list[dict]) -> dict[tuple[str, str], dict]:
 
 
 def _value(by: dict, t: dict, arm: str, fmt: str, field: str = "L") -> float | None:
-    """An item's score for an arm, reading the plain arm's score where the position arm repeats its prompt."""
+    """An item's score for an arm and format (None when it has none)."""
     rec = by.get((t["id"], condition(arm, fmt)))
-    if rec is None:
-        base = alias_of(t, arm)
-        rec = by.get((t["id"], condition(base, fmt))) if base else None
     if rec is None:
         return None
     v = sigmoid(rec["L"]) if field == "s" else rec.get(field)
@@ -665,58 +688,106 @@ def reading(predicted: frozenset[str], zs: tuple[str, ...] | None) -> str:
     return "undecided"
 
 
-def _verdict(rows: dict[str, str]) -> str:
-    """contradicted (any contrast contradicted), consistent (none contradicted, at least one consistent), or
-    untested (every decided contrast missing: no contradicted and no consistent contrast)."""
-    vals = list(rows.values())
-    if "contradicted" in vals:
+def _verdict(h: str, rows: dict[str, dict[str, str]]) -> str:
+    """An account's verdict from the readings of every account and rival reading (`rows`, one format or joint).
+
+    contradicted: at least one contrast contradicted. consistent (amendment after review 2): none contradicted, and
+    consistent on at least one contrast where some rival account (or, for a contrast only this account predicts, the
+    rival reading "no effect") is contradicted. untested: anything else, including an account consistent only where
+    every rival is consistent or undecided too, which shows nothing about it."""
+    mine = rows[h]
+    if "contradicted" in mine.values():
         return "contradicted"
-    return "consistent" if "consistent" in vals else "untested"
+    return "consistent" if _discriminating(h, rows) else "untested"
+
+
+def _discriminating(h: str, rows: dict[str, dict[str, str]]) -> list[str]:
+    """The contrasts where account `h` is consistent and some rival reading is contradicted."""
+    return [c for c, v in rows[h].items() if v == "consistent"
+            and any(rows[o].get(c) == "contradicted" for o in rows if o != h)]
+
+
+def _account_rows(per_account: dict[str, dict[str, str]]) -> dict[str, Any]:
+    out = {}
+    for h in PREDICTIONS:
+        vals = list(per_account[h].values())
+        out[h] = {"per_contrast": per_account[h], "n_consistent": vals.count("consistent"),
+                  "n_contradicted": vals.count("contradicted"), "n_undecided": vals.count("undecided"),
+                  "consistent_where_a_rival_fails": _discriminating(h, per_account),
+                  "verdict": _verdict(h, per_account)}
+    out["rivals"] = {r: per_account[r] for r in RIVAL_READINGS}
+    return out
 
 
 def readout(observed: dict[str, tuple[str, ...] | None]) -> dict[str, Any]:
     """For each account, each contrast it predicts as consistent, contradicted or undecided against the prediction
-    table (one format), and the account's verdict."""
-    out = {}
-    for h, preds in PREDICTIONS.items():
-        rows = {c: reading(allowed, observed.get(c)) for c, allowed in preds.items()}
-        vals = list(rows.values())
-        out[h] = {"per_contrast": rows, "n_consistent": vals.count("consistent"),
-                  "n_contradicted": vals.count("contradicted"), "n_undecided": vals.count("undecided"),
-                  "verdict": _verdict(rows)}
-    return out
+    table (one format), and the account's verdict; `rivals` holds the rival readings ("no position effect")."""
+    rows = {h: {c: reading(allowed, observed.get(c)) for c, allowed in preds.items()}
+            for h, preds in {**PREDICTIONS, **RIVAL_READINGS}.items()}
+    return _account_rows(rows)
+
+
+def _joint(a: str, b: str) -> str:
+    """One contrast's joint reading from the two formats' readings: decided only when both agree."""
+    if a == b and a in ("consistent", "contradicted"):
+        return a
+    if {a, b} == {"consistent", "contradicted"}:
+        return "format_dependent"
+    return "undecided"
+
+
+def _per_contrast(ro: dict[str, Any], h: str) -> dict[str, str]:
+    return ro["rivals"][h] if h in RIVAL_READINGS else ro[h]["per_contrast"]
 
 
 def joint_readout(cand: dict[str, Any], yn: dict[str, Any]) -> dict[str, Any]:
     """The decision rule across formats (amendment after review 1): a contrast is decided for an account only when the
     two formats agree (both consistent, or both contradicted). One consistent and one contradicted is
-    `format_dependent`; anything else is undecided. Both count as undecided in the verdict, and the format-dependent
-    contrasts are listed by name. When every content account (H2-H5, H6_lexical) is contradicted, the summary says
-    no single account fits (a mixture, or an account not on the list); it never picks the least contradicted one."""
-    out: dict[str, Any] = {}
+    `format_dependent`; anything else (one decided, one undecided) is undecided. Both count as undecided in the verdict,
+    and the format-dependent contrasts are listed by name.
+
+    The summary (amendment after review 2) lists the content accounts consistent, untested and contradicted
+    separately. A contradicted account cannot be the sole account; it is not rejected, since the accounts are not
+    exclusive. When every content account (H2-H5, H6_lexical) is contradicted, the summary says no single account fits
+    (a mixture, or an account not on the list) and that the readout is then the estimates of P5, P7 and P8; it never
+    picks the least contradicted account."""
+    rows = {h: {c: _joint(_per_contrast(cand, h)[c], _per_contrast(yn, h)[c]) for c in preds}
+            for h, preds in {**PREDICTIONS, **RIVAL_READINGS}.items()}
+    out = _account_rows(rows)
     for h in PREDICTIONS:
-        rows = {}
-        for c in PREDICTIONS[h]:
-            a, b = cand[h]["per_contrast"][c], yn[h]["per_contrast"][c]
-            if a == b and a in ("consistent", "contradicted"):
-                rows[c] = a
-            elif {a, b} == {"consistent", "contradicted"}:
-                rows[c] = "format_dependent"
-            else:
-                rows[c] = "undecided"
-        vals = list(rows.values())
-        out[h] = {"per_contrast": rows, "n_consistent": vals.count("consistent"),
-                  "n_contradicted": vals.count("contradicted"),
-                  "format_dependent": [c for c, v in rows.items() if v == "format_dependent"],
-                  "verdict": _verdict(rows)}
-    fitting = [h for h in CONTENT_ACCOUNTS if out[h]["verdict"] != "contradicted"]
+        out[h]["format_dependent"] = [c for c, v in rows[h].items() if v == "format_dependent"]
+        del out[h]["n_undecided"]
+    by = {v: [h for h in CONTENT_ACCOUNTS if out[h]["verdict"] == v] for v in ("consistent", "untested", "contradicted")}
+    fitting = by["consistent"] + by["untested"]
+    if not fitting:
+        text = ("no single account; mixture or an account not on the list (each content account is contradicted, so "
+                "none can be the sole account); the readout is the estimates and intervals of P5, P7 and P8")
+    else:
+        text = "; ".join(f"{v}{' (cannot be the sole account)' if v == 'contradicted' else ''}: {', '.join(by[v]) or 'none'}"
+                         for v in ("consistent", "untested", "contradicted"))
     out["summary"] = {
+        "content_accounts_consistent": by["consistent"],
+        "content_accounts_untested": by["untested"],
+        "content_accounts_contradicted": by["contradicted"],
         "content_accounts_not_contradicted": fitting,
-        "content_accounts_consistent": [h for h in CONTENT_ACCOUNTS if out[h]["verdict"] == "consistent"],
-        "reading": ("no single account; mixture or an account not on the list" if not fitting else
-                    "accounts not contradicted: " + ", ".join(fitting)),
+        "reading": text,
         "position": out["H6_position"]["verdict"],
     }
+    return out
+
+
+def separations() -> dict[str, dict[str, list[str]]]:
+    """For each pair of accounts, the contrasts both predict whose allowed zones are disjoint (`separate`: any decided
+    reading contradicts at least one of the two) and those whose allowed zones differ but overlap (`partly`)."""
+    out = {}
+    names = list(PREDICTIONS)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            both = [c for c in PRIMARY if c in PREDICTIONS[a] and c in PREDICTIONS[b]]
+            out[f"{a} vs {b}"] = {
+                "separate": [c for c in both if not PREDICTIONS[a][c] & PREDICTIONS[b][c]],
+                "partly": [c for c in both if PREDICTIONS[a][c] != PREDICTIONS[b][c] and PREDICTIONS[a][c] & PREDICTIONS[b][c]],
+                "identical_rows": PREDICTIONS[a] == PREDICTIONS[b]}
     return out
 
 
@@ -730,11 +801,11 @@ def populations(union: list[dict], sample: set[str], step0: set[str]) -> dict[st
 
 def primary_family(by: dict, pops: dict[str, list[dict]], fmt: str = "cand", B: int = C.BOOTSTRAP_RESAMPLES,
                    perms: int = C.PERMUTATIONS) -> dict[str, Any]:
-    """The seven primary contrasts in one format, Holm within the family, each categorised, and the one-format
+    """The eight primary contrasts in one format, Holm within the family, each categorised, and the one-format
     readout."""
     res = {name: contrast(by, pops[spec["population"]], spec["terms"], fmt, reference=spec["reference"], B=B, perms=perms)
            for name, spec in PRIMARY.items()}
-    # a fixed family of seven: a missing or undefined p enters as 1, so the family never shrinks
+    # a fixed family of eight (len(PRIMARY)): a missing or undefined p enters as 1, so the family never shrinks
     adj = holm({name: (r["p"] if r["p"] == r["p"] else 1.0) for name, r in res.items()})
     for name, r in res.items():
         r["holm_p"] = adj[name]
@@ -771,7 +842,14 @@ def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: 
         }
     block["arms_on_sample"] = arms
     placement_rest = [t for t in pops["sample_placement"] if not p5_eligible(t)]
+    both = ("cand", "yn")
+    not_shown = [t for t in pops["sample_take"] if negated_status(t)[1] == "contents not shown"]
     block["secondary"] = {
+        # review 2: the first P1 and P2, kept as secondary readouts (not minimal pairs: the bare desire lines lack the
+        # swapped task that their comparators keep), and the size of that gap for the keep line
+        "old_P1_desire_keep_vs_ignore": {f: contrast(by, pops["sample"], ((1, "desire_keep"), (-1, "mention_ignore")), f, reference=ref, **kw) for f in both},
+        "old_P2_desire_check_vs_swapped": {f: contrast(by, pops["sample"], ((1, "desire_check"), (-1, "swapped")), f, reference=ref, **kw) for f in both},
+        "desire_keep_alone_vs_after_swapped": {f: contrast(by, pops["sample"], ((1, "desire_keep"), (-1, "desire_keep_sw")), f, reference=ref, **kw) for f in both},
         "desire_keep_vs_swapped": arms["desire_keep"]["vs_swapped_L"],
         "desire_keep_vs_swapped_yes_no": arms["desire_keep"]["yn_vs_swapped_L"],
         "negated_vs_exists_sentence_take": contrast(by, pops["sample_take"], ((1, "negated"), (-1, "mention_exists")), "cand", reference=ref, **kw),
@@ -779,10 +857,18 @@ def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: 
         "negated_by_history": {k: contrast(by, [t for t in pops["sample"] if is_take(t) and negated_status(t)[1] == k],
                                            ((1, "negated"), (-1, "swapped")), "cand", reference=ref, **kw)
                                for k in ("shown, without it", "contents not shown", "shown, holds it")},
+        # review 2: P7 and P8 on the take items whose history does not show the receptacle's contents (where the
+        # user's report is the only information about them), both formats, next to the full population
+        "P7_P8_contents_not_shown": {name: {f: contrast(by, not_shown, PRIMARY[name]["terms"], f, reference=ref, **kw) for f in both}
+                                     for name in ("P7_negated_existence", "P8_negated_vs_affirmed")},
         "cancelled_vs_swapped": arms["cancelled"]["vs_swapped_L"],
         "done_vs_swapped": arms["done"]["vs_swapped_L"],
+        # review 2: P5 read against cancelled's own lift over swapped on P5's items (the ratio is undefined when that
+        # lift is at or below zero), and the lift itself
+        "P5_against_cancelled_lift": {f: contrast(by, pops["p5"], PRIMARY["P5_done_vs_cancelled"]["terms"], f,
+                                                  reference=((1, "cancelled"), (-1, "swapped")), **kw) for f in both},
+        "cancelled_lift_on_p5_items": {f: contrast(by, pops["p5"], ((1, "cancelled"), (-1, "swapped")), f, reference=ref, **kw) for f in both},
         "ignore_vs_exists_sentence": contrast(by, pops["sample"], ((1, "mention_ignore"), (-1, "mention_exists")), "cand", **kw),
-        "described_vs_swapped_described": contrast(by, pops["sample"], ((1, "described"), (-1, "swapped_described")), "cand", reference=ref, **kw),
         "desire_check_vs_keep": contrast(by, pops["sample"], ((1, "desire_check"), (-1, "desire_keep")), "cand", **kw),
         # P5 on the placement items it leaves out: taking from a target-type receptacle (H2 predicts done ABOVE
         # cancelled there) and items whose history contradicts "done"; and on every placement item, as first designed
@@ -795,14 +881,30 @@ def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: 
                           "done_contradicted": sum(done_contradicted(t) for t in placement_rest),
                           "both": sum(takes_from_target_type(t) and done_contradicted(t) for t in placement_rest)},
         "n_done_contradicted_in_sample": sum(done_contradicted(t) for t in pops["sample"]),
+        # review 2: position arms at step 0 only. P6 in the yes/no format and its two parts: moving the aligned line and
+        # moving the swapped line to the top
         "position": {
             "step0_start_vs_usual_yes_no": contrast(by, pops["step0"], PRIMARY["P6_position_step0"]["terms"], "yn", reference=ref, **kw),
-            "sample_start_vs_usual": contrast(by, pops["sample"], PRIMARY["P6_position_step0"]["terms"], "cand", reference=ref, **kw),
-            "later_end_vs_usual": contrast(by, pops["later"], ((1, "aligned_end"), (-1, "swapped_end"), (-1, "aligned"), (1, "swapped")), "cand", reference=ref, **kw),
-            "end_vs_start_step0": contrast(by, pops["step0"], ((1, "aligned_end"), (-1, "swapped_end"), (-1, "aligned_start"), (1, "swapped_start")), "cand", **kw),
-            "end_vs_start_later": contrast(by, pops["later"], ((1, "aligned_end"), (-1, "swapped_end"), (-1, "aligned_start"), (1, "swapped_start")), "cand", **kw),
+            "step0_aligned_start_vs_aligned": contrast(by, pops["step0"], ((1, "aligned_start"), (-1, "aligned")), "cand", **kw),
+            "step0_swapped_start_vs_swapped": contrast(by, pops["step0"], ((1, "swapped_start"), (-1, "swapped")), "cand", **kw),
         },
     }
+    # review 2: the first-token term of P7 and P8 (two-candidate). It does not enter any category; where its sign
+    # differs from the full L's (rq1d's split: a denial lowered Qwen's full L but raised its first token), the report
+    # names the split and P7's two-candidate reading rests on the continuation, not the first token.
+    first = {}
+    for name in ("P7_negated_existence", "P8_negated_vs_affirmed"):
+        ft = contrast(by, pops["sample_take"], PRIMARY[name]["terms"], "cand", field="L_first", **kw)
+        full = block["primary"]["contrasts"][name]["estimate"]
+        ft["sign_split_with_full_L"] = bool(ft["estimate"] == ft["estimate"] and full == full and ft["estimate"] * full < 0)
+        first[name] = ft
+    block["secondary"]["first_token_P7_P8"] = first
+    # review 2: under a mixture the readout is continuous: the point estimates and intervals of P5, P7 and P8 (and r),
+    # in both formats, reported whatever the verdicts
+    block["mixture_readout"] = {
+        name: {fam: {k: block[key]["contrasts"][name].get(k) for k in ("estimate", "ci", "ratio", "category")}
+               for fam, key in (("cand", "primary"), ("yn", "primary_yes_no"))}
+        for name in ("P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed")}
     content = {name: spec for name, spec in PRIMARY.items() if spec["population"] != "step0"}
 
     def split(subsets: dict[str, list[dict]]) -> dict[str, Any]:
@@ -919,28 +1021,76 @@ def _scores_of(run: str | None, tag: str) -> tuple[list[dict], list[Path], list[
     return [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag], folders, []
 
 
+def score_integrity(scores: list[dict], union: list[dict], tags: list[str]) -> dict[str, Any]:
+    """Every score checked against the current items before any analysis (amendment after review 2).
+
+    Per model: scores of items not in the battery, scores whose item hash differs from the current item's, duplicate
+    (item, condition) pairs, and, per arm and format, the scores expected (`jobs` with the model's arms) against those
+    present. A model is `complete` when nothing is off, `not scored` when it has no score at all, else `mismatch`.
+    `refuse` is set when any model is a mismatch or a primary model is not scored."""
+    items = {t["id"]: t for t in union}
+    hashes = {i: _item_hash(t) for i, t in items.items()}
+    out: dict[str, Any] = {}
+    for tag in tags:
+        mine = [x for x in scores if x.get("model") == tag]
+        expected = {(t["id"], condition(a, f)) for t, a, f in jobs(union, model_arms(tag))}
+        keys = Counter((x["transition_id"], x["condition"]) for x in mine)
+        cells: dict[str, dict[str, int]] = defaultdict(lambda: {"expected": 0, "present": 0})
+        for i, cond in expected:
+            arm, fmt = split_condition(cond)
+            cells[f"{arm}/{fmt}"]["expected"] += 1
+        for (i, cond), n in keys.items():
+            arm, fmt = split_condition(cond)
+            cells[f"{arm}/{fmt}"]["present"] += n
+        rec = {"n_scores": len(mine), "n_expected": len(expected),
+               "n_unknown_items": sum(x["transition_id"] not in items for x in mine),
+               "n_hash_mismatch": sum(x["transition_id"] in items and x.get("item_hash") != hashes[x["transition_id"]] for x in mine),
+               "n_duplicates": sum(n - 1 for n in keys.values() if n > 1),
+               "n_missing": len(expected - set(keys)), "n_unexpected": len(set(keys) - expected),
+               "n_undefined_L": sum(x.get("L") != x.get("L") or x.get("L") is None for x in mine),
+               "cells_off": {k: v for k, v in sorted(cells.items()) if v["expected"] != v["present"]}}
+        off = any(rec[k] for k in ("n_unknown_items", "n_hash_mismatch", "n_duplicates", "n_missing", "n_unexpected"))
+        rec["status"] = "not scored" if not mine else "mismatch" if off else "complete"
+        out[tag] = rec
+    out["refuse"] = any(out[t]["status"] == "mismatch" or (t in PRIMARY_MODELS and out[t]["status"] == "not scored")
+                        for t in tags)
+    return out
+
+
 def run_mech2_analysis(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
     folders, problems = complete_shards(cfg["source"])
-    d = _init_run(run_id, {**cfg, "resume": False}, inputs=())
+    d = _init_run(run_id, {**cfg, "resume": False},
+                  inputs=tuple(p / "scoring.jsonl" for p in folders if (p / "scoring.jsonl").exists()))
     if problems:
         write_status(run_id, "waits for every shard:\n" + "\n".join(problems), ok=False)
         return 1
     primary = rq1.rq1_sets(load_items(tuple(cfg.get("sources", SOURCES))))["primary"]
     sets = battery_items(primary, int(cfg.get("sample_n", SAMPLE_N)))
     scores = [x for p in folders for x in read_jsonl(p / "scoring.jsonl")]
+    tags = list(cfg.get("models", PRIMARY_MODELS + SECONDARY_MODELS))
+    integrity = score_integrity(scores, sets["union"], tags)
+    write_json(d / "integrity.json", integrity)
+    if integrity["refuse"]:
+        write_status(run_id, "scores do not match the current items or the expected jobs; nothing analysed:\n" +
+                     "\n".join(f"{t}: {integrity[t]['status']} ({ {k: v for k, v in integrity[t].items() if k.startswith('n_')} })"
+                               for t in tags), ok=False)
+        return 1
     B, perms = int(cfg.get("bootstrap", C.BOOTSTRAP_RESAMPLES)), int(cfg.get("permutations", C.PERMUTATIONS))
     pops = populations(sets["union"], sets["sample"], sets["step0"])
     report: dict[str, Any] = {"items": {"n_primary": len(primary), "n_sample": len(sets["sample"]), "n_step0": len(sets["step0"]),
                                         "n_union": len(sets["union"]), "n_sample_placement": len(pops["sample_placement"]),
                                         "n_p5": len(pops["p5"]), "n_sample_take": len(pops["sample_take"]),
                                         "n_games_sample": len({t["game_id"] for t in pops["sample"]}),
-                                        "task_types_sample": dict(Counter(task_type(t["task_line"]) for t in pops["sample"]))}}
+                                        "task_types_sample": dict(Counter(task_type(t["task_line"]) for t in pops["sample"]))},
+                              "integrity": integrity,
+                              "design": {"separations": separations()}}
     others: dict[str, list[Path]] = {}
     waiting: dict[str, list[str]] = {}
-    tags = list(cfg.get("models", PRIMARY_MODELS + SECONDARY_MODELS))
-    for tag in tags:
+    scored = [tag for tag in tags if integrity[tag]["status"] == "complete"]
+    report["models_not_scored"] = [tag for tag in tags if tag not in scored]
+    for tag in scored:
         s = [x for x in scores if x["model"] == tag]
         block = {"role": ("primary" if tag in PRIMARY_MODELS else
                           "secondary: reported descriptively, not part of any primary family or conclusion"),
@@ -959,15 +1109,28 @@ def run_mech2_analysis(cfg: dict) -> int:
             block["knowledge_split"] = knowledge_split(s, ms, pops["sample"], B=B)
         report[tag] = block
     report["cross_model_item_share"] = {arm: {tag: report[tag]["arms_on_sample"][arm]["yn_item_share_toward_yes_vs_swapped"]["estimate"]
-                                              for tag in tags} for arm in CONTENT_ARMS if arm != "swapped"}
+                                              for tag in scored} for arm in CONTENT_ARMS if arm != "swapped"}
     report["waiting_for_analysis_only_sources"] = waiting
     report["provenance"] = analysis_provenance(cfg["source"], folders, cfg.get("sources", SOURCES), others=others)
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "Mechanism battery (exploratory)", report)
+    write_status(run_id, "\n".join(status_lines(report, scored)), ok=False,
+                 reported="mechanism battery report" if not waiting else "partial report")
+    return 0
+
+
+def status_lines(report: dict[str, Any], tags: list[str]) -> list[str]:
+    """Per model: each primary contrast's two-candidate estimate and category, its yes/no category, and the joint
+    summary (content accounts consistent, untested and contradicted)."""
     lines = []
     for tag in tags:
-        prim = report[tag]["primary"]["contrasts"]
-        lines.append(f"{tag}: " + ", ".join(f"{k.split('_')[0]} {v['estimate']:.2f} ({v['category']})" for k, v in prim.items())
-                     + f"; both formats: {report[tag]['readout_both_formats']['summary']['reading']}")
-    write_status(run_id, "\n".join(lines), ok=False, reported="mechanism battery report" if not waiting else "partial report")
-    return 0
+        prim, yn = report[tag]["primary"]["contrasts"], report[tag]["primary_yes_no"]["contrasts"]
+        summ = report[tag]["readout_both_formats"]["summary"]
+        lines.append(f"{tag}: " + ", ".join(f"{k.split('_')[0]} {v['estimate']:.2f} ({v['category']}; yes/no {yn[k]['category']})"
+                                            for k, v in prim.items())
+                     + f"; both formats: consistent {summ['content_accounts_consistent'] or 'none'}, untested "
+                       f"{summ['content_accounts_untested'] or 'none'}, contradicted (cannot be the sole account) "
+                       f"{summ['content_accounts_contradicted'] or 'none'}; position {summ['position']}; {summ['reading']}")
+    if report.get("models_not_scored"):
+        lines.append("not scored: " + ", ".join(report["models_not_scored"]))
+    return lines

@@ -64,13 +64,18 @@ def test_task_type_reads_every_template():
 
 
 def _arms(t):
-    """The arms an item carries: every arm, except negated on items whose action is not a take."""
-    return [a for a in mech2.ARMS if a != "negated" or t["action"].startswith("take ")]
+    """The arms an item carries: every arm, except negated and affirmed on items whose action is not a take, and the
+    position arms after step 0 (amendment after review 2)."""
+    return [a for a in mech2.ARMS if (a not in ("negated", "affirmed") or t["action"].startswith("take "))
+            and (a not in mech2.POSITION_ARMS or t["history_len"] == 0)]
 
 
 def test_every_arm_builds_for_every_task_type_and_verb():
     for ttype, verb, t in _all_variants():
         assert (mech2.task_line(t, "negated") is None) == (verb != "take")
+        assert (mech2.task_line(t, "affirmed") is None) == (verb != "take")
+        for arm in mech2.POSITION_ARMS:
+            assert (mech2.task_line(t, arm) is None) == (t["history_len"] > 0)
         for arm in _arms(t):
             line = mech2.task_line(t, arm)
             assert line and line.endswith(".") and "  " not in line and ".." not in line, (ttype, verb, arm, line)
@@ -90,6 +95,13 @@ def test_templates_read_as_written():
     assert mech2.task_line(t, "neutral") == rq1.ABSENT_LINE
     assert mech2.task_line(t, "negated") == ("Your task is to: put a clean egg in fridge. The user says there is no apple "
                                              "in the countertop 2.")
+    # amendment after review 2: the minimal-pair partners
+    assert mech2.task_line(t, "affirmed") == ("Your task is to: put a clean egg in fridge. The user says there is an apple "
+                                              "in the countertop 2.")
+    assert mech2.task_line(t, "desire_keep_sw") == ("Your task is to: put a clean egg in fridge. Make sure that the apple is "
+                                                    "not taken; leave it where it is.")
+    assert mech2.task_line(t, "desire_check_can") == ("Your task is to: find out whether an apple can be taken from the "
+                                                      "countertop 2; the user hopes it can.")
     for verb, pp, prep, rec in (("move", "moved", "to", "fridge 1"), ("heat", "heated", "with", "microwave 1"),
                                 ("cool", "cooled", "with", "fridge 1"), ("clean", "cleaned", "with", "sinkbasin 1")):
         u = _item(action=ACTIONS[verb])
@@ -98,6 +110,11 @@ def test_templates_read_as_written():
     m = _item(goal_object="mug", task_line="Your task is to: put a mug in fridge.", action="take mug 1 from countertop 2",
               swapped_task_line="Your task is to: put a egg in fridge.")
     assert "whether a mug can be taken" in mech2.task_line(m, "desire_check")
+    assert "whether a mug can be taken" in mech2.task_line(m, "desire_check_can")
+    assert mech2.task_line(m, "affirmed").endswith("The user says there is a mug in the countertop 2.")
+    for verb, pp in (("move", "moved"), ("heat", "heated"), ("clean", "cleaned")):
+        assert mech2.task_line(_item(action=ACTIONS[verb]), "desire_keep_sw").endswith(
+            f"Make sure that the apple is not {pp}; leave it where it is.")
 
 
 def test_existence_presupposed_only_where_designed():
@@ -117,8 +134,9 @@ def test_an_item_the_action_does_not_name_carries_no_desire_arm():
 
 def test_described_arms_name_no_object():
     for _, _, t in _all_variants():
-        assert "apple" not in mech2.task_line(t, "described") and "egg" not in mech2.task_line(t, "swapped_described")
+        assert "apple" not in mech2.task_line(t, "described")
         assert rq1x.DESCRIPTIONS["apple"] in mech2.task_line(t, "described")
+    assert "swapped_described" not in mech2.ARMS  # amendment after review 2: rq1x measured it
 
 
 # ---------------- prompts differ only where intended ----------------
@@ -140,7 +158,7 @@ def test_content_arms_differ_from_aligned_only_in_the_task_line(mock_score):
 
 
 def test_only_the_real_task_arms_show_the_real_task(mock_score):
-    real = {"aligned", "done", "cancelled", "aligned_start", "aligned_end"}
+    real = {"aligned", "done", "cancelled", "aligned_start"}
     for _, _, t in _all_variants():
         for arm in _arms(t):
             shown = t["task_line"][len("Your task is to: "):] in _query(mech2.arm_messages(t, arm))
@@ -149,6 +167,8 @@ def test_only_the_real_task_arms_show_the_real_task(mock_score):
 
 def test_position_arms_move_only_the_task_line(mock_score):
     for _, _, t in _all_variants():
+        if t["history_len"]:
+            continue  # amendment after review 2: position arms at step 0 only
         for arm in mech2.POSITION_ARMS:
             goal, where = arm.rsplit("_", 1)
             plain, moved = _query(mech2.arm_messages(t, goal)), _query(mech2.arm_messages(t, arm))
@@ -160,12 +180,13 @@ def test_position_arms_move_only_the_task_line(mock_score):
             assert mech2.arm_messages(t, arm)[:-1] == mech2.arm_messages(t, goal)[:-1]
 
 
-def test_usual_position_and_aliases():
+def test_usual_position_and_position_arms_at_step0_only():
     s0, s1 = _item(step0=True), _item()
     assert mech2.usual_position(s0) == "end" and mech2.usual_position(s1) == "line 2"
-    assert mech2.alias_of(s0, "aligned_end") == "aligned" and mech2.alias_of(s0, "swapped_end") == "swapped"
-    assert mech2.alias_of(s0, "aligned_start") is None and mech2.alias_of(s1, "aligned_end") is None
-    assert mech2.alias_of(s1, "aligned_start") is None  # line 2 to line 1 is still a change
+    assert mech2.POSITION_ARMS == ("aligned_start", "swapped_start")
+    assert mech2.history_for(s0, "aligned_start") != s0["history_text"]  # step 0: the line moves from last to first
+    assert mech2.task_line(s0, "aligned_start") == s0["task_line"] and mech2.task_line(s1, "aligned_start") is None
+    assert mech2.arm_messages(s1, "swapped_start") is None
     assert mech2.move_task_line(s1["history_text"], "start").split("\n")[0] == s1["task_line"]
     with pytest.raises(ValueError):
         mech2.move_task_line("no task here", "start")
@@ -186,7 +207,6 @@ def test_reused_arms_are_the_earlier_runs_prompts(mock_score):
     assert mech2.arm_messages(t, "neutral") == rq1.arm_messages(t, "absent")
     assert mech2.arm_messages(t, "mention_exists") == rq1.arm_messages(t, "swapped_plus")
     assert mech2.arm_messages(t, "described") == rq1x.arm_messages(t, "aligned_desc")
-    assert mech2.arm_messages(t, "swapped_described") == rq1x.arm_messages(t, "swapped_desc")
     assert mech2.arm_messages(t, "aligned", "yn") == rq1v.arm_messages(t, "yn_aligned")
     assert mech2.arm_messages(t, "neutral", "yn") == rq1v.arm_messages(t, "yn_absent")
 
@@ -233,13 +253,14 @@ def test_battery_items_add_every_step0_item():
     assert b["step0"] == step0 and {t["id"] for t in b["union"]} == b["sample"] | step0
 
 
-def test_jobs_cover_every_arm_and_skip_aliases():
+def test_jobs_cover_every_arm_position_arms_at_step0_only():
     s0, s1 = _item(id="a", step0=True), _item(id="b")
     j = {(t["id"], a, f) for t, a, f in mech2.jobs([s0, s1])}
     for arm in mech2.ARMS:
         for f in mech2.FORMATS:
-            assert ("b", arm, f) in j
-            assert (("a", arm, f) in j) == (arm not in ("aligned_end", "swapped_end"))
+            assert ("a", arm, f) in j
+            assert (("b", arm, f) in j) == (arm not in mech2.POSITION_ARMS)
+    assert len(j) == 2 * (2 * len(mech2.ARMS) - len(mech2.POSITION_ARMS))
 
 
 def test_done_contradicted_only_when_every_target_was_seen_without_the_object():
@@ -259,17 +280,19 @@ def test_done_contradicted_only_when_every_target_was_seen_without_the_object():
 D = 4.0
 # Mean of each content arm minus the swapped arm, in units of the aligned effect, for each content account's
 # fingerprint (amended after review 1: every value sits well inside its predicted zone).
+# Amended after review 2: P1 = desire_keep_sw - mention_ignore, P2 = desire_check - desire_check_can,
+# P8 = negated - affirmed.
 FINGERPRINTS = {
-    "H2_evidence": {"desire_keep": 0.8, "desire_check": 0.6, "mention_ignore": 0.7, "described": 0.9, "done": -0.3,
-                    "cancelled": 0.5, "negated": -0.6},
-    "H3_salience": {"desire_keep": 0.8, "desire_check": 0.8, "mention_ignore": 0.8, "described": 0.6, "done": 0.8,
-                    "cancelled": 0.8, "negated": 0.7},
-    "H4_wishful": {"desire_keep": -0.5, "desire_check": -0.5, "mention_ignore": 0.0, "described": 0.9, "done": 0.0,
-                   "cancelled": 0.0, "negated": 0.0},
-    "H5_policy_blend": {"desire_keep": -0.5, "desire_check": 0.9, "mention_ignore": 0.0, "described": 0.9, "done": 0.0,
-                        "cancelled": 0.0, "negated": 0.0},
-    "H6_lexical": {"desire_keep": 0.8, "desire_check": 0.8, "mention_ignore": 0.8, "described": 0.0, "done": 0.8,
-                   "cancelled": 0.8, "negated": 0.8},
+    "H2_evidence": {"desire_keep": 0.8, "desire_keep_sw": 0.8, "desire_check": 0.6, "desire_check_can": 0.6,
+                    "mention_ignore": 0.7, "described": 0.9, "done": -0.3, "cancelled": 0.5, "negated": -0.6, "affirmed": 0.8},
+    "H3_salience": {"desire_keep": 0.8, "desire_keep_sw": 0.8, "desire_check": 0.8, "desire_check_can": 0.8,
+                    "mention_ignore": 0.8, "described": 0.6, "done": 0.8, "cancelled": 0.8, "negated": 0.7, "affirmed": 0.7},
+    "H4_wishful": {"desire_keep": -0.5, "desire_keep_sw": -0.5, "desire_check": -0.5, "desire_check_can": 0.4,
+                   "mention_ignore": 0.0, "described": 0.9, "done": 0.0, "cancelled": 0.0, "negated": 0.0, "affirmed": 0.0},
+    "H5_policy_blend": {"desire_keep": -0.5, "desire_keep_sw": -0.5, "desire_check": 0.9, "desire_check_can": 0.9,
+                        "mention_ignore": 0.0, "described": 0.9, "done": 0.0, "cancelled": 0.0, "negated": 0.0, "affirmed": 0.0},
+    "H6_lexical": {"desire_keep": 0.8, "desire_keep_sw": 0.8, "desire_check": 0.8, "desire_check_can": 0.8,
+                   "mention_ignore": 0.8, "described": 0.0, "done": 0.8, "cancelled": 0.8, "negated": 0.8, "affirmed": 0.8},
 }
 REF = ((1, "aligned"), (-1, "swapped"))
 
@@ -294,13 +317,12 @@ def _syn_scores(items, fingerprint, position_shift=0.0, seed=7, noise=1.0, yn_fi
         base = g + rng.gauss(-8, 2)
         for fmt, fp, scale in (("cand", fingerprint, 1.0), ("yn", yn_fingerprint or fingerprint, yn_scale)):
             d = D * scale
-            mu = {"aligned": d, "swapped": 0.0, "neutral": -0.4 * d, "mention_exists": 0.9 * d, "swapped_described": 0.0,
+            mu = {"aligned": d, "swapped": 0.0, "neutral": -0.4 * d, "mention_exists": 0.9 * d,
                   **{a: v * d for a, v in fp.items()}}
-            mu["aligned_start"] = mu["aligned"] + (position_shift * d if t["history_len"] == 0 else 0.0)
+            mu["aligned_start"] = mu["aligned"] + position_shift * d
             mu["swapped_start"] = mu["swapped"]
-            mu["aligned_end"], mu["swapped_end"] = mu["aligned"], mu["swapped"]
             for arm, m in mu.items():
-                if mech2.alias_of(t, arm) or mech2.task_line(t, arm) is None:
+                if mech2.task_line(t, arm) is None:
                     continue
                 L = base + m + rng.gauss(0, noise)
                 out.append({"transition_id": t["id"], "condition": mech2.condition(arm, fmt), "L": L, "L_first": L / 2,
@@ -323,7 +345,7 @@ def test_each_planted_fingerprint_is_read_as_its_own_account(planted):
     items = _syn_items()
     fam = _family(_syn_scores(items, FINGERPRINTS[planted]), items)
     ro = fam["readout"]
-    assert ro[planted]["n_contradicted"] == 0 and ro[planted]["n_consistent"] == 6, (planted, fam["contrasts"])
+    assert ro[planted]["n_contradicted"] == 0 and ro[planted]["n_consistent"] == 7, (planted, fam["contrasts"])
     assert ro[planted]["verdict"] == "consistent"
     for other in FINGERPRINTS:
         if other != planted:
@@ -377,8 +399,10 @@ def test_yes_no_family_reads_yes_no_scores_with_its_own_denominator():
                               B=30, perms=30)
     c, y = block["primary"]["contrasts"], block["primary_yes_no"]["contrasts"]
     assert abs(c["P1_keep_vs_ignore"]["ratio"]["estimate"] + 0.5) < 1e-9
-    assert abs(y["P1_keep_vs_ignore"]["ratio"]["estimate"]) < 1e-9 and abs(y["P2_desire_check"]["ratio"]["estimate"] - 0.8) < 1e-9
-    assert abs(y["P2_desire_check"]["estimate"] - 0.8 * 0.25 * D) < 1e-9
+    assert abs(c["P2_hope_polarity"]["ratio"]["estimate"] + 0.9) < 1e-9
+    assert abs(y["P1_keep_vs_ignore"]["ratio"]["estimate"]) < 1e-9 and abs(y["P2_hope_polarity"]["ratio"]["estimate"]) < 1e-9
+    assert abs(y["P3_mention_without_need"]["ratio"]["estimate"] - 0.8) < 1e-9
+    assert abs(y["P3_mention_without_need"]["estimate"] - 0.8 * 0.25 * D) < 1e-9
     assert abs(block["arms_on_sample"]["desire_check"]["yn_vs_swapped_L"]["ratio"]["estimate"] - 0.8) < 1e-9
 
 
@@ -457,40 +481,47 @@ def test_holm_is_applied_within_the_family():
     ps = {k: v["p"] for k, v in fam["contrasts"].items()}
     for k, v in fam["contrasts"].items():
         assert v["holm_p"] >= v["p"]
-    assert sorted(fam["contrasts"]) == sorted(mech2.PRIMARY) and len(mech2.PRIMARY) == 7
+    assert sorted(fam["contrasts"]) == sorted(mech2.PRIMARY) and len(mech2.PRIMARY) == 8
     smallest = min(ps, key=ps.get)
-    assert abs(fam["contrasts"][smallest]["holm_p"] - min(1.0, 7 * ps[smallest])) < 1e-12
+    assert abs(fam["contrasts"][smallest]["holm_p"] - min(1.0, 8 * ps[smallest])) < 1e-12
 
 
 def test_readout_verdicts_and_the_joint_rule():
     none = {c: None for c in mech2.PRIMARY}
     ro = mech2.readout(none)
-    assert all(v["n_undecided"] == len(v["per_contrast"]) and v["verdict"] == "untested" for v in ro.values())
-    one = {**none, "P2_desire_check": ("S", "L")}
+    assert all(ro[h]["n_undecided"] == len(ro[h]["per_contrast"]) and ro[h]["verdict"] == "untested" for h in mech2.PREDICTIONS)
+    one = {**none, "P2_hope_polarity": ("N",)}
     ro = mech2.readout(one)
-    assert ro["H5_policy_blend"]["per_contrast"]["P2_desire_check"] == "consistent"
-    assert ro["H5_policy_blend"]["verdict"] == "consistent"
-    assert ro["H4_wishful"]["per_contrast"]["P2_desire_check"] == "contradicted" and ro["H4_wishful"]["verdict"] == "contradicted"
+    assert ro["H4_wishful"]["per_contrast"]["P2_hope_polarity"] == "consistent"
+    assert ro["H4_wishful"]["verdict"] == "consistent" and ro["H4_wishful"]["consistent_where_a_rival_fails"] == ["P2_hope_polarity"]
+    for h in ("H2_evidence", "H3_salience", "H5_policy_blend", "H6_lexical"):
+        assert ro[h]["per_contrast"]["P2_hope_polarity"] == "contradicted" and ro[h]["verdict"] == "contradicted"
     assert ro["H6_position"]["verdict"] == "untested"
     # the two formats must agree before a contrast is decided
-    yn = mech2.readout({**none, "P2_desire_check": ("N",)})
+    yn = mech2.readout({**none, "P2_hope_polarity": ("Z",)})
     j = mech2.joint_readout(ro, yn)
-    assert j["H4_wishful"]["per_contrast"]["P2_desire_check"] == "format_dependent"
-    assert j["H4_wishful"]["verdict"] == "untested" and j["H4_wishful"]["format_dependent"] == ["P2_desire_check"]
+    assert j["H4_wishful"]["per_contrast"]["P2_hope_polarity"] == "format_dependent"
+    assert j["H4_wishful"]["verdict"] == "untested" and j["H4_wishful"]["format_dependent"] == ["P2_hope_polarity"]
     j2 = mech2.joint_readout(ro, mech2.readout(none))
-    assert j2["H5_policy_blend"]["per_contrast"]["P2_desire_check"] == "undecided" and j2["H5_policy_blend"]["verdict"] == "untested"
+    assert j2["H4_wishful"]["per_contrast"]["P2_hope_polarity"] == "undecided" and j2["H4_wishful"]["verdict"] == "untested"
     j3 = mech2.joint_readout(ro, ro)
-    assert j3["H4_wishful"]["verdict"] == "contradicted" and j3["H5_policy_blend"]["verdict"] == "consistent"
+    assert j3["H4_wishful"]["verdict"] == "consistent" and j3["H5_policy_blend"]["verdict"] == "contradicted"
+    assert j3["summary"]["content_accounts_consistent"] == ["H4_wishful"]
+    assert j3["summary"]["content_accounts_untested"] == []
+    assert set(j3["summary"]["content_accounts_contradicted"]) == set(mech2.CONTENT_ACCOUNTS) - {"H4_wishful"}
+    assert j3["summary"]["reading"].startswith("consistent: H4_wishful; untested: none; contradicted (cannot be the sole account): ")
 
 
 def test_joint_summary_names_a_mixture_when_every_content_account_is_contradicted():
     # P1 trivial (against H4), P3 below zero (against H2, H3, H6_lexical), P2 below zero (against H5)
     obs = {c: None for c in mech2.PRIMARY}
-    obs.update({"P1_keep_vs_ignore": ("Z",), "P3_mention_without_need": ("N",), "P2_desire_check": ("N",)})
+    obs.update({"P1_keep_vs_ignore": ("Z",), "P3_mention_without_need": ("N",), "P2_hope_polarity": ("N",)})
     ro = mech2.readout(obs)
     j = mech2.joint_readout(ro, ro)
     assert j["summary"]["content_accounts_not_contradicted"] == []
     assert j["summary"]["reading"].startswith("no single account")
+    assert "P5, P7 and P8" in j["summary"]["reading"] and "sole account" in j["summary"]["reading"]
+    assert "reject" not in j["summary"]["reading"]
 
 
 def test_planted_fingerprints_survive_the_joint_rule():
@@ -503,11 +534,11 @@ def test_planted_fingerprints_survive_the_joint_rule():
     assert j["summary"]["content_accounts_consistent"] == ["H2_evidence"]
 
 
-def test_alias_reads_the_plain_score():
+def test_a_missing_score_reads_as_none():
     t = _item(step0=True)
     by = {(t["id"], "aligned"): {"L": 2.0}, (t["id"], "yn_swapped"): {"L": -1.0}}
-    assert mech2._value(by, t, "aligned_end", "cand") == 2.0 and mech2._value(by, t, "swapped_end", "yn") == -1.0
-    assert mech2._value(by, _item(), "aligned_end", "cand") is None
+    assert mech2._value(by, t, "aligned", "cand") == 2.0 and mech2._value(by, t, "swapped", "yn") == -1.0
+    assert mech2._value(by, t, "aligned_start", "cand") is None and mech2._value(by, t, "swapped", "cand") is None
 
 
 def test_later_holds_no_step0_item():
@@ -682,10 +713,16 @@ def test_end_to_end_two_shards_then_analysis(mock_root):
     m = json.loads((mock_root / "mech2_smoke_analysis" / "metrics.json").read_text())
     for tag in rq1.FEWSHOT:
         assert set(m[tag]["primary"]["contrasts"]) == set(mech2.PRIMARY)
-        assert set(m[tag]["primary"]["readout"]) == set(mech2.PREDICTIONS)
+        assert set(m[tag]["primary"]["readout"]) == set(mech2.PREDICTIONS) | {"rivals"}
         assert "position" in m[tag]["secondary"] and "yn_item_share_toward_yes_vs_swapped" in m[tag]["arms_on_sample"]["done"]
-        assert set(m[tag]["readout_both_formats"]) == set(mech2.PREDICTIONS) | {"summary"}
+        assert set(m[tag]["readout_both_formats"]) == set(mech2.PREDICTIONS) | {"summary", "rivals"}
+        assert m["integrity"][tag]["status"] == "complete" and m["integrity"][tag]["n_hash_mismatch"] == 0
+        assert set(m[tag]["mixture_readout"]) == {"P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed"}
+    # the scoring config left Mistral out: reported as not scored, no block
+    assert m["models_not_scored"] == ["mistral-7b-v0.3"] and "mistral-7b-v0.3" not in m
     assert m["items"]["n_union"] == len(mech2.battery_items(primary, 30)["union"])
+    status = (mock_root / "mech2_smoke_analysis" / "STATUS.md").read_text()
+    assert "yes/no" in status and "untested" in status and "cannot be the sole account" in status
 
 
 def test_resume_scores_nothing_twice(mock_root):
@@ -808,6 +845,9 @@ def test_the_secondary_model_is_scored_and_reported_descriptively(mock_root):
     m = json.loads((mock_root / "mech2_smoke_analysis" / "metrics.json").read_text())
     assert m["qwen3-8b-fewshot"]["role"] == "primary" and m["mistral-7b-v0.3"]["role"].startswith("secondary")
     assert "readout_both_formats" in m["mistral-7b-v0.3"]
+    # amendment after review 2: Mistral is scored only on the arms the primary contrasts read
+    assert {mech2.split_condition(r["condition"])[0] for r in recs if r["model"] == "mistral-7b-v0.3"} == set(mech2.PRIMARY_ARMS)
+    assert {mech2.split_condition(r["condition"])[0] for r in recs if r["model"] == "qwen3-8b-fewshot"} == set(mech2.ARMS)
 
 
 def test_the_runner_scores_through_the_model_template_handling(mock_root, monkeypatch):
@@ -837,3 +877,283 @@ def test_the_runner_scores_through_the_model_template_handling(mock_root, monkey
 
     assert mech2.run_mech2_score(_cfg(n_shards=1, models=["mistral-7b-v0.3"]), open_scorer=opener) == 0
     assert seen and all(m[0]["role"] == "user" and all(x["role"] != "system" for x in m) for m in seen)
+
+
+# ---------------- amendment after review 2 (2026-11-20, before any score) ----------------
+
+
+def _words(line):
+    return line.split()
+
+
+def test_minimal_pairs_differ_only_where_designed():
+    """P1, P2 and P8 compare lines that differ only in the designed words."""
+    for _, verb, t in _all_variants():
+        keep_sw, ignore = mech2.task_line(t, "desire_keep_sw"), mech2.task_line(t, "mention_ignore")
+        sw = t["swapped_task_line"]
+        assert keep_sw.startswith(sw + " ") and ignore.startswith(sw + " ")  # the same swapped task in both
+        keep = mech2.task_line(t, "desire_keep")[len("Your task is to: "):]
+        assert keep_sw[len(sw) + 1:] == keep[0].upper() + keep[1:]  # desire_keep's own sentence, after the swapped task
+        check, can = _words(mech2.task_line(t, "desire_check")), _words(mech2.task_line(t, "desire_check_can"))
+        assert len(check) == len(can) and [(a, b) for a, b in zip(check, can) if a != b] == [("cannot.", "can.")]
+        if verb == "take":
+            neg, aff = _words(mech2.task_line(t, "negated")), _words(mech2.task_line(t, "affirmed"))
+            assert len(neg) == len(aff) and [(a, b) for a, b in zip(neg, aff) if a != b] == [("no", "an")]
+
+
+def _note_table(heading: str) -> list[list[str]]:
+    text = (Path(__file__).resolve().parents[1] / "notes" / "mechanism2_design.md").read_text()
+    rest = text.split("### 12.3 " + heading, 1)[1]
+    table = next(b for b in rest.split("\n\n") if b.startswith("|"))  # the first table after the heading
+    rows = [ln for ln in table.splitlines() if ln.startswith("|")]
+    return [[c.strip() for c in ln.strip().strip("|").split("|")] for ln in rows]
+
+
+def _cell(text: str) -> frozenset[str] | None:
+    if not text:
+        return None
+    out: set[str] = set()
+    for tok in re.split(r",\s*|\s+or\s+", text):
+        out |= {"S", "L"} if tok == "+" else {tok}
+    assert out <= set(mech2.ZONES), text
+    return frozenset(out)
+
+
+def test_the_prediction_table_in_the_note_is_the_code_s():
+    """The amended table (section 12) read cell by cell, "+" as S or L, equals PREDICTIONS exactly."""
+    rows = _note_table("Prediction table (amended after review 2)")
+    header, body = rows[0], rows[2:]
+    accounts = {"H2 evidence": "H2_evidence", "H3 referent salience": "H3_salience", "H4 wishful": "H4_wishful",
+                "H5 policy blending": "H5_policy_blend", "H6_lexical": "H6_lexical", "H6_position": "H6_position"}
+    cols = [accounts[h] for h in header[1:]]
+    parsed: dict[str, dict[str, frozenset[str]]] = {h: {} for h in cols}
+    names = {c.split("_")[0]: c for c in mech2.PRIMARY}
+    assert len(body) == len(mech2.PRIMARY)
+    for row in body:
+        name = names[row[0].split()[0]]
+        for h, cell in zip(cols, row[1:]):
+            z = _cell(cell)
+            if z is not None:
+                parsed[h][name] = z
+    assert parsed == mech2.PREDICTIONS
+
+
+def test_p6_counts_every_step0_item_of_the_union_even_outside_the_sample():
+    items = _syn_items()
+    step0 = {t["id"] for t in items if t["history_len"] == 0}
+    sample = {t["id"] for t in items if t["history_len"] > 0} | set(sorted(step0)[:10])  # most step-0 items left out
+    pops = mech2.populations(items, sample, step0)
+    fam = mech2.primary_family(mech2._lookup(_syn_scores(items, FINGERPRINTS["H3_salience"])), pops, B=30, perms=30)
+    assert fam["contrasts"]["P6_position_step0"]["n_items"] == len(step0) > 10
+    assert fam["contrasts"]["P1_keep_vs_ignore"]["n_items"] == len(sample)
+
+
+def test_two_format_rule_contradicted_in_one_format_and_undecided_in_the_other_is_undecided():
+    none = {c: None for c in mech2.PRIMARY}
+    cand = mech2.readout({**none, "P8_negated_vs_affirmed": ("Z",)})  # contradicts H2 (N) in this format
+    yn = mech2.readout({**none, "P8_negated_vs_affirmed": ("N", "Z")})  # undecided for H2
+    assert cand["H2_evidence"]["per_contrast"]["P8_negated_vs_affirmed"] == "contradicted"
+    assert yn["H2_evidence"]["per_contrast"]["P8_negated_vs_affirmed"] == "undecided"
+    j = mech2.joint_readout(cand, yn)
+    assert j["H2_evidence"]["per_contrast"]["P8_negated_vs_affirmed"] == "undecided"
+    assert j["H2_evidence"]["verdict"] == "untested" and j["H2_evidence"]["n_contradicted"] == 0
+    assert "H2_evidence" in j["summary"]["content_accounts_untested"]
+    assert "H2_evidence" not in j["summary"]["content_accounts_contradicted"]
+    # the same in the other order
+    assert mech2.joint_readout(yn, cand)["H2_evidence"]["verdict"] == "untested"
+
+
+def test_consistent_needs_a_rival_contradicted_on_the_same_contrast():
+    none = {c: None for c in mech2.PRIMARY}
+    # P5 in N and Z: consistent with H4 (N or Z), undecided for H2 (N) and the Z accounts; no rival contradicted
+    ro = mech2.readout({**none, "P5_done_vs_cancelled": ("N", "Z")})
+    assert ro["H4_wishful"]["per_contrast"]["P5_done_vs_cancelled"] == "consistent"
+    assert ro["H4_wishful"]["verdict"] == "untested" and ro["H4_wishful"]["consistent_where_a_rival_fails"] == []
+    # P4 large: consistent with H2-H5, H6_lexical contradicted, so each of H2-H5 is consistent
+    ro = mech2.readout({**none, "P4_need_without_name": ("L",)})
+    assert all(ro[h]["verdict"] == "consistent" for h in ("H2_evidence", "H3_salience", "H4_wishful", "H5_policy_blend"))
+    # P6: H6_position's rival is "no position effect"
+    ro = mech2.readout({**none, "P6_position_step0": ("N",)})
+    assert ro["H6_position"]["verdict"] == "consistent" and ro["rivals"]["no_position_effect"]["P6_position_step0"] == "contradicted"
+
+
+def test_no_two_accounts_share_a_row_and_the_thin_pairs_are_known():
+    sep = mech2.separations()
+    assert not any(v["identical_rows"] for v in sep.values())
+    content = [k for k in sep if "H6_position" not in k]
+    assert all(sep[k]["separate"] for k in content)
+    thin = {k: v["separate"] for k, v in sep.items() if k in content and len(v["separate"]) == 1}
+    assert thin == {"H3_salience vs H6_lexical": ["P4_need_without_name"], "H4_wishful vs H5_policy_blend": ["P2_hope_polarity"]}
+
+
+def test_holm_family_of_eight_counts_a_missing_p_as_one():
+    items = _syn_items()
+    scores = [s for s in _syn_scores(items, FINGERPRINTS["H4_wishful"], noise=0.5)
+              if mech2.split_condition(s["condition"])[0] != "affirmed"]  # P8 cannot be computed
+    fam = _family(scores, items)
+    assert fam["contrasts"]["P8_negated_vs_affirmed"]["n_items"] == 0
+    ps = {k: v["p"] for k, v in fam["contrasts"].items() if v["p"] == v["p"]}
+    smallest = min(ps, key=ps.get)
+    assert 8 * ps[smallest] < 1 and abs(fam["contrasts"][smallest]["holm_p"] - 8 * ps[smallest]) < 1e-12
+    assert fam["contrasts"]["P8_negated_vs_affirmed"]["holm_p"] == 1.0
+
+
+def test_dropped_draw_rule_counts_resamples_not_items(monkeypatch):
+    """r is not estimable when more than 2% of the B resamples are undefined, however many items there are."""
+    items = _syn_items()  # 480 items: 2% of the items would allow 9 dropped draws
+    by = mech2._lookup(_syn_scores(items, FINGERPRINTS["H4_wishful"], noise=0.0))
+    real = mech2.cluster_bootstrap
+
+    def fake(fn, xs, games, B, seed):
+        out = real(fn, xs, games, B=B, seed=seed)
+        return {**out, "n_dropped": 3} if fn is mech2._ratio else out
+    monkeypatch.setattr(mech2, "cluster_bootstrap", fake)
+    r = mech2.contrast(by, items, ((1, "desire_keep"), (-1, "swapped")), reference=REF, B=100, perms=20)
+    assert r["n_items"] > 3 / 0.02 and r["ratio"]["n_dropped"] == 3 and not r["ratio"]["estimable"]
+    r = mech2.contrast(by, items, ((1, "desire_keep"), (-1, "swapped")), reference=REF, B=200, perms=20)
+    assert r["ratio"]["estimable"]  # 3 of 200 is 1.5%
+
+
+def test_secondary_readouts_read_the_arms_they_name():
+    items = _syn_items()
+    fp = {**FINGERPRINTS["H2_evidence"], "done": -0.3, "cancelled": 0.5, "desire_keep": 0.3}
+    block = mech2.model_block(_syn_scores(items, fp, noise=0.0, yn_scale=0.5), items, {t["id"] for t in items},
+                              {t["id"] for t in items if t["history_len"] == 0}, B=20, perms=20)
+    sec = block["secondary"]
+    # done - cancelled on every placement item, as first designed
+    assert abs(sec["done_vs_cancelled_all_placement"]["estimate"] + 0.8 * D) < 1e-9
+    # P5 against cancelled's own lift over swapped: -0.8 / 0.5
+    assert abs(sec["P5_against_cancelled_lift"]["cand"]["ratio"]["estimate"] + 1.6) < 1e-9
+    assert abs(sec["cancelled_lift_on_p5_items"]["yn"]["estimate"] - 0.5 * 0.5 * D) < 1e-9
+    # the first P1 and P2, now secondary
+    assert abs(sec["old_P1_desire_keep_vs_ignore"]["cand"]["ratio"]["estimate"] + 0.4) < 1e-9
+    assert abs(sec["old_P2_desire_check_vs_swapped"]["yn"]["ratio"]["estimate"] - 0.6) < 1e-9
+    assert abs(sec["desire_keep_alone_vs_after_swapped"]["cand"]["estimate"] + 0.5 * D) < 1e-9
+    # P7 and P8 on the items whose receptacle contents the history does not show (here every take item)
+    assert abs(sec["P7_P8_contents_not_shown"]["P8_negated_vs_affirmed"]["yn"]["ratio"]["estimate"] + 1.4) < 1e-9
+    assert sec["P7_P8_contents_not_shown"]["P7_negated_existence"]["cand"]["n_items"] == len(
+        [t for t in items if mech2.p7_eligible(t)])
+    # the mixture readout carries P5, P7 and P8 in both formats
+    mix = block["mixture_readout"]
+    assert abs(mix["P8_negated_vs_affirmed"]["yn"]["estimate"] + 1.4 * 0.5 * D) < 1e-9
+    assert abs(mix["P8_negated_vs_affirmed"]["cand"]["estimate"] + 1.4 * D) < 1e-9
+    assert mix["P5_done_vs_cancelled"]["cand"]["ratio"]["estimate"] == block["primary"]["contrasts"]["P5_done_vs_cancelled"]["ratio"]["estimate"]
+    # the first-token term (L_first = L / 2 in the synthetic scores) has the full L's sign: no split
+    assert not block["secondary"]["first_token_P7_P8"]["P7_negated_existence"]["sign_split_with_full_L"]
+
+
+def test_first_token_sign_split_is_flagged():
+    items = _syn_items()
+    scores = _syn_scores(items, FINGERPRINTS["H2_evidence"], noise=0.0)
+    for s in scores:  # the denial raises the first token while it lowers the full L (rq1d's split for Qwen)
+        if s["condition"] == "negated":
+            s["L_first"] = s["L"] + 20.0
+    block = mech2.model_block(scores, items, {t["id"] for t in items}, {t["id"] for t in items if t["history_len"] == 0},
+                              B=20, perms=20)
+    assert block["primary"]["contrasts"]["P7_negated_existence"]["estimate"] < 0
+    assert block["secondary"]["first_token_P7_P8"]["P7_negated_existence"]["sign_split_with_full_L"]
+
+
+def test_negated_by_history_reads_takes_of_the_goal_object_only():
+    t = _item(id="g", scene_locations={})
+    other = _item(id="o", action="take egg 1 from countertop 2")
+    by = {}
+    for x in (t, other):  # a stray negated score on a take of another object must not enter the readout
+        by[(x["id"], "negated")] = {"L": 1.0}
+        by[(x["id"], "swapped")] = {"L": 0.0}
+        by[(x["id"], "aligned")] = {"L": 2.0}
+    block = mech2.model_block(list({"transition_id": k[0], "condition": k[1], **v} for k, v in by.items()),
+                              [t, other], {"g", "o"}, set(), B=5, perms=5)
+    assert block["secondary"]["negated_by_history"]["contents not shown"]["n_items"] == 1
+
+
+def test_knowledge_split_reads_the_content_contrasts_only():
+    items = _syn_items(n_games=6, per_game=6)
+    scores = _syn_scores(items, FINGERPRINTS["H3_salience"], noise=0.0)
+    mech_scores = [{"transition_id": t["id"], "condition": c, "L": v} for t in items
+                   for c, v in (("state_absent", -1.0), ("statetwin_absent", 1.0))]
+    out = mech2.knowledge_split(scores, mech_scores, items, B=10)
+    assert set(out) == {"aligned_effect"} | {n for n, s in mech2.PRIMARY.items() if s["population"] != "step0"}
+    assert "P6_position_step0" not in out and "P8_negated_vs_affirmed" in out
+
+
+def test_analysis_reports_the_secondary_model_by_default(mock_root):
+    models = ["qwen3-8b-fewshot", "llama3.1-8b-fewshot", "mistral-7b-v0.3"]
+    assert mech2.run_mech2_score(_cfg(n_shards=1, models=models)) == 0
+    assert mech2.run_mech2_analysis({"run_id": "mech2_smoke_analysis", "source": "mech2_smoke", "sample_n": 30,
+                                     "sources": ["rq12_transitions_smoke"], "bootstrap": 20, "permutations": 20}) == 0
+    m = json.loads((mock_root / "mech2_smoke_analysis" / "metrics.json").read_text())
+    assert m["models_not_scored"] == [] and m["mistral-7b-v0.3"]["role"].startswith("secondary")
+    assert m["integrity"]["mistral-7b-v0.3"]["status"] == "complete"
+
+
+def test_scoring_records_the_item_files_hashes(mock_root):
+    assert mech2.run_mech2_score(_cfg(n_shards=1)) == 0
+    inputs = json.loads((mock_root / "mech2_smoke" / "shard_00_of_01" / "inputs.json").read_text())["inputs"]
+    assert [Path(k).parent.name for k in inputs] == ["rq12_transitions_smoke"] and all(len(v) >= 16 for v in inputs.values())
+
+
+def _scored_and_analysed(mock_root, edit):
+    assert mech2.run_mech2_score(_cfg(n_shards=1)) == 0
+    path = mock_root / "mech2_smoke" / "shard_00_of_01" / "scoring.jsonl"
+    recs = edit(read_jsonl(path))
+    path.write_text("".join(json.dumps(r) + "\n" for r in recs))
+    rc = mech2.run_mech2_analysis({"run_id": "mech2_smoke_analysis", "source": "mech2_smoke", "sample_n": 30,
+                                   "models": list(rq1.FEWSHOT), "sources": ["rq12_transitions_smoke"],
+                                   "bootstrap": 20, "permutations": 20})
+    d = mock_root / "mech2_smoke_analysis"
+    return rc, json.loads((d / "integrity.json").read_text()), (d / "STATUS.md").read_text(), (d / "metrics.json").exists()
+
+
+def test_analysis_refuses_a_score_of_a_changed_item(mock_root):
+    def edit(recs):
+        recs[0]["item_hash"] = "an older item"
+        return recs
+    rc, integ, status, metrics = _scored_and_analysed(mock_root, edit)
+    assert rc == 1 and integ["refuse"] and not metrics and "nothing analysed" in status
+    assert integ[next(iter(rq1.FEWSHOT))]["n_hash_mismatch"] + integ[list(rq1.FEWSHOT)[1]]["n_hash_mismatch"] == 1
+
+
+def test_analysis_refuses_missing_or_doubled_scores(mock_root):
+    rc, integ, _, metrics = _scored_and_analysed(mock_root, lambda recs: recs[1:])
+    assert rc == 1 and not metrics and sum(integ[t]["n_missing"] for t in rq1.FEWSHOT) == 1
+    cells = [c for t in rq1.FEWSHOT for c in integ[t]["cells_off"].values()]
+    assert cells and cells[0]["present"] == cells[0]["expected"] - 1
+
+
+def test_analysis_refuses_doubled_scores(mock_root):
+    rc, integ, _, _ = _scored_and_analysed(mock_root, lambda recs: recs + recs[:1])
+    assert rc == 1 and sum(integ[t]["n_duplicates"] for t in rq1.FEWSHOT) == 1
+
+
+def test_integrity_counts_expected_scores_per_model_arm_and_format():
+    items = [_item(id="a", step0=True), _item(id="b", action=ACTIONS["move"])]
+    scores = [{"model": "mistral-7b-v0.3", "transition_id": t["id"], "condition": mech2.condition(a, f),
+               "item_hash": mech2._item_hash(t), "L": 0.0} for t, a, f in mech2.jobs(items, mech2.PRIMARY_ARMS)]
+    out = mech2.score_integrity(scores, items, ["mistral-7b-v0.3", "qwen3-8b-fewshot"])
+    assert out["mistral-7b-v0.3"]["status"] == "complete" and out["qwen3-8b-fewshot"]["status"] == "not scored"
+    assert out["refuse"]  # a primary model with no score
+    assert not mech2.score_integrity(scores, items, ["mistral-7b-v0.3"])["refuse"]
+    extra = scores + [{**scores[0], "condition": "neutral"}]  # an arm Mistral is not scored on
+    assert mech2.score_integrity(extra, items, ["mistral-7b-v0.3"])["mistral-7b-v0.3"]["n_unexpected"] == 1
+
+
+def test_mistral_arms_are_those_the_primary_contrasts_read():
+    read = {arm for spec in mech2.PRIMARY.values() for _, arm in spec["terms"] + spec["reference"]}
+    assert set(mech2.PRIMARY_ARMS) == read and set(mech2.model_arms("mistral-7b-v0.3")) == read
+    assert {"neutral", "desire_keep", "mention_exists"}.isdisjoint(read)
+    assert mech2.model_arms("qwen3-8b-fewshot") == mech2.ARMS == mech2.model_arms("llama3.1-8b-fewshot")
+
+
+def test_contents_not_shown_reads_only_the_takes_whose_receptacle_was_not_seen():
+    items = _syn_items(n_games=20, per_game=6)
+    for k, t in enumerate(items):
+        if k % 2 and t["history_len"]:  # the history shows countertop 2 without an apple: P7 item, contents shown
+            t["history_text"] = t["history_text"].replace("go to countertop 1", "go to countertop 2").replace(
+                "You arrive at countertop 1. On the countertop 1", "You arrive at countertop 2. On the countertop 2")
+    shown = [t for t in items if mech2.is_take(t) and mech2.negated_status(t)[1] == "shown, without it"]
+    assert shown
+    block = mech2.model_block(_syn_scores(items, FINGERPRINTS["H2_evidence"], noise=0.0), items, {t["id"] for t in items},
+                              {t["id"] for t in items if t["history_len"] == 0}, B=10, perms=10)
+    ns = block["secondary"]["P7_P8_contents_not_shown"]["P7_negated_existence"]["cand"]
+    assert ns["n_items"] == sum(mech2.p7_eligible(t) for t in items) - len(shown)
