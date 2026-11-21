@@ -96,7 +96,7 @@ Fix round 1 (after review 1, before any score) adds tests for: odd-step states l
 | fix1 a secondary model decides Option C | `test_option_c_reads_rule2_only_and_primary_models_only` |
 | fix1 acceptance cells swapped | `test_rule2_difference_splits_by_acceptance_cell` |
 | fix1 acceptance contributions per cell | `test_rule2_difference_splits_by_acceptance_cell` |
-| fix1 attribution ignores the half | `test_option_c_categories (swapped part below half)` |
+| fix1 attribution ignores the half (adapted in review 3) | `test_option_c_categories` (swapped part below half) |
 | fix1 attribution ignores the sign | retired after review 2 as equivalent (see below) |
 | fix1 baseline on every state | `test_odd_step_states_are_left_out_of_every_state_level_rate` |
 | fix1 broad generator every step | `test_odd_step_states_are_left_out_of_every_state_level_rate` |
@@ -220,8 +220,8 @@ All 154 are caught (`MUTANTS_MATCHING=decisionsim`, six shards, 2026-11-21). The
 | review2 N7 fallback read from another cell | `test_option_c_categories` (default case, worth doing) |
 | review2 N8 fallback checked before attribution | `test_option_c_categories` (not attributable with a large fallback share) |
 | review2 N9 fallback category after not attributable | `test_option_c_category_order` |
-| review2 N10 attribution ignores the sign of aligned minus base | `test_option_c_categories` (aligned minus base negative) |
-| review2 N11 pays-for-itself strict | `test_option_c_notes_a_comparison_verifier_that_does_not_pay_for_itself` |
+| review2 N10 attribution ignores the sign of aligned minus base (adapted in review 3) | `test_option_c_categories` (aligned minus base negative) |
+| review2 N11 pays-for-itself strict (adapted in review 3) | `test_option_c_notes_a_comparison_verifier_that_does_not_pay_for_itself` |
 | review2 N12 yn_blind_all allowed for a secondary model | `test_arms_must_include_aligned_and_neutral` |
 | review2 N13 example task lines not checked | `test_strip_example_tasks_refuses_a_prompt_without_the_examples` |
 | review2 N14 yn_blind_all keeps the query's task | `test_blind_all_prompt_also_strips_only_the_examples_task_lines` (qwen3-8b) |
@@ -257,6 +257,36 @@ All 154 are caught (`MUTANTS_MATCHING=decisionsim`, six shards, 2026-11-21). The
 | review2 R21 tie split for b reads La | `test_ties_are_counted_and_split_evenly_in_the_sensitivity_readout` |
 | review2 R22 blind history accepts two task sentences (count >= 1) | `test_blind_history_removes_the_first_observations_task_sentence_and_nothing_else` |
 | review2 R23 rule 3 states counted over all states | `test_rule3_state_count_is_on_even_steps` |
+
+### Review 3 (2026-11-21, before any score)
+
+New tests in `tests/test_decisionsim.py` (100 collected, from 96; 72 test functions, from 68):
+- the attribution check at exactly half (20, 8 and 14 of 676 states), plus a sweep of every exactly-half case up to 80 failing states (one state less fails); the old float comparison failed 387 of those 1,560 cases;
+- the pays-for-itself flag reads its own comparison arm and stays false when the reference points are missing;
+- a helpful fallback menu (a negative rejected-both net) does not count against;
+- rule 2's headroom counts a failing proposal the history does not determine;
+- the step split reads the task-blind comparison, not the neutral one;
+- the prompt-format flag waits for the deciding verdict;
+- each verdict reports its states and incomplete states.
+
+`scripts/mutation_check.py` now holds 163 decision-simulation mutants:
+- 6 of the reviewer's survivors: S1 to S4, S6 and S10. Two others are left out as equivalent: S9, the same as the retired fix1 "attribution ignores the sign", and S11, since the task-blind query has no task line left to strip.
+- 3 for the fixes (T1, T3, T4).
+- 3 adapted to the changed code: fix1 "attribution ignores the half", review2 N10 and N11.
+
+All 163 are caught (`MUTANTS_MATCHING=decisionsim`, six shards, 2026-11-21).
+
+| Mutant | First test that fails |
+|---|---|
+| review3 S1 pays flag read from the deciding base for every verdict | `test_option_c_flags_read_their_own_comparison_and_stay_false_without_information` |
+| review3 S2 worth-doing-inside flag set when pays is unknown | `test_option_c_flags_read_their_own_comparison_and_stay_false_without_information` |
+| review3 S3 fallback share read as an absolute value | `test_a_fallback_menu_that_helps_does_not_count_against` |
+| review3 S4 headroom counts only determined failing proposals | `test_rule2_headroom_and_net_counts_in_the_contrast` |
+| review3 S6 step split against neutral | `test_rule2_by_step_splits_step_zero_from_later_steps` |
+| review3 S10 format sensitivity ignores a waiting deciding verdict | `test_prompt_format_sensitivity_waits_for_the_deciding_verdict` |
+| review3 T1 half compared without tolerance | `test_attribution_at_exactly_half_passes_whatever_the_floating_point` |
+| review3 T3 verdict does not report its states | `test_option_c_on_a_real_report` |
+| review3 T4 verdict does not report incomplete states | `test_option_c_on_a_real_report` |
 
 ## Model families, wave A (2026-11-20)
 

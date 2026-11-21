@@ -716,12 +716,14 @@ def test_rule3_state_count_is_on_even_steps():
 
 def test_rule2_by_step_splits_step_zero_from_later_steps():
     states, La = _reference_states()
+    La = {**La, "p0": -1.0}  # at step 0 the aligned verifier rejects the working proposal and falls back to f0
     Lb = D.oracle_scores(states)
-    rep = D.model_report(states, {"yn_aligned": La, "yn_absent": Lb, "yn_blind": Lb})
+    rep = D.model_report(states, {"yn_aligned": La, "yn_absent": La, "yn_blind": Lb})  # neutral equals aligned
     split = rep["rule2_by_step"]["yn_aligned_vs_yn_blind"]
     assert split["step0"]["n_states"] == 1 and split["later"]["n_states"] == 3  # s0 at step 0; s1-s3 later
+    assert (split["step0"]["net_states"], split["later"]["net_states"]) == (1, 2)  # against task-blind, not neutral
     whole = rep["yn_aligned_vs_yn_blind"]["rule2_verification"]
-    assert split["step0"]["net_states"] + split["later"]["net_states"] == whole["net_states"] == 2
+    assert split["step0"]["net_states"] + split["later"]["net_states"] == whole["net_states"] == 3
     assert set(rep["rule2_by_step"]) == {"yn_aligned_vs_yn_blind"}
 
 
@@ -742,6 +744,23 @@ def test_model_report_with_both_task_blind_prompts():
     assert D.option_c_model(rep, D.BLIND_ALL)["comparison"] == "yn_blind_all"
     c = rep["yn_aligned_vs_yn_blind_all"]["rule1_with_proposal"]
     assert c["fail_rate_difference"]["estimate"] == D.contrast("rule1_with_proposal", states, L_a, L_ball)["fail_rate_difference"]["estimate"]
+
+
+def test_prompt_format_sensitivity_waits_for_the_deciding_verdict(mock_root, monkeypatch):
+    """Review 3: a model scored with yn_blind_all but not yet with yn_blind gives a format verdict but no deciding one;
+    the sensitivity flag stays unset."""
+    real = D.option_c
+
+    def fake(reports, primary=D.PRIMARY, base=D.OPTION_C_BASE):
+        out = real(reports, primary, base)
+        out["verdict"] = {D.BLIND: "waiting for a primary model", D.NEUTRAL: "worth doing", D.BLIND_ALL: "worth doing"}[base]
+        return out
+
+    monkeypatch.setattr(D, "option_c", fake)
+    cfg = {"run_id": "decisionsim_analysis", "sources": ["rq12_transitions_smoke"], "n_states": "all", "models": {}}
+    assert D.run_decisionsim_analysis(cfg) == 0
+    m = json.loads((mock_root / "decisionsim_analysis" / "metrics.json").read_text())
+    assert m["option_c_sensitive_to_prompt_format"] is None
 
 
 def test_prompt_format_sensitivity_is_flagged_when_the_verdicts_differ(mock_root, monkeypatch):
@@ -886,6 +905,41 @@ def test_option_c_notes_a_comparison_verifier_that_does_not_pay_for_itself():
     assert D.option_c_model(_rep())["comparison_verifier_beats_no_verifier"] is None
 
 
+def test_attribution_at_exactly_half_passes_whatever_the_floating_point():
+    """Review 3: aligned 20/676, task-blind 8/676, swapped 14/676 is exactly half (6 of 12 states) and must pass."""
+    fa, fb, fs = 20 / 676, 8 / 676, 14 / 676
+    assert (fa - fs) < 0.5 * (fa - fb)  # the floating-point trap the tolerance closes
+    m = D.option_c_model(_rep(a_s=fa - fs, a_n=fa - fb))
+    assert m["attributable"] and m["category"] == "worth doing"
+    # every case where the swapped part is exactly half, computed as the decomposition computes it, passes; one state
+    # less is below half and does not
+    for a in range(1, 80):
+        for b in range(a % 2, a, 2):  # a - b even and positive
+            s_ = a - (a - b) // 2
+            Fa, Fb = a / 676, b / 676
+            assert D.option_c_model(_rep(a_s=Fa - s_ / 676, a_n=Fa - Fb))["attributable"], (a, b, s_)
+            assert not D.option_c_model(_rep(a_s=Fa - (s_ + 1) / 676, a_n=Fa - Fb))["attributable"], (a, b, s_)
+
+
+def test_option_c_flags_read_their_own_comparison_and_stay_false_without_information():
+    def ref(blind_fail, neutral_fail, none=0.058):
+        return {"by_arm": {"yn_blind": {"rule2_verification": {"fail_rate": {"estimate": blind_fail}, "no_verifier_fail_rate": none}},
+                           "yn_absent": {"rule2_verification": {"fail_rate": {"estimate": neutral_fail}, "no_verifier_fail_rate": none}}}}
+    rep = {**_rep(), "reference_points": ref(0.03, 0.10)}
+    assert D.option_c_model(rep)["comparison_verifier_beats_no_verifier"] is True
+    m = D.option_c_model(rep, D.NEUTRAL)  # the neutral verdict reads the neutral verifier, not the task-blind one
+    assert m["comparison_verifier_beats_no_verifier"] is False and m["worth_doing_inside_a_verifier_that_does_not_pay"]
+    m = D.option_c_model(_rep())  # no reference points: unknown, and the flag stays down
+    assert m["category"] == "worth doing" and m["comparison_verifier_beats_no_verifier"] is None
+    assert m["worth_doing_inside_a_verifier_that_does_not_pay"] is False
+
+
+def test_a_fallback_menu_that_helps_does_not_count_against():
+    """Review 3: a negative net in the rejected-both cell (the fallback helps) is at most half of any positive net."""
+    assert D.option_c_model(_rep(net=25, fb=-30))["category"] == "worth doing"
+    assert not D.option_c_model(_rep(net=25, fb=-30))["through_fallback"]
+
+
 def test_option_c_waits_for_the_task_blind_arm():
     no_blind = _rep(bases=(D.NEUTRAL,))
     o = D.option_c({"qwen3-8b": _rep(), "llama3.1-8b": no_blind})
@@ -931,6 +985,8 @@ def test_option_c_on_a_real_report():
         assert m["comparison_verifier_beats_no_verifier"] is True
     c = rep["yn_aligned_vs_yn_blind"]["rule2_verification"]
     assert c["by_acceptance"]["accepted_only_b"]["net"] == 36 and c["by_acceptance"]["rejected_both"]["net"] == 0
+    m = D.option_c_model({**rep, "n_states_incomplete": 2})  # review 3: each verdict reports its states
+    assert m["n_states"] == 36 and m["n_states_incomplete"] == 2
     rep = D.model_report(states, {"yn_aligned": L_a, "yn_absent": L_n, "yn_swapped": L_a, "yn_blind": L_b})
     assert D.option_c_model(rep)["category"] == "toward failure, not attributable to the real task"
     # the task-blind verifier chooses as the aligned one does: no change against it, whatever neutral does
@@ -947,6 +1003,8 @@ def test_option_c_on_a_real_report():
 
 def test_rule2_headroom_and_net_counts_in_the_contrast():
     states, La = _reference_states()
+    # review 3: a failing proposal the history does not determine still counts (17 of the census's 42)
+    states[1]["candidates"] = [{**t, "context_determined": False} if t["id"] == "q1" else t for t in states[1]["candidates"]]
     c = D.contrast("rule2_verification", states, La, D.oracle_scores(states))
     assert c["headroom_states"] == 3  # three failing proposals at even steps; the odd-step one never counts
     # aligned fails at s1 and s2; the oracle nowhere: net 2, all harm

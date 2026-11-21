@@ -819,9 +819,13 @@ def option_c_model(rep: dict[str, Any], base: str = OPTION_C_BASE) -> dict[str, 
     through_fallback = fallback_net - OPTION_C_FALLBACK_SHARE * net > TOL
     dec = rep[DECOMPOSITION_KEY[base]][OPTION_C_RULE]
     aligned_minus_base = dec[f"aligned_minus_{BASE_NAME[base]}"]
+    # the interval's bounds are means of per-state differences in {-1, 0, 1}: a zero sum is exactly 0.0, and any other
+    # sum is at least 1/n away from it, so lo > 0 and hi < 0 need no tolerance; p is (count + 1) / (n + 1), never 0.05
     toward_failure = lo > 0 and p < OPTION_C_P
-    attributable = (aligned_minus_base > 0 and dec["aligned_minus_swapped"] > 0
-                    and dec["aligned_minus_swapped"] >= OPTION_C_SWAP_SHARE * aligned_minus_base)
+    # review 3: rates are differences of counts over the same states, so every comparison of two of them allows TOL
+    # (at exactly half, floating point put the swapped part a hair below in about a quarter of the cases)
+    attributable = (aligned_minus_base > TOL and dec["aligned_minus_swapped"] > TOL
+                    and dec["aligned_minus_swapped"] - OPTION_C_SWAP_SHARE * aligned_minus_base >= -TOL)
     if toward_failure and net_enough and attributable and not through_fallback:
         category = "worth doing"
     elif toward_failure and net_enough and attributable:
@@ -836,9 +840,10 @@ def option_c_model(rep: dict[str, Any], base: str = OPTION_C_BASE) -> dict[str, 
         category = "no reliable change in failures"
     # review 2, stated before data: does the comparison verifier beat executing the proposal as is on these menus?
     ref = (rep.get("reference_points") or {}).get("by_arm", {}).get(base, {}).get(OPTION_C_RULE)
-    pays = None if ref is None else ref["fail_rate"]["estimate"] <= ref["no_verifier_fail_rate"]
+    pays = None if ref is None else ref["fail_rate"]["estimate"] - ref["no_verifier_fail_rate"] <= TOL
     r1 = rep[f"{ALIGNED}_vs_{base}"]["rule1_with_proposal"]
-    return {"category": category, "comparison": base, "harm_rate": harm, "help_rate": c["help_rate"]["estimate"],
+    return {"category": category, "comparison": base, "n_states": c.get("n_states"),
+            "n_states_incomplete": rep.get("n_states_incomplete"), "harm_rate": harm, "help_rate": c["help_rate"]["estimate"],
             "fail_rate_difference": c["fail_rate_difference"]["estimate"],
             "fail_rate_difference_ci": [lo, hi], "p": p, "toward_failure": toward_failure,
             "net_states": net, "headroom_states": head, "net_required": net_required, "net_enough": net_enough,
