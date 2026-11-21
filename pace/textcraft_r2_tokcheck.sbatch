@@ -23,7 +23,7 @@
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 : "${TC2_TAG:?set TC2_TAG to a model tag of wf/textcraft/r2.py}"
-: "${SERVE_ENV:?set SERVE_ENV to the serve environment's prefix}"
+: "${SERVE_ENV:?set SERVE_ENV to the prefix of the serve environment}"
 : "${HF_HOME:?set HF_HOME to the HF cache holding the pinned snapshots}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-$HF_HOME}" TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME}"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1
