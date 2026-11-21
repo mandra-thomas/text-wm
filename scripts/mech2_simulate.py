@@ -15,7 +15,11 @@ the earlier runs (two-candidate: rq1x_v2 `named_goal`; yes/no: rq1v_v2 `goal_eff
 - the joint verdicts: which content accounts are consistent, untested and contradicted, how often the planted account
   is the sole survivor (the only content account not contradicted, and consistent), how many (account, contrast)
   readings are decided, and how many are format-dependent;
-- for mixtures, the categories and mean r of P5, P7 and P8 (the readout fixed for mixtures).
+- for mixtures, the categories and mean r of P5, P7 and P8 (the readout fixed for mixtures);
+- after review 3, for every scenario: the mention component M (half of negated plus half of affirmed, minus swapped,
+  on P7's items) per format (mean r and the zones of its interval), the negation placebo's zones, how often the
+  summary's two fixed sentences are given (salience likely part of the effect; claims read, evidence not shown), how
+  often an account is untested because it was consistent only where it allows zero, and the most common summary text.
 
 A scenario plants one fingerprint in both formats, or one per format (formats that disagree), and may name the account
 it is meant to show and a `truth` fingerprint to judge contradictions against (when it adds artefacts such as a gap in
@@ -35,7 +39,7 @@ MODELS = {  # (aligned effect D in nats, per-item SD of the effect, within-game 
     "llama": {"cand": (1.65, 1.94, 0.12), "yn": (2.21, 1.97, 0.19)},
 }
 KEYS = ("desire_keep", "desire_keep_sw", "desire_check", "desire_check_can", "mention_ignore", "described", "done",
-        "cancelled", "negated", "affirmed", "p6")
+        "cancelled", "negated", "affirmed", "placebo_negated", "placebo_affirmed", "p6")
 ZERO = dict.fromkeys(KEYS, 0.0)
 
 
@@ -104,6 +108,14 @@ SCENARIOS: dict[str, dict] = {
                       "truth": FP["H3_salience"], "account": "H3_salience"},
     # review 2: the 50/50 mixture of H2 and H3
     "mix_H2_H3": {"cand": mix(FP["H2_evidence"], FP["H3_salience"]), "mixture": True},
+    # review 3: salience drives the goal effect, and the model also reads explicit claims as any competent reader would
+    # (the denial lowers, the affirmation raises, "done" lowers); and salience with a lean toward failure after negation
+    # words ("not", "cannot", "no") in both formats, which the negation placebo shows (its "no" line 0.4 lower)
+    "H3_plus_comprehension": {"cand": {**FP["H3_salience"], "negated": .1, "affirmed": .9, "done": .2, "cancelled": .7},
+                              "truth": FP["H3_salience"]},
+    "H3_negation_priming": {"cand": {**FP["H3_salience"], "desire_keep_sw": .3, "desire_check": .3, "negated": .3,
+                                     "placebo_negated": -.4},
+                            "truth": FP["H3_salience"]},
 }
 
 
@@ -153,11 +165,28 @@ def main() -> None:
             false_contra = {k: Counter() for k in ("cand", "yn", "joint")}  # account -> replications with one
             verdicts, sole, decided, fdep = Counter(), 0, Counter(), Counter()
             mix_r = defaultdict(list)
+            m_r, m_zones, placebo_zones, flags, readings, why_untested = (defaultdict(list), defaultdict(Counter),
+                                                                          defaultdict(Counter), Counter(), Counter(), Counter())
             for rep in range(reps):
                 rng = random.Random(f"{model}|{name}|{rep}")
                 by = mech2._lookup(synth(sets["union"], fps, params, rng))
                 fam = {f: mech2.primary_family(by, pops, f, B=B, perms=B) for f in ("cand", "yn")}
-                joint = mech2.joint_readout(fam["cand"]["readout"], fam["yn"]["readout"])
+                mention = {f: mech2.contrast(by, pops["sample_take"], mech2.MENTION_TERMS, f, reference=mech2._REF, B=B, perms=B)
+                           for f in ("cand", "yn")}
+                joint = mech2.joint_readout(fam["cand"]["readout"], fam["yn"]["readout"], mention)
+                for f in ("cand", "yn"):
+                    m_r[f].append(mention[f]["ratio"]["estimate"])
+                    m_zones[f][str(mech2.secondary_zones(mention[f]))] += 1
+                    pl = mech2.contrast(by, pops["sample_take"], ((1, "placebo_negated"), (-1, "placebo_affirmed")), f,
+                                        reference=mech2._REF, B=B, perms=B)
+                    placebo_zones[f][str(mech2.secondary_zones(pl))] += 1
+                summ = joint["summary"]
+                flags["salience_likely_part"] += summ["salience_likely_part"]
+                flags["claims_read_not_evidence_shown"] += summ["claims_read_not_evidence_shown"]
+                readings[summ["reading"]] += 1
+                for h in mech2.CONTENT_ACCOUNTS:
+                    if joint[h]["untested_reason"] == "consistent only where it allows zero":
+                        why_untested[h] += 1
                 for f in ("cand", "yn"):
                     for c, r in fam[f]["contrasts"].items():
                         cats[f][c][r["category"]] += 1
@@ -197,7 +226,15 @@ def main() -> None:
             if sc.get("mixture") or name.startswith("mix"):
                 print("   mixture readout, mean r (cand): " + ", ".join(
                     f"{c[:2]} {sum(v) / len(v):+.2f}" for c, v in mix_r.items()))
-            print("   verdicts (both formats):", dict(verdicts), flush=True)
+            print("   verdicts (both formats):", dict(verdicts))
+            print("   M (mention, claim balanced): mean r " + ", ".join(f"{f} {sum(v) / len(v):+.2f}" for f, v in m_r.items())
+                  + "; zones " + "; ".join(f"{f} {dict(z)}" for f, z in m_zones.items()))
+            print("   negation placebo zones: " + "; ".join(f"{f} {dict(z)}" for f, z in placebo_zones.items()))
+            print(f"   summary sentences: salience likely part {flags['salience_likely_part']}/{reps}, claims read "
+                  f"(evidence not shown) {flags['claims_read_not_evidence_shown']}/{reps}; untested because consistent "
+                  f"only where it allows zero: {dict(why_untested)}")
+            top, n = readings.most_common(1)[0]
+            print(f"   most common summary ({n}/{reps}): {top}", flush=True)
 
 
 if __name__ == "__main__":

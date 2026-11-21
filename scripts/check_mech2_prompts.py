@@ -14,8 +14,12 @@ Checks, for every (item, arm, format) the run would score:
   only on take items;
 - the minimal pairs (amendment after review 2): desire_keep_sw and mention_ignore are the same swapped line plus one
   sentence; desire_check and desire_check_can differ only in "cannot"/"can"; negated and affirmed differ only in
-  "no"/the article.
-Prints the jobs per model (Mistral: the arms the primary contrasts read).
+  "no"/the article;
+- the negation placebo (amendment after review 3): placebo_negated and placebo_affirmed are built on exactly the
+  negated arm's items, differ from each other only in "no"/the swapped object's article and from negated/affirmed
+  only in the object named, and never name the action's object.
+Prints the jobs per model (Mistral: the arms the primary contrasts read, on the sample, and P6's arms on every step-0
+item), the primary models' jobs on step-0 items outside the sample, and the H7_check groups.
 Prints counts by task type and action verb, the share of items whose "done" claim the history contradicts, and,
 with --examples, one task line per arm and task type.
 """
@@ -42,7 +46,7 @@ def query(msgs):
 def own_text(line: str, arm: str, t: dict) -> str:
     """The part of a task line this battery writes; the rest is inherited unchanged from earlier runs (RQ2's swapped
     line, rq1x's descriptions, the real task), whose wording, ALFWorld's "a apple" included, is kept for comparability."""
-    if arm in ("mention_ignore", "mention_exists", "negated", "affirmed", "desire_keep_sw"):
+    if arm in ("mention_ignore", "mention_exists", "negated", "affirmed", "desire_keep_sw", "placebo_negated", "placebo_affirmed"):
         return line[len(t["swapped_task_line"]):].strip()
     if arm in ("done", "cancelled"):
         return line.split(mech2._task_text(t["task_line"]), 1)[1].strip()
@@ -62,8 +66,10 @@ def form(line: str, arm: str, t: dict) -> list[str]:
         if (m[1] == "an") != (m[2][0] in "aeiou"):
             out.append(f"article: {m[0]}")
     inst = set(re.findall(r"\b[a-z]+ \d+\b", line))
-    allowed = ({mech2.parse_action(t["action"])[2]} if arm in ("desire_check", "desire_check_can", "negated", "affirmed")
-               else set())
+    allowed = ({mech2.parse_action(t["action"])[2]} if arm in ("desire_check", "desire_check_can", "negated", "affirmed",
+                                                                "placebo_negated", "placebo_affirmed") else set())
+    if arm.startswith("placebo_") and re.search(rf"\b{re.escape(t['goal_object'])}\b", own):
+        out.append("placebo names the action's object")
     if inst - allowed:
         out.append(f"instance named: {sorted(inst - allowed)}")
     return out
@@ -111,8 +117,11 @@ print(f"items: primary {len(primary)}, sample {len(sets['sample'])}, step-0 {len
       f"games {len({t['game_id'] for t in union})}")
 print(f"jobs per model (Qwen3-8B, Llama-3.1-8B): {dict(n_jobs)}")
 for tag in mech2.PRIMARY_MODELS + mech2.SECONDARY_MODELS:
-    j = mech2.jobs(union, mech2.model_arms(tag))
-    print(f"  {tag}: {dict(Counter(f for _, _, f in j))} on {len(mech2.model_arms(tag))} arms")
+    j = mech2.model_jobs(tag, union, sets["sample"])
+    print(f"  {tag}: {dict(Counter(f for _, _, f in j))} on {len(mech2.model_arms(tag))} arms; on step-0 items outside "
+          f"the sample {dict(Counter(f for t, _, f in j if t['id'] not in sets['sample']))}, of them P6's arms "
+          f"{dict(Counter(f for t, a, f in j if t['id'] not in sets['sample'] and a in mech2.P6_ARMS))}; "
+          f"placebo arms {dict(Counter(f for _, a, f in j if a.startswith('placebo_')))}")
 
 
 def _diff(a: str, b: str) -> list[tuple[str, str]] | None:
@@ -134,13 +143,23 @@ for t in union:  # the minimal pairs of the amendment after review 2
         if _diff(check, can) != [("cannot.", "can.")]:
             problems["P2 pair: differs beyond the hope's polarity"] += 1
     neg, aff = mech2.task_line(t, "negated"), mech2.task_line(t, "affirmed")
+    pneg, paff = mech2.task_line(t, "placebo_negated"), mech2.task_line(t, "placebo_affirmed")
     if (neg is None) != (aff is None):
         problems["negated and affirmed built on different items"] += 1
+    if not ((neg is None) == (pneg is None) == (paff is None)):
+        problems["placebo pair built on other items than negated"] += 1
     if neg is not None:
         n_pairs["P8"] += 1
         d = _diff(neg, aff)
         if not d or len(d) != 1 or d[0][0] != "no" or d[0][1] != mech2.rq1._article(t["goal_object"]):
             problems["P8 pair: differs beyond no/article"] += 1
+    if pneg is not None:
+        n_pairs["placebo"] += 1
+        d = _diff(pneg, paff)
+        if not d or len(d) != 1 or d[0][0] != "no" or d[0][1] != mech2.rq1._article(t["swapped_goal_object"]):
+            problems["placebo pair: differs beyond no/article"] += 1
+        if _diff(neg, pneg) != [(t["goal_object"], t["swapped_goal_object"])]:
+            problems["placebo_negated differs from negated beyond the object named"] += 1
     for arm in mech2.POSITION_ARMS:
         if (mech2.task_line(t, arm) is None) != (t.get("history_len", 0) > 0):
             problems[f"{arm}: built after step 0 or missing at step 0"] += 1
@@ -172,6 +191,13 @@ for arm in ("negated", "affirmed"):
 print(f"P7 (negated, take items): {len(take)} sample items; claim status (scene at start, history):",
       dict(Counter(mech2.negated_status(t) for t in take)))
 print("P7 take items by reason:", dict(Counter(t["determination_reason"] for t in take)), "; P7 items (history does not show the object there):", sum(mech2.p7_eligible(t) for t in sample))
+shown = [t for t in sample if mech2.p7_eligible(t) and mech2.negated_status(t)[1] == "shown, without it"]
+hidden = [t for t in sample if mech2.p7_eligible(t) and mech2.negated_status(t)[1] == "contents not shown"]
+print(f"H7_check (i): P7 items shown without the object {len(shown)}, contents not shown {len(hidden)}; within "
+      f"contents_or_open_state {sum(t['determination_reason'] == 'contents_or_open_state' for t in shown)} and "
+      f"{sum(t['determination_reason'] == 'contents_or_open_state' for t in hidden)}; (iii) completing actions "
+      f"{sum(mech2.completes_task(t) for t in sample)} of {len(sample)} sample items, by task type "
+      f"{dict(Counter(mech2.task_type(t['task_line']) for t in sample if mech2.completes_task(t)))}")
 print("sample step-0 items:", sum(t.get("history_len", 0) == 0 for t in sample), "games in sample:", len({t["game_id"] for t in sample}))
 print("problems:", dict(problems) or "none")
 if "--examples" in sys.argv:

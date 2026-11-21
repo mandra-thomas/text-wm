@@ -184,6 +184,76 @@ The real tokenizers (pinned Qwen3-8B, Llama-3.1-8B and Mistral-7B-Instruct-v0.3,
 
 The gate was rerun on the real tokenizers after the amendment (ICE, `coc-cpu` partition, CPU job 7205732, the job's environment, 2026-11-20): both candidates of all 1,403 items for each model, and every yes/no prompt each model is scored on (19,292 for Qwen3-8B and Llama-3.1-8B, 15,083 for Mistral-7B-Instruct-v0.3, among them 3,520 of the three new arms), no problem for any model; "Yes" and "No" are the same single tokens as before.
 
+**Review 3 (2026-11-21, before any score).** The review's 22 mutants (A1 to A22; fourteen had survived: A1 to A9, A11, A15, A18, A19, A21) were added to `scripts/mutation_check.py`, adapted where the amended code moved their text (A4: the refusal list now ends with the primary-arm NaN count; A13: the mixture readout is now followed by M; A16: the affirmed line reads the swapped line from `sw`; A18: the NaN count goes through `_undefined`), except two that are equivalent and left out with the reason in the mutation list: A15 (the analysis reads a mismatched secondary model; a mismatch of any model refuses the analysis before the list of scored models is read) and A19 (H6_position consistent without a rival; an H6_position consistent on P6, zones within N, S and L, always contradicts the rival "no position effect", Z). A5 was equivalent as the code stood (a score of an unknown item was also counted as unexpected); the amendment counts the two apart, which makes A5 killable. Thirty-eight mutants of the amendment (T1 to T38: M and the two summary sentences, the risky rule and the labels, H2 on P3, the placebo pair and the named secondaries, Mistral's jobs, the integrity changes, H7_check's readouts and the knowledge split's known-minus-unknown) were added, and five existing mutants were updated where their text moved (untested read as consistent, negated built for every verb, N25, Q20, and the P5 take-from-target mutant, now anchored to its own function since `completes_task` repeats its last line). New tests (27; `tests/test_mech2.py` now has 104, all passing): discriminating contrasts need the rival to fail on the same contrast; consistent needs a risky prediction, with the untested reason and the labels; H2 allows P3 about zero; categories use Holm's p, not the raw p; P8 (and M and the placebo) read P7's items only; the integrity check refuses unknown items and unexpected conditions, counted apart; undefined scores counted, refused on primary arms, reported elsewhere (unit and end to end, status line); untested accounts are not read as a mixture; the joint position verdict needs both formats and reads the rival's own row; the first-token split is read against the two-candidate full L; every primary contrast's r is over aligned minus swapped; P5 against cancelled's lift reads P5's items; the two summary sentences and when they are withheld; M is half negated plus half affirmed minus swapped; the named secondaries in both formats against their predictions; secondary zones need an estimable r; Mistral's jobs (unit, runner and integrity); completing actions; the group difference and its r; the H7 readouts; the knowledge split's known-minus-unknown; the note's secondary prediction table equals `SECONDARY_PREDICTIONS`; H7_check stays out of the verdicts; the status line lists each account with its contrasts. Run on 2026-11-21 (`MUTANTS_MATCHING=mech2`): all 168 mech2 mutants killed, none timed out or failed to apply (the first run was stopped from outside after 137 mutants, all killed by a named test; the other 31 were run by name). A mutant counts as killed only when a named test fails: T4's first record named none (its pytest was probably ended by another process's `pkill`), so the summary test was made to check that case directly and T4 was rerun alone, killed by that test. Every one of the 168 has a named killing test below.
+
+| Mutant | Killed by (`tests/test_mech2.py::`) |
+| --- | --- |
+| A1 rival contradicted on any contrast counts | `test_discriminating_contrasts_are_those_where_a_rival_fails_on_the_same_contrast` |
+| A2 category from raw p, not Holm | `test_categories_use_the_holm_p_not_the_raw_p` |
+| A3 P8 on the whole sample | `test_p8_reads_p7_items_only` |
+| A4 integrity ignores unexpected scores | `test_integrity_refuses_unknown_items_and_unexpected_conditions` |
+| A5 integrity ignores unknown items | `test_integrity_refuses_unknown_items_and_unexpected_conditions` |
+| A6 untested accounts not counted as fitting | `test_untested_accounts_are_not_read_as_a_mixture` |
+| A7 rival reading taken from H6_position row | `test_joint_position_verdict_reads_both_formats_and_the_rival` |
+| A8 first-token split against yes/no full L | `test_first_token_split_is_read_against_the_two_candidate_full_L` |
+| A9 P1 reference is aligned minus mention_ignore | `test_every_primary_contrast_reads_r_over_the_aligned_minus_swapped_effect` |
+| A10 rival P6 band includes N | `test_position_counts_only_for_the_position_account` |
+| A11 joint position verdict from cand only | `test_joint_position_verdict_reads_both_formats_and_the_rival` |
+| A12 contents-not-shown keeps shown-without | `test_contents_not_shown_reads_only_the_takes_whose_receptacle_was_not_seen` |
+| A13 mixture readout drops P5 | `test_end_to_end_two_shards_then_analysis` |
+| A14 secondary not-scored refuses | `test_end_to_end_two_shards_then_analysis` |
+| A16 negated/affirmed receptacle without its number | `test_templates_read_as_written` |
+| A17 desire_keep_sw lower-case sentence | `test_templates_read_as_written` |
+| A18 undefined L never counted | `test_undefined_scores_count_and_refuse_on_primary_arms` |
+| A20 old P2 secondary against can | `test_secondary_readouts_read_the_arms_they_name` |
+| A21 P5 lift ratio on all placement items | `test_p5_lift_reads_p5_items_only` |
+| A22 mixture text when any account is contradicted | `test_readout_verdicts_and_the_joint_rule` |
+| T1 M is P7 | `test_mention_component_is_half_negated_plus_half_affirmed_minus_swapped` |
+| T2 M above the band in one format suffices | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| T3 M read above zero, not above the band | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| T4 salience sentence without the claims-only condition | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| T5 claims-only allows other contrasts | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| T6 claims sentence without H2 consistent | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| T7 risky rule dropped | `test_consistent_needs_a_risky_prediction` |
+| T8 risky read as excluding N | `test_position_counts_only_for_the_position_account` |
+| T9 label hides the contrasts that allow zero | `test_consistent_needs_a_risky_prediction` |
+| T10 untested reason from risky contrasts | `test_consistent_needs_a_risky_prediction` |
+| T11 H2 P3 back to positive only | `test_the_prediction_table_in_the_note_is_the_code_s` |
+| T12 placebo denies the action object | `test_templates_read_as_written` |
+| T13 placebo article of the action object | `test_templates_read_as_written` |
+| T14 placebo readout reversed | `test_named_secondaries_read_their_arms_in_both_formats` |
+| T15 P8 net adds the placebo | `test_named_secondaries_read_their_arms_in_both_formats` |
+| T16 S1 read in the two-candidate format only | `test_named_secondaries_read_their_arms_in_both_formats` |
+| T17 Mistral on every item | `test_mistral_is_scored_on_the_sample_and_p6_arms_on_every_step0_item` |
+| T18 Mistral without P6 arms outside the sample | `test_mistral_is_scored_on_the_sample_and_p6_arms_on_every_step0_item` |
+| T19 P6 arms are the position arms only | `test_mistral_is_scored_on_the_sample_and_p6_arms_on_every_step0_item` |
+| T20 integrity expects every job of the arms | `test_the_secondary_model_is_scored_and_reported_descriptively` |
+| T21 analysis checks integrity without the sample | `test_the_secondary_model_is_scored_and_reported_descriptively` |
+| T22 runner gives Mistral every job | `test_the_secondary_model_is_scored_and_reported_descriptively` |
+| T23 undefined L on a primary arm does not refuse | `test_undefined_scores_count_and_refuse_on_primary_arms` |
+| T24 undefined L on any arm counted as primary | `test_undefined_scores_count_and_refuse_on_primary_arms` |
+| T25 unknown items counted as unexpected too | `test_integrity_refuses_unknown_items_and_unexpected_conditions` |
+| T26 status line hides undefined scores | `test_status_line_reports_undefined_scores_of_secondary_arms` |
+| T27 every move completes the task | `test_completing_actions_move_the_goal_object_into_a_target_type_receptacle` |
+| T28 group difference reversed | `test_group_difference_is_a_difference_in_differences_with_r` |
+| T29 group r over group a reference only | `test_group_difference_is_a_difference_in_differences_with_r` |
+| T30 H7a groups swapped | `test_h7_readouts_split_p7_items_by_what_the_history_shows_and_actions_by_role` |
+| T31 H7c against every item | `test_h7_readouts_split_p7_items_by_what_the_history_shows_and_actions_by_role` |
+| T32 known minus unknown reversed | `test_knowledge_split_reports_known_minus_unknown` |
+| T33 knowledge split without desire_check | `test_knowledge_split_reads_the_content_contrasts_only` |
+| T34 secondary joint reading from one format | `test_secondary_zones_need_an_estimable_r` |
+| T35 secondary zones ignore estimable | `test_secondary_zones_need_an_estimable_r` |
+| T36 placebo predicted below zero under H2 | `test_named_secondaries_read_their_arms_in_both_formats` |
+| T37 summary not given M | `test_mention_component_is_half_negated_plus_half_affirmed_minus_swapped` |
+| T38 M on every sample item | `test_p8_reads_p7_items_only` |
+| N25 affirmed with "a" for every object | `test_templates_read_as_written` |
+| negated built for every verb | `test_every_arm_builds_for_every_task_type_and_verb` |
+| Q20 knowledge split on step-0 terms too | `test_knowledge_split_reads_the_content_contrasts_only` |
+| P5 keeps takes from a target-type receptacle | `test_p5_leaves_out_takes_from_a_target_type_receptacle_and_contradicted_items` |
+| untested read as consistent | `test_readout_verdicts_and_the_joint_rule` |
+
+The gate was rerun on the real tokenizers after the amendment (ICE, `coc-cpu` partition, CPU job 7219082, the job's environment read-only, 2026-11-21): both candidates of all 1,403 items for each model and every yes/no prompt each model is scored on (20,720, 20,720 and 11,878, the placebo pair's 1,428 per primary model among them), no problem for any model.
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:

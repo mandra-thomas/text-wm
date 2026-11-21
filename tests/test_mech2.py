@@ -63,10 +63,13 @@ def test_task_type_reads_every_template():
         mech2.task_type("Your task is to: dance.")
 
 
+TAKE_ARMS = ("negated", "affirmed", "placebo_negated", "placebo_affirmed")
+
+
 def _arms(t):
-    """The arms an item carries: every arm, except negated and affirmed on items whose action is not a take, and the
-    position arms after step 0 (amendment after review 2)."""
-    return [a for a in mech2.ARMS if (a not in ("negated", "affirmed") or t["action"].startswith("take "))
+    """The arms an item carries: every arm, except negated, affirmed and the placebo pair (review 3) on items whose
+    action is not a take, and the position arms after step 0 (amendment after review 2)."""
+    return [a for a in mech2.ARMS if (a not in TAKE_ARMS or t["action"].startswith("take "))
             and (a not in mech2.POSITION_ARMS or t["history_len"] == 0)]
 
 
@@ -112,6 +115,13 @@ def test_templates_read_as_written():
     assert "whether a mug can be taken" in mech2.task_line(m, "desire_check")
     assert "whether a mug can be taken" in mech2.task_line(m, "desire_check_can")
     assert mech2.task_line(m, "affirmed").endswith("The user says there is a mug in the countertop 2.")
+    # amendment after review 3: the negation placebo, the same report about the swapped task's object
+    assert mech2.task_line(t, "placebo_negated") == ("Your task is to: put a clean egg in fridge. The user says there is no "
+                                                     "egg in the countertop 2.")
+    assert mech2.task_line(t, "placebo_affirmed") == ("Your task is to: put a clean egg in fridge. The user says there is an "
+                                                      "egg in the countertop 2.")
+    k = _item(swapped_task_line="Your task is to: put a clean kettle in fridge.", swapped_goal_object="kettle")
+    assert mech2.task_line(k, "placebo_affirmed").endswith("The user says there is a kettle in the countertop 2.")
     for verb, pp in (("move", "moved"), ("heat", "heated"), ("clean", "cleaned")):
         assert mech2.task_line(_item(action=ACTIONS[verb]), "desire_keep_sw").endswith(
             f"Make sure that the apple is not {pp}; leave it where it is.")
@@ -318,7 +328,7 @@ def _syn_scores(items, fingerprint, position_shift=0.0, seed=7, noise=1.0, yn_fi
         for fmt, fp, scale in (("cand", fingerprint, 1.0), ("yn", yn_fingerprint or fingerprint, yn_scale)):
             d = D * scale
             mu = {"aligned": d, "swapped": 0.0, "neutral": -0.4 * d, "mention_exists": 0.9 * d,
-                  **{a: v * d for a, v in fp.items()}}
+                  "placebo_negated": 0.0, "placebo_affirmed": 0.0, **{a: v * d for a, v in fp.items()}}
             mu["aligned_start"] = mu["aligned"] + position_shift * d
             mu["swapped_start"] = mu["swapped"]
             for arm, m in mu.items():
@@ -509,7 +519,8 @@ def test_readout_verdicts_and_the_joint_rule():
     assert j3["summary"]["content_accounts_consistent"] == ["H4_wishful"]
     assert j3["summary"]["content_accounts_untested"] == []
     assert set(j3["summary"]["content_accounts_contradicted"]) == set(mech2.CONTENT_ACCOUNTS) - {"H4_wishful"}
-    assert j3["summary"]["reading"].startswith("consistent: H4_wishful; untested: none; contradicted (cannot be the sole account): ")
+    assert j3["summary"]["reading"].startswith("consistent: H4_wishful [risky: P2]; untested: none; contradicted (cannot be "
+                                               "the sole account): H2_evidence [P2], ")
 
 
 def test_joint_summary_names_a_mixture_when_every_content_account_is_contradicted():
@@ -717,7 +728,9 @@ def test_end_to_end_two_shards_then_analysis(mock_root):
         assert "position" in m[tag]["secondary"] and "yn_item_share_toward_yes_vs_swapped" in m[tag]["arms_on_sample"]["done"]
         assert set(m[tag]["readout_both_formats"]) == set(mech2.PREDICTIONS) | {"summary", "rivals"}
         assert m["integrity"][tag]["status"] == "complete" and m["integrity"][tag]["n_hash_mismatch"] == 0
-        assert set(m[tag]["mixture_readout"]) == {"P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed"}
+        assert set(m[tag]["mixture_readout"]) == {"P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed",
+                                                  "M_mention_component"}
+        assert set(m[tag]["secondary_named"]) >= set(mech2.SECONDARY_PREDICTIONS) - {"H7b_desire_check_known_vs_unknown"}
     # the scoring config left Mistral out: reported as not scored, no block
     assert m["models_not_scored"] == ["mistral-7b-v0.3"] and "mistral-7b-v0.3" not in m
     assert m["items"]["n_union"] == len(mech2.battery_items(primary, 30)["union"])
@@ -899,11 +912,16 @@ def test_minimal_pairs_differ_only_where_designed():
         if verb == "take":
             neg, aff = _words(mech2.task_line(t, "negated")), _words(mech2.task_line(t, "affirmed"))
             assert len(neg) == len(aff) and [(a, b) for a, b in zip(neg, aff) if a != b] == [("no", "an")]
+            # review 3: the placebo pair differs as P8's does, and from P8's lines only in the object named
+            pn, pa = _words(mech2.task_line(t, "placebo_negated")), _words(mech2.task_line(t, "placebo_affirmed"))
+            assert len(pn) == len(pa) and [(a, b) for a, b in zip(pn, pa) if a != b] == [("no", "an")]
+            assert [(a, b) for a, b in zip(neg, pn) if a != b] == [("apple", "egg")]
 
 
 def _note_table(heading: str) -> list[list[str]]:
+    """The first table after a heading of the design note (the heading's full text, "### 13.3 ...")."""
     text = (Path(__file__).resolve().parents[1] / "notes" / "mechanism2_design.md").read_text()
-    rest = text.split("### 12.3 " + heading, 1)[1]
+    rest = text.split(heading + "\n", 1)[1]
     table = next(b for b in rest.split("\n\n") if b.startswith("|"))  # the first table after the heading
     rows = [ln for ln in table.splitlines() if ln.startswith("|")]
     return [[c.strip() for c in ln.strip().strip("|").split("|")] for ln in rows]
@@ -920,8 +938,8 @@ def _cell(text: str) -> frozenset[str] | None:
 
 
 def test_the_prediction_table_in_the_note_is_the_code_s():
-    """The amended table (section 12) read cell by cell, "+" as S or L, equals PREDICTIONS exactly."""
-    rows = _note_table("Prediction table (amended after review 2)")
+    """The amended table (section 13, after review 3) read cell by cell, "+" as S or L, equals PREDICTIONS exactly."""
+    rows = _note_table("### 13.3 Prediction table (amended after review 3)")
     header, body = rows[0], rows[2:]
     accounts = {"H2 evidence": "H2_evidence", "H3 referent salience": "H3_salience", "H4 wishful": "H4_wishful",
                 "H5 policy blending": "H5_policy_blend", "H6_lexical": "H6_lexical", "H6_position": "H6_position"}
@@ -1073,7 +1091,8 @@ def test_knowledge_split_reads_the_content_contrasts_only():
     mech_scores = [{"transition_id": t["id"], "condition": c, "L": v} for t in items
                    for c, v in (("state_absent", -1.0), ("statetwin_absent", 1.0))]
     out = mech2.knowledge_split(scores, mech_scores, items, B=10)
-    assert set(out) == {"aligned_effect"} | {n for n, s in mech2.PRIMARY.items() if s["population"] != "step0"}
+    assert set(out) == ({"aligned_effect", "desire_check_vs_swapped", "H7b_desire_check_known_vs_unknown"}
+                        | {n for n, s in mech2.PRIMARY.items() if s["population"] != "step0"})
     assert "P6_position_step0" not in out and "P8_negated_vs_affirmed" in out
 
 
@@ -1157,3 +1176,392 @@ def test_contents_not_shown_reads_only_the_takes_whose_receptacle_was_not_seen()
                               {t["id"] for t in items if t["history_len"] == 0}, B=10, perms=10)
     ns = block["secondary"]["P7_P8_contents_not_shown"]["P7_negated_existence"]["cand"]
     assert ns["n_items"] == sum(mech2.p7_eligible(t) for t in items) - len(shown)
+
+
+# ---------------- amendment after review 3 (2026-11-21, before any score) ----------------
+
+
+def _block(items, fp, **kw):
+    return mech2.model_block(_syn_scores(items, fp, **kw), items, {t["id"] for t in items},
+                             {t["id"] for t in items if t["history_len"] == 0}, B=20, perms=20)
+
+
+def test_discriminating_contrasts_are_those_where_a_rival_fails_on_the_same_contrast():
+    """Review 3, A1: a rival contradicted on another contrast does not make a contrast discriminating."""
+    none = {c: None for c in mech2.PRIMARY}
+    ro = mech2.readout({**none, "P5_done_vs_cancelled": ("N", "Z"), "P6_position_step0": ("N",)})
+    assert ro["rivals"]["no_position_effect"]["P6_position_step0"] == "contradicted"
+    assert ro["H4_wishful"]["per_contrast"]["P5_done_vs_cancelled"] == "consistent"
+    assert ro["H4_wishful"]["consistent_where_a_rival_fails"] == [] and ro["H4_wishful"]["verdict"] == "untested"
+    assert ro["H4_wishful"]["untested_reason"] == "no contrast decided where a rival fails"
+
+
+def test_consistent_needs_a_risky_prediction():
+    """Review 3: consistent only on contrasts whose allowed zones include Z is untested, with the reason given."""
+    none = {c: None for c in mech2.PRIMARY}
+    ro = mech2.readout({**none, "P5_done_vs_cancelled": ("Z",)})  # H2 (N) contradicted; H3, H5, H6_lexical allow Z
+    for h in ("H3_salience", "H5_policy_blend", "H6_lexical"):
+        assert ro[h]["consistent_where_a_rival_fails"] == ["P5_done_vs_cancelled"] and ro[h]["risky_where_a_rival_fails"] == []
+        assert ro[h]["verdict"] == "untested" and ro[h]["untested_reason"] == "consistent only where it allows zero"
+    j = mech2.joint_readout(ro, ro)
+    assert j["summary"]["content_accounts_consistent"] == []
+    assert "H3_salience [consistent only where it allows zero: P5]" in j["summary"]["reading"]
+    ro = mech2.readout({**none, "P8_negated_vs_affirmed": ("N",)})  # H2's N excludes Z: a risky prediction
+    assert ro["H2_evidence"]["verdict"] == "consistent" and ro["H2_evidence"]["risky_where_a_rival_fails"] == ["P8_negated_vs_affirmed"]
+    j = mech2.joint_readout(ro, ro)
+    assert "consistent: H2_evidence [risky: P8]" in j["summary"]["reading"]
+    ro = mech2.readout({**none, "P8_negated_vs_affirmed": ("N",), "P1_keep_vs_ignore": ("S",)})  # P1: H4 fails, H2 allows Z
+    assert "consistent: H2_evidence [risky: P8; allows zero: P1]" in mech2.joint_readout(ro, ro)["summary"]["reading"]
+
+
+def test_h2_allows_about_zero_on_p3():
+    """Review 3: "Ignore the {obj}" only presupposes the object, so task as evidence allows P3 about zero."""
+    assert mech2.PREDICTIONS["H2_evidence"]["P3_mention_without_need"] == frozenset({"Z", "S", "L"})
+    sep = mech2.separations()
+    assert "P3_mention_without_need" in sep["H2_evidence vs H4_wishful"]["partly"]
+    assert "P3_mention_without_need" in sep["H2_evidence vs H5_policy_blend"]["partly"]
+
+
+def test_categories_use_the_holm_p_not_the_raw_p(monkeypatch):
+    """Review 3, A2: P3 inside the band with raw p 0.01 is NULL when Holm's p (0.08) is not significant; P4 small
+    with the same p is INCONCLUSIVE, not POS_SMALL."""
+    cis = {"P3_mention_without_need": [0.05, 0.2], "P4_need_without_name": [0.3, 0.45]}
+
+    def fake(by, items, terms, fmt="cand", field="L", reference=None, B=0, perms=0):
+        name = next(n for n, sp in mech2.PRIMARY.items() if sp["terms"] == terms)
+        return {"estimate": 1.0, "ci": [0.5, 1.5], "p": 0.01 if name in cis else 0.5, "n_items": 10,
+                "ratio": {"estimate": 0.1, "ci": cis.get(name, [-0.1, 0.1]), "estimable": True}}
+    monkeypatch.setattr(mech2, "contrast", fake)
+    fam = mech2.primary_family({}, {k: [] for k in ("sample", "p5", "step0", "sample_take")}, "cand")
+    c = fam["contrasts"]
+    assert abs(c["P3_mention_without_need"]["holm_p"] - 0.08) < 1e-12
+    assert c["P3_mention_without_need"]["category"] == "NULL" and c["P4_need_without_name"]["category"] == "INCONCLUSIVE"
+
+
+def test_p8_reads_p7_items_only():
+    """Review 3, A3: P8 leaves out take items whose history shows the object in the receptacle, as P7 does."""
+    items = _syn_items(n_games=20, per_game=6)
+    for k, t in enumerate(items):
+        if k % 2 and t["history_len"]:  # the history shows countertop 2 holding an apple: the claim is contradicted
+            t["history_text"] = t["history_text"].replace("go to countertop 1", "go to countertop 2").replace(
+                "You arrive at countertop 1. On the countertop 1, you see a egg 1.",
+                "You arrive at countertop 2. On the countertop 2, you see a apple 1.")
+    holds = sum(mech2.is_take(t) and not mech2.p7_eligible(t) for t in items)
+    assert holds > 0
+    fam = _family(_syn_scores(items, FINGERPRINTS["H2_evidence"]), items, B=20)
+    n7, n8 = (fam["contrasts"][c]["n_items"] for c in ("P7_negated_existence", "P8_negated_vs_affirmed"))
+    assert n7 == n8 == sum(mech2.p7_eligible(t) for t in items) == sum(mech2.is_take(t) for t in items) - holds
+    block = _block(items, FINGERPRINTS["H2_evidence"])  # M and the placebo read the same items (review 3)
+    assert block["mixture_readout"]["M_mention_component"]["yn"]["n_items"] == n7
+    assert block["secondary_named"]["S3_P8_net_of_placebo"]["by_format"]["cand"]["n_items"] == n7
+
+
+def test_integrity_refuses_unknown_items_and_unexpected_conditions():
+    """Review 3, A4 and A5: a score of an item outside the battery, or of a battery item under a condition the model
+    is not scored on, makes the model a mismatch and refuses the analysis; the two are counted apart."""
+    items = [_item(id="a", step0=True), _item(id="b", action=ACTIONS["move"])]
+    scores = [{"model": "mistral-7b-v0.3", "transition_id": t["id"], "condition": mech2.condition(a, f),
+               "item_hash": mech2._item_hash(t), "L": 0.0} for t, a, f in mech2.jobs(items, mech2.PRIMARY_ARMS)]
+    assert mech2.score_integrity(scores, items, ["mistral-7b-v0.3"])["mistral-7b-v0.3"]["status"] == "complete"
+    unknown = mech2.score_integrity(scores + [{**scores[0], "transition_id": "zz"}], items, ["mistral-7b-v0.3"])
+    assert unknown["mistral-7b-v0.3"]["n_unknown_items"] == 1 and unknown["mistral-7b-v0.3"]["n_unexpected"] == 0
+    assert unknown["mistral-7b-v0.3"]["status"] == "mismatch" and unknown["refuse"]
+    extra = mech2.score_integrity(scores + [{**scores[0], "condition": "neutral"}], items, ["mistral-7b-v0.3"])
+    assert extra["mistral-7b-v0.3"]["n_unexpected"] == 1 and extra["mistral-7b-v0.3"]["n_unknown_items"] == 0
+    assert extra["mistral-7b-v0.3"]["status"] == "mismatch" and extra["refuse"]
+
+
+def test_undefined_scores_count_and_refuse_on_primary_arms():
+    """Review 3, A18 and fix 6: an undefined L on an arm the primary contrasts read refuses; elsewhere it is counted."""
+    items = [_item(id="a", step0=True), _item(id="b")]
+    scores = [{"model": "qwen3-8b-fewshot", "transition_id": t["id"], "condition": mech2.condition(a, f),
+               "item_hash": mech2._item_hash(t), "L": 0.0} for t, a, f in mech2.jobs(items)]
+    nan_primary = [dict(x) for x in scores]
+    next(x for x in nan_primary if x["condition"] == "yn_desire_keep_sw")["L"] = float("nan")
+    out = mech2.score_integrity(nan_primary, items, ["qwen3-8b-fewshot"])["qwen3-8b-fewshot"]
+    assert out["n_undefined_L"] == 1 and out["n_undefined_L_primary_arms"] == 1 and out["status"] == "mismatch"
+    nan_other = [dict(x) for x in scores]
+    next(x for x in nan_other if x["condition"] == "neutral")["L"] = None
+    out = mech2.score_integrity(nan_other, items, ["qwen3-8b-fewshot"])
+    assert out["qwen3-8b-fewshot"]["n_undefined_L"] == 1 and out["qwen3-8b-fewshot"]["n_undefined_L_primary_arms"] == 0
+    assert out["qwen3-8b-fewshot"]["status"] == "complete" and not out["refuse"]
+
+
+def test_analysis_refuses_an_undefined_score_on_a_primary_arm_and_reports_others(mock_root):
+    def primary_nan(recs):
+        next(r for r in recs if mech2.split_condition(r["condition"])[0] == "negated")["L"] = float("nan")
+        return recs
+    rc, integ, status, metrics = _scored_and_analysed(mock_root, primary_nan)
+    assert rc == 1 and not metrics and sum(integ[t]["n_undefined_L_primary_arms"] for t in rq1.FEWSHOT) == 1
+
+
+def test_status_line_reports_undefined_scores_of_secondary_arms(mock_root):
+    def other_nan(recs):
+        next(r for r in recs if mech2.split_condition(r["condition"])[0] == "neutral")["L"] = float("nan")
+        return recs
+    rc, integ, status, metrics = _scored_and_analysed(mock_root, other_nan)
+    assert rc == 0 and metrics and "undefined L on 1 scores of secondary arms" in status
+
+
+def test_untested_accounts_are_not_read_as_a_mixture():
+    """Review 3, A6: with every account untested, the summary lists them as untested, not as 'no single account'."""
+    none = mech2.readout({c: None for c in mech2.PRIMARY})
+    j = mech2.joint_readout(none, none)
+    assert j["summary"]["content_accounts_not_contradicted"] == list(mech2.CONTENT_ACCOUNTS)
+    assert j["summary"]["reading"].startswith("consistent: none; untested: H2_evidence, H3_salience")
+    assert "no single account" not in j["summary"]["reading"]
+
+
+def test_joint_position_verdict_reads_both_formats_and_the_rival():
+    """Review 3, A7 and A11: the rival "no position effect" is read in its own row, and the position verdict needs
+    both formats."""
+    none = {c: None for c in mech2.PRIMARY}
+    neg, zero = (mech2.readout({**none, "P6_position_step0": z}) for z in (("N",), ("Z",)))
+    j = mech2.joint_readout(neg, neg)
+    assert j["rivals"]["no_position_effect"]["P6_position_step0"] == "contradicted"
+    assert j["H6_position"]["verdict"] == "consistent" and j["summary"]["position"] == "consistent"
+    j = mech2.joint_readout(neg, zero)
+    assert j["H6_position"]["per_contrast"]["P6_position_step0"] == "format_dependent"
+    assert j["H6_position"]["verdict"] == "untested" and j["summary"]["position"] == "untested"
+
+
+def test_first_token_split_is_read_against_the_two_candidate_full_L():
+    """Review 3, A8: the first-token term (two-candidate) is compared with the two-candidate full L, not yes/no's."""
+    items = _syn_items()
+    block = _block(items, FINGERPRINTS["H2_evidence"], noise=0.0, yn_fingerprint=FINGERPRINTS["H3_salience"])
+    assert block["primary"]["contrasts"]["P7_negated_existence"]["estimate"] < 0
+    assert block["primary_yes_no"]["contrasts"]["P7_negated_existence"]["estimate"] > 0
+    assert not block["secondary"]["first_token_P7_P8"]["P7_negated_existence"]["sign_split_with_full_L"]
+
+
+def test_every_primary_contrast_reads_r_over_the_aligned_minus_swapped_effect():
+    """Review 3, A9: the denominator is aligned - swapped on the contrast's items (here D), whatever the arms."""
+    items = _syn_items()
+    fam = _family(_syn_scores(items, FINGERPRINTS["H2_evidence"], noise=0.0), items, B=20)
+    for name, r in fam["contrasts"].items():
+        assert mech2.PRIMARY[name]["reference"] == mech2._REF and abs(r["reference_effect"] - D) < 1e-9, name
+    assert abs(fam["contrasts"]["P1_keep_vs_ignore"]["ratio"]["estimate"] - 0.1) < 1e-9  # (0.8 - 0.7) / 1
+
+
+def test_p5_lift_reads_p5_items_only():
+    """Review 3, A21: P5 against cancelled's lift reads P5's items, not every placement item."""
+    items = _syn_items()
+    for k, t in enumerate(items):
+        if k % 4 == 1 and mech2.task_type(t["task_line"]) != "examine":
+            t["action"] = "take apple 1 from fridge 1"  # a take from a target-type receptacle: not a P5 item
+    pops = _pops(items)
+    assert len(pops["p5"]) < len(pops["sample_placement"])
+    block = _block(items, FINGERPRINTS["H2_evidence"], noise=0.0)
+    for f in ("cand", "yn"):
+        assert block["secondary"]["P5_against_cancelled_lift"][f]["n_items"] == len(pops["p5"])
+
+
+def _claims_obs():
+    """Zones read as task as evidence predicts them: salience is contradicted on P5, P7 and P8 only."""
+    return {"P1_keep_vs_ignore": ("Z",), "P2_hope_polarity": ("Z",), "P3_mention_without_need": ("S",),
+            "P4_need_without_name": ("L",), "P5_done_vs_cancelled": ("N",), "P6_position_step0": ("Z",),
+            "P7_negated_existence": ("N",), "P8_negated_vs_affirmed": ("N",)}
+
+
+def _mention(lo, hi, estimable=True):
+    return {f: {"estimate": 1.0, "ci": [0.5, 1.5], "ratio": {"estimate": (lo + hi) / 2, "ci": [lo, hi], "estimable": estimable}}
+            for f in mech2.FORMATS}
+
+
+def test_summary_sentences_on_salience_contradicted_only_by_claims():
+    """Review 3, must-fix 1: the two fixed sentences, and when they are not given."""
+    ro = mech2.readout(_claims_obs())
+    assert [c for c, v in ro["H3_salience"]["per_contrast"].items() if v == "contradicted"] == list(mech2.CLAIM_CONTRASTS)
+    j = mech2.joint_readout(ro, ro, _mention(0.3, 0.7))
+    text = j["summary"]["reading"]
+    assert ("Salience cannot be the sole account, but a mention component remains with the claim balanced (r = 0.50 "
+            "[0.30, 0.70] two-candidate; 0.50 [0.30, 0.70] yes/no): salience is likely part of the effect.") in text
+    assert ("H3 is contradicted only on contrasts that add an explicit claim (done; the user's report). This shows the "
+            "model reads such claims, not that the goal effect comes from evidence rather than salience; see M.") in text
+    assert j["summary"]["salience_likely_part"] and j["summary"]["claims_read_not_evidence_shown"]
+    # M's interval touches the band in one format: no salience sentence; the claims sentence stays (H2 consistent)
+    m = _mention(0.3, 0.7)
+    m["yn"]["ratio"]["ci"] = [0.2, 0.7]
+    j = mech2.joint_readout(ro, ro, m)
+    assert "mention component remains" not in j["summary"]["reading"] and "see M." in j["summary"]["reading"]
+    assert not mech2.joint_readout(ro, ro, _mention(0.3, 0.7, estimable=False))["summary"]["salience_likely_part"]
+    assert not mech2.joint_readout(ro, ro)["summary"]["salience_likely_part"]  # no M given
+    # salience contradicted on P1 too: neither sentence
+    ro1 = mech2.readout({**_claims_obs(), "P1_keep_vs_ignore": ("L",)})
+    j = mech2.joint_readout(ro1, ro1, _mention(0.3, 0.7))
+    assert not j["summary"]["salience_contradicted_only_on_claims"] and "see M." not in j["summary"]["reading"]
+    assert not j["summary"]["salience_likely_part"] and "mention component remains" not in j["summary"]["reading"]
+    # task as evidence contradicted (P7 small, against its "N or Z") while salience fails on P5 and P8 only: the
+    # salience sentence stays, the claims sentence does not
+    ro2 = mech2.readout({**_claims_obs(), "P7_negated_existence": ("S",)})
+    j = mech2.joint_readout(ro2, ro2, _mention(0.3, 0.7))
+    assert j["H2_evidence"]["verdict"] == "contradicted" and j["summary"]["salience_likely_part"]
+    assert not j["summary"]["claims_read_not_evidence_shown"] and "see M." not in j["summary"]["reading"]
+
+
+def test_mention_component_is_half_negated_plus_half_affirmed_minus_swapped():
+    items = _syn_items()
+    fp = {**FINGERPRINTS["H2_evidence"], "negated": -0.4, "affirmed": 1.2}
+    block = _block(items, fp, noise=0.0, yn_scale=0.5)
+    m = block["mixture_readout"]["M_mention_component"]
+    assert abs(m["cand"]["estimate"] - 0.4 * D) < 1e-9 and abs(m["cand"]["ratio"]["estimate"] - 0.4) < 1e-9
+    assert abs(m["yn"]["estimate"] - 0.4 * 0.5 * D) < 1e-9 and m["cand"]["zones"] == ("S",)
+    summ = block["readout_both_formats"]["summary"]["mention_component"]
+    assert abs(summ["yn"]["ratio"]["estimate"] - 0.4) < 1e-9
+
+
+def test_named_secondaries_read_their_arms_in_both_formats():
+    """Review 3, should-fix 4: desire_check - desire_keep with r in both formats; the negation placebo and P8 net of
+    it, on P7's items, each read against its written predictions."""
+    items = _syn_items()
+    fp = {**FINGERPRINTS["H2_evidence"], "placebo_negated": -0.3, "placebo_affirmed": 0.1}
+    sec = _block(items, fp, noise=0.0, yn_scale=0.5)["secondary_named"]
+    for f, scale in (("cand", 1.0), ("yn", 0.5)):
+        assert abs(sec["S1_desire_check_vs_keep"]["by_format"][f]["estimate"] + 0.2 * scale * D) < 1e-9
+        assert abs(sec["S2_negation_placebo"]["by_format"][f]["estimate"] + 0.4 * scale * D) < 1e-9
+        assert abs(sec["S1_desire_check_vs_keep"]["by_format"][f]["ratio"]["estimate"] + 0.2) < 1e-9  # 0.6 - 0.8
+        assert abs(sec["S2_negation_placebo"]["by_format"][f]["ratio"]["estimate"] + 0.4) < 1e-9
+        assert abs(sec["S3_P8_net_of_placebo"]["by_format"][f]["ratio"]["estimate"] + 1.0) < 1e-9  # -1.4 + 0.4
+    assert sec["S2_negation_placebo"]["by_format"]["cand"]["n_items"] == sum(mech2.p7_eligible(t) for t in items)
+    assert sec["S2_negation_placebo"]["zones"]["cand"] == ["N"]
+    r = sec["S2_negation_placebo"]["readings"]
+    assert r["negation_artefact"]["joint"] == "consistent" and r["H2_evidence"]["joint"] == "contradicted"
+    assert sec["S1_desire_check_vs_keep"]["readings"]["H4_wishful"]["joint"] == "consistent"
+    assert sec["S1_desire_check_vs_keep"]["readings"]["H5_policy_blend"]["joint"] == "contradicted"
+
+
+def test_secondary_zones_need_an_estimable_r():
+    assert mech2.secondary_zones({"ratio": {"ci": [0.3, 0.6], "estimable": True}}) == ("S", "L")
+    assert mech2.secondary_zones({"ratio": {"ci": [0.3, 0.6], "estimable": False}}) is None
+    assert mech2.secondary_zones({"ratio": {"ci": [float("nan"), 0.6], "estimable": True}}) is None
+    assert mech2.secondary_zones({}) is None
+    out = mech2.read_secondary("S2_negation_placebo", {"cand": {"ratio": {"ci": [-0.6, -0.3], "estimable": True}},
+                                                       "yn": {"ratio": {"ci": [-0.1, 0.1], "estimable": True}}})
+    assert out["readings"]["negation_artefact"] == {"cand": "consistent", "yn": "contradicted", "joint": "format_dependent"}
+
+
+def test_mistral_is_scored_on_the_sample_and_p6_arms_on_every_step0_item():
+    """Review 3, should-fix 4's budget: the secondary model's content arms on the sample only, P6's arms on every
+    step-0 item; the primary models keep every arm on every item; the integrity check expects the same jobs."""
+    items = _syn_items(n_games=4, per_game=6)
+    sample = {t["id"] for t in items if t["history_len"] > 0} | {items[0]["id"]}
+    out = mech2.model_jobs("mistral-7b-v0.3", items, sample)
+    outside = [(t, a, f) for t, a, f in out if t["id"] not in sample]
+    assert outside and {a for _, a, _ in outside} == set(mech2.P6_ARMS) == {"aligned", "swapped", "aligned_start", "swapped_start"}
+    assert {(t["id"], a, f) for t, a, f in out if t["id"] in sample} == {
+        (t["id"], a, f) for t, a, f in mech2.jobs([t for t in items if t["id"] in sample], mech2.PRIMARY_ARMS)}
+    assert mech2.model_jobs("qwen3-8b-fewshot", items, sample) == mech2.jobs(items)
+    scores = [{"model": "mistral-7b-v0.3", "transition_id": t["id"], "condition": mech2.condition(a, f),
+               "item_hash": mech2._item_hash(t), "L": 0.0} for t, a, f in out]
+    assert mech2.score_integrity(scores, items, ["mistral-7b-v0.3"], sample)["mistral-7b-v0.3"]["status"] == "complete"
+    assert mech2.score_integrity(scores, items, ["mistral-7b-v0.3"])["mistral-7b-v0.3"]["status"] == "mismatch"
+
+
+def test_the_runner_scores_mistral_on_the_sample_only(mock_root):
+    assert mech2.run_mech2_score(_cfg(n_shards=1, models=["mistral-7b-v0.3"])) == 0
+    recs = read_jsonl(mock_root / "mech2_smoke" / "shard_00_of_01" / "scoring.jsonl")
+    out = [r for r in recs if not r["in_sample"]]
+    assert out and all(r["step0"] and mech2.split_condition(r["condition"])[0] in mech2.P6_ARMS for r in out)
+
+
+def test_completing_actions_move_the_goal_object_into_a_target_type_receptacle():
+    assert mech2.completes_task(_item(TASKS["clean"][0], action="move apple 1 to fridge 1"))
+    assert not mech2.completes_task(_item(TASKS["clean"][0], action="move apple 1 to countertop 1"))
+    assert not mech2.completes_task(_item(TASKS["clean"][0], action=ACTIONS["take"]))
+    assert not mech2.completes_task(_item(TASKS["examine"][0], action="move apple 1 to fridge 1"))
+    assert not mech2.completes_task(_item(TASKS["clean"][0], action="move egg 1 to fridge 1"))
+
+
+def test_group_difference_is_a_difference_in_differences_with_r():
+    items = _syn_items()
+    a, b = items[::2], items[1::2]
+    scores = _syn_scores(items, FINGERPRINTS["H2_evidence"], noise=0.0)
+    ids = {t["id"] for t in a}
+    for s in scores:
+        if s["transition_id"] in ids and s["condition"] == "desire_check":
+            s["L"] -= 2.0
+        if s["transition_id"] in ids and s["condition"] == "aligned":
+            s["L"] += 2.0  # the reference effect is D + 2 on group a, D on group b: r reads it over both
+    by = mech2._lookup(scores)
+    g = mech2.group_difference(by, a, b, ((1, "desire_check"), (-1, "swapped")), B=50)
+    assert abs(g["estimate"] + 2.0) < 1e-9 and abs(g["ratio"]["estimate"] + 2.0 / (D + 1.0)) < 1e-9
+    assert g["n_a"] == len(a) and g["n_b"] == len(b) and g["ratio"]["estimable"]
+    assert mech2.group_difference(by, a, [], mech2._REF)["estimate"] != mech2.group_difference(by, a, [], mech2._REF)["estimate"]
+
+
+def test_h7_readouts_split_p7_items_by_what_the_history_shows_and_actions_by_role():
+    items = _syn_items(n_games=20, per_game=6)
+    for k, t in enumerate(items):
+        if k % 2 and t["history_len"]:  # countertop 2 shown without an apple
+            t["history_text"] = t["history_text"].replace("go to countertop 1", "go to countertop 2").replace(
+                "You arrive at countertop 1. On the countertop 1", "You arrive at countertop 2. On the countertop 2")
+        if k % 6 == 4:
+            t["action"] = "move apple 1 to fridge 1"  # completes "put a clean apple in fridge."
+    shown = {t["id"] for t in items if mech2.is_take(t) and mech2.negated_status(t)[1] == "shown, without it"}
+    completing = {t["id"] for t in items if mech2.completes_task(t)}
+    assert shown and completing
+    scores = _syn_scores(items, FINGERPRINTS["H2_evidence"], noise=0.0)
+    for s in scores:
+        if s["transition_id"] in shown and s["condition"] == "desire_check":
+            s["L"] -= 1.0
+        if s["transition_id"] in completing and s["condition"] == "yn_aligned":
+            s["L"] += 0.5
+    block = mech2.model_block(scores, items, {t["id"] for t in items}, {t["id"] for t in items if t["history_len"] == 0},
+                              B=20, perms=20)
+    sec = block["secondary_named"]
+    h7a = sec["H7a_desire_check_shown_vs_not"]["by_format"]["cand"]
+    assert abs(h7a["estimate"] + 1.0) < 1e-9 and h7a["n_a"] == len(shown)
+    assert h7a["n_b"] == sum(mech2.is_take(t) and mech2.negated_status(t)[1] == "contents not shown" for t in items)
+    assert abs(sec["H7a_aligned_shown_vs_not"]["by_format"]["cand"]["estimate"]) < 1e-9
+    h7c = sec["H7c_aligned_completing_vs_other"]["by_format"]
+    assert abs(h7c["yn"]["estimate"] - 0.5) < 1e-9 and abs(h7c["cand"]["estimate"]) < 1e-9 and h7c["yn"]["n_a"] == len(completing)
+    assert set(sec["H7a_within_contents_or_open_state"]) == {"desire_check", "aligned"}
+
+
+def test_knowledge_split_reports_known_minus_unknown():
+    items = _syn_items(n_games=10, per_game=6)
+    scores, mech_scores = [], []
+    for k, t in enumerate(items):
+        known = k % 2 == 0
+        for arm, L in (("aligned", 4.0), ("swapped", 0.0), ("desire_check", 1.0 if known else 3.0)):
+            scores.append({"transition_id": t["id"], "condition": arm, "L": L, "game_id": t["game_id"]})
+        mech_scores += [{"transition_id": t["id"], "condition": "state_absent", "L": -1.0 if known else 1.0},
+                        {"transition_id": t["id"], "condition": "statetwin_absent", "L": 1.0}]
+    out = mech2.knowledge_split(scores, mech_scores, items, B=50)
+    kmu = out["desire_check_vs_swapped"]["known_minus_unknown"]
+    assert abs(kmu["estimate"] + 2.0) < 1e-9 and abs(kmu["ratio"]["estimate"] + 0.5) < 1e-9
+    assert out["H7b_desire_check_known_vs_unknown"]["readings"]["H7_check"]["cand"] == "consistent"
+    assert out["H7b_desire_check_known_vs_unknown"]["readings"]["H2_evidence"]["cand"] == "contradicted"
+    assert abs(out["aligned_effect"]["known_minus_unknown"]["estimate"]) < 1e-9
+
+
+def test_the_secondary_prediction_table_in_the_note_is_the_code_s():
+    rows = _note_table("### 13.6 Named secondary readouts and their predictions")
+    header, body = rows[0], rows[2:]
+    accounts = {"H2 evidence": "H2_evidence", "H3 referent salience": "H3_salience", "H4 wishful": "H4_wishful",
+                "H5 policy blending": "H5_policy_blend", "H6_lexical": "H6_lexical", "H7_check": "H7_check",
+                "negation artefact": "negation_artefact"}
+    cols = [accounts[h] for h in header[1:]]
+    parsed: dict[str, dict[str, frozenset[str]]] = {}
+    for row in body:
+        name = row[0].split()[0].strip("`")
+        parsed[name] = {h: z for h, cell in zip(cols, row[1:]) for z in [_cell(cell)] if z is not None}
+    assert parsed == mech2.SECONDARY_PREDICTIONS
+    assert set(mech2.SECONDARY_ACCOUNTS) == set(cols)
+
+
+def test_h7_check_stays_out_of_the_verdicts():
+    assert "H7_check" not in mech2.PREDICTIONS and "H7_check" not in mech2.CONTENT_ACCOUNTS
+    assert len(mech2.PRIMARY) == 8 and not set(mech2.SECONDARY_PREDICTIONS) & set(mech2.PRIMARY)
+    assert {"placebo_negated", "placebo_affirmed"}.isdisjoint(mech2.PRIMARY_ARMS)
+
+
+def test_status_line_lists_each_account_with_its_contrasts():
+    ro = mech2.readout(_claims_obs())
+    j = mech2.joint_readout(ro, ro, _mention(0.3, 0.7))
+    fam = {name: {"estimate": 0.0, "category": "NULL"} for name in mech2.PRIMARY}
+    report = {"m": {"primary": {"contrasts": fam}, "primary_yes_no": {"contrasts": fam}, "readout_both_formats": j},
+              "integrity": {"m": {"n_undefined_L": 0}}}
+    line = mech2.status_lines(report, ["m"])[0]
+    assert "consistent: H2_evidence [risky: P4, P5, P8; allows zero: P1, P2, P3, P7]" in line
+    assert "H3_salience [P5, P7, P8]" in line and "see M." in line and "undefined" not in line
