@@ -1,0 +1,9 @@
+run_id: decisionsim_agent_label
+# Stage 1b (notes/decisionsim_agent_design.md; wf/decisionsim_agent.py). Every candidate of every sampled list executed once on a
+# fresh replay on the real server (CPU, no GPU), with the RQ2 labels and a per-state swap object. The server leaks
+# memory on every reset, so a job stops after max_replays_per_job replays and the sbatch loop restarts the server and
+# resumes. WF_SHARD / WF_N_SHARDS split it by game.
+sample_source: decisionsim_agent_sample
+seed: 20260924
+n_shards: 8
+max_replays_per_job: 1200

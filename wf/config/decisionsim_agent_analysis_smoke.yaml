@@ -1,0 +1,8 @@
+run_id: decisionsim_agent_analysis_smoke
+# Stage 1b (notes/decisionsim_agent_design.md; wf/decisionsim_agent.py). Analysis of the smoke scores (pipeline check only).
+label_source: decisionsim_agent_label_smoke
+priority: [llama3.1-8b, mistral-7b-v0.3]
+models:
+  llama3.1-8b: decisionsim_agent_score_smoke_llama3.1-8b
+  mistral-7b-v0.3: decisionsim_agent_score_smoke_mistral-7b-v0.3
+  qwen3-8b: decisionsim_agent_score_smoke_qwen3-8b

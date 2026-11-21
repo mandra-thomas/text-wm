@@ -1,0 +1,6 @@
+run_id: decisionsim_agent_label_smoke
+# Stage 1b (notes/decisionsim_agent_design.md; wf/decisionsim_agent.py). Labels for the smoke lists.
+sample_source: decisionsim_agent_sample_smoke
+seed: 20260924
+n_shards: 1
+max_replays_per_job: 1200

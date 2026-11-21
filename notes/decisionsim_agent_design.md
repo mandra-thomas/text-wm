@@ -1,6 +1,6 @@
 # Stage 1b: verification of the agent's own ranked candidates (design, 2026-11-20)
 
-Exploratory. This note was written and committed before any data of this stage existed: no agent candidate list has been sampled, no candidate has been labelled by replay, and no verifier has scored any candidate, so no decision of this stage could have been computed. Every number quoted below comes from archived runs that were finished before this design (the RQ3 episodes at `text-wm-fix11/runs/rq3`, commit ddeabc2, and the collection at `text-wm-fix17`), recomputed on CPU without any model. Code: `wf/decisionsim_agent.py`; runs `decisionsim_agent_sample`, `decisionsim_agent_label`, `decisionsim_agent_score_<model>`, `decisionsim_agent_analysis` and the model-free `decisionsim_agent_dryrun`.
+Exploratory. This note was written and committed before any data of this stage existed: no agent candidate list has been sampled, no candidate has been labelled by replay, and no verifier has scored any candidate, so no decision of this stage could have been computed. It was amended once, still before any data of this stage, with facts from the model-free dry run (last section). Every number quoted below comes from archived runs that were finished before this design (the RQ3 episodes at `text-wm-fix11/runs/rq3`, commit ddeabc2, and the collection at `text-wm-fix17`), recomputed on CPU without any model. Code: `wf/decisionsim_agent.py`; runs `decisionsim_agent_sample`, `decisionsim_agent_label`, `decisionsim_agent_score_<model>`, `decisionsim_agent_analysis` and the model-free `decisionsim_agent_dryrun`.
 
 ## Where this sits
 
@@ -119,7 +119,7 @@ where the first part is what naming the real task's object adds over a task of t
 
 ## Predictions (logged before any data of this stage)
 
-1. **Encounter.** At least one regime candidate appears in the list at between 8% and 30% of states (central guess 15%); most regime candidates are free-form (outside the admissible list); a regime candidate is reachable at under half of the encounter states. The strict, RQ2-like encounter rate is lower, 3–15%.
+1. **Encounter.** At least one regime candidate appears in the list at between 8% and 30% of states (central guess 15%); most regime candidates are free-form (outside the admissible list); a regime candidate is reachable at under half of the encounter states. The strict, RQ2-like encounter rate is much lower: 0.5–5% (amended before any data of this stage; the first version said 3–15%, see the last section).
 2. **Qwen3-8B (contrast).** $|\Delta_{\text{invalid}}|$ below 0.5 points, interval including zero: it accepts almost no determined goal-object failure under the aligned task (0.2%).
 3. **Llama-3.1-8B.** A positive point estimate between 0.2 and 1.5 points, concentrated in regime candidates the aware verifier accepts; it may not reach significance (see "Precision").
 4. **Mistral-7B-v0.3.** A positive point estimate between 0.5 and 3 points, and the largest decision-change rate of the three; its task-blind verifier will already accept many failures, so its verifier value over none will be the smallest of the three and may be negative.
@@ -169,7 +169,7 @@ A $\Delta_{\text{invalid}}$ of about one point is detected reliably; one of a fe
 
 ## Risks
 
-- **Sampling quality at $T = 1$.** Untruncated sampling can produce malformed replies. An engineering gate, fixed now and independent of any outcome: the sampling run's smoke job (two train games) must show format errors in under 25% of samples and no replay mismatch; otherwise the run stops for a design amendment before the census.
+- **Sampling quality at $T = 1$.** Untruncated sampling can produce malformed replies. An engineering gate, fixed now and independent of any outcome: the sampling run's smoke job (two train games) must show format errors in under 25% of samples, no replay mismatch, and no state whose 20 replies are all identical (which would mean the per-request seed collapsed the samples); otherwise the run stops for a design amendment before the census.
 - **Nondeterminism.** vLLM sampling is reproducible only on the same hardware and version; the saved replies are the data, and a resume never resamples a saved state.
 - **The census is weighted toward long failing episodes,** and their late states are often loops; the game-weighted and first-12-steps readouts show how much this matters.
 - **Rank 1 comes from the archived run,** not from a new greedy call. It is the agent's real action at that state, and its replay check ties the state to the episode; the samples are drawn now, on whatever GPU the job gets.
@@ -187,3 +187,12 @@ Stage 2 (not designed here) would branch real episodes at decision points where 
 1. The task-blind definition (query task line deleted, examples unchanged) should match Stage 1a's literal task-blind arm.
 2. Whether to also score the neutral task line ("explore the room"), which would cost about a third more scoring and would link to Stage 1a's baseline.
 3. Whether $T = 1$ (the model's own distribution) or Qwen's recommended non-thinking settings ($T = 0.7$, top-p 0.8, top-k 20) better represents "a sampling agent"; the design uses $T = 1$.
+
+## Facts added before any data of this stage (dry run, 2026-11-20)
+
+The model-free dry run (`decisionsim_agent_dryrun`, no model and no server) rebuilt every one of the 2,973 states from the archived episodes, with each game's opening observation taken from the item collection, and labelled the rank-1 candidate (the greedy action) from its recorded reply. It found no state whose history lacked exactly one task line, and it reproduced the re-pick table above exactly. Three facts it adds:
+
+- The greedy action alone is a regime candidate at 61 states (2.1%), in only 15 of the 134 games, at a median step of 22; none is at step 0, 2 are at steps 1–11 (0.15% of those states) and 59 at steps 12–29 (3.9%). Rank 1 therefore already contributes about 2 points of encounter, and the encounters are concentrated in a few long failing episodes, which the game-clustered intervals account for.
+- With the strict, RQ2-like requirement that the history never acted on the goal object, the greedy action is a regime candidate at only 4 states (0.13%, 4 games). By the time this agent proposes a failing action on the goal object, it has usually already handled that object. Prediction 1's strict range was therefore lowered from 3–15% to 0.5–5%; the main encounter range (8–30%) is unchanged.
+- The greedy action is a progress event at 10.8% of states, which sets the scale for the progress readout.
+

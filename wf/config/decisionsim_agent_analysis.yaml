@@ -1,0 +1,10 @@
+run_id: decisionsim_agent_analysis
+# Stage 1b (notes/decisionsim_agent_design.md; wf/decisionsim_agent.py). CPU only. Primary: Delta_invalid (task-aware minus task-blind
+# chosen-failure rate) per priority model, Holm over the two; Qwen3-8B is a contrast. A model whose scoring run is
+# missing, unfinished or scored another label run is listed under "waiting".
+label_source: decisionsim_agent_label
+priority: [llama3.1-8b, mistral-7b-v0.3]
+models:
+  llama3.1-8b: decisionsim_agent_score_llama3.1-8b
+  mistral-7b-v0.3: decisionsim_agent_score_mistral-7b-v0.3
+  qwen3-8b: decisionsim_agent_score_qwen3-8b

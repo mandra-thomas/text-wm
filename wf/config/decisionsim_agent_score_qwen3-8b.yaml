@@ -1,0 +1,8 @@
+run_id: decisionsim_agent_score_qwen3-8b
+# Stage 1b (notes/decisionsim_agent_design.md; wf/decisionsim_agent.py). Yes/no scores of every labelled candidate under the
+# task-aware (real task line), task-blind (query task line deleted) and swapped (state's swap object; only where one
+# exists) verifier prompts, at the pinned revision in wf.constants.REVISIONS. Every arm of a state in one job.
+model: qwen3-8b
+label_source: decisionsim_agent_label
+arms: [yn_aligned, yn_blind, yn_swapped]
+n_shards: 2

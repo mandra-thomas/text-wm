@@ -1,0 +1,6 @@
+run_id: decisionsim_agent_score_smoke_qwen3-8b
+# Stage 1b (notes/decisionsim_agent_design.md; wf/decisionsim_agent.py). Smoke scores on the smoke labels.
+model: qwen3-8b
+label_source: decisionsim_agent_label_smoke
+arms: [yn_aligned, yn_blind, yn_swapped]
+n_shards: 1
