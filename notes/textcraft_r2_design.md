@@ -92,11 +92,13 @@ Any failure stops the job before it writes a score. Also recorded, for informati
 
 A model that fails the gate is reported as *not interpretable* for every confirmatory contrast and every effect estimate in this note. Its estimates are shown but not read, and its tests stay in the Holm family with their p-values, so the family's size does not change.
 
-**Role-level competence (descriptive, pre-registered).** Llama's round-1 competence differed sharply by role (two-candidate neutral AUC 0.84 on the goal role, 0.58 on ingredients). For every model, the neutral-line AUC is reported on the goal role (goal-role successes against goal-role failures) and on the ingredient role, on both scales, with pair-bootstrap intervals. It is also reported per failure class (each class against all successes) and on the parent records' successes against their failures. These readouts do not change the gate's verdict. The two-candidate neutral AUC, overall and per role, and the median first-token mass of the two-candidate score (the probability of the two candidates' first tokens) are reported too.
+**Role-level competence (descriptive, pre-registered).** Llama's round-1 competence differed sharply by role (two-candidate neutral AUC 0.84 on the goal role, 0.58 on ingredients). For every model, the neutral-line AUC is reported on the goal role (goal-role successes against goal-role failures) and on the ingredient role, on both scales, with pair-bootstrap intervals. It is also reported per failure class (each class against all successes), per history-length bin (the bin's failures against the bin's successes), role-matched for the used-up class (used-up ingredient failures against the 300 ingredient-role successes; the confirmatory used-up AUC set mostly-ingredient failures against successes of both roles), and on the parent records' successes against their failures. These readouts do not change the gate's verdict. The two-candidate neutral AUC, overall and per role, and the median first-token mass of the two-candidate score (the probability of the two candidates' first tokens) are reported too.
+
+*Added 2026-11-21, before any round-2 score, from the finished competence analysis (`notes/textcraft_llama_competence.md`, heuristics fixed at 9a83738 before any fit):* Llama-3.1-8B's neutral two-candidate AUC on the main population is 0.61 (the 0.68 of the confirmatory metrics included the usefulness failures). It is expected to fail this gate; it stays in the design, and the gate decides.
 
 ## 4. Records
 
-All records are in `wf/textcraft/data/r2_items.jsonl`, built by `python -m wf.textcraft.r2_items build` from the frozen items (`items.jsonl`, sha256 `3b81ac3f…5e421a6`) and the frozen builder. There are 2,982 records: 2,100 main and 882 parent. Each model scores 24,008 (record, arm) combinations.
+All records are in `wf/textcraft/data/r2_items.jsonl`, built by `python -m wf.textcraft.r2_items build` from the frozen items (`items.jsonl`, sha256 `3b81ac3f…5e421a6`) and the frozen builder. There are 2,982 records: 2,100 main and 882 parent. Each model scores 23,988 (record, arm) combinations.
 
 ### 4.1 Main records and the two-item goal line
 
@@ -111,7 +113,9 @@ All records are in `wf/textcraft/data/r2_items.jsonl`, built by `python -m wf.te
 | neutral | "Goal: explore the crafting commands." | names no item |
 | two-item | "Goal: craft A and B." | names G; crafting G does not complete the task, because the other item remains |
 
-In the two-item line, A and B are the pair's two goals in sorted order. Both members of a couple therefore see the same line, and across couples the action's object is named first in 255 goal-role items and second in 255.
+In the two-item line, A and B are the pair's two goals in sorted order. Both members of a couple therefore see the same line, and across couples the action's object is named first in half the goal-role items and second in the other half.
+
+*Added while building, before any score (2026-11-21).* One goal pair has a goal whose name contains the word "and" (flint and steel, paired with pink dye), so its two-item line, "Goal: craft flint and steel and pink dye.", cannot be read as two items. Its 10 records (4 goal-role failures, 6 goal-role successes) get no two-item arms and leave the two-item contrasts; they keep every other arm. The rule (`r2.two_item_line`): no two-item line when either goal's name contains the word "and". The naming and completion contrasts therefore use 500 goal-role failures (158 pairs) and the 990 ingredient failures.
 
 **Is a two-item goal faithful to the environment?** Checked against AgentGym's code at 3ef9235 (`environment.py`, `env_wrapper.py`, the client `agentenv/envs/textcraft.py`):
 
@@ -344,8 +348,16 @@ The lift: Λ confirmed above zero means the model raises predicted success for i
 6. The list control: L under the aligned line on the extended list minus on the item's own list.
 7. Dn and Dc by the object's position in the two-item line, by class, by length bin, and on successes. Λ on ingredients that share a word with the goal and on those that share none.
 8. T's two parts (goal-role and ingredient changes) separately, by length bin. The empty-start contrast: the effect with one look-up against none, per role.
-9. Competence: the gate's four values, the role-level and class-level AUCs on both scales, the two-candidate first-token mass per arm, and the AUC cost of each goal line.
-10. Across models: a table of Λ, P, Dn, Dc, T and the overall effect, per model, with the gate result.
+9. Competence: the gate's four values; the role-level, class-level, length-bin and role-matched used-up AUCs on both scales (section 3); the two-candidate first-token mass per arm; and the AUC cost of each goal line.
+10. Heuristic tracking (added 2026-11-21, before any round-2 score). For every model, on the 1,500 main failures and 600 successes under the neutral line, on both scales, the fits of four heuristics of the competence note, with their definitions exactly as committed at 9a83738:
+
+    - H1, every input's name mentioned somewhere in the history;
+    - H2, the units obtained over the history reach each input's count, consumption ignored;
+    - H6, the true inventory rule;
+    - H2 and H9, H2 and the action's output is not a top item of the displayed list (so a goal craft fails).
+
+    For each: the share of items it calls a success; the tracking AUC (the model's L between the items the heuristic calls a success and those it calls a failure; for H6 this is the competence AUC); the tracking AUC within the true failures and within the true successes; and the agreement and Cohen's kappa between the model's decision (L above zero) and the heuristic. `wf/textcraft/r2_heuristics.py` ports the competence script's definitions, and a test checks that the two agree on all 2,100 items. In round 1 Llama-3.1 followed H1 most closely (tracking AUC 0.87 against 0.61 for the truth), and H2 and H9 best by kappa. The readout says whether each round-2 model reads the state or a shortcut, which bears on how its contrasts can be read; it changes no verdict.
+11. Across models: a table of Λ, P, Dn, Dc, T and the overall effect, per model, with the gate result.
 
 ## 10. Power (planning figures, not results)
 
@@ -360,20 +372,20 @@ Each contrast's standard error comes from the design effect of its items per pai
 |---|---|---|---|
 | Λ | 990 (162) | 0.18 | 0.69 |
 | P | 675 (111) | 0.33 | 0.99 |
-| Dn, Dc | 504 goal (159) and 990 ingredient (162) | 0.38 | 1.25 |
-| T | 338 goal (130) and 582 ingredient (128) | 0.45 | 1.52 |
+| Dn, Dc | 500 goal (158) and 990 ingredient (162) | 0.38 | 1.25 |
+| T | 336 goal (129; the two used-up goal-role items are left out, as everywhere) and 582 ingredient (128) | 0.45 | 1.52 |
 
 For Llama-sized spreads, the expected P (−0.5 to −0.9) and an F1 equivalence verdict (|estimate| below about 0.15 with δ near 0.41) are both reachable. For Qwen-sized spreads, only large effects are detectable, and equivalence is reachable only for estimates near zero. The new models' spreads are unknown; in ALFWorld their effects were on Llama's scale (0.8–1.1 nats two-candidate).
 
 ## 11. Cost
 
-Each model scores 24,008 (record, arm) combinations:
+Each model scores 23,988 (record, arm) combinations:
 
-- main: 2,100 × 8 = 16,800;
+- main: 2,090 × 8 + 10 × 6 = 16,780;
 - padding: 920 × 4 = 3,680;
 - parent: 882 × 4 = 3,528.
 
-That is 120,040 scores over five models. The yes/no arms (8,400 per model) are read from one forward pass each (`score_one_token_pair`, equal to `score_pair` by construction for one-token candidates). Two-candidate arms take two passes.
+That is 119,940 scores over five models. The yes/no arms (8,390 per model) are read from one forward pass each (`score_one_token_pair`, equal to `score_pair` by construction for one-token candidates). Two-candidate arms take two passes.
 
 Round 1's rate was 51,200 scores (both models, all arms through `score_pair`) in about 4 GPU-hours on four shards, about 12,800 scores per GPU-hour; the diagnostics ran about 15,000 scores in 98 GPU-minutes. Prompts are of similar length. Estimated GPU time:
 

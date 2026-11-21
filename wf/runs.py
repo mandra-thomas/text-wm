@@ -1439,6 +1439,11 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "families_analysis": lambda cfg: _lazy("families", "run_families_analysis")(cfg),
     # 2026-11-20, logged before any wave A score was read: Mistral's system text in the first user turn.
     "family_placement_mistral-7b-v0.3": lambda cfg: _lazy("families", "run_family_placement")(cfg),
+    # 2026-11-21, TextCraft round 2 (notes/textcraft_r2_design.md): one scoring run per model, a smoke run per model,
+    # and the analysis.
+    **{f"textcraft_r2_{kind}_{tag}": (lambda cfg: _lazy("textcraft.r2_score", "run_textcraft_r2_score")(cfg))
+       for kind in ("score", "smoke") for tag in ("qwen3-8b", "llama3.1-8b", "gemma2-9b-it", "mistral-7b-v0.3", "llama3.2-3b")},
+    "textcraft_r2_analysis": lambda cfg: _lazy("textcraft.r2_analysis", "run_textcraft_r2_analysis")(cfg),
 }
 
 

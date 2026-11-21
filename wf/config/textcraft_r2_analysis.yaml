@@ -1,0 +1,5 @@
+run_id: textcraft_r2_analysis
+# TextCraft round 2 analysis (notes/textcraft_r2_design.md, sections 6 to 9): the competence gate, the five
+# confirmatory contrasts per model in one Holm family of 50, verdicts, readings and the descriptive readouts.
+manifest: wf/textcraft/data/r2_manifest.json
+models: [qwen3-8b, llama3.1-8b, gemma2-9b-it, mistral-7b-v0.3, llama3.2-3b]

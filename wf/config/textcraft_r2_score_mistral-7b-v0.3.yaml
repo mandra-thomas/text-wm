@@ -1,0 +1,8 @@
+run_id: textcraft_r2_score_mistral-7b-v0.3
+# TextCraft round 2 (notes/textcraft_r2_design.md): every record and arm of wf/textcraft/data/r2_items.jsonl under the
+# clean world-model prompt, model mistral-7b-v0.3 (wf/textcraft/r2.py MODELS). Refuses records not marked verified in
+# r2_manifest.json; the tokenization gate and the golden renderings are checked before any score. Sharded by goal
+# pair: WF_SHARD / WF_N_SHARDS.
+manifest: wf/textcraft/data/r2_manifest.json
+model: mistral-7b-v0.3
+n_shards: 4

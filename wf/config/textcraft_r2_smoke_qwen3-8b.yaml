@@ -1,0 +1,7 @@
+run_id: textcraft_r2_smoke_qwen3-8b
+# Format and timing check for textcraft_r2_score_qwen3-8b: 20 seeded records, every arm, one shard, the same gate.
+# Read for format only (first tokens, timing), never for results; the analysis never reads this run.
+manifest: wf/textcraft/data/r2_manifest.json
+model: qwen3-8b
+max_records: 20
+n_shards: 1

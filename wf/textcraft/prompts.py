@@ -36,6 +36,19 @@ SYSTEM = (
     "action, predict the environment's next observation exactly in TextCraft style. Output only the observation "
     "text.\n\nThe agent was given these instructions:\n" + INSTRUCTION
 )
+# The clean world-model system text (decided 2026-11-21; notes/textcraft_r2_design.md): the default for every TextCraft
+# run after the confirmatory one, which stays reported under SYSTEM. It keeps the framing and states only the
+# environment's rules and the output format: every agent-directed sentence of AgentGym's instruction is gone, and so is
+# "from the inventory or the environment". It does not state that the inventory starts empty. First used as the
+# exploratory "clean" variant of notes/textcraft_llama_dx.md (run 4); the text is unchanged.
+CLEAN_SYSTEM = (
+    "You are a text world model for TextCraft, a Minecraft crafting game. Given the interaction history and the next "
+    "action, predict the environment's next observation exactly in TextCraft style. Output only the observation "
+    "text.\n\nThe environment's rules: crafting commands are of the format \"craft [target object] using [input "
+    "ingredients]\". Each action is \"get\" with a quantity and an object, \"inventory\" to look up the inventory, or "
+    "\"craft\" with a quantity and one of the crafting commands shown. If a crafting command uses a generic ingredient "
+    "like \"planks\", a special type of the same ingredient, e.g. \"dark oak planks\", can be used instead."
+)
 # The exploratory empty-start arm (design 13) appends this rule to the system text; the default prompt never states it.
 EMPTY_START = "\n\nThe inventory is empty when the game starts; it holds only what the history's get and craft steps put in it."
 YN_QUESTION = "Question: Will this action succeed? Answer Yes or No.\nAnswer:"

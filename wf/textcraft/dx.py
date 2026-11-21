@@ -59,14 +59,7 @@ OBJECT_GOAL_ARMS = ("object_goal", "yn_object_goal")
 # Run 4 (notes/textcraft_llama_dx.md): a world-model-only system text. It keeps the framing and states only the
 # environment's rules and the output format; every agent-directed sentence of AgentGym's instruction is gone, and so
 # is "from the inventory or the environment". It does not state that the inventory starts empty.
-CLEAN_SYSTEM = (
-    "You are a text world model for TextCraft, a Minecraft crafting game. Given the interaction history and the next "
-    "action, predict the environment's next observation exactly in TextCraft style. Output only the observation "
-    "text.\n\nThe environment's rules: crafting commands are of the format \"craft [target object] using [input "
-    "ingredients]\". Each action is \"get\" with a quantity and an object, \"inventory\" to look up the inventory, or "
-    "\"craft\" with a quantity and one of the crafting commands shown. If a crafting command uses a generic ingredient "
-    "like \"planks\", a special type of the same ingredient, e.g. \"dark oak planks\", can be used instead."
-)
+CLEAN_SYSTEM = P.CLEAN_SYSTEM  # first-class since round 2 (wf/textcraft/prompts.py); the text is unchanged
 PROMPT_VARIANTS = ("clean", "inventory", "clean_inventory")
 
 
