@@ -6,15 +6,18 @@
 # About 1 busy core; the server grows about 36 MB per reset (verify_items.sbatch), one reset per candidate.
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=64G
-# Stage 1b labelling, CPU only: one fresh replay per candidate on the real server, one shard of the games per job
-# (8 shards; 9,000-18,000 replays in all, about 1,300 an hour). A job stops after max_replays_per_job replays
-# (PARTIAL), the server restarts and the run resumes, so memory stays bounded.
+# Stage 1b labelling, CPU only: one fresh replay per distinct candidate of the two lists (the primary and the
+# temperature-1 list share one cache) on the real server, one shard of the games per job (8 shards; 12,000-27,000
+# replays in all at 4-9 distinct candidates per state, about 1,300 an hour, so 1.5-3.5 h per shard).
+# A job stops after max_replays_per_job replays (PARTIAL), the server restarts and the run resumes, so memory stays bounded.
 #SBATCH --time=4:00:00
 #SBATCH --partition=coc-cpu
 #SBATCH --output=logs/dsa_label_%j.out
 #SBATCH --error=logs/dsa_label_%j.err
 #
-# After every sampling shard says "shard complete":
+# After every sampling shard says "shard complete" (then the model-free analysis, decisionsim_agent_encounter, on CPU:
+#   sbatch --export=ALL,ANALYSIS_RUNS=decisionsim_agent_encounter pace/analysis_cpu.sbatch
+# which every scoring run waits for):
 #   for i in $(seq 0 7); do sbatch --export=ALL,DSA_RUN=decisionsim_agent_label,WF_SHARD=$i,WF_N_SHARDS=8 pace/decisionsim_agent_label.sbatch; done
 # Smoke: sbatch --export=ALL,DSA_RUN=decisionsim_agent_label_smoke pace/decisionsim_agent_label.sbatch
 # A shard cut off by the time limit: the same command with WF_RESUME=1 in --export.

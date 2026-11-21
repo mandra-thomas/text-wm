@@ -1436,6 +1436,8 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     **{f"decisionsim_agent_{step}{suffix}": (lambda cfg, step=step: _lazy("decisionsim_agent", f"run_decisionsim_agent_{step}")(cfg))
        for step in ("sample", "label", "analysis") for suffix in ("", "_smoke")},
     "decisionsim_agent_dryrun": lambda cfg: _lazy("decisionsim_agent", "run_decisionsim_agent_dryrun")(cfg),
+    **{f"decisionsim_agent_encounter{suffix}": (lambda cfg: _lazy("decisionsim_agent", "run_decisionsim_agent_analysis")(cfg))
+       for suffix in ("", "_smoke")},
     **{f"decisionsim_agent_score{suffix}_{tag}": (lambda cfg: _lazy("decisionsim_agent", "run_decisionsim_agent_score")(cfg))
        for tag in ("llama3.1-8b", "mistral-7b-v0.3", "qwen3-8b") for suffix in ("", "_smoke")},
 }

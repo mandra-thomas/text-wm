@@ -124,7 +124,7 @@ def test_bookkeeping_flags_identical_replies_drift_and_seed_check():
     b = A.sampling_bookkeeping([st, other])
     assert b["primary"]["states_all_replies_identical"] == 1 and b["primary"]["truncated_replies"] == 2
     assert b["greedy_agreement"] == 0.5 and b["drifted_sampler"]
-    assert b["seed_check"] == {"n_states": 2, "nondegenerate": 1, "nondegenerate_same_set": 1}
+    assert b["seed_check"] == {"n_states": 2, "nondegenerate": 1, "nondegenerate_same_set": 1, "same_seed_reproduces": 0}
     gate = A.smoke_gate({**b, "replay_mismatches": 0})
     assert not gate["passed"]  # a second seed reproduced a non-degenerate set
     ok = A.sampling_bookkeeping([{**st, "seed_check": {"distinct_first": 3, "same_set": False}}])
@@ -296,13 +296,44 @@ def test_encounter_bands_and_the_futility_rule():
     rep = A.encounter_report(sts)
     b = rep["encounter_by_step_band"]
     assert (b["step_0"]["n_states"], b["steps_1_11"]["n_states"], b["steps_12_29"]["n_states"]) == (1, 1, 2)
-    assert rep["reachable_games"] == 4 and rep["futility"]["primary_cannot_reach_significance"]
-    many = [_state([_cand(1, True, goal=True)], game=f"g{i}") for i in range(7)]
-    assert not A.encounter_report(many)["futility"]["primary_cannot_reach_significance"]
+    assert rep["reachable_games"] == 4 and rep["futility"]["games"] == 4
+    assert rep["futility"]["conditional_cannot_reach_significance"]  # 4 games < 7
+    # Encounters in 7 games but no working candidate anywhere: no state can differ, so futile.
+    no_success = [_state([_cand(1, True, goal=True)], game=f"g{i}") for i in range(7)]
+    rep = A.encounter_report(no_success)
+    assert rep["reachable_games"] == 7 and rep["futility"]["games"] == 0
+    assert rep["futility"]["conditional_cannot_reach_significance"]
+    # Encounters in 7 games, a success always ranked above them: not reachable, yet a verifier that rejects the
+    # success can still choose them, so the rule must not call this futile (review 2).
     unreachable = [_state([_cand(1, False), _cand(2, True, goal=True)], game=f"g{i}") for i in range(7)]
-    rep = A.encounter_report(unreachable)  # encounters in 7 games, but a success is always ranked above them
-    assert rep["encounter_games"] == 7 and rep["reachable_games"] == 0
-    assert rep["futility"]["primary_cannot_reach_significance"]
+    rep = A.encounter_report(unreachable)
+    assert rep["encounter_games"] == 7 and rep["reachable_games"] == 0 and rep["futility"]["games"] == 7
+    assert not rep["futility"]["conditional_cannot_reach_significance"]
+    six = A.encounter_report(unreachable[:6])
+    assert six["futility"]["conditional_cannot_reach_significance"]  # the boundary: 6 games are not enough
+
+
+def test_encounter_bands_count_encounters_not_reachable_ones():
+    sts = [_state([_cand(1, False), _cand(2, True, goal=True)], game=f"g{i}", t=t) for i, t in enumerate((0, 5, 20))]
+    b = A.encounter_report(sts)["encounter_by_step_band"]
+    assert [b[k]["estimate"] for k in ("step_0", "steps_1_11", "steps_12_29")] == [1.0, 1.0, 1.0]
+
+
+def test_reviewer_counterexample_eight_unreachable_games_can_be_significant():
+    # 8 games, one encounter state each: rank 1 works (task-irrelevant), rank 2 a regime candidate, rank 3 works.
+    labs = [_lab([_cand(1, False), _cand(2, True, goal=True), _cand(3, False)], game=f"g{i}", t=5) for i in range(8)]
+    states = A.views(labs)
+    enc = A.encounter_report(states)
+    assert enc["reachable_games"] == 0 and enc["futility"]["games"] == 8
+    assert not enc["futility"]["conditional_cannot_reach_significance"]
+    L = {A.AWARE: {}, A.BLIND: {}, A.SWAPPED: {}}
+    for s in labs:  # the aware verifier rejects the working rank 1 and accepts the regime candidate
+        L[A.AWARE].update(_L(s, [-1, 1, 1]))
+        L[A.BLIND].update(_L(s, [1, -1, 1]))
+        L[A.SWAPPED].update(_L(s, [1, -1, 1]))
+    c = A.contrast(states, L, "aware", "blind")
+    assert c["difference"]["estimate"] == 1.0 and c["difference"]["n_games_nonzero"] == 8
+    assert c["difference"]["p"] < 0.025 and c["harm_regime_share"] == 1.0
 
 
 # ---------------- contrasts and statistics ----------------
@@ -411,6 +442,8 @@ def test_incompetent_models_stay_in_holm_and_harm_from_loops_is_flagged():
     out = A.primary_block(models, list(A.PRIORITY), set(), "primary", "decomposition")["per_model"]
     assert out["llama3.1-8b"]["verdict"] == "not interpreted" and out["llama3.1-8b"]["p_holm"] == pytest.approx(0.02)
     assert out["mistral-7b-v0.3"]["harm_mostly_regime"] is False
+    assert out["mistral-7b-v0.3"]["verdict"] == ("toward failure, attributable to the real task (not evidence for the "
+                                                 "main finding: harm mostly from non-regime actions)")
 
 
 def test_auc_and_competence():
@@ -500,6 +533,10 @@ def test_complete_labs_need_every_arm_where_defined():
     keep, short = A.complete_labs(labs, L)
     assert short == 1 and labs[0] not in keep
     assert A.complete_labs(labs, {a: v for a, v in L.items() if a not in (A.SWAPPED, A.NEUTRAL)})[1] == 0
+    no_neutral = {a: dict(v) for a, v in L.items()}
+    del no_neutral[A.NEUTRAL][A.cand_id(labs[1], labs[1]["candidates"][0])]
+    keep, short = A.complete_labs(labs, no_neutral)  # labs[0] still lacks its swapped score from above
+    assert short == 2 and labs[1] not in keep  # a scored neutral arm is needed where it was scored
     single = _lab([_cand(1, True)], game="g9")
     assert A.complete_labs([single], {A.AWARE: {}, A.BLIND: {A.cand_id(single, single["candidates"][0]): 1.0}})[1] == 0
     assert A.complete_labs([single], {A.AWARE: {}, A.BLIND: {}})[1] == 1
@@ -608,10 +645,16 @@ def _label(i=0, n=2, **kw):
     return A.run_decisionsim_agent_label({"run_id": "dsa_label", "sample_source": "dsa_sample", "n_shards": n, "shard": i, **kw})
 
 
-def _score(tag, **kw):
+def _model_free(run_id="dsa_mf"):
+    return A.run_decisionsim_agent_analysis({"run_id": run_id, "label_source": "dsa_label", "models": {}})
+
+
+def _score(tag, model_free=True, **kw):
+    if model_free and "model_free_analysis" not in kw:
+        assert _model_free() == 0
     arms = list(A.ARMS) if tag in A.PRIORITY else [A.AWARE, A.BLIND, A.SWAPPED]
     return A.run_decisionsim_agent_score({"run_id": f"dsa_score_{tag}", "model": tag, "label_source": "dsa_label",
-                                          "n_shards": 1, "arms": arms, **kw})
+                                          "n_shards": 1, "arms": arms, "model_free_analysis": "dsa_mf", **kw})
 
 
 def _analysis():
@@ -1012,9 +1055,9 @@ def test_a_failed_gate_scores_nothing_and_enters_holm_with_p_one(mock_runs, monk
 
 def test_arms_must_include_aware_and_blind(mock_runs):
     with pytest.raises(SystemExit):
-        _score("qwen3-8b", arms=["yn_aligned", "yn_swapped"])
+        _score("qwen3-8b", model_free=False, arms=["yn_aligned", "yn_swapped"])
     with pytest.raises(SystemExit):
-        _score("gemma2-9b-it")
+        _score("gemma2-9b-it", model_free=False)
 
 
 def test_analysis_waits_and_refuses_scores_of_another_label_run(mock_runs):
@@ -1131,5 +1174,231 @@ def test_seed_check_flags_a_seed_that_changes_nothing():
             return [{"text": f"Action: a{i % 3}", "finish_reason": "stop"} for i in range(n)]
 
     rec = A.sample_state(Stuck(), [{"role": "user", "content": "x"}], "a0", "g", 0, {"seed_check": True})
-    assert rec["seed_check"] == {"distinct_first": 3, "same_set": True}
+    assert rec["seed_check"] == {"distinct_first": 3, "same_set": True, "same_seed_reproduces": True}
     assert set(rec["lists"]) == {A.PRIMARY_LIST, A.T1_LIST} and rec["greedy_fresh"]["agrees"] is True
+
+
+# ---------------- review 2 ----------------
+
+
+def test_each_block_reads_its_own_estimand_p_decomposition_and_states():
+    # Two non-encounter harm states in g1-g2 and two encounter help states in g3-g4, and one encounter state where a
+    # success is ranked above the regime candidate (an encounter, but not reachable).
+    harm = [_lab([_cand(1, False), _cand(2, True)], game=f"g{i}", t=0) for i in (1, 2)]
+    hlp = [_lab([_cand(1, True, goal=True), _cand(2, False)], game=f"g{i}", t=0) for i in (3, 4)]
+    unreach = [_lab([_cand(1, False), _cand(2, True, goal=True)], game="g5", t=0)]
+    labs = harm + hlp + unreach
+    L = {A.AWARE: {}, A.BLIND: {}, A.SWAPPED: {}}
+    for s in harm:  # aware rejects the working rank 1 and lands on the failure; blind keeps rank 1
+        L[A.AWARE].update(_L(s, [-1, 1])); L[A.BLIND].update(_L(s, [1, 1])); L[A.SWAPPED].update(_L(s, [1, 1]))
+    for s in hlp:  # aware rejects the failing rank 1; blind accepts it; swapped chooses as aware
+        L[A.AWARE].update(_L(s, [-1, 1])); L[A.BLIND].update(_L(s, [1, 1])); L[A.SWAPPED].update(_L(s, [-1, 1]))
+    for s in unreach:  # aware rejects the working rank 1 and takes the regime failure: harm at an encounter state
+        L[A.AWARE].update(_L(s, [-1, 1])); L[A.BLIND].update(_L(s, [1, 1])); L[A.SWAPPED].update(_L(s, [-1, 1]))
+    rep = A.model_report(labs, L, L)
+    assert rep["primary"]["n_states"] == 5 and rep["conditional"]["n_states"] == 3  # g5 counts though unreachable
+    assert rep["primary"]["difference"]["estimate"] == pytest.approx(1 / 5)
+    assert rep["conditional"]["difference"]["estimate"] == pytest.approx(-1 / 3)
+    assert rep["conditional_decomposition"]["n_states"] == 3 and rep["decomposition"]["n_states"] == 5
+    assert rep["decomposition"]["aware_minus_swapped"]["estimate"] == pytest.approx(2 / 5)
+    assert rep["conditional_decomposition"]["aware_minus_swapped"]["estimate"] == pytest.approx(0.0)
+    # In the Holm blocks each family reads its own p and decomposition.
+    m = {"competence": {"interpretable": True}, **{k: rep[k] for k in ("primary", "conditional", "decomposition",
+                                                                      "conditional_decomposition")}}
+    m["primary"] = {**m["primary"], "difference": {**m["primary"]["difference"], "p": 0.001, "ci": [0.01, 0.3]}}
+    m["conditional"] = {**m["conditional"], "difference": {**m["conditional"]["difference"], "p": 0.002, "ci": [0.01, 0.3]},
+                        "harm_regime_share": 1.0, "changed": {"harm": 1}}
+    models = {t: m for t in A.PRIORITY}
+    blocks = A.primary_blocks(models, list(A.PRIORITY), set())
+    over, cond = blocks["overall"]["per_model"], blocks["conditional_on_encounter"]["per_model"]
+    assert over["llama3.1-8b"]["p_holm"] == pytest.approx(0.002) and cond["llama3.1-8b"]["p_holm"] == pytest.approx(0.004)
+    assert cond["llama3.1-8b"]["n_states"] == 3 and over["llama3.1-8b"]["n_states"] == 5
+    assert over["llama3.1-8b"]["verdict"].startswith("toward failure, attributable")  # 2/5 against 1/5
+    assert cond["llama3.1-8b"]["verdict"] == "toward failure, not attributable to the real task"  # aware-swapped 0
+
+
+def test_verdict_boundaries():
+    assert A.verdict({"ci": [0.0, 0.02]}, 0.001, None) == "no reliable difference"  # the bound must be above zero
+    models = {"llama3.1-8b": _model(0.01, [0.001, 0.02], regime_share=0.5),
+              "mistral-7b-v0.3": _model(0.02, [0.001, 0.02], regime_share=0.49)}
+    out = A.primary_block(models, list(A.PRIORITY), set(), "primary", "decomposition")["per_model"]
+    assert out["llama3.1-8b"]["harm_mostly_regime"] is True
+    assert out["llama3.1-8b"]["verdict"] == "toward failure, attributable to the real task"  # exactly half: no suffix
+    assert out["mistral-7b-v0.3"]["verdict"].endswith("(not evidence for the main finding: harm mostly from non-regime actions)")
+
+
+def test_t1_list_readouts_read_the_t1_list():
+    a, b, c = _cand(1, False), _cand(2, True, goal=True), _cand(3, False, action="z")
+    labs = [_lab([a, b], t1=[{**a}, {**c, "rank": 2}], game=f"g{i}", t=0) for i in range(3)]
+    L = {arm: {k: 1.0 for s in labs for k in _L(s, [1, 1, 1]).items() for k in [k[0]]} for arm in (A.AWARE, A.BLIND)}
+    rep = A.model_report(labs, L, L)
+    assert rep["conditional"]["n_states"] == 3  # the primary lists hold the regime candidate
+    assert rep["sensitivity"]["t1_list"]["n_states"] == 3
+    assert rep["sensitivity"]["t1_list_conditional"]["n_states"] == 0  # the t1 lists hold none
+
+
+def test_t1_encounter_report_in_the_analysis_reads_the_t1_lists(mock_runs):
+    root, _, _ = mock_runs
+    assert _sample(0, n=1) == 0 and _label(0, n=1) == 0 and _model_free() == 0
+    m = json.loads((root / "dsa_mf" / "metrics.json").read_text())
+    labs = [x for x in _rows(root, "dsa_label", "labels.jsonl") if A.usable(x)]
+    n_t1 = sum(len(A.scored_candidates(v)) for v in A.views(labs, A.T1_LIST))
+    n_pr = sum(len(A.scored_candidates(v)) for v in A.views(labs, A.PRIMARY_LIST))
+    assert n_t1 != n_pr and m["encounter_t1_list"]["n_candidates"] == n_t1 and m["encounter"]["n_candidates"] == n_pr
+
+
+def test_shards_with_different_settings_are_refused(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNS_DIR", str(tmp_path))
+    for i, seed in enumerate((1, 2)):
+        d = tmp_path / "x" / f"shard_{i:02d}_of_02"
+        d.mkdir(parents=True)
+        (d / "STATUS.md").write_text("# STATUS — x — REPORTED (shard complete)\n")
+        (d / "git_sha").write_text("abc\n")
+        (d / "config.json").write_text(json.dumps({"run_id": f"x/shard_{i:02d}_of_02", "shard": i, "seed": seed}))
+    _, problems = A.complete_shards("x")
+    assert any("different settings" in p for p in problems)
+    (tmp_path / "x" / "shard_01_of_02" / "config.json").write_text(json.dumps({"run_id": "y", "shard": 1, "seed": 1}))
+    assert A.complete_shards("x")[1] == []
+
+
+def test_the_swap_object_excludes_every_candidate_of_both_lists(mock_runs, monkeypatch):
+    from wf.env.scene import scan_scene
+
+    seen = {}
+    monkeypatch.setattr(A, "state_swap_object", lambda scene, task, goal, actions, *a, **k: seen.update(actions=actions))
+    client = AlfworldClient()
+    client.create()
+    st = client.reset("train/1", "train")
+    lists = {"primary": {"candidates": [{"rank": 1, "action": "inventory"}], "n_samples": 0, "n_format_errors": 0, "n_cut": 0},
+             "t1": {"candidates": [{"rank": 1, "action": "inventory"}, {"rank": 2, "action": "take apple 1 from countertop 1"}],
+                    "n_samples": 0, "n_format_errors": 0, "n_cut": 0}}
+    s = {"game_id": "train/1", "split": "train", "state_idx": 0, "task_line": st.task_line, "prefix_actions": [],
+         "recorded_obs": None, "history_text": st.first_observation, "lists": lists}
+    A.label_state(client, scan_scene(client, "train/1", "train"), s)
+    assert seen["actions"] == ["inventory", "take apple 1 from countertop 1"]
+
+
+def test_sample_seed_value_is_pinned():
+    assert A.sample_seed("valid_unseen/1", 3) == 3067989451
+    assert A.sample_seed("valid_unseen/1", 3, name="t1") == 912758500
+
+
+def test_label_budget_counts_the_next_state(mock_runs):
+    root, _, _ = mock_runs
+    assert _sample(0, n=1) == 0
+    states = _rows(root)
+    sizes = [len(A.union_actions(s)) for s in states]
+    budget = sizes[0] + sizes[1] - 1  # the second state would cross it
+    assert _label(0, n=1, max_replays_per_job=budget) == 1
+    assert len(read_jsonl(root / "dsa_label" / "shard_00_of_01" / "labels.jsonl")) == 1
+
+
+class _Recorder:
+    """A stand-in sampler that records every request and can permute its replies by seed."""
+
+    def __init__(self, permute=False, text="Action: a{i}"):
+        self.calls, self.permute, self.text = [], permute, text
+
+    def sample(self, messages, n, params, max_tokens, seed):
+        self.calls.append((params, seed))
+        out = [{"text": self.text.format(i=i % 4), "finish_reason": "stop"} for i in range(n)]
+        return out[::-1] if self.permute and seed % 2 else out
+
+
+def test_seed_check_uses_the_primary_settings_and_compares_sequences():
+    r = _Recorder()
+    rec = A.sample_state(r, [{"role": "user", "content": "x"}], "a0", "g", 0, {"seed_check": True})
+    assert [p for p, _ in r.calls] == [A.SAMPLINGS["primary"], A.SAMPLINGS["t1"], A.GREEDY,
+                                       A.SAMPLINGS["primary"], A.SAMPLINGS["primary"]]
+    assert r.calls[4][1] == r.calls[0][1] and r.calls[3][1] != r.calls[0][1]  # the repeat reuses the primary seed
+    seeds = {}
+    for x in range(40):  # find a state whose seed-check seed and primary seed differ in parity
+        a, b = A.sample_seed("g", x, name="primary"), A.sample_seed("g", x, name="seed_check")
+        if a % 2 != b % 2:
+            seeds = {"t": x}
+            break
+    rec = A.sample_state(_Recorder(permute=True), [{"role": "user", "content": "x"}], "a0", "g", seeds["t"], {"seed_check": True})
+    assert rec["seed_check"]["same_set"] is False  # the same replies in another order are another sequence
+
+
+def test_smoke_gate_needs_a_non_degenerate_seed_check_state_and_reports_readouts():
+    lst = {"n_samples": 4, "n_format_errors": 0, "n_cut": 0, "candidates": [{"count": 1}],
+           "replies": [{"text": "Action: look", "finish_reason": "length"}] * 4}
+    degenerate = [{"lists": {"primary": lst}, "greedy_fresh": {"agrees": True},
+                   "seed_check": {"distinct_first": 1, "same_set": True, "same_seed_reproduces": True}}]
+    b = A.sampling_bookkeeping(degenerate)
+    gate = A.smoke_gate({**b, "replay_mismatches": 0})
+    assert not gate["passed"]  # the seed check never saw a state that could show anything
+    assert gate["truncated_replies"]["primary"] == {"n": 4, "share": 1.0}
+    assert gate["greedy_agreement"] == 1.0 and gate["drifted_sampler"] is False
+
+
+def test_fresh_greedy_agreement_compares_normalised_actions_and_the_drift_boundary():
+    rec = A.sample_state(_Recorder(text="Action: A{i}."), [{"role": "user", "content": "x"}], "a0", "g", 0, {})
+    assert rec["greedy_fresh"]["agrees"] is True  # "A0." and "a0" are one action
+    lst = {"n_samples": 1, "n_format_errors": 0, "n_cut": 0, "candidates": [{"count": 1}], "replies": []}
+    sts = [{"lists": {"primary": lst}, "greedy_fresh": {"agrees": i < 9}} for i in range(10)]
+    b = A.sampling_bookkeeping(sts)
+    assert b["greedy_agreement"] == pytest.approx(0.9) and b["drifted_sampler"] is False  # exactly 90% is not drift
+
+
+def test_request_settings_and_normalisation_counts_are_recorded(mock_runs):
+    root, _, _ = mock_runs
+    assert _sample(0, n=1) == 0
+    m = json.loads((root / "dsa_sample" / "shard_00_of_01" / "metrics.json").read_text())
+    for name, p in A.SAMPLINGS.items():
+        assert m["request_settings"][name] == {**p, **A.FIXED_PARAMS, "n": 20, "max_tokens": 256}
+    assert m["primary"]["normalised_actions"] > 0  # the mock writes "Go to Drawer 1."
+    r = A.rank_candidates("z", ["Action: Go to X.", "Action: look", "Action: look "], "g", 0)
+    assert r["n_normalised"] == 1
+
+
+def test_scoring_waits_for_the_model_free_analysis_unless_overridden(mock_runs):
+    root, _, _ = mock_runs
+    assert _sample(0, n=1) == 0 and _label(0, n=1) == 0
+    assert _score("qwen3-8b", model_free=False) == 1  # no model-free analysis yet
+    assert "waits for the model-free analysis" in (root / "dsa_score_qwen3-8b" / "shard_00_of_01" / "STATUS.md").read_text()
+    assert A.run_decisionsim_agent_analysis({"run_id": "dsa_mf", "label_source": "other", "models": {}}) == 1
+    assert _score("qwen3-8b", model_free=False) == 1  # another label run, and unfinished
+    assert _score("qwen3-8b", model_free=False, run_order_override="smoke of the scorer") == 0
+    order = json.loads((root / "dsa_score_qwen3-8b" / "shard_00_of_01" / "run_order.json").read_text())
+    assert order["override"] == "smoke of the scorer" and order["would_have_refused"]
+    assert _model_free() == 0 and _score("qwen3-8b", model_free=False) == 0
+    order = json.loads((root / "dsa_score_qwen3-8b" / "shard_00_of_01" / "run_order.json").read_text())
+    assert "override" not in order and "conditional_cannot_reach_significance" in order["futility"]
+    assert A.run_decisionsim_agent_analysis({"run_id": "dsa_mf", "label_source": "dsa_label",
+                                             "models": {"qwen3-8b": "dsa_score_qwen3-8b"}}) == 0
+    assert _score("qwen3-8b", model_free=False) == 1  # an analysis with models is not the model-free one
+
+
+def test_views_count_only_runnable_candidates():
+    lab = _lab([_cand(1, False), _cand(2, True, err="server error"), _cand(3, True, goal=True)])
+    v = A.view(lab)
+    assert [c["rank"] for c in v["candidates"]] == [1, 3] and v["n_union"] == 2
+
+
+def _fake_analysis(root, name, label_source="dsa_label", models=None, status="REPORTED (Stage 1b report)"):
+    d = root / name
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "metrics.json").write_text(json.dumps({"encounter": {"futility": {"games": 9}}}))
+    (d / "config.json").write_text(json.dumps({"run_id": name, "label_source": label_source, "models": models or {}}))
+    (d / "STATUS.md").write_text(f"# STATUS — {name} — {status}\n")
+
+
+def test_run_order_check_cases(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNS_DIR", str(tmp_path))
+    cfg = {"label_source": "dsa_label", "model_free_analysis": "mf"}
+    assert not A.run_order_check(cfg)["ok"]  # nothing written yet
+    _fake_analysis(tmp_path, "mf", label_source="other")
+    r = A.run_order_check(cfg)
+    assert not r["ok"] and "another label run" in r["why"]
+    _fake_analysis(tmp_path, "mf", models={"qwen3-8b": "x"})
+    assert "lists models" in A.run_order_check(cfg)["why"]
+    _fake_analysis(tmp_path, "mf", status="FAIL")
+    assert "did not finish" in A.run_order_check(cfg)["why"]
+    _fake_analysis(tmp_path, "mf")
+    r = A.run_order_check(cfg)
+    assert r["ok"] and r["futility"] == {"games": 9} and "override" not in r
+    _fake_analysis(tmp_path, "mf", label_source="other")
+    r = A.run_order_check({**cfg, "run_order_override": "why not"})
+    assert r["ok"] and r["override"] == "why not" and "another label run" in r["would_have_refused"]

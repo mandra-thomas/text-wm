@@ -1,0 +1,7 @@
+run_id: decisionsim_agent_encounter
+# Stage 1b (notes/decisionsim_agent_design.md, amended after reviews 1 and 2; wf/decisionsim_agent.py). The model-free analysis, read before any verifier is scored:
+# encounter rates of both lists and the futility rule (encounter states that also list a working candidate in fewer
+# than 7 games: the conditional estimand cannot reach significance). CPU only; no model. Every scoring run refuses to
+# start until this run has finished on the same label run (or is given a logged run_order_override).
+label_source: decisionsim_agent_label
+models: {}

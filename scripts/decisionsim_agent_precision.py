@@ -6,9 +6,12 @@ the real game structure of the 134 RQ3 no-foresight episodes.
 Encounter states are put in a fixed number of games, drawn with weights favouring long failing games (games are
 weighted by their state count times one plus their failing greedy actions, as the archived encounters are); among
 encounter states an aware-blind difference is harm with probability `harm` and help with probability `help`; every
-other state changes outcome in either direction with probability `bg` each (symmetric background). Inference as in
-the analysis: game-clustered percentile bootstrap and whole-game sign-flip permutation. Holm over the two priority
-models: with the other model null, the first threshold is p < 0.025; both p < 0.05 is the second.
+other state changes outcome in either direction with probability `bg` each (symmetric background), and encounter
+states may also carry a symmetric background `bg_in` of their own on top of harm and help (amended after review 2).
+Inference as in the analysis: game-clustered percentile bootstrap and whole-game sign-flip permutation. Holm over the
+two priority models: with the other model null, the first threshold is p < 0.025; both p < 0.05 is the second. The
+powers are upper bounds: the model has no between-game variation in the per-encounter effect, no loops, and no
+dependence between a game's states beyond their shared game.
 
   python scripts/decisionsim_agent_precision.py <RQ3 run folder> [dry-run metrics.json] [--reps 300]
 
@@ -48,7 +51,7 @@ def load(run: Path) -> tuple[list[str], list[int], list[int]]:
 
 
 def simulate(sizes, fails, enc_games, enc_mean, harm, help_, bg=0.005, reps=300, B=1000, P=1000, seed=1,
-             fixed_k=None):
+             fixed_k=None, bg_in=0.0):
     import numpy as np
 
     rng = np.random.default_rng(seed)
@@ -63,7 +66,7 @@ def simulate(sizes, fails, enc_games, enc_mean, harm, help_, bg=0.005, reps=300,
             eg = rng.choice(G, size=enc_games, replace=False, p=w / w.sum())
             k = np.zeros(G, int)
             k[eg] = np.minimum(sizes[eg], np.maximum(1, rng.poisson(enc_mean, len(eg))))
-        enc = rng.binomial(k, harm) - rng.binomial(k, help_)
+        enc = rng.binomial(k, harm) - rng.binomial(k, help_) + rng.binomial(k, bg_in) - rng.binomial(k, bg_in)
         back = rng.binomial(sizes - k, bg) - rng.binomial(sizes - k, bg)
         tot = enc + back
         row = []
@@ -90,6 +93,7 @@ def simulate(sizes, fails, enc_games, enc_mean, harm, help_, bg=0.005, reps=300,
     return res
 
 
+BACKGROUND_SCENARIOS = [(15, 15, 0.10, 0.02), (30, 8, 0.10, 0.02), (30, 20, 0.10, 0.02)]
 SCENARIOS = [  # (encounter games, mean encounter states per encounter game, harm, help)
     (15, 15, 0.10, 0.02), (15, 15, 0.20, 0.03),
     (30, 8, 0.10, 0.02), (30, 20, 0.10, 0.02), (30, 20, 0.20, 0.03),
@@ -103,6 +107,7 @@ def main(argv: list[str]) -> int:
         reps = int(argv[argv.index("--reps") + 1])
         argv = [a for i, a in enumerate(argv) if a != "--reps" and (i == 0 or argv[i - 1] != "--reps")]
     games, sizes, fails = load(Path(argv[0]))
+    print("powers are upper bounds (see the docstring)")
     print(f"{len(games)} games, {sum(sizes)} states; sign-flip floor p_min(g) = 2^(1-g): "
           f"{min_games_for(0.025)} games needed for p < 0.025, {min_games_for(0.05)} for p < 0.05")
     rows = []
@@ -112,10 +117,17 @@ def main(argv: list[str]) -> int:
         for harm, help_ in ((0.10, 0.02), (0.20, 0.03)):
             r = simulate(sizes, fails, 0, 0, harm, help_, reps=reps, fixed_k=k)
             rows.append({"scenario": f"rank 1 only ({sum(k)} states in {sum(x > 0 for x in k)} games)", "harm": harm,
-                         "help": help_, **r})
+                         "help": help_, "bg": 0.005, "bg_in": 0.0, **r})
     for eg, m, harm, help_ in SCENARIOS:
         r = simulate(sizes, fails, eg, m, harm, help_, reps=reps)
-        rows.append({"scenario": f"{eg} games, about {m} encounter states each", "harm": harm, "help": help_, **r})
+        rows.append({"scenario": f"{eg} games, about {m} encounter states each", "harm": harm, "help": help_, "bg": 0.005,
+                     "bg_in": 0.0, **r})
+    # More background change (review 2): 2% and 5% per direction outside encounters, and 2% or 5% inside them too.
+    for eg, m, harm, help_ in BACKGROUND_SCENARIOS:
+        for bg, bg_in in ((0.02, 0.0), (0.05, 0.0), (0.02, 0.02), (0.05, 0.05)):
+            r = simulate(sizes, fails, eg, m, harm, help_, bg=bg, bg_in=bg_in, reps=reps)
+            rows.append({"scenario": f"{eg} games, about {m} each; background {bg:.0%}, inside {bg_in:.0%}", "harm": harm,
+                         "help": help_, "bg": bg, "bg_in": bg_in, **r})
     for r in rows:
         print(f"{r['scenario']:<44} harm {r['harm']:.2f} help {r['help']:.2f} | encounter states {r['encounter_states']:.0f} | "
               f"overall {r['overall_delta']:.2f} pts ±{r['overall_halfwidth']:.2f}, power {r['overall_power_holm_first']:.2f} "

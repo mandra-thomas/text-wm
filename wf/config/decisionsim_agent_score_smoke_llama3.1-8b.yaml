@@ -2,8 +2,9 @@ run_id: decisionsim_agent_score_smoke_llama3.1-8b
 # Stage 1b (notes/decisionsim_agent_design.md, amended after review 1; wf/decisionsim_agent.py). Yes/no scores of every distinct labelled candidate (both
 # lists share one cache) under the task-aware, task-blind (query task line deleted) and swapped (only where a swap
 # object exists) prompts; at states with a single distinct candidate only the blind arm. Priority model: the neutral arm (explore the room) is a secondary that never decides.
-# Pinned revision in wf.constants.REVISIONS. Scored only after the model-free futility rule has been read.
+# Pinned revision in wf.constants.REVISIONS. Refuses to start until model_free_analysis has finished on these labels.
 model: llama3.1-8b
 label_source: decisionsim_agent_label_smoke
 arms: [yn_aligned, yn_blind, yn_swapped, yn_absent]
 n_shards: 1
+model_free_analysis: decisionsim_agent_encounter_smoke

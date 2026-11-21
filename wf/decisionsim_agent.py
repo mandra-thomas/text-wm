@@ -17,7 +17,8 @@ Runs:
   decisionsim_agent_sample           GPU: vLLM agent + ALFWorld server; samples and freezes the lists
   decisionsim_agent_label            CPU: ALFWorld server; one fresh replay per distinct candidate, labels, swap object
   decisionsim_agent_score_<model>    GPU: yes/no scores, every distinct candidate under every arm
-  decisionsim_agent_analysis         CPU: encounter rates and the futility rule (no model needed), then decisions
+  decisionsim_agent_encounter        CPU: the model-free analysis (encounter rates, the futility rule); scoring waits for it
+  decisionsim_agent_analysis         CPU: decisions, both estimands, attribution
   decisionsim_agent_dryrun           CPU, no model and no server: the archived episodes, rank 1 only
 """
 from __future__ import annotations
@@ -193,8 +194,10 @@ def rank_candidates(greedy: str, replies: list[str], game: str, t: int, k_max: i
     """The frozen list: rank 1 the greedy action (its recorded string, the one the agent executed), then the other
     distinct sampled actions by count, ties by the seeded hash, at most k_max in all. A reply without an Action line
     is a format error and contributes no candidate."""
-    parsed = [normalize_action(parse_react_action(r)) for r in replies]
+    raw = [parse_react_action(r) for r in replies]
+    parsed = [normalize_action(r) for r in raw]
     n_format = sum(p is None for p in parsed)
+    n_normalised = sum(p is not None and p != r for r, p in zip(raw, parsed))  # actions normalisation changed
     counts = Counter(p for p in parsed if p is not None)
     greedy_count = counts.pop(normalize_action(greedy), 0)
     rest = sorted(counts.items(), key=lambda kv: (-kv[1], tie_key(game, t, kv[0], seed)))
@@ -202,7 +205,7 @@ def rank_candidates(greedy: str, replies: list[str], game: str, t: int, k_max: i
     cands = [{"rank": 1, "action": greedy, "count": greedy_count, "greedy": True}]
     cands += [{"rank": r + 2, "action": a, "count": c, "greedy": False} for r, (a, c) in enumerate(kept)]
     return {"candidates": cands, "n_samples": len(replies), "n_format_errors": n_format,
-            "n_distinct_sampled": len(counts) + (greedy_count > 0), "n_cut": len(cut),
+            "n_distinct_sampled": len(counts) + (greedy_count > 0), "n_cut": len(cut), "n_normalised": n_normalised,
             "cut_counts": [c for _, c in cut]}
 
 
@@ -293,10 +296,13 @@ def sample_state(sampler: AgentSampler, msgs: list[dict[str, str]], greedy: str,
     if cfg.get("seed_check"):
         params = samplings[PRIMARY_LIST]
         again = sampler.sample(msgs, n, params, max_tokens, sample_seed(g, t, seed, "seed_check"))
+        repeat = sampler.sample(msgs, n, params, max_tokens, sample_seed(g, t, seed, PRIMARY_LIST))
         first = [r["text"] for r in lists[PRIMARY_LIST]["replies"]]
-        # a working per-request seed gives a different sequence of replies; the same sequence means the seed is not
-        # what drives the draws (and within-request collapse shows as one distinct reply)
-        rec["seed_check"] = {"distinct_first": len(set(first)), "same_set": first == [r["text"] for r in again]}
+        # Another seed must give another sequence of replies (the seed drives the draws; within-request collapse shows
+        # as one distinct reply). The same seed repeated is reported, not gated: vLLM repeats only on the same
+        # hardware, version and batch.
+        rec["seed_check"] = {"distinct_first": len(set(first)), "same_set": first == [r["text"] for r in again],
+                             "same_seed_reproduces": first == [r["text"] for r in repeat]}
     return rec
 
 
@@ -381,6 +387,7 @@ def sampling_bookkeeping(states: list[dict]) -> dict[str, Any]:
             "list_length_counts": dict(sorted(Counter(len(x["candidates"]) for x in ls).items())),
             "states_with_cut": sum(x["n_cut"] > 0 for x in ls),
             "greedy_never_sampled": sum(x["candidates"][0]["count"] == 0 for x in ls),
+            "normalised_actions": sum(x.get("n_normalised", 0) for x in ls),
             "truncated_replies": sum(r.get("finish_reason") == "length" for x in ls for r in x.get("replies", [])),
             "states_all_replies_identical": sum(len({r["text"] for r in x.get("replies", [])}) == 1 < len(x.get("replies", []))
                                                 for x in ls)}
@@ -389,7 +396,8 @@ def sampling_bookkeeping(states: list[dict]) -> dict[str, Any]:
     out["drifted_sampler"] = bool(fresh) and out["greedy_agreement"] < GREEDY_AGREEMENT_MIN
     checks = [s["seed_check"] for s in states if "seed_check" in s]
     out["seed_check"] = {"n_states": len(checks), "nondegenerate": sum(c["distinct_first"] > 1 for c in checks),
-                         "nondegenerate_same_set": sum(c["distinct_first"] > 1 and c["same_set"] for c in checks)}
+                         "nondegenerate_same_set": sum(c["distinct_first"] > 1 and c["same_set"] for c in checks),
+                         "same_seed_reproduces": sum(bool(c.get("same_seed_reproduces")) for c in checks)}
     return out
 
 
@@ -400,8 +408,14 @@ def smoke_gate(book: dict[str, Any]) -> dict[str, Any]:
     sc = book["seed_check"]
     ok = (all(x < 0.25 for x in fmt.values()) and book["replay_mismatches"] == 0
           and sc["nondegenerate_same_set"] == 0 and (sc["n_states"] == 0 or sc["nondegenerate"] > 0))
+    lists = {k: v for k, v in book.items() if isinstance(v, dict) and "format_error_share" in v}
+    # Required readouts, reported with the gate (amended after review 2): replies cut at max_tokens, and agreement of
+    # the fresh greedy completion with the archived action (below 90%: the lists are from a drifted sampler).
     return {"passed": bool(ok), "format_error_share": fmt, "replay_mismatches": book["replay_mismatches"],
-            "seed_check": sc}
+            "seed_check": sc,
+            "truncated_replies": {k: {"n": v["truncated_replies"], "share": v["truncated_replies"] / v["n_samples"]
+                                      if v["n_samples"] else float("nan")} for k, v in lists.items()},
+            "greedy_agreement": book.get("greedy_agreement"), "drifted_sampler": book.get("drifted_sampler")}
 
 
 # ---------------- labels ----------------
@@ -668,6 +682,33 @@ def load_labels(source: str) -> tuple[list[dict], list[Path], list[str]]:
 
 
 SCORE_OUTPUTS = ("scoring.jsonl",)
+MODEL_FREE_RUN = "decisionsim_agent_encounter"
+
+
+def run_order_check(cfg: dict) -> dict[str, Any]:
+    """Verifiers are scored only after the model-free analysis of the same labels has been written (its encounter
+    readouts and the futility rule are read first). An explicit, logged override is allowed: `run_order_override`
+    with the reason."""
+    name = cfg.get("model_free_analysis", MODEL_FREE_RUN)
+    d = resolve_run(name)
+    why = None
+    if not (d / "metrics.json").exists():
+        why = f"no metrics.json in {name}"
+    else:
+        saved = json.loads((d / "config.json").read_text(encoding="utf-8")) if (d / "config.json").exists() else {}
+        status = (d / "STATUS.md").read_text(encoding="utf-8").splitlines()[0] if (d / "STATUS.md").exists() else ""
+        if saved.get("label_source") != cfg["label_source"]:
+            why = f"{name} read another label run ({saved.get('label_source')})"
+        elif saved.get("models"):
+            why = f"{name} is not a model-free analysis (it lists models)"
+        elif "REPORTED" not in status:
+            why = f"{name} did not finish: {status or 'no status'}"
+    if why and cfg.get("run_order_override"):
+        return {"ok": True, "model_free_analysis": name, "override": str(cfg["run_order_override"]), "would_have_refused": why}
+    if why:
+        return {"ok": False, "model_free_analysis": name, "why": why}
+    m = json.loads((d / "metrics.json").read_text(encoding="utf-8"))
+    return {"ok": True, "model_free_analysis": name, "futility": m.get("encounter", {}).get("futility")}
 
 
 def run_decisionsim_agent_score(cfg: dict) -> int:
@@ -688,12 +729,18 @@ def run_decisionsim_agent_score(cfg: dict) -> int:
     if problems:
         write_status(run_id, "scoring waits for every labelling shard:\n" + "\n".join(problems), ok=False)
         return 1
+    order = run_order_check(cfg)
+    if not order["ok"]:
+        write_status(run_id, "scoring waits for the model-free analysis (design note, futility rule): "
+                     + order["why"], ok=False)
+        return 1
     states = [s for s in labs if usable(s)]
     games = set(shard_games({s["game_id"] for s in states}, i, n))
     mine = [s for s in states if s["game_id"] in games]
     cfg = {**cfg, "run_id": run_id, "shard": i, "n_shards": n, "arms": list(arms)}
     d = _init_run(run_id, cfg, inputs=tuple(p / "labels.jsonl" for p in folders))
     _fresh(d, SCORE_OUTPUTS, bool(cfg.get("resume")))
+    write_json(d / "run_order.json", order)  # which model-free analysis was read first, or the logged override
     jobs = score_jobs(mine, arms)
     prompts = {(cand_id(s, c), a): arm_messages(tag, s, c, a) for s, c, a in jobs}
     hashes = {k: _sha([m, "Yes", "No"]) for k, m in prompts.items()}
@@ -910,6 +957,9 @@ def encounter_report(states: list[dict]) -> dict[str, Any]:
         by_rank[c["rank"]][0] += 1
         by_rank[c["rank"]][1] += regime(c)
     reach_games = sorted({s["game_id"] for s in states if reachable(s)})
+    # A difference at a state needs one choice to work and the other to fail, so an encounter state can contribute
+    # regime harm (or any conditional difference) only if its list also holds a working candidate.
+    open_games = sorted({s["game_id"] for s in states if encounter(s) and any(not c["failed"] for c in scored_candidates(s))})
     return {
         "n_states": len(states), "n_games": len(set(games)), "n_candidates": len(cands),
         "mean_list_length": _mean([len(scored_candidates(s)) for s in states]),
@@ -917,13 +967,18 @@ def encounter_report(states: list[dict]) -> dict[str, Any]:
         "encounter_strict": _boot([float(encounter(s, strict=True)) for s in states], games),
         "reachable": _boot([float(reachable(s)) for s in states], games),
         "encounter_games": len({s["game_id"] for s in states if encounter(s)}),
-        "reachable_games": len(reach_games),
-        # The futility rule fixed after review 1: the sign-flip p can reach Holm's first threshold (0.025) only with
-        # at least MIN_GAMES_FOR_SIGNIFICANCE games whose net difference is not zero.
-        "futility": {"rule": f"reachable encounter states in fewer than {MIN_GAMES_FOR_SIGNIFICANCE} games: the primary "
-                             f"cannot reach significance; the encounter rates are the result and verifier scoring is "
-                             f"decided then",
-                     "primary_cannot_reach_significance": len(reach_games) < MIN_GAMES_FOR_SIGNIFICANCE},
+        "reachable_games": len(reach_games),  # descriptive
+        "encounter_games_with_a_working_candidate": len(open_games),
+        # The futility rule (review 1, corrected after review 2): the sign-flip p can reach Holm's first threshold
+        # (0.025) only with at least MIN_GAMES_FOR_SIGNIFICANCE games whose net difference is not zero, and a game can
+        # contribute a conditional difference or regime harm only through an encounter state that also lists a
+        # working candidate. A necessary condition, so it can only show futility, never promise significance.
+        "futility": {"rule": f"encounter states that also list a working candidate in fewer than "
+                             f"{MIN_GAMES_FOR_SIGNIFICANCE} games: the conditional estimand cannot reach significance and "
+                             f"no regime harm can be significant; the encounter rates are then the result and verifier "
+                             f"scoring is decided then",
+                     "games": len(open_games),
+                     "conditional_cannot_reach_significance": len(open_games) < MIN_GAMES_FOR_SIGNIFICANCE},
         "encounter_by_step_band": bands,
         "regime_candidates": {"n": len(reg), "free_form": sum(c.get("admissible") is False for _, c in reg),
                               "rank1": sum(c["rank"] == 1 for _, c in reg)},
@@ -1185,6 +1240,9 @@ def primary_block(models: dict[str, dict], priority: list[str], gate_failed: set
             v = "not interpreted"
         else:
             v = verdict(diff, adj[t], m.get(dec_key))
+            share = m[key]["harm_regime_share"]
+            if v.startswith("toward failure") and not (share == share and share >= 0.5):
+                v += " (not evidence for the main finding: harm mostly from non-regime actions)"
         per[t] = {"delta_invalid": diff["estimate"], "ci": diff["ci"], "p": diff["p"], "p_holm": adj.get(t),
                   "n_states": m[key]["n_states"], "n_games_nonzero": diff["n_games_nonzero"],
                   "p_min_sign_flip": diff["p_min_sign_flip"], "interpretable": m["competence"]["interpretable"],
@@ -1194,6 +1252,14 @@ def primary_block(models: dict[str, dict], priority: list[str], gate_failed: set
                   "harm_mostly_regime": m[key]["harm_regime_share"] >= 0.5 if m[key]["changed"]["harm"] else None,
                   "verdict": v}
     return {"priority_models": priority, "holm_family_size": len(priority), "per_model": per}
+
+
+def primary_blocks(models: dict[str, dict], priority: list[str], gate_failed: set[str]) -> dict[str, Any]:
+    """The two Holm families: the overall estimand with the overall decomposition, the conditional one with the
+    decomposition on the encounter states."""
+    return {"overall": primary_block(models, priority, gate_failed, "primary", "decomposition"),
+            "conditional_on_encounter": primary_block(models, priority, gate_failed, "conditional",
+                                                      "conditional_decomposition")}
 
 
 def gate_failures(folders: list[Path]) -> bool:
@@ -1243,13 +1309,9 @@ def run_decisionsim_agent_analysis(cfg: dict) -> int:
         sts, short = complete_labs(good, L)
         report["models"][tag] = {"n_states_incomplete": short, **model_report(sts, L, Lraw)}
         score_folders += sfolders
-    priority = list(cfg.get("priority", PRIORITY))
-    failed = set(report["gate_failed"])
-    report["primary"] = {
-        "overall": primary_block(report["models"], priority, failed, "primary", "decomposition"),
-        "conditional_on_encounter": primary_block(report["models"], priority, failed, "conditional",
-                                                  "conditional_decomposition"),
-        "futility": report["encounter"]["futility"]}
+    report["primary"] = {**primary_blocks(report["models"], list(cfg.get("priority", PRIORITY)),
+                                          set(report["gate_failed"])),
+                         "futility": report["encounter"]["futility"]}
     report["stage2_feed"] = {t: stage2_feed(m["disagreements"]) for t, m in report["models"].items()}
     from wf.provenance import provenance
 
@@ -1261,7 +1323,7 @@ def run_decisionsim_agent_analysis(cfg: dict) -> int:
              for t, v in report["primary"]["overall"]["per_model"].items()]
     write_status(run_id, f"encounter {report['encounter']['encounter']['estimate']:.3f} in "
                          f"{report['encounter']['encounter_games']} games; futility "
-                         f"{report['encounter']['futility']['primary_cannot_reach_significance']}\n" + "\n".join(lines)
+                         f"{report['encounter']['futility']['conditional_cannot_reach_significance']}\n" + "\n".join(lines)
                  + (f"\nwaiting: {sorted(report['waiting'])}" if report["waiting"] else ""), ok=False,
                  reported="Stage 1b report")
     return 0
