@@ -375,11 +375,20 @@ def test_stored_golden_holds_every_message_in_order(records):
         for case in golden["cases"]:
             text = rend[f"{case['id']}|{case['arm']}"]["text"]
             pos = 0
-            for m in R.model_messages(R.MODELS[tag], by_id[case["id"]], case["arm"], SHOTS):
+            msgs = R.model_messages(R.MODELS[tag], by_id[case["id"]], case["arm"], SHOTS)
+            for m in msgs:  # the turns in order; Mistral's template moves the system text into the last user turn
+                if m["role"] == "system":
+                    assert m["content"].split("\n")[-1] in text, (tag, case)
+                    continue
                 piece = m["content"].strip().split("\n")[-1]
                 found = text.find(piece, pos)
                 assert found >= 0, (tag, case)
                 pos = found
+            assert text.rstrip().endswith({"qwen3-8b": "<|im_start|>assistant\n<think>\n\n</think>",
+                                           "gemma2-9b-it": "<start_of_turn>model",
+                                           "mistral-7b-v0.3": "[/INST]"}.get(tag, "<|start_header_id|>assistant<|end_header_id|>")), tag
+            if tag == "mistral-7b-v0.3":  # the system text sits in the last user turn, after the examples
+                assert text.rfind(P.CLEAN_SYSTEM.split("\n")[-1]) > text.find(SHOTS[-1]["observation"])
 
 
 # ---------------- scoring run, mock ----------------
@@ -507,6 +516,7 @@ def _planted(recs, tag, lam=0.7, nu=0.4, kappa=-1.1, tau=0.5, lst=0.2, noise=0.0
             done = goal and line == "aligned"
             k = kappa + (tau if pad == 8 else 0.0)
             val = base + lam * rel + nu * named + k * done + (lst if (r["kind"] == "parent" and arm == "aligned") else 0.0)
+            val += -0.3 if (line == "neutral" and goal) else 0.0  # the neutral line sits apart from the swapped one, by role
             val += rng.gauss(0, noise) if noise else 0.0
             out.append({"model": tag, "transition_id": r["id"], "condition": arm, "L": val, "item_hash": R.item_hash(r, SHOTS),
                         "logp_plus": -0.05 if val > 0 else -3.0, "logp_minus": -3.0 if val > 0 else -0.05,
@@ -843,3 +853,11 @@ def test_used_up_auc_is_role_matched(records, fast):
     d = A.competence(by, sub)["descriptive"]
     assert d["yes_no"]["used_up_vs_ingredient_successes"]["auc"] == 1.0
     assert d["yes_no"]["class_used_up"]["auc"] == 0.5
+
+
+def test_gate_catches_a_candidate_written_differently_by_the_template(small):
+    """Two-candidate arms only, so the yes/no check cannot be what fails."""
+    recs = [{**r, "arms": [a for a in r["arms"] if not R.parse_arm(a)[0]]} for r in small[:5]]
+    rep = T.gate(_fake_scorer(FakeTok(reply_prefix="▁ ")), R.MODELS["qwen3-8b"], recs, SHOTS)
+    assert not rep["ok"] and any(" o_plus: alone " in p for p in rep["problems"])
+    assert rep["n_yes_no_prompts_checked"] == 0

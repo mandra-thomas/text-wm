@@ -393,7 +393,7 @@ Round 1's rate was 51,200 scores (both models, all arms through `score_pair`) in
 - Llama-3.2-3B: about 0.9 hours;
 - Gemma-2-9B with eager attention (slower; taken as twice the rate's time): about 3.2 hours.
 
-That totals about **9 GPU-hours**, plus about 0.5 for a 20-record smoke run per model and model loading; budget **10–12 GPU-hours**. Each model runs as 4 shards by goal pair, one job per shard of under 1.5 hours (Gemma's under 2 hours), saving every score as it is made, with resume. The CPU tokenization check took the time recorded in section 13.
+That totals about **9 GPU-hours**, plus about 0.5 for a 20-record smoke run per model and model loading; budget **10–12 GPU-hours**. Each model runs as 4 shards by goal pair, one job per shard of under 1.5 hours (Gemma's under 2 hours), saving every score as it is made, with resume. The CPU tokenization check took 9 to 12 minutes per model (section 13).
 
 ## 12. Code (built after this note; see section 13 for the checks' results)
 
@@ -403,9 +403,35 @@ That totals about **9 GPU-hours**, plus about 0.5 for a 20-record smoke run per 
 - `wf/textcraft/r2_tokcheck.py`: tokenization gate and golden renderings, on CPU.
 - `wf/textcraft/r2_score.py`: the scoring run `textcraft_r2_score_<tag>`, sharded and resumable, with the gate before any score.
 - `wf/textcraft/r2_analysis.py`: the run `textcraft_r2_analysis`, with the gate, the contrasts, the Holm family, the verdicts and the descriptive readouts.
+- `wf/textcraft/r2_heuristics.py`: the competence note's heuristics H1, H2, H6, H9 and H2 and H9, ported from `scripts/textcraft_llama_competence.py` (definitions fixed at 9a83738).
 - Configs `wf/config/textcraft_r2_*.yaml`; jobs `pace/textcraft_r2_tokcheck.sbatch` and `pace/textcraft_r2_score.sbatch`.
 - Tests `tests/test_textcraft_r2.py`; mutants in `scripts/mutation_check.py`, with their killing tests listed in `notes/testing.md`.
 
-## 13. Checks run before scoring
+## 13. Checks run before scoring (2026-11-21; no model has scored a round-2 record)
 
-*(Filled in by the build commit.)*
+**Records.** `r2_items.jsonl` (sha256 `ac971f15…f32ea837`): 2,982 records, 23,988 (record, arm) combinations per model. `python -m wf.textcraft.r2_items verify` marked the manifest verified:
+
+- *Per-record checks in three fresh processes* (hash seeds 0, 1 and 2), on all 2,982 records: no replay, checker, structure or prompt failure, no duplicate id, no prompt-example goal. The replays covered the parent records on their own and their extended lists under goal, partner, parent and no goal, and every padded history at both padding levels under goal, partner and no goal. Every look-up replied with the padding text, and every reply and twin reproduced.
+- *Determinism.* Two fresh builds (hash seed 0 with 8 worker processes, hash seed 1 with 3) wrote the records byte for byte.
+- *Base items.* The frozen manifest is verified and hashes `items.jsonl` and `fewshot.json`.
+- The recipe database copied to ICE hashes to the pinned `5216d3a5…d26d65f`.
+
+**Tokenization, on ICE CPU** (checkout `text-wm-fix28` at 26de317, partition coc-cpu, jobs 7219636–7219640, the serve environment's transformers 4.51.3, each pinned tokenizer, offline; `wf/textcraft/data/r2_tokcheck_ice.json`). The gate of section 3 ran on every record and arm for each model: 31,196 candidate checks (both candidates of 15,598 two-candidate prompts) and 8,390 yes/no prompts per model.
+
+| Model | Gate | Problems | Yes / No tokens | First tokens (success vs failure) | Longest input (tokens) | Over 4,096 | Plain join differs | Minutes |
+|---|---|---|---|---|---|---|---|---|
+| Qwen3-8B | pass | 0 | single, ids 9454 / 2753 | "Craft" vs "Could" | 1,790 | 0 | 0 | 11 |
+| Llama-3.1-8B | pass | 0 | single, ids 9642 / 2822 | "Craft" vs "Could" | 1,808 | 0 | 0 | 10 |
+| Gemma-2-9B-it | pass | 0 | single, ids 3553 / 1294 | "C" vs "Could" | 1,677 | 0 | 0 | 9 |
+| Mistral-7B-v0.3 | pass | 0 | single ("▁Yes", "▁No"), ids 6360 / 2538 | "Craft" vs "Could" | 2,021 | 0 | 31,196 (by design) | 10 |
+| Llama-3.2-3B | pass | 0 | single, ids 9642 / 2822 | "Craft" vs "Could" | 1,808 | 0 | 0 | 12 |
+
+The clean prompt therefore passes the tokenization checks for all five models, the condition the owner set for making it the default for later TextCraft runs. For every model the template's ids equal the plain tokenization of its rendered text. Mistral's plain join differs for every candidate because its template puts a space before the reply, which the gate's template-reply check takes into account (wave A found the same). No input reaches Gemma 2's 4,096-token window. One difference to keep in mind when reading first-token numbers: Gemma 2 splits "Crafted" as "C" + "rafted", so its first-token term compares "C" with "Could".
+
+**Golden renderings.** `r2_chat_golden.json` holds, for each model, five renderings made in the same jobs: the first padded main record under the aligned, two-item, yes/no two-item and eight-look-up aligned arms, and the first parent record under the parent line. A test checks, without a tokenizer, that each stored text holds every turn in order, ends in the model's generation prompt, and that Mistral's system text sits after the examples.
+
+**Dry run without models.** Mock scoring of all five models (4 shards each) and the analysis on the real records: 119,940 scores with none missing, and the analysis wrote every block and a family of 50 tests. As expected, every mock model fails the competence gate and every contrast reads "not interpretable".
+
+**Tests and mutants.** `tests/test_textcraft_r2.py`: 72 passed (no model, no real tokenizer; the golden test reads the stored renderings). Full suite (`tests/`): 934 passed, 7 skipped. `scripts/mutation_check.py` holds 54 round-2 mutants, covering the prompts and arms, the item hash, the record builder and its checks, the scoring run and its gate, the tokenization gate, the analysis's contrasts, family, margins, competence gate, verdicts and readings, and the heuristics. The final run against the final tests killed all 54. In the first run two survived and were killed by tests added for them, and one equivalent mutant was removed (`notes/testing.md` lists each mutant with the test that killed it). The scope of this claim is these 54 mutants against the test suite.
+
+**What has not been run.** No model has scored any round-2 record: there has been no smoke run and no GPU job. The design is to be reviewed and frozen at a tag before the smoke runs.

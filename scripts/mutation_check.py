@@ -457,7 +457,6 @@ MUTANTS = [
     ('textcraft r2 sign flips single items', 'wf/textcraft/r2_analysis.py', '        tot[c] += v', '        tot[str(len(tot))] += v'),
     ('textcraft r2 heuristic H9 always true', 'wf/textcraft/r2_heuristics.py', '"H9": int(y in consumed_names)}', '"H9": 1}'),
     ('textcraft r2 heuristic H2 counts crafted units twice', 'wf/textcraft/r2_heuristics.py', '            gained[from_id(x)] += int(kk)', '            gained[from_id(x)] += 2 * int(kk)'),
-    ('textcraft r2 heuristic H1 ignores inventory replies', 'wf/textcraft/r2_heuristics.py', '        out |= set(re.findall(r"\\[([^\\]]+)\\] \\(", reply))', '        pass'),
     ('textcraft r2 used-up AUC not role-matched', 'wf/textcraft/r2_analysis.py', 'val([r for r in s if r["role"] == "ingredient"]),', 'val(s),'),
 ]
 
@@ -474,12 +473,17 @@ def _covering_tests(work: Path, rel: str) -> list[str]:
     return found or ["tests"]
 
 
+LAST_KILLER: list[str] = [""]  # the first failing test of the last killed mutant (2026-11-21), logged with it
+
+
 def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900) -> str:
     try:
-        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", *targets],
+        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", "-rf", *targets],
                                 cwd=work, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return "timeout"
+    failed = [ln.split(" ", 1)[1].split(" - ")[0] for ln in result.stdout.splitlines() if ln.startswith(("FAILED ", "ERROR "))]
+    LAST_KILLER[0] = failed[0] if failed else ("collection or setup error" if result.returncode != 0 else "")
     return "killed" if result.returncode != 0 else "survived"
 
 
@@ -519,7 +523,7 @@ def main() -> int:
                 outcome = _run_tests(python, work, ["tests"], timeout)
             path.write_text(source, encoding="utf-8")
             label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]
-            print(f"{label}  {name}", flush=True)
+            print(f"{label}  {name}" + (f"  [{LAST_KILLER[0]}]" if outcome == "killed" else ""), flush=True)
             if outcome == "survived":
                 survivors.append(name)
             elif outcome == "timeout":

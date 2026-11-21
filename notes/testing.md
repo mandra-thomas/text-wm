@@ -75,4 +75,61 @@ These were planned on 2026-11-17 and were all in use before any confirmatory ite
 - *the scoring run* in mock mode: refusal of unverified or changed records, every record and arm scored once, resume, refusal of saved scores of a changed record, the gate stopping before any score, yes/no arms in one forward pass, the seeded smoke subset;
 - *the analysis* on planted scores (L built from a lift, a naming term, a completion term, a timing change and a list effect): each contrast recovers its planted term exactly, the naming reading when naming carries the penalty, the Holm family fixed at 50 with missing tests padded at p = 1, withheld verdicts with a missing score, stale, unknown, duplicated and foreign scores refused, the competence gate (wave A's rule, read on the yes/no question, with role and class AUCs), every contrast "not interpretable" for a model that fails it, the verdict and reading tables row by row, timing "not applicable" without a role gap, the cross-model patterns and falsifiers, the equivalence margin, the bootstrap, TOST and sign-flip helpers on whole pairs, and a mock end-to-end run of five models.
 
-`scripts/mutation_check.py` holds 51 round-2 mutants (`MUTANTS_MATCHING='textcraft r2'`); the results and the test that killed each are recorded below.
+`scripts/mutation_check.py` holds 54 round-2 mutants (`MUTANTS_MATCHING='textcraft r2'`), and the script now logs the first failing test of every killed mutant. In the first campaign three mutants were not killed by the round-2 tests. Two were killed by tests added for them: the gate's candidate check switched off (the stand-in tokenizer's reply prefix also broke the yes/no check, which hid it; a test now runs the gate on two-candidate arms only), and the naming contrast read against the neutral line instead of the swapped one (the planted scores gave both lines the same value; the neutral line now sits apart by role, so the swap changes the estimate). A third, H1 ignoring names listed in "Inventory:" replies, is equivalent and was removed: a name can only be listed in an inventory after a get or craft step has already mentioned it. The final run of all 54 against the final tests (2026-11-21, four shards) killed every one:
+
+| Mutant | First test that failed |
+|---|---|
+| two-item line kept for names with and | `test_two_item_line_is_sorted_and_shared_by_a_couple` |
+| hash misses the system text | `test_item_hash_covers_fields_and_context` |
+| eight look-ups become four | `test_parse_arm` |
+| padding on 9-12 steps too | `test_check_records_reports_and_passes` |
+| padded twin not checked | `test_padded_twin_and_class_checks` |
+| gate failure ignored | `test_scores_every_record_and_arm_then_resumes` |
+| shards by record not pair | `test_scores_every_record_and_arm_then_resumes` |
+| gate unfolded for Gemma | `test_gate_folds_for_gemma` |
+| completion lines reversed | `test_planted_effects_are_recovered_exactly` |
+| family without Holm | `test_family_is_holm_adjusted` |
+| competence AUC 0.6 | `test_competence_gate_uses_wave_a_rule` |
+| naming reading only without completion | `test_reading_table[confirmed below zero-confirmed below zero-confirmed below zero-naming penalty]` |
+| bootstrap resamples items | `test_statistics_helpers` |
+| padding after the history | `test_every_arm_changes_only_what_its_name_says` |
+| hash misses the extended list | `test_item_hash_covers_fields_and_context` |
+| parent may share craftables with the partner | `test_a_parent_sharing_a_craftable_with_the_partner_does_not_qualify` |
+| frozen items reused as parents | `test_rebuilding_two_pairs_gives_the_committed_records` |
+| padded class not checked | `test_padded_twin_and_class_checks` |
+| resume ignores record hashes | `test_resume_refuses_scores_of_changed_records` |
+| gate candidate check off | `test_gate_catches_a_candidate_written_differently_by_the_template` |
+| lift on the goal role | `test_planted_effects_are_recovered_exactly` |
+| naming against neutral | `test_planted_effects_are_recovered_exactly` |
+| family shrinks with missing p | `test_family_is_fixed_at_fifty_and_pads_missing` |
+| competence on the two-candidate score | `test_competence_gate_uses_wave_a_rule` |
+| stale scores accepted | `test_stale_unknown_duplicate_or_foreign_scores_stop` |
+| sign flips single items | `test_sign_flip_flips_whole_pairs` |
+| used-up AUC not role-matched | `test_used_up_auc_is_role_matched` |
+| ext arm shows the item's own list | `test_every_arm_changes_only_what_its_name_says` |
+| Gemma not folded | `test_gemma_folds_the_system_text_and_the_others_do_not` |
+| strict parent not preferred | `test_every_parent_is_the_rules_choice` |
+| parent draw seed drops the bin | `test_rebuilding_two_pairs_gives_the_committed_records` |
+| text-only partner check off | `test_text_parent_check_catches_bad_parents` |
+| golden problems ignored | `test_run_gate_requires_the_golden_and_the_attention` |
+| gate single-token check off | `test_gate_fails_on_each_tokenization_problem[tok1-not one token]` |
+| penalty against the swapped line | `test_planted_effects_are_recovered_exactly` |
+| timing reversed | `test_planted_effects_are_recovered_exactly` |
+| margin half an SD | `test_margin_is_three_tenths_of_the_item_sd` |
+| confirmed without the interval | `test_verdict_rules` |
+| verdicts with missing scores | `test_missing_scores_withhold_verdicts` |
+| heuristic H9 always true | `test_heuristics_agree_with_the_competence_script_on_every_item` |
+| two-item line not sorted | `test_two_item_line_is_sorted_and_shared_by_a_couple` |
+| yes/no query keeps Next observation | `test_every_arm_changes_only_what_its_name_says` |
+| yes/no candidates reversed | `test_candidates` |
+| added lines appended | `test_structure_check_catches_changes` |
+| three failures per bin | `test_rebuilding_two_pairs_gives_the_committed_records` |
+| yes/no scored with two passes | `test_yes_no_arms_use_one_forward_pass` |
+| attention not checked | `test_run_gate_requires_the_golden_and_the_attention` |
+| gate first-token check off | `test_gate_fails_on_each_tokenization_problem[tok2-share their first token]` |
+| gap without the ingredient term | `test_planted_effects_are_recovered_exactly` |
+| timing always applicable | `test_timing_not_applicable_without_a_role_gap` |
+| TOST from the smaller side | `test_statistics_helpers` |
+| failed gate still read | `test_failed_gate_makes_every_contrast_not_interpretable` |
+| used-up goal items kept | `test_populations_on_the_full_records` |
+| heuristic H2 counts crafted units twice | `test_heuristics_agree_with_the_competence_script_on_every_item` |
