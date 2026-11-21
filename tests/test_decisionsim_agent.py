@@ -97,7 +97,7 @@ def test_list_is_cut_at_k_max_and_the_cut_is_recorded():
 
 
 def test_bookkeeping_flags_identical_replies():
-    st = {"n_samples": 3, "n_format_errors": 0, "candidates": [1], "n_cut": 0,
+    st = {"n_samples": 3, "n_format_errors": 0, "candidates": [{"count": 3}], "n_cut": 0,
           "replies": [{"text": "Action: look", "finish_reason": "stop"}] * 3}
     other = {**st, "replies": [{"text": "Action: look", "finish_reason": "stop"}, {"text": "Action: x", "finish_reason": "length"}]}
     b = A.sampling_bookkeeping([st, other])
