@@ -501,6 +501,8 @@ MUTANTS = [
     ('textcraft r2 A fast bootstrap ignores the ingredient side', 'wf/textcraft/r2_analysis.py', '            v = (sg / ng if ng else float("nan")) - (si / ni if ni else float("nan"))', '            v = sg / ng if ng else float("nan")'),
     ('textcraft r2 A fast bootstrap resamples items', 'wf/textcraft/r2_analysis.py', '    keys, by = _clusters(rows, clusters)\n    agg = {}', '    keys, by = _clusters(rows, [str(i) for i in range(len(rows))])\n    agg = {}'),
     ('textcraft r2 A role gap on all rows', 'wf/textcraft/r2_analysis.py', '                                                  if has_both(i) else float("nan")))', '                                                  if True else float("nan")))'),
+    ('textcraft r2 Q round-1 question in the prompts', 'wf/textcraft/r2.py', '        query = query[: -len(P.NEXT)] + YN_QUESTION', '        query = query[: -len(P.NEXT)] + P.YN_QUESTION'),
+    ("textcraft r2 Q hash covers round 1's question", 'wf/textcraft/r2.py', '"question": YN_QUESTION,', '"question": P.YN_QUESTION,'),
 ]
 
 

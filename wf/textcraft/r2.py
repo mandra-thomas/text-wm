@@ -27,6 +27,14 @@ from wf.families import REFERENCE, ModelSpec, fold_system
 from wf.textcraft import prompts as P
 
 SYSTEM = P.CLEAN_SYSTEM
+# The round-2 yes/no question (amendment 14.Q, 2026-11-21, before any round-2 score). Round 1's question ("Will this
+# action succeed?", prompts.YN_QUESTION) is not tied to the environment's reply and can be read as "will this action
+# help the task succeed". This one names TextCraft's own reply forms, as ALFWorld's question names "Nothing happens."
+# (wf/rq1v.py): a success replies "Crafted K minecraft:..." (a craft) or "Got N ..." (a get); a failure replies
+# "Could not find ..." ("Could not find enough items to craft ...", or "Could not find X" for a get). Round-2 yes/no
+# scores are therefore a different quantity from round 1's.
+YN_QUESTION = ('Question: will the environment reply that this action succeeded ("Crafted ..." or "Got ...") or that '
+               'it failed ("Could not find ...")? Answer Yes if it succeeds and No if it fails.\nAnswer:')
 LINES = ("aligned", "swapped", "neutral", "both", "parent")
 LINE_FIELDS = {"aligned": "task_line", "swapped": "swapped_task_line", "neutral": "neutral_task_line",
                "both": "both_task_line", "parent": "parent_task_line"}
@@ -100,7 +108,7 @@ def messages(rec: dict, arm: str, shots, system: str = SYSTEM) -> list[dict[str,
         out.append({"role": "assistant", "content": ex["observation"]})
     query = P.turn(lines, history, rec["action"], goal_line)
     if question:
-        query = query[: -len(P.NEXT)] + P.YN_QUESTION
+        query = query[: -len(P.NEXT)] + YN_QUESTION
     out.append({"role": "user", "content": query})
     return out
 
@@ -125,7 +133,7 @@ def item_hash(rec: dict, shots) -> str:
     """Everything any arm of the record shows or scores, and the prompt context (system text, question, examples,
     padding step), so a saved score can never attach to a changed record or prompt."""
     fields = {k: rec.get(k) for k in HASHED}
-    context = {"system": SYSTEM, "question": P.YN_QUESTION, "next": P.NEXT, "fewshot": list(shots),
+    context = {"system": SYSTEM, "question": YN_QUESTION, "next": P.NEXT, "fewshot": list(shots),
                "pad_step": list(PAD_STEP)}
     return hashlib.sha256(json.dumps({"item": fields, "context": context}, sort_keys=True).encode()).hexdigest()[:16]
 

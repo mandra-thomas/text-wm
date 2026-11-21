@@ -104,7 +104,7 @@ def test_every_arm_changes_only_what_its_name_says(small):
     m = {a: R.messages(rec, a, SHOTS) for a in rec["arms"]}
     assert m["aligned"][-1]["content"].replace(rec["task_line"], rec["both_task_line"]) == m["both"][-1]["content"]
     assert m["pad8_aligned"][-1]["content"].count("> inventory\nInventory: You are not carrying anything.") >= 8
-    assert m["yn_aligned"][-1]["content"].endswith(P.YN_QUESTION)
+    assert m["yn_aligned"][-1]["content"].endswith(R.YN_QUESTION) and P.YN_QUESTION not in m["yn_aligned"][-1]["content"]
     assert m["aligned"][0]["content"] == P.CLEAN_SYSTEM
 
 
@@ -1042,8 +1042,8 @@ def test_hash_covers_every_field_and_context_key(small, monkeypatch):
     h = R.item_hash(rec, SHOTS)
     for field in R.HASHED:
         assert R.item_hash({**rec, field: "changed"}, SHOTS) != h, field
-    for name, value in (("NEXT", "Next:"), ("YN_QUESTION", "Q?")):
-        monkeypatch.setattr(P, name, value)
+    for mod, name, value in ((P, "NEXT", "Next:"), (R, "YN_QUESTION", "Q?")):
+        monkeypatch.setattr(mod, name, value)
         assert R.item_hash(rec, SHOTS) != h, name
         monkeypatch.undo()
 
@@ -1156,3 +1156,21 @@ def test_role_gap_descriptive_equals_naming_plus_completion(small, fast):
     c = A.contrasts(by, pops, 0.4)
     d = A.descriptive(by, pops)
     assert d["role_gap_main"]["estimate"] == pytest.approx(c["naming"]["estimate"] + c["completion"]["estimate"])
+
+
+def test_round2_question_is_anchored_to_the_replies():
+    """14.Q: the round-2 yes/no question names TextCraft's success and failure replies, as ALFWorld's names "Nothing
+    happens."; round 1's unanchored question is kept for round 1 only."""
+    q = R.YN_QUESTION
+    assert q.startswith("Question: will the environment reply") and q.endswith("\nAnswer:")
+    for reply_start in ('"Crafted ', '"Got ', '"Could not find '):
+        assert reply_start in q
+    assert "Answer Yes if it succeeds and No if it fails." in q
+    assert P.YN_QUESTION == "Question: Will this action succeed? Answer Yes or No.\nAnswer:"
+    import hashlib
+    assert hashlib.sha256(q.encode()).hexdigest() == "5e31ac7a4a0136367d51dfec938347caa71c0b2f9d740fac95d34b0034180f05"
+    # every reply a round-2 action can get starts with one of the named forms
+    recs = I.read_records()
+    for r in recs[:400]:
+        for text in (r["candidates"]["o_plus"], r["candidates"]["o_minus"]):
+            assert text.startswith(("Crafted ", "Got ", "Could not find ")), text

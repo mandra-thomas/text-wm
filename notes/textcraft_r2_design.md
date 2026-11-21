@@ -55,7 +55,7 @@ Round 2 asks four questions about the account:
 
 It keeps the world-model framing and states only the environment's rules and the action format. Every sentence addressed to the agent is removed, and so is "from the inventory or the environment", which hinted at a hidden store. It does not say that the inventory starts empty.
 
-**Everything else is the verified prompt.** The three verified in-context examples (`fewshot.json`, sha256 `e6ddab93…adfb1253`), the turn format ("History:", "Action:", "Next observation:"), and the yes/no question ("Question: Will this action succeed? Answer Yes or No.\nAnswer:") are all unchanged.
+**Everything else is the verified prompt.** The three verified in-context examples (`fewshot.json`, sha256 `e6ddab93…adfb1253`), the turn format ("History:", "Action:", "Next observation:"), and, as first written, the yes/no question ("Question: Will this action succeed? Answer Yes or No.\nAnswer:") were unchanged. *(Amended, 14.Q: round 2 uses a yes/no question anchored to TextCraft's replies; round 1's question is not used.)*
 
 **Safeguards before any score** (validation standard, steps 7 and 9b; these were skipped by the diagnostic runs):
 
@@ -248,7 +248,7 @@ The predictions follow from round 1 and from ALFWorld, not from what would make 
 
 **Timing.** For Llama, round 1's gradient among goal-role failures holding some inputs was −1.17, −0.49 and +0.02 nats at 1–3, 4–8 and 9–12 steps; by share of inputs held it was −0.85, −0.75 and −0.27. Length and progress are confounded there. If the length gradient were all timing, eight look-ups would move the padded items by about +0.5 to +1.2 nats, so T would be about +0.8. If it were all content, T would be zero. We make no directional prediction for any model.
 
-**Competence (disclosed now).** Under the gate of section 3, applied today to the confirmatory TextCraft scoring records (verified prompt; 1,500 main failures and 600 successes under the neutral line), the results are:
+**Competence (disclosed now).** *(Every yes/no figure in this paragraph, and in 14.U1's disclosure table, comes from round 1's unanchored yes/no question; round 2's anchored question (14.Q) measures a different quantity, so these are a guide, not a forecast.)* Under the gate of section 3, applied today to the confirmatory TextCraft scoring records (verified prompt; 1,500 main failures and 600 successes under the neutral line), the results are:
 
 - *Llama-3.1-8B:* yes/no AUC 0.61 (goal role 0.85, ingredient 0.55); Yes to 9.9% of failures and 11.3% of successes; median P(Yes) plus P(No) 0.999. It *would have been classed as not competent*, on the AUC condition. Its two-candidate neutral AUC on the same items is 0.61 (goal role 0.84, ingredient 0.58). The confirmatory metrics' 0.68 is the same model's two-candidate AUC under the aligned line, over the main and usefulness failures.
 - *Qwen3-8B:* yes/no AUC 0.85; Yes to 18.7% of failures and 72.5% of successes; median mass 1.00. It passes.
@@ -520,7 +520,7 @@ The first version read every contrast through one overall gate, and a model that
 
 Review 1 notes that Llama's goal-role competence in round 1 was largely "input names seen" (H1) coinciding with the truth there. The tracking within each population shows whether that recurs.
 
-**Disclosure: these rules on the confirmatory scores** (verified prompt, round 1; yes/no neutral-line AUC; the parent population did not exist then):
+**Disclosure: these rules on the confirmatory scores** (verified prompt, round 1; yes/no neutral-line AUC from round 1's *unanchored* question, 14.Q; the parent population did not exist then):
 
 | Population | Llama-3.1-8B | Qwen3-8B |
 |---|---|---|
@@ -606,6 +606,28 @@ If P is confirmed below zero only through the partially named parents (14.U2), t
 - **The parent display and F1.** The penalty on each line's own display and the extended-list two-item split are reported (14.U2). If F1 holds, the top-item status of round 1's goal crafts, a property of recipe structure, is named as a candidate explanation of the round-1 role gap.
 - **Counts in the scoring job.** The sbatch comment now gives 25,743 scores per model.
 - **Mutants.** Review 1's surviving mutants M1–M4, M6, M9–M11, M13–M16, M21, M35, M38, M40, M48 and M51 now have killing tests, and are in `scripts/mutation_check.py` adapted to the amended code. M9 (excluded goals allowed as parents) is not equivalent: a test calls the rule with an excluded goal that consumes a real item. M52 targeted a check that repeated the expected-query check; that check was removed rather than tested. Results are in 14.C.
+
+### 14.Q The yes/no question is anchored to the environment's replies (found by the Qwen competence analysis)
+
+Round 1 asked "Question: Will this action succeed? Answer Yes or No." That question is not tied to the environment's reply, unlike ALFWorld's, which asks whether the environment will reply "Nothing happens." (`wf/rq1v.py`). A model can read it as "will this action help the task succeed". The Qwen competence analysis found the pattern that reading predicts: under the swapped line, Qwen's Yes on *working* goal crafts falls from 73% to 14% (−18 nats), although the craft works whatever the goal. Round 2 uses the yes/no question for every competence gate and as a scale, so it now asks:
+
+> Question: will the environment reply that this action succeeded ("Crafted ..." or "Got ...") or that it failed ("Could not find ...")? Answer Yes if it succeeds and No if it fails.
+> Answer:
+
+(`r2.YN_QUESTION`; its sha256, `5e31ac7a…34180f05`, is pinned in a test.) It names every reply form a TextCraft action can get:
+
+- a craft's success, "Crafted K minecraft:…";
+- a get's success, "Got N …";
+- both failures, "Could not find enough items to craft …" and "Could not find X".
+
+Every round-2 candidate starts with one of these, and a test checks this. Round 1's question stays in `prompts.YN_QUESTION` for round 1 only.
+
+Consequences:
+
+- Round-2 yes/no scores are a different quantity from round 1's.
+- Every round-1 yes/no figure quoted in this note came from the unanchored question: Llama's yes/no AUC of 0.61 overall and 0.85 on the goal role, the yes shares, and 14.U1's disclosure table. These figures are a guide to how the gates behave, not a forecast of round 2's.
+- The item hash covers the question, so scores made with another question can never attach to these records.
+- The tokenization check and the golden renderings were rerun with the new question for all five models (14.C). "Yes" and "No" must still be single tokens equal to the template's reply after every yes/no prompt.
 
 ### 14.C Checks rerun after the amendments
 

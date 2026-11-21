@@ -133,3 +133,23 @@ These were planned on 2026-11-17 and were all in use before any confirmatory ite
 | failed gate still read | `test_failed_gate_makes_every_contrast_not_interpretable` |
 | used-up goal items kept | `test_populations_on_the_full_records` |
 | heuristic H2 counts crafted units twice | `test_heuristics_agree_with_the_competence_script_on_every_item` |
+
+### TextCraft round 2, amendments before freeze (2026-11-21)
+
+The amendments (design section 14) added tests for:
+
+- the statistical verdicts, now never withheld;
+- the interpretation table (a distortion in a competent predictor against a measurable goal effect; "inconclusive (equivalence underpowered)", never "no effect");
+- every row of the amended mechanism readings, the partial-naming and one-look-up qualifiers, and the corrected F3 (true, false and undecided);
+- the margin cap and that every contrast uses `margin_of`'s value;
+- equivalence power and the 20,000-draw floor;
+- the per-pair bootstrap against the item-level one;
+- the contrast-specific competence rules on the full records: each population, the parent population alone failing, used-up ingredients kept out of the class-matched populations, the other three criteria on the full population, and the 0.70 boundary (0.70 passes, 0.69 fails);
+- class-matched controls (shifting used-up ingredients leaves naming, completion and timing unchanged);
+- timing's applicability read from the interval, and the one-look-up change beside it;
+- the parent subsets, overlap kinds (with the "stone stairs" case) and the exact extended-list split of P;
+- review 1's surviving mutants: every hashed field and context key; the system-text prompt check; excluded goals as parents; the strict-word text check; the list-is-pair-list check; the padded verdict and no-goal replay; NaN scores as missing; the mass criterion on failures and successes; resume across models; sorted shard slices; the smoothed sign-flip p;
+- provenance (one commit, pinned revisions);
+- the role gap equalling naming plus completion.
+
+MUTATION_V2_PLACEHOLDER

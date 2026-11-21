@@ -218,12 +218,12 @@ def prompt_problems(rec: dict, shots) -> list[str]:
         want_history = [list(R.PAD_STEP)] * pad + [list(h) for h in rec["history"]]
         expected = P.turn(want_lines, want_history, rec["action"], rec[R.LINE_FIELDS[line]])
         if question:
-            expected = expected[: -len(P.NEXT)] + P.YN_QUESTION
+            expected = expected[: -len(P.NEXT)] + R.YN_QUESTION
         if m[-1]["content"] != expected:
             problems.append(f"{arm}: query is not the shown list, history, action and goal line")
         if goal_line_of(m[-1]["content"]) != [rec[R.LINE_FIELDS[line]]]:
             problems.append(f"{arm}: the query's goal line is not the record's {R.LINE_FIELDS[line]}")
-        plain = m[-1]["content"] if not question else m[-1]["content"][: -len(P.YN_QUESTION)] + P.NEXT
+        plain = m[-1]["content"] if not question else m[-1]["content"][: -len(R.YN_QUESTION)] + P.NEXT
         swapped_back = plain.replace(rec[R.LINE_FIELDS[line]], rec["task_line"], 1)
         if not pad and not ext and swapped_back != base[-1]["content"]:
             problems.append(f"{arm}: query differs from the aligned one beyond the goal line")

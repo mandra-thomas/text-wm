@@ -476,3 +476,5 @@ Before any round-2 score, and before the design was frozen, the round-2 design (
 - **Statistics and provenance.** Family tests use 20,000 resamples, and the analysis checks provenance (one commit, pinned revisions).
 
 The records were rebuilt and re-verified, and the ICE tokenization check was rerun on them. None of this affects the confirmatory TextCraft result, which stays as reported.
+
+The same day, also before any round-2 score, the round-2 yes/no question was anchored to TextCraft's replies: "will the environment reply that this action succeeded ("Crafted ..." or "Got ...") or that it failed ("Could not find ...")?", parallel to ALFWorld's "Nothing happens." question. Round 1's question ("Will this action succeed?") can be read as task success: Qwen's Yes on working goal crafts fell from 73% to 14% under the swapped line. Round-2 yes/no scores, and the competence gates built on them, are therefore a different quantity from round 1's, and every round-1 yes/no figure in the design note came from the unanchored question (design section 14.Q).
