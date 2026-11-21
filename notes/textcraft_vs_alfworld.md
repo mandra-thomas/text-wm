@@ -220,6 +220,146 @@ For Qwen the completing move is among the largest ALFWorld cells, larger than a 
 
 **The follow-up that would settle most of this** is one scoring run (GPU, not run here) that puts the two environments on identical readouts: score both with the same yes/no question wording and with a reply format matched across environments (in ALFWorld, a failure reply that names the object, or both replies cut to their first word; in TextCraft, the current prefix arm), with the neutral task, on ALFWorld later-step items and TextCraft main items, plus TextCraft's empty-history items with the `empty_start` system line. If Qwen's first-token gap closes under a matched format and question, the cross-environment difference for Qwen is measurement plus step 0. If it remains, and the TextCraft effect stays "swapped suppresses" while ALFWorld's stays "aligned lifts", the two environments engage different goal mechanisms, which an ALFWorld variant whose failures turn on visible state (for example, actions whose failure the history shows directly, as in the "receptacle seen without the object" items) could test further. Adding an ALFWorld-style object-naming failure reply would also give an exact estimate of how much of ALFWorld's two-candidate effect is the tail term under a matched format.
 
+## 9. "Why did Llama do better when Qwen3 is supposed to be the better model?" (added 2026-11-21)
+
+This section answers that question with the data. It is exploratory and post hoc, like the rest of the note. The numbers come from `scripts/xenv/competence.py` and are stored under `competence_vs_effect` in the metrics file.
+
+The short answer is that Llama does not do better on any ruler where "better" means a better world model. It looks better on two rulers that mostly measure something else:
+
+- **In ALFWorld,** Llama's two-candidate effect (1.65 nats) is smaller than Qwen's (6.12). Section 2 showed that most of Qwen's two-candidate effect is the success sentence's tail. On the shared readouts the two models are close: yes/no 2.21 against 2.80 nats, and the share of failing items pushed toward Yes 0.896 against 0.887. On the practical rulers Llama is far *worse*: its answers change on 16% of failing items, against 0.2% for Qwen.
+- **In TextCraft,** Llama shows no positive effect while Qwen does. But Llama also barely separates working from failing actions there, so there is little prediction for the goal to bias.
+
+### (a) Competence next to every effect scale, both models, both environments
+
+Competence here is how well the model's score under the neutral task ("explore the room" or "explore the crafting commands") separates the determined successes from the failures. It is reported as an AUC: the chance that a random success scores above a random failure, where 0.5 is chance and 1 is perfect. Next to it are the mean scores under the neutral task, which show where the model's baseline sits. The effect scales are those of Section 2. The **share toward Yes** is the share of failing items whose yes/no log-odds is higher under the aligned task than under the swapped task; 0.5 means no effect. **Flipped No → Yes** counts failing items answered No under the swapped task and Yes under the aligned task. TextCraft's numbers use its 1,500 main failures and 600 successes; with the usefulness failures added, as its design does, the AUCs are 0.87 and 0.85 for Qwen and 0.68 and 0.67 for Llama.
+
+| | Qwen ALFWorld | Llama ALFWorld | Qwen TextCraft | Llama TextCraft |
+|---|---|---|---|---|
+| **Competence** | | | | |
+| AUC under the neutral task, two-candidate | 0.93 | 0.87 | 0.86 | 0.61 |
+| AUC under the neutral task, yes/no | 0.99 | 0.97 | 0.85 | 0.61 |
+| Mean two-candidate L, failures / successes | −23.4 / +15.3 | −3.7 / +2.8 | −9.8 / +7.3 | −2.0 / −0.3 |
+| Mean yes/no L, failures / successes | −26.5 / +3.1 | −4.4 / +1.8 | −12.4 / +6.3 | −3.6 / −2.4 |
+| Answered Yes under the neutral task, failures / successes | 0.2% / 58.9% | 5.3% / 85.3% | 18.7% / 72.5% | 9.9% / 11.3% |
+| **Effect** | | | | |
+| Two-candidate ΔL, nats | 6.12 [5.51, 6.75] | 1.65 [1.50, 1.78] | 0.94 [0.64, 1.25] | −0.19 [−0.30, −0.09] |
+| First-token ΔL, nats | 2.52 | 0.68 | 0.97 | −0.16 |
+| Yes/no ΔL, nats | 2.80 [2.60, 3.01] | 2.21 [2.04, 2.39] | 2.92 [2.56, 3.31] | −0.15 [−0.21, −0.09] |
+| Standardized, two-candidate / yes/no | 1.02 / 0.88 | 0.85 / 1.12 | 0.20 / 0.49 | −0.14 / −0.17 |
+| Two-candidate Δp, points | 5.9 | 16.4 | 3.6 | 0.4 |
+| Yes/no Δp, points | 0.2 | 16.2 | 6.7 | −0.3 |
+| Share toward Yes | 0.887 [0.859, 0.912] | 0.896 [0.871, 0.920] | 0.661 [0.634, 0.688] | 0.407 [0.375, 0.439] |
+| Flipped No → Yes | 0.2% [0.1, 0.3] | 15.9% [14.0, 18.1] | 7.5% [6.0, 9.0] | 0.7% [0.3, 1.2] |
+| Answered Yes on failures, swapped → aligned | 0.0% → 0.2% | 5.6% → 21.0% | 8.4% → 15.3% | 4.0% → 3.5% |
+
+**In ALFWorld both models are competent, and Qwen is the more competent and far more confident.** Its yes/no score on failures averages −26.5 nats under the neutral task, against Llama's −4.4. The two models move their scores by similar amounts on the shared readouts: about 2 to 3 nats on yes/no, toward Yes on about 89% of items. What differs is where those moves start. Qwen starts so deep in "No" that a 2.8-nat push changes almost no answers. Llama starts close enough to the boundary that a 2.2-nat push turns 16% of failing items into Yes. So in ALFWorld Llama's goal bias is about as strong as Qwen's in log-odds and much larger in consequences. Its smaller two-candidate number comes from the reply tail and from its lower confidence, not from a sounder judgement.
+
+**In TextCraft only Qwen remains competent.** Llama answers Yes to 9.9% of failures and 11.3% of successes under the neutral task, and its mean yes/no L on successes is −2.4. It predicts failure for nearly everything, whether the action works or not. Its share toward Yes is below one half (0.41): the goal line moves slightly more items toward No than toward Yes, by small amounts (mean −0.15 nats).
+
+### (b) Across models in ALFWorld: does the effect track competence or baseline confidence?
+
+This part uses ALFWorld only, with 11 distinct models:
+
+- the two reference models (Qwen3-8B and Llama-3.1-8B, from their confirmatory scores);
+- the four wave-A family models (Gemma-2-9B, Mistral-7B, Llama-3.2-3B, Llama-3.2-1B; scores from `family_score_*`, ICE `text-wm-fix23`);
+- the Qwen3 size series at 0.6B, 1.7B, 4B, 14B and 32B (`size_score_*`, archive `text-wm-fix18`).
+
+The size series' own 8B run is a rescore of the reference model; it matches it to two decimals and is left out of the pooled set so that the model is not counted twice. All 11 were scored on the same 4,666 failures and 292 successes.
+
+| Model | AUC two-cand. | AUC yes/no | Yes/no L on failures, neutral | Answered Yes on failures, neutral | ΔL two-cand. | ΔL yes/no | Share toward Yes | Yes/no Δp | Flipped No → Yes |
+|---|---|---|---|---|---|---|---|---|---|
+| Qwen3-8B | 0.93 | 0.99 | −26.5 | 0.2% | 6.12 | 2.80 | 0.89 | 0.2 | 0.2% |
+| Llama-3.1-8B | 0.87 | 0.97 | −4.4 | 5.3% | 1.65 | 2.21 | 0.90 | 16.2 | 15.9% |
+| Gemma-2-9B | 0.90 | 0.99 | −8.4 | 1.0% | 0.80 | 1.23 | 0.75 | 2.5 | 3.0% |
+| Mistral-7B | 0.77 | 0.94 | +0.5 | 55.9% | 1.06 | 2.67 | 0.88 | 30.2 | 35.8% |
+| Llama-3.2-3B | 0.80 | 0.88 | −0.9 | 16.3% | 0.98 | 0.70 | 0.84 | 14.0 | 21.2% |
+| Llama-3.2-1B | 0.60 | 0.68 | −0.3 | 13.1% | 0.31 | 0.09 | 0.60 | 2.0 | 1.4% |
+| Qwen3-0.6B | 0.72 | 0.55 | +7.0 | 100% | 0.89 | 0.12 | 0.62 | 0.0 | 0.0% |
+| Qwen3-1.7B | 0.81 | 0.90 | +14.1 | 99.9% | 2.49 | 2.08 | 0.80 | 0.1 | 0.1% |
+| Qwen3-4B | 0.93 | 0.94 | −21.2 | 2.2% | 7.49 | 2.27 | 0.49 | 5.5 | 6.4% |
+| Qwen3-14B | 0.90 | 0.99 | −23.6 | 0.6% | 4.33 | 3.18 | 0.70 | 4.6 | 4.5% |
+| Qwen3-32B | 0.91 | 0.97 | −6.8 | 2.4% | 2.35 | 1.55 | 0.71 | 9.2 | 8.9% |
+
+Per-model game-clustered intervals for ΔL, the share and the flips are in the metrics file.
+
+Across models I report Spearman rank correlations: how well the models' order on one measure matches their order on another, from −1 to +1. They are given for all 11 models and for the 8 that pass the families competence rule. That rule requires a neutral yes/no AUC of at least 0.70, Yes on at most 95% of failures and on at least 5% of successes; its fourth criterion, the median yes/no probability mass, is not recomputed here. The 8 are the reference models, Gemma, Mistral, Llama-3.2-3B, and Qwen3 at 4B, 14B and 32B. The permutation p treats the models as exchangeable draws, which they are not; it is a descriptive guide only. The table shows the correlations that answer the question; the full grid is in the metrics file.
+
+| Effect measure | Against yes/no AUC, all 11 | Against two-candidate AUC, all 11 | Against yes/no AUC, competent 8 | Against neutral yes/no L on failures, competent 8 | Against answered Yes on failures (neutral), competent 8 |
+|---|---|---|---|---|---|
+| Two-candidate ΔL | +0.53 | +0.79 (p 0.006) | +0.31 | −0.67 | −0.50 |
+| Yes/no ΔL | +0.75 (p 0.008) | +0.65 | +0.55 | −0.52 | −0.45 |
+| Share toward Yes | +0.32 | +0.10 | −0.02 | +0.33 | +0.26 |
+| Yes/no Δp | +0.20 | +0.06 | −0.71 | +0.90 (p 0.005) | +0.95 (p 0.002) |
+| Flipped No → Yes | +0.15 | +0.05 | −0.81 (p 0.02) | +0.93 (p 0.002) | +0.98 (p 0.001) |
+
+Three descriptive patterns, each with its limits:
+
+1. **Whether there is an effect tracks competence.** The models with the smallest yes/no effects are the two that cannot do the task: Llama-3.2-1B (AUC 0.68; 0.09 nats) and Qwen3-0.6B (answers Yes to everything; 0.12 nats). Across all 11 models, the log-odds effects rise with AUC (yes/no ΔL against yes/no AUC +0.75; two-candidate ΔL against two-candidate AUC +0.79). Among the 8 competent models this relation weakens (+0.55 and +0.79, neither with a clear p). In short, the nat-scale relation is carried mostly by the near-incompetent models. Every competent model shows a positive effect on both scales. No model and no environment combines high competence with no effect.
+2. **How many answers the goal changes tracks baseline confidence, not competence.** Among the competent models, the yes/no probability shift and the No → Yes flips follow how close the model's failures sit to the Yes/No boundary under the neutral task (+0.90 to +0.98). Mistral, which already answers Yes to 56% of failures, flips 36%. Qwen3-8B, at −26.5 nats, flips 0.2%. These measures fall with competence (−0.71 and −0.81), because the most competent models are also the most confident. This is the ALFWorld version of the Qwen-against-Llama contrast in (a).
+3. **The share toward Yes tracks neither.** It is 0.75 to 0.90 for most competent models, regardless of AUC or baseline (all correlations within ±0.36). The exceptions are within the Qwen3 size series: 4B at 0.49, 14B at 0.70, 32B at 0.71. Qwen3-4B has a mean yes/no effect of 2.27 nats while moving only half the items toward Yes, so large moves on a minority of items carry its mean. Within the six Qwen3 sizes, no relation is reliable with six points.
+
+**What this cannot show.** About a dozen models differ at once in developer, training data, size, tokenizer, chat template and post-training, so a correlation across them cannot isolate competence as a cause. Competence and confidence are themselves correlated (the competent models are the confident ones), so this design cannot separate their roles. The competent subset is defined from the same yes/no scores that the effects use. Each model has one scoring run with one example set. The AUC rests on 292 successes that are built differently from the failures. The analysis covers ALFWorld only: TextCraft has two models, which is too few for any cross-model statement.
+
+### (c) Llama's absent TextCraft effect: robustness, or nothing settled to bias?
+
+Read it as the absence of a settled prediction, not as robustness. The evidence:
+
+- **No settled prediction.** Under the neutral task Llama separates TextCraft's working and failing actions barely above chance (AUC 0.61 on the main failures, 0.67 to 0.68 with the usefulness failures). It answers Yes to 11% of actions that work and 10% of those that fail. Earlier TextCraft analyses found that it ranks used-up failures above real successes (AUC 0.31) and that it cannot do the counting items (AUC 0.42).
+- **The same pattern appears elsewhere.** Across ALFWorld models, the only near-zero yes/no effects come from the two models without working state judgements (Llama-3.2-1B, Qwen3-0.6B). No competent model in either environment shows a null effect.
+- **The goal line is not ignored.** Both goal lines lower Llama's TextCraft yes/no score relative to the neutral task (aligned −0.60, swapped −0.45 nats). Its main-set effect is small and negative rather than zero. On the 100 empty-history items its yes/no effect is +1.09. So the goal line still reaches its output. It just has no consistent state judgement to push toward success.
+
+Robustness would mean a model that tracks the state (high AUC) and is not moved by the goal. That combination does not occur in any model or environment in this project's data. Calling Llama "robust" in TextCraft would mistake an unformed prediction for a resistant one.
+
+## 10. Naming the object against completing the task, in ALFWorld (added 2026-11-21)
+
+This section is exploratory and post hoc; the numbers come from `scripts/xenv/completion.py`, stored under `completion_vs_intermediate` in the metrics file. In TextCraft the aligned goal names one item, and crafting that item completes the task, so "the action names the goal object" and "the action completes the task" cannot be separated (Section 6). In ALFWorld they can be partly separated, because several kinds of action act on the goal object but stand at different places in the task's plan. Every RQ2 history leaves the goal object untouched, so every move, heat, cool and clean item fails because the object was never picked up. Grouping the 4,666 failures by the action's place in the plan:
+
+- **Completing** (668 items): move the goal object to a receptacle of the task's target type. This is the last step of every placement, pick-two and heat/cool/clean task, and on a plain placement task it would finish the task.
+- **Intermediate, advancing** (408): heat, cool or clean the goal object when the task asks for that transformation.
+- **Take** (2,449): take the goal object from a receptacle, the first step of every task.
+- **Off-plan move** (656): move the goal object to a receptacle that is not of the target type.
+- **Off-plan transformation** (485): heat, cool or clean when the task asks for another transformation or none.
+
+The ALFWorld data have no "go to" action carrying the object, because RQ2 actions all name the goal object.
+
+The cleanest contrast puts the completing move against the transformation step **within heat, cool and clean tasks** (393 against 408 items). Matching reweights the transformation items to the completing items' mix of failure reason (agent elsewhere, not holding the object, never moved), step (0 or later) and task kind (heat, cool or clean); every completing item has a match. The other contrasts are matched on failure reason and step. Intervals come from the same game resamples for both groups, so the differences are paired by game.
+
+**Matched difference, completing minus transformation step, heat/cool/clean tasks** (negative means a smaller effect on the completing action, a "completion penalty"):
+
+| Measure | Qwen: completing / transformation / difference | Llama: completing / transformation / difference |
+|---|---|---|
+| Two-candidate ΔL | 7.57 / 8.14 / −0.57 [−1.77, 0.61] | 0.74 / 1.18 / −0.43 [−0.76, −0.07] |
+| First-token ΔL | 3.67 / 2.41 / +1.26 [0.75, 1.83] | 0.73 / 0.74 / −0.02 [−0.17, 0.15] |
+| Yes/no ΔL | 3.26 / 3.62 / −0.36 [−0.92, 0.18] | 2.36 / 1.72 / +0.64 [0.42, 0.88] |
+| Yes/no Δp, points | 0.1 / 0.4 / −0.3 [−0.9, 0.1] | 13.4 / 20.6 / −7.2 [−10.5, −3.7] |
+| 2×2 goal-directed part | +0.56 / 0.00 / +0.56 [−0.59, 1.76] | −0.81 / +0.32 / −1.13 [−1.38, −0.85] |
+| 2×2 mention part | 7.01 / 8.14 / −1.14 [−2.21, 0.02] | 1.56 / 0.86 / +0.70 [0.38, 0.99] |
+| Object-free (described) task ΔL | 5.00 / 5.22 / −0.22 [−1.38, 0.95] | 0.93 / 1.06 / −0.14 [−0.46, 0.17] |
+| Yes/no, aligned minus neutral | 3.18 / 5.42 / −2.23 [−2.89, −1.64] | 2.32 / 2.17 / +0.15 [−0.08, 0.38] |
+
+The 2×2 (RQ2's object-mention design, scored only on these two groups, 1,076 items) splits the aligned-minus-swapped effect into two parts:
+
+- **The mention part** is the effect of naming the action's object in a task the action does not advance.
+- **The goal-directed part** is what the action advancing the named task adds on top.
+
+For a completing move, the mention task changes the destination ("put the mug in the cabinet" when the action moves it to the fridge). For a transformation step, it changes the transformation (heat becomes clean).
+
+**Other matched contrasts** (completing minus the other group; two-candidate / first token / yes/no, nats):
+
+- **Against take actions**, matched on reason and step (76% of completing items have a match): Qwen +1.33 / +0.12 / −0.09; Llama −1.42 / −0.09 / −0.34 [−0.67, −0.01].
+- **Against off-plan moves** (same verb, same reasons and steps): Qwen +1.85 / +1.00 / +1.39 [0.81, 2.09]; Llama −0.01 / +0.56 / +1.26 [0.91, 1.57].
+- **Against off-plan transformations:** Qwen −1.60 / +1.39 / +0.49; Llama −0.35 / +0.38 / +0.49.
+- **The object-free task keeps a similar share of the named effect on completing actions as on others:** Qwen 66% on completing moves, 66% on transformation steps, 61% on takes. For Llama the described task gives *more* than the named one on completing moves (139% [109, 182]), against 96% on transformation steps and 85% on takes.
+
+**Is there a completion penalty?**
+
+- **For Qwen3-8B, no.** No decision scale shows a reliable penalty. The two-candidate and yes/no differences against the transformation step are small, with intervals across zero. The first token shows a completion *bonus* (+1.26). Against an off-plan move, the completing move has the larger effect on every scale. Its 2×2 goal-directed part is positive (+0.56 [0.17, 0.95]). One asymmetry exists, but it is not a penalty on the effect: the aligned task lifts the transformation step much further above the neutral task than it lifts the completing move (yes/no 5.42 against 3.18). The swapped task does the same, so the aligned-minus-swapped difference is unchanged.
+- **For Llama-3.1-8B, a small one, on some scales only.** The goal-directed part of the 2×2 is negative on completing moves (−0.81 [−1.02, −0.60]) and positive on transformation steps (+0.32), a difference of −1.13. Llama's overall 2×2 goal-directed part, −0.18 in `rq2_results.md`, is the average of these two opposite pieces. Once the object's mention is held fixed, a task that the move would complete makes Llama slightly *less* willing to predict success than a task it would not advance. The two-candidate scale shows a small matched penalty (−0.43). The yes/no question shows the opposite (+0.64), and the first token shows nothing. The penalty is outweighed by a larger mention part on completing moves (1.56 against 0.86), so the total effect on completing moves stays positive.
+
+So ALFWorld has no general completion penalty. Llama's small, scale-dependent penalty on the goal-directed part has the same sign as its negative TextCraft goal-role cell (Section 6), which is suggestive but not a demonstration. In TextCraft the aligned-minus-swapped contrast mixes mention and completion. In ALFWorld the penalty appears only after mention is removed, and only on two of the four scales.
+
+**What matching cannot remove.** The completing move and the transformation step differ in verb, so their success replies differ ("You move the mug 1 to the fridge 1." against "You heat the mug 1 using the microwave 1."). That matters for the two-candidate and tail-sensitive scales, though not for yes/no. The 2×2's mention task changes a different thing for each group (the destination against the transformation), so the goal-directed parts compare two manipulations that are not identical. The take contrast also crosses failure semantics: a take fails because the agent is elsewhere or the object was not seen there, while a move fails because the agent does not hold the object. Matching on the recorded failure reason does not equalize those, since every completing move is also a never-obtained failure whatever reason is recorded. The step-0 items differ by group in which receptacles the agent could plausibly reach. Finally, these groups come from the generators of `rq2_results.md` ("How alternative actions were generated"), so their mix is set by design choices, not by what an agent would propose.
+
 ## Reproducing
 
 From the repository root, with the ALFWorld code importable and the archive and TextCraft data available (the TextCraft items are `wf/textcraft/data/items.jsonl` on branch `textcraft`; the scores are `text-wm-fix24/runs/textcraft_score/shard_0{0..3}_of_04/scoring.jsonl` on ICE):
@@ -230,4 +370,4 @@ python scripts/xenv/compare.py --archive <text-wm-runs-archive> \
     --out notes/textcraft_vs_alfworld_metrics.json
 ```
 
-It runs on CPU in about 15 minutes. The ALFWorld runs read are `text-wm-fix11` (`rq2_score`), `text-wm-fix12` (`rq1_score`), `text-wm-fix13` (`rq1x_score`) and `text-wm-fix17` (`rq1v_score`, and the collected items through `wf.rq2.load_items`).
+It runs on CPU in about 15 minutes. Sections 9 and 10 are added to the same metrics file by `scripts/xenv/competence.py` (which also needs `--families-dir`, a folder holding the four `family_score_<model>` scoring files from ICE `text-wm-fix23`, named `<model>.jsonl`) and `scripts/xenv/completion.py`; run them after `compare.py`, one at a time. The ALFWorld runs read are `text-wm-fix11` (`rq2_score`), `text-wm-fix12` (`rq1_score`), `text-wm-fix13` (`rq1x_score`) and `text-wm-fix17` (`rq1v_score`, and the collected items through `wf.rq2.load_items`).
