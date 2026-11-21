@@ -3,7 +3,7 @@ run_id: decisionsim_analysis
 # decisionsim_score_<tag> run (a run under this checkout's runs/, or an absolute path); a model whose run is missing,
 # unfinished or scored on another sample is listed under "waiting". n_states and seed must match the scoring runs.
 sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
-n_states: 300
+n_states: all
 seed: 20260924
 primary: [qwen3-8b, llama3.1-8b]
 models:
