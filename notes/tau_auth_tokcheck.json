@@ -1,0 +1,339 @@
+{
+ "config": "tau_auth_score",
+ "items": 192,
+ "comprehension_items": 24,
+ "prompt_check_problems": [],
+ "n_prompt_check_problems": 0,
+ "system_message_sha256": {
+  "main": "7cc042481b3dcfa2668954e13c984dcec5a70da8c3ffce0bcc9a575878974a17",
+  "auth": "11ede0a69e8004e84a0336aaef471262e0d91be444a1083169632024a4cb77c3",
+  "blind": "2c621c0e79683493fa6926e6b36a6ccc65a0fb37d31369c58625149120574ba9"
+ },
+ "models": [
+  {
+   "model": "Qwen/Qwen3-8B",
+   "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+   "single_token_ids": {
+    "{\"": [
+     4913
+    ],
+    "Error": [
+     1454
+    ],
+    "Yes": [
+     9454
+    ],
+    "No": [
+     2753
+    ],
+    " {\"": [
+     5212
+    ],
+    " Error": [
+     4600
+    ],
+    " Yes": [
+     7414
+    ],
+    " No": [
+     2308
+    ]
+   },
+   "single_tokens": {
+    "{\"": [
+     "{\""
+    ],
+    "Error": [
+     "Error"
+    ],
+    "Yes": [
+     "Yes"
+    ],
+    "No": [
+     "No"
+    ],
+    " {\"": [
+     "\u0120{\""
+    ],
+    " Error": [
+     "\u0120Error"
+    ],
+    " Yes": [
+     "\u0120Yes"
+    ],
+    " No": [
+     "\u0120No"
+    ]
+   },
+   "auth_error_ids": [
+    1454,
+    25,
+    576,
+    1196
+   ],
+   "generation_prompt_tail": "tant\n<think>\n\n</think>\n\n",
+   "items": 192,
+   "comprehension_items": 24,
+   "prompts_rendered": 9504,
+   "problems": {
+    "first_token": 0,
+    "boundary": 0,
+    "only_task_line": 0
+   },
+   "examples": {
+    "first_token": [],
+    "boundary": [],
+    "only_task_line": []
+   },
+   "prompt_tokens": {
+    "auth/fail/comp": {
+     "median": 12833.0,
+     "max": 14716,
+     "n": 96
+    },
+    "auth/fail/first": {
+     "median": 12666.5,
+     "max": 15110,
+     "n": 192
+    },
+    "auth/fail/yn": {
+     "median": 12699.5,
+     "max": 15143,
+     "n": 192
+    },
+    "auth/witness/first": {
+     "median": 12667.0,
+     "max": 15110,
+     "n": 192
+    },
+    "auth/witness/yn": {
+     "median": 12700.0,
+     "max": 15143,
+     "n": 192
+    },
+    "blind/fail/comp": {
+     "median": 13225.0,
+     "max": 15108,
+     "n": 96
+    },
+    "blind/fail/first": {
+     "median": 13058.5,
+     "max": 15502,
+     "n": 192
+    },
+    "blind/fail/yn": {
+     "median": 13091.5,
+     "max": 15535,
+     "n": 192
+    },
+    "blind/witness/first": {
+     "median": 13059.0,
+     "max": 15502,
+     "n": 192
+    },
+    "blind/witness/yn": {
+     "median": 13092.0,
+     "max": 15535,
+     "n": 192
+    },
+    "main/fail/comp": {
+     "median": 11161.0,
+     "max": 13044,
+     "n": 96
+    },
+    "main/fail/first": {
+     "median": 10994.5,
+     "max": 13438,
+     "n": 192
+    },
+    "main/fail/yn": {
+     "median": 11027.5,
+     "max": 13471,
+     "n": 192
+    },
+    "main/witness/first": {
+     "median": 10995.0,
+     "max": 13438,
+     "n": 192
+    },
+    "main/witness/yn": {
+     "median": 11028.0,
+     "max": 13471,
+     "n": 192
+    }
+   },
+   "longest_prompt": [
+    15535,
+    "tau-g-77cc59152d73",
+    "blind",
+    "fail",
+    "yn"
+   ],
+   "model_max_length": 131072,
+   "passed": true
+  },
+  {
+   "model": "meta-llama/Llama-3.1-8B-Instruct",
+   "revision": "0e9e39f249a16976918f6564b8830bc894c89659",
+   "single_token_ids": {
+    "{\"": [
+     5018
+    ],
+    "Error": [
+     1480
+    ],
+    "Yes": [
+     9642
+    ],
+    "No": [
+     2822
+    ],
+    " {\"": [
+     5324
+    ],
+    " Error": [
+     4703
+    ],
+    " Yes": [
+     7566
+    ],
+    " No": [
+     2360
+    ]
+   },
+   "single_tokens": {
+    "{\"": [
+     "{\""
+    ],
+    "Error": [
+     "Error"
+    ],
+    "Yes": [
+     "Yes"
+    ],
+    "No": [
+     "No"
+    ],
+    " {\"": [
+     "\u0120{\""
+    ],
+    " Error": [
+     "\u0120Error"
+    ],
+    " Yes": [
+     "\u0120Yes"
+    ],
+    " No": [
+     "\u0120No"
+    ]
+   },
+   "auth_error_ids": [
+    1480,
+    25,
+    578,
+    1217
+   ],
+   "generation_prompt_tail": "stant<|end_header_id|>\n\n",
+   "items": 192,
+   "comprehension_items": 24,
+   "prompts_rendered": 9504,
+   "problems": {
+    "first_token": 0,
+    "boundary": 0,
+    "only_task_line": 0
+   },
+   "examples": {
+    "first_token": [],
+    "boundary": [],
+    "only_task_line": []
+   },
+   "prompt_tokens": {
+    "auth/fail/comp": {
+     "median": 11483.0,
+     "max": 13019,
+     "n": 96
+    },
+    "auth/fail/first": {
+     "median": 11348.0,
+     "max": 13293,
+     "n": 192
+    },
+    "auth/fail/yn": {
+     "median": 11381.0,
+     "max": 13326,
+     "n": 192
+    },
+    "auth/witness/first": {
+     "median": 11348.5,
+     "max": 13293,
+     "n": 192
+    },
+    "auth/witness/yn": {
+     "median": 11381.5,
+     "max": 13326,
+     "n": 192
+    },
+    "blind/fail/comp": {
+     "median": 11795.0,
+     "max": 13331,
+     "n": 96
+    },
+    "blind/fail/first": {
+     "median": 11660.0,
+     "max": 13605,
+     "n": 192
+    },
+    "blind/fail/yn": {
+     "median": 11693.0,
+     "max": 13638,
+     "n": 192
+    },
+    "blind/witness/first": {
+     "median": 11660.5,
+     "max": 13605,
+     "n": 192
+    },
+    "blind/witness/yn": {
+     "median": 11693.5,
+     "max": 13638,
+     "n": 192
+    },
+    "main/fail/comp": {
+     "median": 10064.0,
+     "max": 11600,
+     "n": 96
+    },
+    "main/fail/first": {
+     "median": 9929.0,
+     "max": 11874,
+     "n": 192
+    },
+    "main/fail/yn": {
+     "median": 9962.0,
+     "max": 11907,
+     "n": 192
+    },
+    "main/witness/first": {
+     "median": 9929.5,
+     "max": 11874,
+     "n": 192
+    },
+    "main/witness/yn": {
+     "median": 9962.5,
+     "max": 11907,
+     "n": 192
+    }
+   },
+   "longest_prompt": [
+    13638,
+    "tau-g-77cc59152d73",
+    "blind",
+    "fail",
+    "yn"
+   ],
+   "model_max_length": 131072,
+   "passed": true
+  }
+ ],
+ "passed": true
+}

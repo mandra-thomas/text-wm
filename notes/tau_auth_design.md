@@ -557,3 +557,51 @@ smoke run and its record in this note; the full run; the analysis.
 - **192 items of two classes.** Per-class results are secondary; one domain, one prompt format.
 - **Arm (i) is rescored, not reused,** so that all three arms are compared within one run on the same hardware and
   code. The confirmatory scores serve only as the reproducibility check of §7.9.
+
+## Implementation record (2026-11-22, after the design commit `6dd0026`; no design change)
+
+Built as designed (`6bc8a41`, `069ff00`). Nothing has been scored. What the build established:
+
+- **Code.** `wf/tau/auth.py` (prompts, item and job selection, the prompt checks that refuse to score, scoring with
+  resume, the analysis and decision rules), `wf/tau/auth_token_check.py`, the configs `tau_auth_score`,
+  `tau_auth_score_smoke`, `tau_auth_analysis` and `tau_auth_smoke_analysis`, `pace/tau_auth_score.sbatch` (4 shards,
+  4 hours) and `pace/tau_auth_tokcheck.sbatch` (CPU). Arm (i) is rendered by the confirmatory `wf/tau/prompts.py` and is
+  checked to be identical to the confirmatory prompt for every scored job. The confirmatory runs and their code are
+  unchanged.
+- **System messages** (sha256): arm (i) `7cc04248…` (the confirmatory one), arm (ii) `11ede0a6…`, arm (iii)
+  `2c621c0e…`, pinned in `tests/test_tau_auth.py`.
+- **Items.** On the pinned build (`2c8ffeac…`, `9bd6c3f7…`, `231607f7…`, copied from the confirmatory build and checked
+  against the pins): 192 items, 96 per class, from 116 users; 24 comprehension items from 24 users; 9,504 jobs per
+  model, as designed.
+- **Dry run without models** (mock scores, the real build, the verification gate bypassed; its refusal is tested):
+  four shards of 29 users each (55, 42, 48 and 47 items), 19,008 records, no missing or stale score, analysis complete
+  with every block. Mock scores are constant, so every contrast is 0 and both gates fail, as they should on such data.
+- **Token check on ICE** (`pace/tau_auth_tokcheck.sbatch`, job 7241247, new checkout at `069ff00`, tokenizers at the
+  pinned revisions, report in [tau_auth_tokcheck.json](tau_auth_tokcheck.json)): PASS for both models on all 9,504
+  scored prompts per model. `{"`, `Error`, `Yes` and `No` are single tokens; the authorization error opens with the
+  `Error` token; every twin and witness output opens with `{"`, every failure reply and witness failure with `Error`;
+  no token merges at the prompt/answer boundary (first-token prompts with both replies and the authorization error,
+  yes/no and comprehension prompts with Yes and No); within an arm the prompts differ only in the task line; the
+  scoring run's own prompt checks report no problem. Median prompt length of the first-token prompt, Qwen3 / Llama-3.1:
+  arm (i) 10,995 / 9,929, arm (ii) 12,667 / 11,348, arm (iii) 13,059 / 11,660 tokens; the longest prompt is 15,535 /
+  13,638 (arm (iii), yes/no), far below both context limits. Arms (ii) and (iii) are thus 1,670 and 2,060 Qwen tokens
+  longer than arm (i), about 15% and 19% (§9.1 assumed 15% for both); costed at 19% for arm (iii), the full run is about
+  8.0 GPU-hours instead of 7.9, and a shard still about 2 hours. The first token check (job 7240675) stopped before
+  any check because the Llama tokenizer is only in the top level of the shared cache; the job now takes the cache
+  folder.
+- **Tests.** `tests/test_tau_auth.py`, 66 tests: golden system messages and texts, the arms' diffs at the level of the
+  system message, the examples and every rendered turn, the example cells and minimal pairs, the per-item few-shot
+  order, item, comprehension and job selection, the comprehension rule (80%, ties incorrect, per-arm answers), the
+  positive control's arms, action and threshold, the decomposition identity, every row of the category and reading
+  tables, Holm over exactly eight tests, one synthetic data set per predicted pattern (A, AB, B, both, grows, a
+  Llama-sized request component without a naming component, each failed gate), and the runs end to end on mock scores
+  (gates, resume, missing and stale scores, the smoke analysis without estimates, the projection).
+- **Mutation testing.** 58 mutants (`tau-auth …` in `scripts/mutation_check.py`), run through
+  `scripts/tau_mutation_check.py` against `tests/test_tau_auth.py` after the unmutated copy passed: 57 killed on the
+  first run, each with its killing test logged. The survivor (the system-message check no longer comparing arm (iii)
+  with arm (i)) lived because a changed closing paragraph of arm (iii) also broke the arm (ii) comparison; the test now
+  requires the specific arm's check to fire, and the mutant is killed.
+
+- **Full test suite** (once, single process, at `069ff00`): 966 passed, 7 skipped.
+
+Before scoring: an independent review, then the freeze tag, then the smoke run (§10).
