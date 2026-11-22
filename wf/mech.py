@@ -1,4 +1,4 @@
-"""Exploratory mechanism diagnostic (decided 2026-11-19, after the meeting with Prof. Zhang; notes/deviations.md).
+"""Exploratory mechanism diagnostic (decided 2026-11-19, after outside feedback; notes/deviations.md).
 
 Two accounts of why the goal moves predictions on determined failures:
 (a) state inference: the model cannot recover the facts that decide the failure, and falls back on the task;

@@ -2,7 +2,7 @@
 
 This note fixes the design of the second-environment replication of the RQ2 goal effect on the τ-bench
 (tau2-bench) retail domain. It is written and committed before the item set is built and before any model is
-scored. The feasibility probe of 2026-11-20 (report/TRACKER.md §4.4, "τ-bench trial build result") built a
+scored. The feasibility probe of 2026-11-20 (recorded outside this repository) built a
 throwaway version of the items; its counts informed the expected sizes below, and no model was scored on it.
 Anything changed after this commit goes in a dated "Changes" section at the end, with its reason.
 

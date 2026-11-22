@@ -82,19 +82,19 @@ Goal × used up has only 6 items (one pair) and is omitted.
   - the swapped goal's recipe tree is on screen;
   - the reply formats differ.
 - **Scoring runs.** One scoring run per model (see the multi-seed note in the decision log). Greedy, teacher-forced scoring has little run-to-run variation, but other sources (prompt examples, item draws) are not varied here.
-- **Follow-up.** The exploratory prompt variants (section 13, D10: examples on goal; empty start) were scored after this analysis. They, and an exploratory investigation of the goal-completion cell, are reported separately (branch `textcraft-llama-dx`). Nothing exploratory replaces the confirmatory outcome above.
+- **Follow-up.** The exploratory prompt variants (section 13, D10: examples on goal; empty start) were scored after this analysis. They, and an exploratory investigation of the goal-completion cell, are reported separately in [textcraft_llama_dx.md](textcraft_llama_dx.md). Nothing exploratory replaces the confirmatory outcome above.
 
 ## Follow-up analyses (exploratory, 2026-11-21)
 
-Everything in this section was done after the confirmatory result above had been read. None of it changes that result. Details, dated plans and all numbers are on two branches: `textcraft-llama-dx` (`notes/textcraft_llama_dx.md`) and `xenv-compare` (`notes/textcraft_vs_alfworld.md`).
+Everything in this section was done after the confirmatory result above had been read. None of it changes that result. Details, dated plans and all numbers are in [textcraft_llama_dx.md](textcraft_llama_dx.md) and [textcraft_llama_competence.md](textcraft_llama_competence.md) (Llama diagnostics and competence), [textcraft_vs_alfworld.md](textcraft_vs_alfworld.md) (comparison with ALFWorld), and [textcraft_qwen_robustness.md](textcraft_qwen_robustness.md) and [textcraft_qwen_competence.md](textcraft_qwen_competence.md) (Qwen robustness and competence), each with its metrics file next to it.
 
 **Qwen's effect in TextCraft is smaller than in ALFWorld, by about half on rulers anchored to the environment's reply.** *(Corrected 2026-11-21. An earlier version of this paragraph said the two environments "agree" on the yes/no question, 2.92 against 2.80. That comparison is withdrawn; see "The yes/no question" below.)*
 
 - *The two-candidate drop is largely about the replies.* The two-candidate ΔL falls from 6.12 nats in ALFWorld to 0.94 here. Of ALFWorld's figure, 59% is the goal raising the probability of the words *after* "You" in ALFWorld's success sentence, and TextCraft's two replies name the same item, so that term is zero by design. ALFWorld's largest effects are also at step 0, which the main set lacks.
-- *On the reply's first token, TextCraft is a third to a half of ALFWorld.* The first token is the model's predicted observation, "Craft" against "Could". The ratio is 0.39 overall, about 0.54 at matched history lengths and about 0.46 at a matched baseline (`textcraft_vs_alfworld.md`, branch `xenv-compare`).
+- *On the reply's first token, TextCraft is a third to a half of ALFWorld.* The first token is the model's predicted observation, "Craft" against "Could". The ratio is 0.39 overall, about 0.54 at matched history lengths and about 0.46 at a matched baseline ([textcraft_vs_alfworld.md](textcraft_vs_alfworld.md)).
 - *The flip rates are similar.* Failures flipped to predicted success are 5.6% here against 5.9% in ALFWorld.
 
-**The yes/no question.** TextCraft's question, "Will this action succeed? Answer Yes or No.", is not anchored to the environment's reply. ALFWorld's is: "…or will the environment reply 'Nothing happens.'?". Qwen's TextCraft yes/no answers partly judge whether the action serves the named task (`textcraft_qwen_robustness.md`, section 9, branch `textcraft-qwen-robust`).
+**The yes/no question.** TextCraft's question, "Will this action succeed? Answer Yes or No.", is not anchored to the environment's reply. ALFWorld's is: "…or will the environment reply 'Nothing happens.'?". Qwen's TextCraft yes/no answers partly judge whether the action serves the named task ([textcraft_qwen_robustness.md](textcraft_qwen_robustness.md), section 9).
 
 - *At matched predicted observations, the swapped line shifts the answer.* At the same first-token score, the swapped line shifts the yes/no answer toward "No" by 2.0 nats on failures and 7.2 nats on successes.
 - *The clearest case is working goal crafts.* On working goal crafts that Qwen's own predicted observation confidently calls successes, it answers "No" to 72% under the swapped line, against 13% aligned and 1% neutral.
@@ -128,7 +128,7 @@ Llama's overall negative is this penalty without the lift. Qwen's positive total
 - The overall interval reaches zero when the empty start is stated (−0.11 [−0.23, +0.01]) and under the clean prompt with the inventory shown (−0.09 [−0.24, +0.06]).
 - The goal-role negative persists under every prompt tried.
 
-**Llama's competence in TextCraft, and what it implies.** Competence here is the AUC under the neutral goal line, the probability that the model scores a real success above a real failure (0.5 is chance). The full analysis is in `notes/textcraft_llama_competence.md` on branch `textcraft-llama-dx`. That note's heuristics were fixed and committed before they were fitted.
+**Llama's competence in TextCraft, and what it implies.** Competence here is the AUC under the neutral goal line, the probability that the model scores a real success above a real failure (0.5 is chance). The full analysis is in [textcraft_llama_competence.md](textcraft_llama_competence.md). That note's heuristics were fixed and committed before they were fitted.
 
 *How well Llama discriminates.*
 
@@ -163,7 +163,7 @@ Given the cue, the true outcome adds nothing to Llama's score (slope −0.55 nat
 - **The goal-craft negative is not explained by incompetence.** It sits where Llama discriminates. Part of that discrimination is a prior that goal crafts fail: Llama predicts success for only 24% of goal crafts that work.
 - **Round 2 applies the families rule to every model before any data.** Llama-3.1-8B is expected to fail it.
 
-**How robust Qwen's effect is** (`textcraft_qwen_robustness.md` and `textcraft_qwen_competence.md`, branches `textcraft-qwen-robust` and `textcraft-qwen-competence`).
+**How robust Qwen's effect is** ([textcraft_qwen_robustness.md](textcraft_qwen_robustness.md) and [textcraft_qwen_competence.md](textcraft_qwen_competence.md)).
 
 - *The direction holds on every check.* An independent recompute gives +0.94 [+0.60, +1.27]. Dropping any one pair or recipe family leaves +0.85 to +1.06. The sign also holds under trimmed and winsorized means, on every reply-anchored readout, and under every prompt variant; the clean prompt raises the effect.
 - *It is heavy-tailed.* The median item moves +0.25 [−0.00, +0.48] and the 10% trimmed mean is +0.48 [+0.24, +0.73]. The top 5% of items carry 80% of the total, but the interval reaches zero only after the 29 largest-contributing pairs of 229 are dropped.

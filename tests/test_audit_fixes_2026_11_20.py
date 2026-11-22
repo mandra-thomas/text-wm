@@ -1,4 +1,4 @@
-"""Fixes and new runs from the 2026-11-20 documentation and rigor audit (report/doc_audit/FIX_LIST.md).
+"""Fixes and new runs from the 2026-11-20 documentation and rigor audit (notes/deviations.md).
 
 B1 outcome selection in the paired effects; B2 strict task-line replacement; B3 the thinking mock flag; B4 NaN
 in the size flips and slope; B5 submit.sh and pace.env.example; B6 provenance and the golden prompt; B8 the

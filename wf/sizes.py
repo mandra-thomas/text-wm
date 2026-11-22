@@ -1,4 +1,4 @@
-"""Exploratory model-size series (decided 2026-11-19, after the meeting with Prof. Zhang; notes/deviations.md).
+"""Exploratory model-size series (decided 2026-11-19, after outside feedback; notes/deviations.md).
 
 The Qwen3 dense instruct models, 0.6B to 32B, thinking off, scored with the RQ2 prompt (example set 1, history
 only) on RQ2's primary items and the determined successes, under the aligned, swapped and neutral tasks, both as
