@@ -51,12 +51,20 @@ LAYER_STEP = 4
 ONSET_THRESHOLD = 0.6  # removal whose cross-fitted lower bound stays at or above this from the onset layer on
 TARGET_HALF_WIDTH = 0.075  # amendment 2, B3: the full pilot's sample size is set to reach this half-width
 SAMPLE_SIZE_MARGIN = 1.2  # amendment 3, C6: games as clusters make the 1/sqrt(n) scaling optimistic
+# Amendment 4, D10: the full pilot's items per stratum are the largest n any listed measure needs, capped here
+# (about 11 A100-hours of patching or 2 of ablation per stratum at the cap); if a cap binds, the half-width each
+# measure reaches at the cap is reported and the bands stay as they are.
+PATCH_CAP_PER_STRATUM = 400
+ABLATE_CAP_PER_STRATUM = 400
 NO_DIRECTION_UPPER = 0.3  # amendment 3, C1: "no single direction" needs the deepest layer's upper bound below this
 # Amendment 3, C2: a profile layer whose direct-path share (the part of the effect already in readout form at that
 # layer, read at the final norm's scale) has a 95% upper bound at or above this is treated as a caveat layer.
 DIRECT_PATH_MAX = 0.3
 PERP_TASK_MIN_REMOVAL = 0.3  # amendment 3, C3: the perp/task removal ratio is read only where task removal's
 # lower bound reaches this
+STEER_TASK_MIN_GAIN = 0.3  # amendment 4, D3: the steering ratio is read only where steer_task's share has this lower bound
+ANSWER_SUCCESS_MAX_COS = 0.5  # amendment 4, D7: the second projection is read only where |cos(answer, s_perp)| < this
+MIN_RELIABILITY = 0.2  # amendment 4, D8: disattenuation is undefined when either between-fold cosine is below this
 
 
 def stratum(rec: dict) -> str:
@@ -595,8 +603,10 @@ def projected_cosine_boot(diffs: Any, diff_games: list[str], succ: Any, succ_ver
 def disattenuated(cos: float, rel_a: float | None, rel_b: float | None) -> float:
     """A cosine between two noisy direction estimates divided by the square root of their reliabilities (each
     the cosine between its two folds' estimates; amendment 3, C3): what the cosine would be between noise-free
-    directions, to first order. NaN if a reliability is not positive; clipped to [-1, 1]."""
-    if rel_a is None or rel_b is None or not (rel_a > 0 and rel_b > 0) or cos != cos:
+    directions, to first order. NaN if either reliability is below 0.2 (amendment 4, D8: dividing by a small,
+    noisy reliability inflates the cosine); clipped to [-1, 1]."""
+    if (rel_a is None or rel_b is None or not (rel_a >= MIN_RELIABILITY and rel_b >= MIN_RELIABILITY)
+            or cos != cos):
         return float("nan")
     return max(-1.0, min(1.0, cos / math.sqrt(rel_a * rel_b)))
 
@@ -642,14 +652,18 @@ def onset_layer(profile: dict[int, dict], threshold: float = ONSET_THRESHOLD) ->
 
 
 def onset_versus_arrival(onset: int | None, arrival_index: float | None, layers: list[int],
-                         deepest_upper: float | None = None, step: int = LAYER_STEP) -> str:
+                         deepest_upper: float | None = None, step: int = LAYER_STEP,
+                         all_layers: list[int] | None = None) -> str:
     """The onset layer against the patching arrival layer (amendment 2, B1; amendment 3, C1), without hypothesis
     labels (the minimal pilot reports no verdicts).
 
     The arrival layer is rounded up to the ablation grid (after rounding to 6 decimals, so that 32.000000001
     is 32). It is "not assessable" when there is no arrival or it lies after the deepest layer the onset was
     read on (`layers`). Without an onset, "no single direction" only when the deepest layer's removal upper
-    bound is below 0.3; otherwise the interval is too wide to say."""
+    bound is below 0.3; otherwise the interval is too wide to say. With `all_layers` (the whole profile;
+    amendment 4, D1), an onset after the arrival is "not assessable" when a profile layer between the arrival
+    and the onset was excluded by the direct-path rule: the exclusion alone could have pushed the onset past the
+    arrival."""
     if arrival_index is None or arrival_index != arrival_index:
         return "not assessable (no arrival on the grid)"
     grid_arrival = step * math.ceil(round(arrival_index, 6) / step)
@@ -657,6 +671,9 @@ def onset_versus_arrival(onset: int | None, arrival_index: float | None, layers:
         return "not assessable (every profile layer excluded by the direct-path rule)"
     if grid_arrival > max(layers):
         return "not assessable (arrival after the profile)"
+    if (onset is not None and onset > grid_arrival and all_layers
+            and any(grid_arrival <= m < onset and m not in layers for m in all_layers)):
+        return "not assessable (a layer between arrival and onset excluded by the direct-path rule)"
     if onset is None:
         if deepest_upper is not None and deepest_upper == deepest_upper and deepest_upper < NO_DIRECTION_UPPER:
             return "no single direction"
@@ -700,15 +717,39 @@ def direct_path_share(dA: Any, dS: Any, DA: Any, DS: Any, games: list[str], ids:
 
 def direct_path_kept(layers: list[int], direct: dict | None, bound: float = DIRECT_PATH_MAX) -> list[int]:
     """Profile layers on which the onset is read (amendment 3, C2): those whose direct-path share has a 95% upper
-    bound below `bound`. A layer without a direct-path estimate is kept."""
+    bound below `bound`. A layer without a direct-path estimate is kept; a layer whose estimate has no finite
+    upper bound is excluded (amendment 4, D8)."""
     if not direct:
         return list(layers)
     out = []
     for m in layers:
-        x = direct.get(m) or direct.get(str(m)) or {}
-        hi = (x.get("ci") or (float("nan"), float("nan")))[1]
-        if not (hi == hi and hi >= bound):
+        x = direct.get(m) or direct.get(str(m))
+        if x is None:
             out.append(m)
+            continue
+        hi = (x.get("ci") or (float("nan"), float("nan")))[1]
+        if hi == hi and hi < bound:
+            out.append(m)
+    return out
+
+
+def half_width_at(n_new: int, n: int, se: float, z: float = 1.96, margin: float = SAMPLE_SIZE_MARGIN) -> float:
+    """The 95% half-width a measure reaches with `n_new` items, from its SE at `n` (the inverse of
+    `n_for_half_width`, margin included)."""
+    if not n or not n_new or se != se:
+        return float("nan")
+    return z * se * math.sqrt(margin * n / n_new)
+
+
+def plan_sizes(needs: dict[str, int | None], cap: int, measures_n: dict[str, tuple[int, float]]) -> dict:
+    """The pre-registered combination (amendment 4, D10): the stratum's n is the largest n any listed measure
+    needs, at most `cap`; when the cap binds, the half-width each measure reaches at the cap."""
+    vals = [v for v in needs.values() if isinstance(v, int)]
+    want = max(vals) if vals else None
+    n = None if want is None else min(want, cap)
+    out = {"n_wanted": want, "cap": cap, "n": n, "cap_binds": bool(want is not None and want > cap)}
+    if out["cap_binds"]:
+        out["half_width_at_cap"] = {k: half_width_at(cap, n0, se) for k, (n0, se) in measures_n.items()}
     return out
 
 
@@ -958,6 +999,15 @@ def ablation_summary(recs: list[dict], fold_of: dict[str, int], succ_ids: set[st
             "task_on_successes": (removed_share(by, succ, at("task", m), games, B, seed, weights=weights) if succ
                                   else {"n": 0, "defined": False, "why": "no determined success in this stratum"}),
         } for m in layers}
+        for m in layers:
+            b = row["by_layer"][m]
+            b["steer_perp_over_task"] = gate_on_lower_bound(b["steer_task"], b["steer_perp_over_task"], "ratio",
+                                                            STEER_TASK_MIN_GAIN)
+            # amendment 4, D9: steering along u and ablating u at the same layer move the readout by about the same
+            # amount if the network after it is close to linear along u; a free diagnostic
+            st_, tr = b["steer_task"].get("ratio", float("nan")), row["profile"][m].get("share", float("nan"))
+            b["linearity_steer_task_vs_removal"] = {"steer_task_share": st_, "task_removal": tr,
+                                                     "ratio": st_ / tr if tr else float("nan")}
         for kind in ("task", "task_perp_success", "mention", "task_from"):
             row[kind] = removed_share(by, fails, name(kind), games, B, seed, weights=weights)
         row["task_on_successes"] = (removed_share(by, succ, name("task"), games, B, seed, weights=weights) if succ
@@ -974,6 +1024,15 @@ def ablation_summary(recs: list[dict], fold_of: dict[str, int], succ_ids: set[st
                                 for k in sorted({k for r in recs for k in r["edits"] if k.startswith("random|")})}
         out[s] = row
     return out
+
+
+def gate_on_lower_bound(reference: dict, row: dict, key: str, minimum: float) -> dict:
+    """`row` marked assessable only where the reference quantity's 95% lower bound reaches `minimum` (amendment 4,
+    D3: the steering ratio over a task steering that barely moves the readout is a ratio of two small numbers)."""
+    lo = (reference.get("ci") or (float("nan"),))[0]
+    if not (lo == lo and lo >= minimum):
+        return {**row, "assessable": False, "why": f"reference lower bound {lo:.3g} is below {minimum}"}
+    return {**row, "assessable": True}
 
 
 def perp_over_task(task_row: dict, by: dict, fails: list[str], m: int, games: dict[str, str], B: int, seed: int,

@@ -640,13 +640,16 @@ def run_interp_pilot_analysis(cfg: dict) -> int:
     aman = json.loads((root / cfg.get("ablate", "interp_pilot_ablate") / "manifest.json").read_text())
     sets = load_sets(cfg)
     succ_ids = {t["id"] for t in sets["successes"]}
-    abl_fails = [t for t in sets["failures"] if any(t["id"] in ids for ids in aman["items"].values())]
-    report["direct_path"] = direct_path_report(store, abl_fails, aman["layers"], n_layers, lens_dir,
-                                               s0.get("norm_eps", 1e-6), aman.get("weights"), B)
+    # Amendment 4, D8: the direct-path share on every failure of the edited fold (stage 0 has them all), not only
+    # the ablation's sample, so it is the population's share and needs no weights.
+    edited = set(aman.get("edit_folds", [cfg.get("calibration_fold", 0)]))
+    fold_all = folds(sets["failures"] + sets["successes"], cfg.get("split_seed", 0))
+    cal_fails = [t for t in sets["failures"] if fold_all[t["game_id"]] in edited]
+    report["direct_path"] = direct_path_report(store, cal_fails, aman["layers"], n_layers, lens_dir,
+                                               s0.get("norm_eps", 1e-6), None, B)
     report["ablation"] = ablation_report(cfg, B, report["direct_path"])
     report["cosines"] = aman["cosines"]
-    fold = folds(sets["failures"] + sets["successes"], cfg.get("split_seed", 0))
-    report["h4_cosines"] = h4_cosine_report(store, sets, fold, h4_layers(aman["layers"], n_layers), lens_dir,
+    report["h4_cosines"] = h4_cosine_report(store, sets, fold_all, h4_layers(aman["layers"], n_layers), lens_dir,
                                             cfg.get("bootstrap_cosine", B))
     if cfg.get("hidden_probe", True):
         report["hidden_probe"] = hidden_probe_report(cfg)
@@ -713,7 +716,8 @@ def h4_cosine_report(store: Any, sets: dict, fold: dict[str, int], layers: list[
     prompts within outcome and verb)."""
     import numpy as np
 
-    from wf.interp.analysis import answer_direction, projected_cosine_boot, verb
+    from wf.interp.analysis import answer_direction, project_unit, projected_cosine_boot, success_direction, verb
+    from wf.interp.directions import cosine
 
     recs = {(r["id"], r["goal"]): r for r in store.records() if r.get("fmt", "yn") == "yn"}
     if not layers:
@@ -740,6 +744,10 @@ def h4_cosine_report(store: Any, sets: dict, fold: dict[str, int], layers: list[
                 A_ - S_, [t["game_id"] for t in fl], Sc, [verb(t) for t in sc], [t["game_id"] for t in sc],
                 F_, [verb(t) for t in nf], [t["game_id"] for t in nf],
                 {"readout": [lens_dir], "readout_and_answer": [lens_dir, ans]}, B, C.RNG_SEED + f)
+            # amendment 4, D7: if the answer direction is itself close to the success feature, projecting it out
+            # removes what H4 is about, and the second projection cannot be read
+            s_perp = project_unit(success_direction(Sc, F_, [verb(t) for t in sc], [verb(t) for t in nf]), lens_dir)
+            out[f"{f}|{m}"]["answer_success_perp_readout_cos"] = cosine(ans, s_perp)
     return out
 
 
@@ -770,6 +778,8 @@ def h4_rows(ab: dict, cos: dict, layers: list[int], boot: dict | None = None) ->
     the patching arrival layer), each next to its null baselines. Medians over the layers; cosines averaged over
     the two folds' estimates where both exist. The goal-role row (task against mention cosine) is reported apart:
     a mention is itself an object match, so it is not a null for H4."""
+    from wf.interp.analysis import ANSWER_SUCCESS_MAX_COS
+
     boot = boot or {}
 
     def fold_mean(key: str, layer: int) -> float:
@@ -793,12 +803,23 @@ def h4_rows(ab: dict, cos: dict, layers: list[int], boot: dict | None = None) ->
 
     perp = [get(m, "perp_over_task_removal") for m in layers]
     assessable = [x.get("ratio") for x in perp if x.get("assessable")]
+    steer = [get(m, "steer_perp_over_task") for m in layers]
+    steer_ok = [m for m, x in zip(layers, steer) if x.get("assessable")]
+
+    def ans_cos(m: int) -> float:
+        v = [boot.get(f"{f}|{m}", {}).get("answer_success_perp_readout_cos") for f in (0, 1)]
+        v = [abs(x) for x in v if x is not None and x == x]
+        return max(v) if v else float("nan")
+    second_ok = [m for m in layers if ans_cos(m) == ans_cos(m) and ans_cos(m) < ANSWER_SUCCESS_MAX_COS]
     return {
         "layers": layers,
         "cos_task_success_perp_readout": _median([fold_mean("task_success_perp_readout", m) for m in layers]),
         "cos_task_success_perp_readout_ci_by_layer": {m: boot_mean(m, "readout", "ci") for m in layers},
         "cos_task_success_perp_readout_se": _median([boot_mean(m, "readout", "se") for m in layers]),
-        "cos_task_success_perp_readout_and_answer": _median([boot_mean(m, "readout_and_answer", "cos") for m in layers]),
+        "cos_task_success_perp_readout_and_answer": (_median([boot_mean(m, "readout_and_answer", "cos") for m in second_ok])
+                                                     if second_ok else "not assessable"),
+        "cos_task_success_perp_readout_and_answer_layers": second_ok,
+        "answer_success_perp_readout_cos_by_layer": {m: ans_cos(m) for m in layers},
         "cos_task_success_perp_readout_and_answer_ci_by_layer": {m: boot_mean(m, "readout_and_answer", "ci")
                                                                  for m in layers},
         "cos_task_success_perp_readout_disattenuated": _median(
@@ -814,8 +835,10 @@ def h4_rows(ab: dict, cos: dict, layers: list[int], boot: dict | None = None) ->
               + cos.get(f"cross_fold_task_success_perp_readout|1|{m}", float("nan"))) / 2 for m in layers]),
         "null_random_pair_sd": cos.get("random_pair_sd"),
         "cos_task_success_raw": _median([fold_mean("task_success", m) for m in layers]),
-        "steer_perp_over_task": _median([get(m, "steer_perp_over_task").get("ratio") for m in layers]),
-        "steer_perp_over_task_se": _median([get(m, "steer_perp_over_task").get("se") for m in layers]),
+        "steer_perp_over_task": (_median([get(m, "steer_perp_over_task").get("ratio") for m in steer_ok])
+                                 if steer_ok else "not assessable"),
+        "steer_perp_over_task_layers": steer_ok,
+        "steer_perp_over_task_se": _median([get(m, "steer_perp_over_task").get("se") for m in steer_ok]),
         "steer_success_perp_readout_share": _median([get(m, "steer_success_perp_readout").get("ratio") for m in layers]),
         "steer_task_share": _median([get(m, "steer_task").get("ratio") for m in layers]),
         "steer_success_raw_share": _median([get(m, "steer_success").get("ratio") for m in layers]),
@@ -849,7 +872,8 @@ def table_rows(report: dict, n_layers: int | None = None) -> dict:
         onset = ab.get("onset_layer")
         task = ab.get("task", {})
         g = ab.get("gap_neutral", {})
-        h4l = h4_layers(layers, n_layers or 0, arrival_last) if n_layers else []
+        defined = [a for a in (arrival_index, arrival_last) if a is not None and a == a]
+        h4l = h4_layers(layers, n_layers or 0, min(defined) if defined else None) if n_layers else []
         rows[s] = {
             "history_share": (None if not hs.get("defined") else
                               "high (>=0.3)" if hs["ci"][0] >= 0.3 else "low (<0.15)" if hs["ci"][1] < 0.15 else "between"),
@@ -858,7 +882,7 @@ def table_rows(report: dict, n_layers: int | None = None) -> dict:
             "single_direction_onset_layer": onset, "onset_read_on_layers": ab.get("onset_layers"),
             "onset_versus_arrival": onset_versus_arrival(onset, arrival_last,
                                                          ab["onset_layers"] if "onset_layers" in ab else layers,
-                                                         ab.get("deepest_upper")),
+                                                         ab.get("deepest_upper"), all_layers=layers),
             "task_last_sanity_share": ab.get("task_last", {}).get("share"),
             "task_direction_removed_at_chosen_layer": task.get("share"),
             "neutral_gap_ratio": g.get("ratio"),
@@ -872,15 +896,20 @@ def table_rows(report: dict, n_layers: int | None = None) -> dict:
 
 
 def sample_sizes(report: dict) -> dict:
-    """The calibration rule's output (amendment 2, B3; amendment 3, C6): per stratum, each summary measure's
-    game-bootstrap SE at the minimal pilot's n, and the n the full pilot needs for a 95% half-width of 0.075
-    (times the margin of 1.2). The bands are not moved."""
-    from wf.interp.analysis import SAMPLE_SIZE_MARGIN, TARGET_HALF_WIDTH, n_for_half_width
+    """The calibration rule's output (amendment 2, B3; amendment 3, C6; amendment 4, D5, D10): per stratum, each
+    summary measure's game-bootstrap SE at the minimal pilot's n, and the n the full pilot needs for a 95%
+    half-width of 0.075 (times the margin of 1.2); the stage-0 quantities (the H4 cosine, the direct-path share)
+    have an SE only, since stage 0 already uses every item of the fold. Then the plan: per stratum, the largest n
+    any patching measure needs and the largest any ablation measure needs, each capped at 400; where a cap binds,
+    the half-width each measure reaches at the cap. The bands are not moved."""
+    from wf.interp.analysis import (ABLATE_CAP_PER_STRATUM, PATCH_CAP_PER_STRATUM, SAMPLE_SIZE_MARGIN,
+                                    TARGET_HALF_WIDTH, n_for_half_width, plan_sizes)
 
     def nn(n: Any, se: Any) -> dict:
         se = float("nan") if se is None else se
         return {"n": n, "se": se, "n_needed": n_for_half_width(n or 0, se)}
 
+    na = "not applicable (stage 0 uses every item of the fold)"
     out: dict[str, Any] = {"target_half_width": TARGET_HALF_WIDTH, "margin": SAMPLE_SIZE_MARGIN}
     for s in ("step0", "later", "all"):
         noise = report["patching"]["noise"][s]
@@ -898,10 +927,23 @@ def sample_sizes(report: dict) -> dict:
         row["gap_ratio"] = nn(ab.get("n_failures", 0) + ab.get("n_successes", 0), g.get("ratio_se"))
         h4 = report.get("table_rows", {}).get(s, {}).get("h4", {})
         by = ab.get("by_layer", {})
-        row["h4"] = {"cos_task_success_perp_readout": nn(ab.get("n_failures"), h4.get("cos_task_success_perp_readout_se")),
+        row["h4"] = {"cos_task_success_perp_readout": {"se": h4.get("cos_task_success_perp_readout_se"),
+                                                       "n_needed": na},
                      "steer_perp_over_task": nn(ab.get("n_failures"), h4.get("steer_perp_over_task_se")),
                      "perp_over_task_removal": nn(ab.get("n_failures"), _median(
                          [(by.get(m) or {}).get("perp_over_task_removal", {}).get("se") for m in h4.get("layers", [])]))}
+        dp = (report.get("direct_path") or {}).get(s, {})
+        row["direct_path_share"] = {m: {"se": v.get("se"), "n_needed": na} for m, v in dp.items()}
+        patch_m = {k: row[k] for k in ("history_share", "action_share", "object_mention_share", "arrival_answer_position")}
+        abl_m = {**{f"removal|{m}": v for m, v in row["removal_by_layer"].items()}, "gap_ratio": row["gap_ratio"],
+                 "steer_perp_over_task": row["h4"]["steer_perp_over_task"],
+                 "perp_over_task_removal": row["h4"]["perp_over_task_removal"]}
+        row["plan"] = {
+            "patching": plan_sizes({k: v["n_needed"] for k, v in patch_m.items()}, PATCH_CAP_PER_STRATUM,
+                                   {k: (v["n"], v["se"]) for k, v in patch_m.items()}),
+            "ablation": plan_sizes({k: v["n_needed"] for k, v in abl_m.items()}, ABLATE_CAP_PER_STRATUM,
+                                   {k: (v["n"], v["se"]) for k, v in abl_m.items()}),
+        }
         out[s] = row
     return out
 

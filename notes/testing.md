@@ -112,6 +112,27 @@ Review 3 put 40 bugs into the code (K1 to K40); 19 survived, most of them in the
 
 The other 21 of review 3's mutants were already killed by earlier tests and stay in the list. From 2026-11-21 the mutation check counts a mutant as killed only when pytest exits with code 1 (a named test failed); a collection error, an internal error or a run stopped from outside is reported as inconclusive, never as a kill. All 176 interpretability mutants were rerun under that rule. Review 3's direct-path simulation is a test (`test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it`).
 
+## Interpretability pilot, review 4 (2026-11-21, branch `interp`)
+
+Review 4 put 32 bugs into the code (N1 to N32, listed here as R4-N1 to R4-N32); 22 survived. N18 (the readout centred within cells only through X) is equivalent and left out: once X is centred within cells, centring y as well leaves a ridge without intercept unchanged. Fix round 4 added value tests and 15 mutants of its own code (M1 to M16 without M3, which is equivalent: the onset is always one of the kept layers, so counting it in the excluded-between check changes nothing). All 222 interpretability mutants are run with a CPU torch environment under the strict rule (a kill only on pytest exit code 1). Killing tests (file `tests/test_interp_pilot.py`):
+
+| Mutant | Killed by |
+|---|---|
+| R4-N2 direct path along W_U without gamma; R4-N3 weighted by the ablation sample; R4-N4 on both folds | `test_minimal_pilot_end_to_end` (non-unit final-norm weight; the direct path recomputed on every fold-0 failure) |
+| R4-N5 direct_path_share without item weights | `test_direct_path_report_is_the_readout_lens_at_the_final_scale` |
+| R4-N7 onset on every profile layer; R4-N8 deepest bound from the deepest profile layer | `test_onset_and_deepest_bound_come_from_the_kept_layers` |
+| R4-N10 arrival at the deepest kept layer; R4-N11 upper bound of exactly 0.3; M1 the excluded-between check | `test_an_excluded_layer_between_arrival_and_onset_makes_it_not_assessable` |
+| R4-N14, R4-N15 steer_relative draws | `test_steer_relative_bootstrap_draws_carry_the_weights` |
+| R4-N17 raw success steering in the ratio; M4, M5 the steering gate; M16 linearity ratio | `test_steering_ratio_is_gated_on_the_task_steering_and_uses_the_readout_free_direction` |
+| R4-N19 answer direction centred by outcome only | `test_answer_direction_is_centred_within_verbs_too` |
+| R4-N20 verb weights in the cosine bootstrap; R4-N29 success direction fixed across draws; R4-N30 projection basis not orthonormalised; M12 disattenuation at any positive reliability | `test_cosine_bootstrap_details` |
+| R4-N21 answer direction from failures only; R4-N22 second projection without the readout; M10 answer cosine with the raw success direction | `test_h4_cosine_report_projects_the_readout_and_the_answer_direction` |
+| R4-N23 unpaired gap ratio | `test_gap_ratio_interval_is_paired` |
+| R4-N24 ablation minimum scaled against 100; R4-N26 mention disattenuated by the task's reliability | `test_ablation_minimum_scaled_against_75_and_mention_disattenuated_by_its_own_reliability` |
+| R4-N27 arrival SE from the layer before; M2 table row without the whole profile (a case with layer 16 excluded); M6 steering median over every layer (two layers not assessable); M7 H4 layers cut at the later arrival; M8 cosine sample size computed; M9 second projection at every layer; M13, M14 plan | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| M11 NaN upper bound kept | `test_onset_and_deepest_bound_come_from_the_kept_layers` |
+| M15 half-width at the cap without the margin | `test_table_rows_read_interval_bounds_onset_and_h4` (the plan when a cap binds) |
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:

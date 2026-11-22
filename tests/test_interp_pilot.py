@@ -478,14 +478,16 @@ def _report(hs, arrival=0.5, onset=8, profile=None, arrival_last=16, perp_ok=Tru
     by = {m: {"perp_over_task_removal": ({"assessable": True, "ratio": 0.5, "se": 0.1} if perp_ok and m != 12 else
                                          {"assessable": False, "ratio": 5.0}),
               "steer_success_perp_readout": {"ratio": 0.6}, "steer_task": {"ratio": 1.2},
-              "steer_perp_over_task": {"ratio": 0.5, "se": 0.08}, "steer_success": {"ratio": 0.9}} for m in layers}
+              "steer_perp_over_task": ({"ratio": 0.5, "se": 0.08, "assessable": True} if m not in (4, 8) else
+                                       {"ratio": 9.0, "se": 3.0, "assessable": False}),
+              "steer_success": {"ratio": 0.9}} for m in layers}
     cos = {f"{f}|{m}": {"task_success_perp_readout": 0.4 if f == 0 else 0.2, "mention_success_perp_readout": 0.05,
                         "task_success": 0.7, "task_success_perp_readout_disattenuated": 0.5}
            for f in (0, 1) for m in layers}
     cos.update({f"between_folds|{m}": 0.8 for m in layers})
     cos.update({f"cross_fold_task_success_perp_readout|0|{m}": 0.3 for m in layers})
     cos.update({f"cross_fold_task_success_perp_readout|1|{m}": 0.1 for m in layers})
-    last_curve = {"se": [0.07] * 36}
+    last_curve = {"se": [m / 100 for m in range(36)]}
     noise = {"history_share": hs, "arrival_layer": arrival, "arrival_last_grid": arrival_last, "n_items": 60,
              "action_share": {"se": 0.04}, "object_mention_share": {"defined": True, "se": 0.09},
              "curves": {"last": last_curve}}
@@ -493,7 +495,8 @@ def _report(hs, arrival=0.5, onset=8, profile=None, arrival_last=16, perp_ok=Tru
           "task": {"share": 0.7}, "gap_neutral": {"ratio": 0.95, "ratio_se": 0.03}, "n_failures": 50,
           "n_successes": 20}
     boot = {f"{f}|{m}": {"readout": {"cos": 0.3, "ci": (0.1, 0.5), "se": 0.1},
-                         "readout_and_answer": {"cos": 0.2, "ci": (0.0, 0.4), "se": 0.1}} for f in (0, 1) for m in layers}
+                         "readout_and_answer": {"cos": 0.2 if m != 8 else 0.9, "ci": (0.0, 0.4), "se": 0.1},
+                         "answer_success_perp_readout_cos": 0.2 if m != 8 else -0.7} for f in (0, 1) for m in layers}
     return {"patching": {"noise": {s: noise for s in ("step0", "later", "all")}},
             "ablation": {"layers": layers, **{s: ab for s in ("step0", "later", "all")}}, "cosines": cos,
             "h4_cosines": boot}
@@ -518,9 +521,17 @@ def test_table_rows_read_interval_bounds_onset_and_h4():
     assert h4["goal_role"]["cos_mention_success_perp_readout"] == pytest.approx(0.05)
     assert "null_mention_success_perp_readout" not in h4  # a mention is an object match, not a null for H4
     assert h4["null_between_folds_task"] == pytest.approx(0.8)
-    assert h4["steer_perp_over_task"] == pytest.approx(0.5)
+    # the median over the assessable layer only (12): over every H4 layer it would be 9.0
+    assert h4["steer_perp_over_task"] == pytest.approx(0.5) and h4["steer_perp_over_task_layers"] == [12]
+    assert h4["cos_task_success_perp_readout_and_answer_layers"] == [4, 12]  # |cos(answer, s_perp)| 0.7 at 8
+    assert h4["steer_perp_over_task_se"] == pytest.approx(0.08)
     assert h4["perp_success_over_task_removal"] == pytest.approx(0.5)
     assert h4["perp_success_over_task_removal_layers"] == [4, 8]  # 12 is not assessable
+    # H4 layers are cut at the earlier of the two arrivals (amendment 4, D4)
+    a = PI.table_rows(_report({"defined": False}, arrival=0.5, arrival_last=None), 36)
+    assert a["all"]["h4"]["layers"] == [4, 8, 12, 16]  # only the final-group arrival 17.5
+    b = PI.table_rows(_report({"defined": False}, arrival=10 / 35, arrival_last=20), 36)
+    assert b["all"]["h4"]["layers"] == [4, 8]  # 10 is earlier than 20
     none = PI.table_rows(_report({"defined": True, "max": 0.4, "ci": (0.31, 0.5)}, perp_ok=False), 36)
     assert none["all"]["h4"]["perp_success_over_task_removal"] == "not assessable"
     mid = PI.table_rows(_report({"defined": False}, onset=20), 36)  # 20 against the answer-position arrival 16
@@ -530,6 +541,10 @@ def test_table_rows_read_interval_bounds_onset_and_h4():
         excl["ablation"][st] = {**excl["ablation"][st], "onset_layers": []}
     assert PI.table_rows(excl, 36)["all"]["onset_versus_arrival"].startswith(
         "not assessable (every profile layer excluded")  # not a fallback to the whole profile
+    btw = _report({"defined": False}, onset=20)  # 16 (at the arrival) excluded by the direct-path rule
+    for st in ("step0", "later", "all"):
+        btw["ablation"][st] = {**btw["ablation"][st], "onset_layers": [4, 8, 12, 20, 24, 28]}
+    assert PI.table_rows(btw, 36)["all"]["onset_versus_arrival"].startswith("not assessable (a layer between")
     late = PI.table_rows(_report({"defined": False}, onset=24), 36)
     assert late["all"]["onset_versus_arrival"] == "after arrival" and late["all"]["history_share"] is None
     r = _report({"defined": True, "max": 0.4, "ci": (0.31, 0.5)})
@@ -540,10 +555,20 @@ def test_table_rows_read_interval_bounds_onset_and_h4():
     ss = PI.sample_sizes(rep)
     assert ss["all"]["history_share"]["n_needed"] == A.n_for_half_width(60, 0.06)
     assert ss["all"]["object_mention_share"]["n_needed"] == A.n_for_half_width(60, 0.09)
-    assert ss["all"]["arrival_answer_position"]["se"] == 0.07
+    assert ss["all"]["arrival_answer_position"]["se"] == 0.16  # the SE at the arrival layer, 16
+    assert ss["all"]["h4"]["cos_task_success_perp_readout"]["n_needed"].startswith("not applicable")
+    pl = ss["all"]["plan"]
+    want = max(A.n_for_half_width(60, x) for x in (0.06, 0.04, 0.09, 0.16))
+    assert pl["patching"]["n_wanted"] == want and pl["patching"]["n"] == min(want, 400)
+    assert pl["patching"]["cap_binds"] is (want > 400)
     assert ss["all"]["gap_ratio"]["n_needed"] == A.n_for_half_width(70, 0.03)
     assert ss["all"]["h4"]["steer_perp_over_task"]["n_needed"] == A.n_for_half_width(50, 0.08)
     assert ss["all"]["h4"]["cos_task_success_perp_readout"]["se"] == pytest.approx(0.1)
+    # the plan when a cap binds: half-widths at the cap, bands unchanged
+    big = A.plan_sizes({"x": 900, "y": 100}, 400, {"x": (60, 0.2), "y": (60, 0.05)})
+    assert big["n"] == 400 and big["cap_binds"] and big["half_width_at_cap"]["x"] == pytest.approx(
+        1.96 * 0.2 * np.sqrt(1.2 * 60 / 400))
+    assert A.plan_sizes({"x": 90, "y": None}, 400, {})["n"] == 90 and A.plan_sizes({}, 400, {})["n"] is None
     assert ss["step0"]["removal_by_layer"][8]["n_needed"] == A.n_for_half_width(50, 0.05)
 
 
@@ -804,9 +829,20 @@ def test_direct_path_report_is_the_readout_lens_at_the_final_scale():
         den += dd[f"x{k}|yn|aligned"] - dd[f"x{k}|yn|swapped"]
     out = PI.direct_path_report(_Store0(arrays, dd), fails, [2, 3], n_layers, r, 1e-6, None, B=50)
     assert out["all"][2]["share"] == pytest.approx(num / den) and out["later"][2]["n"] == 10 and "step0" not in out
-    # at the last layer the lens is the readout itself, so the share is the readout's own effect over itself
-    lam_last = PI.direct_path_report(_Store0(arrays, dd), fails, [4], n_layers, r, 1e-6, None, B=20)["all"][4]["share"]
-    assert lam_last != lam_last or isinstance(lam_last, float)
+    # at the last layer the lens is the readout itself: with D the readout of the last residual, the share is 1
+    exact = {k: float(arrays[k][-1] @ r / np.sqrt((arrays[k][-1] ** 2).mean() + 1e-6)) for k in arrays}
+    lam_last = PI.direct_path_report(_Store0(arrays, exact), fails, [4], n_layers, r, 1e-6, None, B=20)
+    assert lam_last["all"][4]["share"] == pytest.approx(1.0)
+    # with item weights the share is the weighted ratio (direct_path_share itself)
+    ids = [t["id"] for t in fails]
+    w = {i: (3.0 if k < 5 else 1.0) for k, i in enumerate(ids)}
+    dA, dS = np.arange(10.0), np.zeros(10)
+    DA, DS = np.arange(10.0) * 0 + 4.0, np.zeros(10)
+    got = A.direct_path_share(dA, dS, DA, DS, [t["game_id"] for t in fails], ids, w, B=50)
+    wv = np.array([w[i] for i in ids])
+    assert got["share"] == pytest.approx((wv @ dA) / (wv @ DA))
+    W = A.game_weights([t["game_id"] for t in fails], 50, 0) * wv[None, :]
+    assert got["ci"] == pytest.approx(A._interval(((W @ dA) / (W @ DA))[1:]))
 
 
 def test_ablation_summary_reads_the_onset_on_layers_free_of_the_direct_path():
@@ -1012,6 +1048,215 @@ def test_minimums_scale_with_a_smaller_draw():
     assert PI.scaled_minimum(20, 30, 75) == 8
 
 
+# ---------------- amendment 4 (review 4) ----------------
+
+
+def test_an_excluded_layer_between_arrival_and_onset_makes_it_not_assessable():
+    prof = A.profile_layers(36)
+    rem = {m: {"ci": (0.65, 0.9)} if m >= 12 else {"ci": (0.0, 0.2)} for m in prof}
+
+    def row(direct):
+        kept = A.direct_path_kept(prof, direct)
+        onset = A.onset_layer({m: rem[m] for m in kept})
+        return A.onset_versus_arrival(onset, 12, kept, rem[max(kept)]["ci"][1] if kept else None, all_layers=prof)
+    # review 4's cases: arrival 12; the naive onset is 12
+    assert row({12: {"ci": (0.1, 0.32)}}).startswith("not assessable (a layer between arrival and onset")
+    assert row({12: {"ci": (0.2, 0.4)}, 16: {"ci": (0.2, 0.35)}}).startswith("not assessable (a layer between")
+    assert row({m: {"ci": (0.3, 0.6)} for m in (20, 24, 28)}) == "at or before arrival"
+    assert row({m: {"ci": (0.3, 0.6)} for m in range(12, 29, 4)}) == "not assessable (arrival after the profile)"
+    # a genuine "after arrival": nothing between arrival and onset was excluded
+    assert A.onset_versus_arrival(16, 8, prof, all_layers=prof) == "after arrival"
+    assert A.onset_versus_arrival(16, 8, [4, 8, 16, 20, 24, 28], all_layers=prof).startswith("not assessable (a layer")
+    # the arrival exactly at the deepest kept layer is assessable; an upper bound of exactly 0.3 is not "no direction"
+    assert A.onset_versus_arrival(28, 28, prof) == "at or before arrival"
+    assert A.onset_versus_arrival(None, 16, prof, deepest_upper=0.3).startswith("inconclusive")
+
+
+def test_onset_and_deepest_bound_come_from_the_kept_layers():
+    recs, fold_of, succ = _ablate_recs({0: 4, 1: 4})
+    for r in recs:  # layer 4 removes little, layer 8 removes everything
+        if r["goal"] == "aligned":
+            r["edits"].update({"task|4": 3.8, "task|8": 1.0})
+    plain = A.ablation_summary(recs, fold_of, succ, [4, 8], B=50)
+    assert plain["all"]["onset_layer"] == 8
+    out = A.ablation_summary(recs, fold_of, succ, [4, 8], B=50, direct={"all": {8: {"ci": (0.2, 0.5)}}})
+    assert out["all"]["onset_layers"] == [4] and out["all"]["onset_layer"] is None
+    assert out["all"]["deepest_upper"] == pytest.approx(out["all"]["profile"][4]["ci"][1])
+    assert out["all"]["deepest_upper"] != pytest.approx(out["all"]["profile"][8]["ci"][1])
+    # a NaN upper bound is excluded; a layer with no estimate is kept
+    assert A.direct_path_kept([4, 8], {4: {"ci": (float("nan"), float("nan"))}}) == [8]
+    assert A.direct_path_kept([4, 8], {4: {"n": 0}}) == [8] and A.direct_path_kept([4, 8], {8: {"ci": (0, 0.1)}}) == [4, 8]
+
+
+def _steer_recs(task_gain, perp_gain=0.5, raw_gain=2.0, n=12):
+    games = {f"i{k}": f"g{k % 4}" for k in range(n)}
+    by = {"aligned": {}, "swapped": {}, "absent": {}}
+    recs = []
+    for k in range(n):
+        i = f"i{k}"
+        tg = task_gain + (0.1 if k % 2 else -0.1)
+        ed = {"steer_task|4": 1.0 + tg, "steer_success_perp_readout|4": 1.0 + perp_gain, "steer_success|4": 1.0 + raw_gain,
+              "task|4": 1.0}
+        for goal, d, e in (("aligned", 4.0, {"task|4": 2.5}), ("swapped", 1.0, ed), ("absent", 0.0, {"task|4": 0.0})):
+            recs.append({"id": i, "game_id": games[i], "goal": goal, "d": d, "edits": e, "edit_clean": {x: d for x in e},
+                         "history_len": 2})
+    return recs, {f"i{k}": 0 for k in range(n)}
+
+
+def test_steering_ratio_is_gated_on_the_task_steering_and_uses_the_readout_free_direction():
+    recs, fold_of = _steer_recs(task_gain=2.0)
+    out = A.ablation_summary(recs, fold_of, set(), [4], B=100)
+    b = out["all"]["by_layer"][4]
+    assert b["steer_task"]["ratio"] == pytest.approx(2.0 / 3.0) and b["steer_perp_over_task"]["assessable"]
+    assert b["steer_perp_over_task"]["ratio"] == pytest.approx(0.5 / 2.0)  # the readout-free direction, not raw
+    weak, fo = _steer_recs(task_gain=0.1)
+    bw = A.ablation_summary(weak, fo, set(), [4], B=100)["all"]["by_layer"][4]
+    assert bw["steer_perp_over_task"]["assessable"] is False  # steering along u barely moves the readout
+    lin = b["linearity_steer_task_vs_removal"]
+    assert lin["task_removal"] == pytest.approx(0.5) and lin["ratio"] == pytest.approx((2.0 / 3.0) / 0.5)
+    assert A.gate_on_lower_bound({"ci": (0.29, 0.5)}, {"ratio": 1.0}, "ratio", 0.3)["assessable"] is False
+    assert A.gate_on_lower_bound({"ci": (0.3, 0.5)}, {"ratio": 1.0}, "ratio", 0.3)["assessable"] is True
+
+
+def test_steer_relative_bootstrap_draws_carry_the_weights():
+    rng = np.random.default_rng(12)
+    n = 24
+    ids = [f"i{k}" for k in range(n)]
+    games = {i: f"g{k % 6}" for k, i in enumerate(ids)}
+    x, y = rng.uniform(0, 1, n), rng.uniform(1, 2, n)
+    by = {"swapped": {i: {"d": 0.0, "edits": {"a": float(x[k]), "b": float(y[k])}, "edit_clean": {"a": 0.0, "b": 0.0}}
+                      for k, i in enumerate(ids)}}
+    w = {i: (2.5 if k < 8 else 1.0) for k, i in enumerate(ids)}
+    got = A.steer_relative(by, ids, lambda i: "a", lambda i: "b", games, B=100, weights=w)
+    W = A.game_weights([games[i] for i in ids], 100, 0) * np.array([w[i] for i in ids])[None, :]
+    r = (W @ x) / (W @ y)
+    assert got["ratio"] == pytest.approx(r[0]) and got["ci"] == pytest.approx(A._interval(r[1:]))
+
+
+def test_gap_ratio_interval_is_paired():
+    rng = np.random.default_rng(13)
+    n = 30
+    ids = [f"i{k}" for k in range(n)]
+    games = {i: f"g{k % 6}" for k, i in enumerate(ids)}
+    clean = rng.normal(0, 1, n) + np.array([2.0] * 10 + [0.0] * 20)
+    edited = clean * 0.8 + rng.normal(0, 0.1, n)
+    recs = {i: {"d": float(clean[k]), "edits": {"t": float(edited[k])}, "edit_clean": {"t": float(clean[k])}}
+            for k, i in enumerate(ids)}
+    g = A.gap(recs, ids[:10], ids[10:], lambda i: "t", games, B=200)
+    W = A.game_weights([games[i] for i in ids], 200, 0)
+    y = np.array([1.0] * 10 + [0.0] * 20)
+
+    def gp(v):
+        return (W @ (v * y)) / (W @ y) - (W @ (v * (1 - y))) / (W @ (1 - y))
+    r = gp(edited) / gp(clean)
+    assert g["ratio_ci"] == pytest.approx(A._interval(r[1:]))
+
+
+def test_answer_direction_is_centred_within_verbs_too():
+    rng = np.random.default_rng(14)
+    d, n = 12, 400
+    e = np.eye(d)
+    outcome = [k % 2 == 0 for k in range(n)]
+    verbs = ["take" if k % 3 else "move" for k in range(n)]
+    X = rng.standard_normal((n, d))
+    X += np.array([[2.0 * (v == "take")] for v in verbs]) * e[2][None, :]
+    Dn = 1.5 * (X @ e[4]) + 3.0 * np.array([v == "take" for v in verbs], dtype=float)
+    ans = A.answer_direction(X, Dn, outcome, verbs)
+    assert abs(ans @ e[4]) > 0.95 and abs(ans @ e[2]) < 0.15
+
+
+def test_cosine_bootstrap_details():
+    rng = np.random.default_rng(15)
+    d, n = 10, 240
+    e = np.eye(d)
+    games = [f"g{k % 12}" for k in range(n)]
+    # two verbs with different success directions and very unequal failure counts: the within-verb weights matter
+    sv = ["take"] * 120 + ["move"] * 120
+    fv = ["take"] * 230 + ["move"] * 10
+    succ = rng.standard_normal((n, d)) + np.array([e[1] if v == "take" else e[2] for v in sv]) * 2
+    fail = rng.standard_normal((n, d))
+    diffs = np.tile(e[0] + e[1], (n, 1))  # the task difference is the same in every item: u is fixed
+    b = A.projected_cosine_boot(diffs, games, succ, sv, games, fail, fv, games,
+                                {"r": [e[0]], "two": [e[0], e[0] + e[3]]}, B=200)
+    s_hat = A.success_direction(succ, fail, sv, fv)
+    want = float(A.project_unit(e[0] + e[1], e[0]) @ A.project_unit(s_hat, e[0]))
+    assert b["r"]["cos"] == pytest.approx(want)  # the within-verb weights n_s n_f / (n_s + n_f)
+    assert b["r"]["ci"][1] - b["r"]["ci"][0] > 0.01  # s is re-estimated in every draw, so the interval has width
+    u2 = A.project_out_all(e[0] + e[1], [e[0], e[0] + e[3]])
+    s2 = A.project_out_all(s_hat, [e[0], e[0] + e[3]])
+    assert b["two"]["cos"] == pytest.approx(float(u2 @ s2))  # a non-orthogonal pair is orthonormalised first
+    assert A.disattenuated(0.3, 0.19, 0.9) != A.disattenuated(0.3, 0.19, 0.9)  # reliability below 0.2: undefined
+    assert A.disattenuated(0.3, 0.2, 0.9) == pytest.approx(0.3 / np.sqrt(0.18))
+
+
+def test_h4_cosine_report_projects_the_readout_and_the_answer_direction():
+    from tests.test_interp import _item
+
+    rng = np.random.default_rng(16)
+    d = 8
+    e = np.eye(d)
+    arrays, dd, fails, succs = {}, {}, [], []
+    for f in (0, 1):
+        for k in range(40):
+            t = _item(id=f"F{f}_{k}", game_id=f"G{f}_{k % 5}", history_len=2, action="take mug 1 from cabinet 3")
+            fails.append(t)
+            base = rng.standard_normal(d)
+            arrays[f"{t['id']}|yn|aligned"] = np.stack([base + e[0] + e[1] + 0.3 * rng.standard_normal(d)] * 3)
+            arrays[f"{t['id']}|yn|swapped"] = np.stack([base] * 3)
+            arrays[f"{t['id']}|yn|absent"] = np.stack([base] * 3)
+            s = _item(id=f"S{f}_{k}", game_id=f"G{f}_{k % 5}", history_len=2, action="take mug 1 from cabinet 3")
+            succs.append(s)
+            arrays[f"{s['id']}|yn|absent"] = np.stack([rng.standard_normal(d) + e[1] + e[2]] * 3)
+    for k_, v in arrays.items():
+        dd[k_] = float(v[0] @ (e[1] + e[3]))
+    store = _Store0(arrays, dd)
+    fold = {f"G{f}_{k}": f for f in (0, 1) for k in range(5)}
+    out = PI.h4_cosine_report(store, {"failures": fails, "successes": succs}, fold, [1], e[0], B=50)
+    fl = [t for t in fails if fold[t["game_id"]] == 0]
+    sc = [t for t in succs if fold[t["game_id"]] == 0]
+    X = lambda ts, g: np.array([arrays[f"{t['id']}|yn|{g}"][1] for t in ts])  # noqa: E731
+    neutral = np.vstack([X(fl, "absent"), X(sc, "absent")])
+    Dn = [dd[f"{t['id']}|yn|absent"] for t in fl + sc]
+    ans = A.answer_direction(neutral, Dn, [False] * 40 + [True] * 40, ["take"] * 80)
+    want = A.projected_cosine_boot(X(fl, "aligned") - X(fl, "swapped"), [t["game_id"] for t in fl], X(sc, "absent"),
+                                   ["take"] * 40, [t["game_id"] for t in sc], X(fl, "absent"), ["take"] * 40,
+                                   [t["game_id"] for t in fl], {"a": [e[0], ans], "b": [ans]}, B=50, seed=0)
+    assert out["0|1"]["readout_and_answer"]["cos"] == pytest.approx(want["a"]["cos"])
+    assert want["a"]["cos"] != pytest.approx(want["b"]["cos"])  # the readout direction is in the second projection
+    s_perp = A.project_unit(A.success_direction(X(sc, "absent"), X(fl, "absent"), ["take"] * 40, ["take"] * 40), e[0])
+    assert out["0|1"]["answer_success_perp_readout_cos"] == pytest.approx(float(ans @ s_perp))
+
+
+def test_ablation_minimum_scaled_against_75_and_mention_disattenuated_by_its_own_reliability():
+    from tests.test_interp import _item
+
+    fails = [_item(id=f"a{k:03d}", game_id=f"g{k % 4}", history_len=0 if k % 2 else 3,
+                   determination_reason="hands_full") for k in range(200)]
+    fold = {f"g{k}": 0 for k in range(4)}
+    # the default minimum of 20 is set for 75 failures: scaled to 30 items it is 8 (against 100 it would be 6)
+    assert PI.scaled_minimum(20, 30, 75) == 8 and PI.scaled_minimum(20, 30, 100) == 6
+    few = [t for t in fails if t["history_len"] > 0] + [t for t in fails if t["history_len"] == 0][:12]
+    recs2 = [{"id": t["id"], "goal": g, "fmt": "yn"} for t in few for g in ("aligned", "swapped", "absent")]
+    sel2, _ = PI.ablation_selection({"n_failures_per_fold": 30, "n_successes_per_fold": 0},
+                                    {"failures": few, "successes": []}, recs2, fold, (0,))
+    assert sum(t["history_len"] == 0 for t in sel2[0]) == 8  # proportional would give 3
+    rng = np.random.default_rng(17)
+    d = 16
+    lens = rng.standard_normal(d)
+
+    def unit():
+        return _unit(rng.standard_normal(d))
+    t0, s0, m0 = unit(), unit(), unit()
+    dirs = {0: {5: {"task": t0, "success": s0, "mention": m0}},
+            1: {5: {"task": _unit(t0 + 0.2 * unit()), "success": _unit(s0 + 1.5 * unit()), "mention": _unit(m0 + 0.6 * unit())}}}
+    cos = PI.fold_cosines(dirs, lens, [5])
+    c = cos["0|5"]
+    want = A.disattenuated(c["mention_success_perp_readout"], cos["between_folds_mention_perp_readout|5"],
+                           cos["between_folds_success_perp_readout|5"])
+    assert c.get("mention_success_perp_readout_disattenuated", float("nan")) == pytest.approx(want, nan_ok=True)
+    assert cos["between_folds_mention_perp_readout|5"] != pytest.approx(cos["between_folds_task_perp_readout|5"])
+
+
 # ---------------- the runs end to end on a tiny model ----------------
 
 OBJS = ["mug", "plate", "bowl", "apple", "cup", "pen"]
@@ -1076,6 +1321,8 @@ def pilot_env(pilot_tok, monkeypatch, tmp_path):
     monkeypatch.setenv("RUNS_DIR", str(tmp_path))
     (tmp_path / "FILED.txt").write_text("filed_date: x\n")
     q = parts(_qwen(len(pilot_tok), layers=4))
+    with torch.no_grad():  # a non-unit final-norm weight, so the readout direction differs from W_U[Yes] - W_U[No]
+        q.norm.weight.copy_(torch.linspace(0.5, 1.5, q.d_model))
     monkeypatch.setattr(PI, "load_model", lambda cfg: (q, pilot_tok))
     monkeypatch.setattr(PI, "load_sets", lambda cfg: {"failures": FAILS, "successes": SUCCS})
     monkeypatch.setattr(PI, "all_items", lambda cfg: FAILS + SUCCS)
@@ -1265,6 +1512,14 @@ def test_minimal_pilot_end_to_end(pilot_env):
     hc = next(iter(rep["h4_cosines"].values()))
     assert {"readout", "readout_and_answer"} <= set(hc) and hc["readout"]["cos"] != hc["readout_and_answer"]["cos"]
     assert "direct_path" in rep["ablation"]["all"]
+    f0 = [t for t in FAILS if fold[t["game_id"]] == 0]
+    s0m = json.loads((root / "interp_pilot_stage0" / "manifest.json").read_text())
+    want = PI.direct_path_report(PI._stage0_store({}), f0, [1, 2], 4, lens_dir, s0m["norm_eps"], None, 50)
+    assert rep["direct_path"]["all"]["1"]["share"] == pytest.approx(want["all"][1]["share"])
+    assert rep["direct_path"]["all"]["1"]["n"] == len(f0)
+    assert not np.allclose(lens_dir, np.load(root / "interp_pilot_stage0" / "readout_vec.npy"))  # gamma is not 1
+    assert "linearity_steer_task_vs_removal" in rep["ablation"]["all"]["by_layer"]["1"]
+    assert "answer_success_perp_readout_cos" in hc
     for row in rep["table_rows"].values():
         assert not any(f"H{k}" in str(row["onset_versus_arrival"]) for k in range(1, 7))
     # pooled numbers are weighted back to the population (the step-0 quota oversamples step 0)
