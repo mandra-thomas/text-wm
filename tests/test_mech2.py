@@ -729,13 +729,16 @@ def test_end_to_end_two_shards_then_analysis(mock_root):
         assert set(m[tag]["readout_both_formats"]) == set(mech2.PREDICTIONS) | {"summary", "rivals"}
         assert m["integrity"][tag]["status"] == "complete" and m["integrity"][tag]["n_hash_mismatch"] == 0
         assert set(m[tag]["mixture_readout"]) == {"P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed",
-                                                  "M_mention_component"}
+                                                  "M_mention_residual", *mech2.M_HALVES}
         assert set(m[tag]["secondary_named"]) >= set(mech2.SECONDARY_PREDICTIONS) - {"H7b_desire_check_known_vs_unknown"}
     # the scoring config left Mistral out: reported as not scored, no block
     assert m["models_not_scored"] == ["mistral-7b-v0.3"] and "mistral-7b-v0.3" not in m
     assert m["items"]["n_union"] == len(mech2.battery_items(primary, 30)["union"])
     status = (mock_root / "mech2_smoke_analysis" / "STATUS.md").read_text()
-    assert "yes/no" in status and "untested" in status and "cannot be the sole account" in status
+    assert "untested" in status and "cannot be the sole account" in status
+    # each primary contrast with its two-candidate estimate and category and its yes/no category (review 4: the S1
+    # line also says "yes/no", so the pattern is checked, not the word)
+    assert re.search(r"P1 -?\d+\.\d\d \([A-Z_]+; yes/no [A-Z_]+\), P2 ", status), status
 
 
 def test_resume_scores_nothing_twice(mock_root):
@@ -1252,7 +1255,7 @@ def test_p8_reads_p7_items_only():
     n7, n8 = (fam["contrasts"][c]["n_items"] for c in ("P7_negated_existence", "P8_negated_vs_affirmed"))
     assert n7 == n8 == sum(mech2.p7_eligible(t) for t in items) == sum(mech2.is_take(t) for t in items) - holds
     block = _block(items, FINGERPRINTS["H2_evidence"])  # M and the placebo read the same items (review 3)
-    assert block["mixture_readout"]["M_mention_component"]["yn"]["n_items"] == n7
+    assert block["mixture_readout"]["M_mention_residual"]["yn"]["n_items"] == n7
     assert block["secondary_named"]["S3_P8_net_of_placebo"]["by_format"]["cand"]["n_items"] == n7
 
 
@@ -1356,6 +1359,11 @@ def test_p5_lift_reads_p5_items_only():
         assert block["secondary"]["P5_against_cancelled_lift"][f]["n_items"] == len(pops["p5"])
 
 
+# Phrases that would attribute part of the effect to salience on the strength of M (withdrawn after review 4)
+SALIENCE_ATTRIBUTION = ("salience is likely", "likely part of the effect", "salience is part of the effect",
+                        "upper bound on salience", "salience contributes to", "salience plays")
+
+
 def _claims_obs():
     """Zones read as task as evidence predicts them: salience is contradicted on P5, P7 and P8 only."""
     return {"P1_keep_vs_ignore": ("Z",), "P2_hope_polarity": ("Z",), "P3_mention_without_need": ("S",),
@@ -1369,44 +1377,49 @@ def _mention(lo, hi, estimable=True):
 
 
 def test_summary_sentences_on_salience_contradicted_only_by_claims():
-    """Review 3, must-fix 1: the two fixed sentences, and when they are not given."""
+    """Review 3, must-fix 1, as amended after review 4 and the adversarial check of M (a mention-associated residual
+    after averaging opposing claims, never read as salience): the fixed sentences, and when they are not given."""
     ro = mech2.readout(_claims_obs())
     assert [c for c, v in ro["H3_salience"]["per_contrast"].items() if v == "contradicted"] == list(mech2.CLAIM_CONTRASTS)
     j = mech2.joint_readout(ro, ro, _mention(0.3, 0.7))
     text = j["summary"]["reading"]
-    assert ("Salience cannot be the sole account, but a mention component remains with the claim balanced (r = 0.50 "
-            "[0.30, 0.70] two-candidate; 0.50 [0.30, 0.70] yes/no): salience is likely part of the effect.") in text
+    assert (". Salience cannot be the sole account. A mention-associated residual of r = 0.50 [0.30, 0.70] two-candidate "
+            "and 0.50 [0.30, 0.70] yes/no remains after averaging opposing claims; it is consistent with salience but "
+            "also with asymmetric processing of affirmations and denials, so it does not show that salience contributes. "
+            "Word overlap with the action would give the same.") in text
+    for phrase in SALIENCE_ATTRIBUTION:
+        assert phrase not in text
     assert ("H3 is contradicted only on contrasts that add an explicit claim (done; the user's report). This shows the "
             "model reads such claims, not that the goal effect comes from evidence rather than salience; see M.") in text
-    assert j["summary"]["salience_likely_part"] and j["summary"]["claims_read_not_evidence_shown"]
+    assert j["summary"]["mention_residual_remains"] and j["summary"]["claims_read_not_evidence_shown"]
     # M's interval touches the band in one format: no salience sentence; the claims sentence stays (H2 consistent)
     m = _mention(0.3, 0.7)
     m["yn"]["ratio"]["ci"] = [0.2, 0.7]
     j = mech2.joint_readout(ro, ro, m)
-    assert "mention component remains" not in j["summary"]["reading"] and "see M." in j["summary"]["reading"]
-    assert not mech2.joint_readout(ro, ro, _mention(0.3, 0.7, estimable=False))["summary"]["salience_likely_part"]
-    assert not mech2.joint_readout(ro, ro)["summary"]["salience_likely_part"]  # no M given
+    assert "residual" not in j["summary"]["reading"] and "see M." in j["summary"]["reading"]
+    assert not mech2.joint_readout(ro, ro, _mention(0.3, 0.7, estimable=False))["summary"]["mention_residual_remains"]
+    assert not mech2.joint_readout(ro, ro)["summary"]["mention_residual_remains"]  # no M given
     # salience contradicted on P1 too: neither sentence
     ro1 = mech2.readout({**_claims_obs(), "P1_keep_vs_ignore": ("L",)})
     j = mech2.joint_readout(ro1, ro1, _mention(0.3, 0.7))
     assert not j["summary"]["salience_contradicted_only_on_claims"] and "see M." not in j["summary"]["reading"]
-    assert not j["summary"]["salience_likely_part"] and "mention component remains" not in j["summary"]["reading"]
+    assert not j["summary"]["mention_residual_remains"] and "residual" not in j["summary"]["reading"]
     # task as evidence contradicted (P7 small, against its "N or Z") while salience fails on P5 and P8 only: the
     # salience sentence stays, the claims sentence does not
     ro2 = mech2.readout({**_claims_obs(), "P7_negated_existence": ("S",)})
     j = mech2.joint_readout(ro2, ro2, _mention(0.3, 0.7))
-    assert j["H2_evidence"]["verdict"] == "contradicted" and j["summary"]["salience_likely_part"]
+    assert j["H2_evidence"]["verdict"] == "contradicted" and j["summary"]["mention_residual_remains"]
     assert not j["summary"]["claims_read_not_evidence_shown"] and "see M." not in j["summary"]["reading"]
 
 
-def test_mention_component_is_half_negated_plus_half_affirmed_minus_swapped():
+def test_mention_residual_is_half_negated_plus_half_affirmed_minus_swapped():
     items = _syn_items()
     fp = {**FINGERPRINTS["H2_evidence"], "negated": -0.4, "affirmed": 1.2}
     block = _block(items, fp, noise=0.0, yn_scale=0.5)
-    m = block["mixture_readout"]["M_mention_component"]
+    m = block["mixture_readout"]["M_mention_residual"]
     assert abs(m["cand"]["estimate"] - 0.4 * D) < 1e-9 and abs(m["cand"]["ratio"]["estimate"] - 0.4) < 1e-9
     assert abs(m["yn"]["estimate"] - 0.4 * 0.5 * D) < 1e-9 and m["cand"]["zones"] == ("S",)
-    summ = block["readout_both_formats"]["summary"]["mention_component"]
+    summ = block["readout_both_formats"]["summary"]["mention_residual"]
     assert abs(summ["yn"]["ratio"]["estimate"] - 0.4) < 1e-9
 
 
@@ -1565,3 +1578,236 @@ def test_status_line_lists_each_account_with_its_contrasts():
     line = mech2.status_lines(report, ["m"])[0]
     assert "consistent: H2_evidence [risky: P4, P5, P8; allows zero: P1, P2, P3, P7]" in line
     assert "H3_salience [P5, P7, P8]" in line and "see M." in line and "undefined" not in line
+
+
+# ---------------- amendment after review 4 (2026-11-21, before any score) ----------------
+
+
+def _ratio_by_format(lo, hi, lo_yn=None, hi_yn=None, estimable=True):
+    out = _mention(lo, hi, estimable)
+    if lo_yn is not None:
+        out["yn"]["ratio"]["ci"] = [lo_yn, hi_yn]
+    return out
+
+
+def test_mention_sentence_reads_h3_from_the_joint_rows_not_one_format():
+    """Review 4, R1: salience contradicted on P1 in the two-candidate format only (format-dependent jointly) is still
+    contradicted only on the claim contrasts."""
+    cand = mech2.readout({**_claims_obs(), "P1_keep_vs_ignore": ("L",)})
+    yn = mech2.readout(_claims_obs())
+    j = mech2.joint_readout(cand, yn, _mention(0.3, 0.7))
+    assert j["H3_salience"]["per_contrast"]["P1_keep_vs_ignore"] == "format_dependent"
+    assert j["summary"]["salience_contradicted_only_on_claims"] and j["summary"]["mention_residual_remains"]
+
+
+def test_claims_sentence_needs_task_as_evidence_consistent_jointly():
+    """Review 4, R2: H2 consistent in the two-candidate format but untested jointly gives no claims sentence."""
+    cand = mech2.readout(_claims_obs())
+    yn = mech2.readout({**_claims_obs(), "P4_need_without_name": None, "P5_done_vs_cancelled": None, "P8_negated_vs_affirmed": None})
+    j = mech2.joint_readout(cand, yn, _mention(0.3, 0.7))
+    assert cand["H2_evidence"]["verdict"] == "consistent" and j["H2_evidence"]["verdict"] == "untested"
+    assert j["summary"]["salience_contradicted_only_on_claims"]  # through P7
+    assert not j["summary"]["claims_read_not_evidence_shown"] and "see M." not in j["summary"]["reading"]
+
+
+def test_no_claim_sentences_when_salience_is_not_contradicted():
+    """Review 4, R3: with salience not contradicted, no sentence about claims or M, even with H2 consistent."""
+    none = {c: None for c in mech2.PRIMARY}
+    ro = mech2.readout({**none, "P4_need_without_name": ("L",)})
+    j = mech2.joint_readout(ro, ro, _mention(0.3, 0.7))
+    assert j["H2_evidence"]["verdict"] == "consistent" and j["H3_salience"]["verdict"] == "consistent"
+    s = j["summary"]
+    assert not s["salience_contradicted_only_on_claims"] and not s["claims_read_not_evidence_shown"]
+    assert not s["mention_residual_remains"] and "see M." not in s["reading"] and "residual" not in s["reading"]
+
+
+def test_mention_band_edges():
+    """Review 4, R6 and should-fix 4: an interval starting exactly at 0.25 is not above the band; an interval inside
+    the band in both formats gives the 'no residual' sentence, one outside it in one format does not."""
+    ro = mech2.readout(_claims_obs())
+    assert not mech2.joint_readout(ro, ro, _mention(0.25, 0.6))["summary"]["mention_residual_remains"]
+    j = mech2.joint_readout(ro, ro, _mention(-0.1, 0.2))
+    assert j["summary"]["mention_residual_absent"] and not j["summary"]["mention_residual_remains"]
+    assert ("No mention-associated residual remains after averaging opposing claims (r = 0.05 [-0.10, 0.20] "
+            "two-candidate and 0.05 [-0.10, 0.20] yes/no, inside the band in both formats); task as evidence with a "
+            "symmetric reading of the claims predicts this, but salience offset by an asymmetric reading would give the "
+            "same, so it does not show that salience is absent.") in j["summary"]["reading"]
+    assert "see M." in j["summary"]["reading"]
+    for m in (_ratio_by_format(-0.1, 0.2, -0.1, 0.3), _ratio_by_format(-0.1, 0.2, -0.3, 0.2), _mention(-0.1, 0.2, False)):
+        assert not mech2.joint_readout(ro, ro, m)["summary"]["mention_residual_absent"]
+    assert mech2.joint_readout(ro, ro, _mention(-0.25, 0.25))["summary"]["mention_residual_absent"]
+    ro1 = mech2.readout({**_claims_obs(), "P1_keep_vs_ignore": ("L",)})  # salience fails beyond the claims: no sentence
+    assert not mech2.joint_readout(ro1, ro1, _mention(-0.1, 0.2))["summary"]["mention_residual_absent"]
+
+
+def test_placebo_below_the_band_names_the_verdicts_resting_on_p8():
+    """Review 4, should-fix 3: with S2 below the band in both formats the summary names the verdicts that rest on P8
+    and gives S3; the verdicts themselves do not change."""
+    ro = mech2.readout(_claims_obs())
+    plain = mech2.joint_readout(ro, ro, _mention(0.3, 0.7))
+    j = mech2.joint_readout(ro, ro, _mention(0.3, 0.7), _mention(-0.6, -0.3), _mention(-0.9, -0.5))
+    for h in mech2.PREDICTIONS:
+        assert j[h]["verdict"] == plain[h]["verdict"] and j[h]["per_contrast"] == plain[h]["per_contrast"]
+    assert j["summary"]["negation_placebo_below_band_both_formats"]
+    assert j["summary"]["verdicts_resting_on_P8"] == ["H2_evidence consistent", "H3_salience contradicted", "H4_wishful contradicted",
+                                                     "H5_policy_blend contradicted", "H6_lexical contradicted"]
+    assert ('The negation placebo lies below the band in both formats (r = -0.45 [-0.60, -0.30] two-candidate and -0.45 '
+            '[-0.60, -0.30] yes/no): the word "no" lowers the success reading whatever it denies, so P8 is read net of '
+            'it. Verdicts that rest on P8: H2_evidence consistent, H3_salience contradicted, H4_wishful contradicted, '
+            'H5_policy_blend contradicted, H6_lexical contradicted; P8 net of the placebo: r = -0.70 [-0.90, -0.50] '
+            'two-candidate and -0.70 [-0.90, -0.50] yes/no.') in j["summary"]["reading"]
+    for pl in (_ratio_by_format(-0.6, -0.3, -0.6, -0.2), _ratio_by_format(-0.6, -0.25), _mention(-0.6, -0.3, False)):
+        assert not mech2.joint_readout(ro, ro, None, pl)["summary"]["negation_placebo_below_band_both_formats"]
+    assert "placebo" not in plain["summary"]["reading"]
+
+
+def test_mention_halves_and_per_format_zones():
+    """Review 4: M's two halves as r in both formats on P7's items; R9: each format's M zones are its own."""
+    items = _syn_items()
+    fp = {**FINGERPRINTS["H2_evidence"], "negated": -0.4, "affirmed": 1.2}
+    block = _block(items, fp, noise=0.0, yn_fingerprint=FINGERPRINTS["H2_evidence"], yn_scale=0.5)
+    mix = block["mixture_readout"]
+    aff, den = mix["M_half_affirmed_minus_swapped"], mix["M_half_swapped_minus_negated"]
+    assert abs(aff["cand"]["ratio"]["estimate"] - 1.2) < 1e-9 and abs(den["cand"]["ratio"]["estimate"] - 0.4) < 1e-9
+    assert abs(aff["yn"]["ratio"]["estimate"] - 0.8) < 1e-9 and abs(den["yn"]["ratio"]["estimate"] - 0.6) < 1e-9
+    assert abs(den["yn"]["estimate"] - 0.6 * 0.5 * D) < 1e-9 and aff["cand"]["n_items"] == sum(mech2.p7_eligible(t) for t in items)
+    m = mix["M_mention_residual"]
+    assert abs(m["cand"]["ratio"]["estimate"] - (1.2 - 0.4) / 2) < 1e-9
+    assert m["cand"]["zones"] == ("S",) and m["yn"]["zones"] == ("Z",)
+
+
+def test_secondary_readouts_per_format_and_population():
+    """Review 4, R7 and R15: S2 and S3 read P7's items, each format with its own scores."""
+    items = _syn_items(n_games=20, per_game=6)
+    for k, t in enumerate(items):
+        if k % 2 and t["history_len"]:  # the history shows countertop 2 holding an apple: not a P7 item
+            t["history_text"] = t["history_text"].replace("go to countertop 1", "go to countertop 2").replace(
+                "You arrive at countertop 1. On the countertop 1, you see a egg 1.",
+                "You arrive at countertop 2. On the countertop 2, you see a apple 1.")
+    fp = {**FINGERPRINTS["H2_evidence"], "placebo_negated": -0.3}
+    sec = _block(items, fp, noise=0.0, yn_scale=0.5)["secondary_named"]
+    n7 = sum(mech2.p7_eligible(t) for t in items)
+    assert n7 < sum(mech2.is_take(t) for t in items)
+    for f, scale in (("cand", 1.0), ("yn", 0.5)):
+        assert sec["S2_negation_placebo"]["by_format"][f]["n_items"] == n7
+        assert abs(sec["S3_P8_net_of_placebo"]["by_format"][f]["estimate"] + (1.4 - 0.3) * scale * D) < 1e-9
+
+
+def test_placebo_is_built_only_on_takes_of_the_goal_object():
+    """Review 4, R13."""
+    other = _item(action="take egg 1 from countertop 2")
+    for arm in TAKE_ARMS:
+        assert mech2.task_line(other, arm) is None
+
+
+def test_placebo_also_read_without_swapped_targets_at_the_action_receptacle():
+    """Review 4, should-fix 6: where the swapped task's target type is the action's receptacle type, the placebo's
+    claim bears on the swapped task; the placebo is also read without those items."""
+    hit = _item(swapped_task_line="Your task is to: put a clean egg in countertop.")  # the action takes from countertop 2
+    assert mech2.swapped_target_at_rec(hit) and not mech2.swapped_target_at_rec(_item())
+    assert not mech2.swapped_target_at_rec(_item(action=ACTIONS["heat"]))
+    items = _syn_items(n_games=10, per_game=6)
+    for k, t in enumerate(items):
+        if k % 3 == 0:
+            t["swapped_task_line"] = "Your task is to: put a clean egg in countertop."
+    sec = _block(items, FINGERPRINTS["H2_evidence"])["secondary_named"]["S2_negation_placebo_without_swapped_target_at_rec"]
+    n_hit = sum(mech2.p7_eligible(t) and mech2.swapped_target_at_rec(t) for t in items)
+    assert sec["n_left_out"] == n_hit > 0
+    assert sec["by_format"]["yn"]["n_items"] == sum(mech2.p7_eligible(t) for t in items) - n_hit
+
+
+def test_h7a_within_contents_or_open_state_keeps_the_sign():
+    """Review 4, R16: shown minus not shown, within the one failure reason."""
+    items = _syn_items(n_games=20, per_game=6)
+    for k, t in enumerate(items):
+        t["determination_reason"] = "contents_or_open_state"
+        if k % 2 and t["history_len"]:
+            t["history_text"] = t["history_text"].replace("go to countertop 1", "go to countertop 2").replace(
+                "You arrive at countertop 1. On the countertop 1", "You arrive at countertop 2. On the countertop 2")
+    shown = {t["id"] for t in items if mech2.is_take(t) and mech2.negated_status(t)[1] == "shown, without it"}
+    scores = _syn_scores(items, FINGERPRINTS["H2_evidence"], noise=0.0)
+    for s in scores:
+        if s["transition_id"] in shown and s["condition"] == "desire_check":
+            s["L"] -= 1.0
+    block = mech2.model_block(scores, items, {t["id"] for t in items}, {t["id"] for t in items if t["history_len"] == 0},
+                              B=20, perms=20)
+    within = block["secondary_named"]["H7a_within_contents_or_open_state"]["desire_check"]["cand"]
+    assert abs(within["estimate"] + 1.0) < 1e-9 and within["n_a"] == len(shown)
+
+
+def test_integrity_catches_a_stale_hash_of_the_secondary_model():
+    """Review 4, R18."""
+    items = [_item(id="a", step0=True), _item(id="b")]
+    scores = [{"model": "mistral-7b-v0.3", "transition_id": t["id"], "condition": mech2.condition(a, f),
+               "item_hash": mech2._item_hash(t), "L": 0.0} for t, a, f in mech2.jobs(items, mech2.PRIMARY_ARMS)]
+    scores[3]["item_hash"] = "an older item"
+    out = mech2.score_integrity(scores, items, ["mistral-7b-v0.3"])
+    assert out["mistral-7b-v0.3"]["n_hash_mismatch"] == 1 and out["mistral-7b-v0.3"]["status"] == "mismatch" and out["refuse"]
+
+
+def test_status_line_gives_s1_when_wishful_and_blending_both_stand():
+    """Review 4, should-fix 5."""
+    none = {c: None for c in mech2.PRIMARY}
+    ro = mech2.readout({**none, "P4_need_without_name": ("L",)})  # H4 and H5 both consistent
+    j = mech2.joint_readout(ro, ro)
+    s1 = mech2.read_secondary("S1_desire_check_vs_keep", {"cand": {"ratio": {"ci": [0.3, 0.6], "estimable": True}},
+                                                          "yn": {"ratio": {"ci": [0.3, 0.45], "estimable": True}}})
+    block = {"readout_both_formats": j, "secondary_named": {"S1_desire_check_vs_keep": s1}}
+    line = mech2.s1_line(block)
+    assert line == ("H4 and H5 not told apart by the verdicts; S1 (desire_check - desire_keep): zones two-candidate S/L, "
+                    "yes/no S; joint: H4_wishful contradicted, H5_policy_blend consistent")
+    fam = {name: {"estimate": 0.0, "category": "NULL"} for name in mech2.PRIMARY}
+    report = {"m": {"primary": {"contrasts": fam}, "primary_yes_no": {"contrasts": fam}, **block}, "integrity": {}}
+    assert line in mech2.status_lines(report, ["m"])[0]
+    ro2 = mech2.readout({**none, "P2_hope_polarity": ("N",)})  # H5 contradicted on P2
+    assert mech2.s1_line({"readout_both_formats": mech2.joint_readout(ro2, ro2), "secondary_named": {}}) == ""
+    assert "not read" in mech2.s1_line({"readout_both_formats": j, "secondary_named": {}})
+
+
+def test_model_block_passes_the_placebo_and_p8_net_to_the_summary():
+    """Review 4, should-fix 3, end of the chain: a placebo far below the band in both formats reaches the summary."""
+    items = _syn_items()
+    low = _block(items, {**FINGERPRINTS["H2_evidence"], "placebo_negated": -0.6}, noise=0.0)["readout_both_formats"]["summary"]
+    assert low["negation_placebo_below_band_both_formats"] and "P8 net of the placebo: r = -0.80" in low["reading"]
+    flat = _block(items, FINGERPRINTS["H2_evidence"], noise=0.0)["readout_both_formats"]["summary"]
+    assert not flat["negation_placebo_below_band_both_formats"]
+
+
+# ---------------- adversarial check of M (2026-11-21, before any score) ----------------
+
+
+@pytest.mark.parametrize("affirmed,negated", [(1.8, 0.0), (1.4, -0.2), (0.6, -1.0), (0.2, -1.0)])
+def test_pure_task_as_evidence_with_asymmetric_claims_is_never_read_as_salience(affirmed, negated):
+    """Planted pure task as evidence (no salience, no word overlap, wishful or blending component), with affirmations
+    and denials moving the reading by different amounts: M is far from zero in either direction, yet task as evidence
+    is not contradicted and the summary never attributes any of the effect to salience."""
+    items = _syn_items()
+    fp = {**FINGERPRINTS["H2_evidence"], "affirmed": affirmed, "negated": negated}
+    block = mech2.model_block(_syn_scores(items, fp), items, {t["id"] for t in items},
+                              {t["id"] for t in items if t["history_len"] == 0}, B=200, perms=200)
+    j, mix = block["readout_both_formats"], block["mixture_readout"]
+    assert j["H2_evidence"]["verdict"] == "consistent" and j["summary"]["content_accounts_consistent"] == ["H2_evidence"]
+    assert j["H3_salience"]["verdict"] == "contradicted"
+    text = j["summary"]["reading"]
+    for phrase in SALIENCE_ATTRIBUTION:
+        assert phrase not in text
+    m = (affirmed + negated) / 2
+    assert abs(mix["M_mention_residual"]["cand"]["ratio"]["estimate"] - m) < 0.1
+    assert abs(mix["M_half_affirmed_minus_swapped"]["yn"]["ratio"]["estimate"] - affirmed) < 0.1
+    assert abs(mix["M_half_swapped_minus_negated"]["yn"]["ratio"]["estimate"] + negated) < 0.1
+    if m > 0.5:  # the residual sentence is given, and says the residual does not show salience
+        assert j["summary"]["mention_residual_remains"]
+        assert "it is consistent with salience but also with asymmetric processing of affirmations and denials, so it " \
+               "does not show that salience contributes." in text
+    if m < -0.25:
+        assert not j["summary"]["mention_residual_remains"] and not j["summary"]["mention_residual_absent"]
+
+
+def test_the_m_sentences_never_attribute_the_effect_to_salience():
+    """The wording is pinned: neither M sentence asserts that salience is part of the effect, or that it is absent."""
+    ro = mech2.readout(_claims_obs())
+    for m in (_mention(0.3, 0.9), _mention(-0.1, 0.1)):
+        text = mech2.joint_readout(ro, ro, m)["summary"]["reading"]
+        for phrase in SALIENCE_ATTRIBUTION:
+            assert phrase not in text
+        assert "does not show that salience" in text

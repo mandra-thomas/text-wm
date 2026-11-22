@@ -20,7 +20,8 @@ restriction of it (P5, P7, P8) or the step-0 items (P6).
 Models: Qwen3-8B and Llama-3.1-8B (primary, every arm) and Mistral-7B-Instruct-v0.3 (secondary, descriptive, only the
 arms the primary contrasts need, on the sample, and P6's arms on every step-0 item), at pinned revisions.
 
-After review 3: the mention component M on P7's items (half of negated plus half of affirmed, minus swapped) in the
+After review 3: M on P7's items (half of negated plus half of affirmed, minus swapped; after review 4 described as a
+mention-associated residual after averaging opposing claims, which does not by itself show salience) in the
 mixture readout and the summary; "consistent" needs a risky prediction (a discriminating contrast whose allowed zones
 exclude Z); a negation placebo pair (the user's report about the swapped object) as a named secondary; desire_check -
 desire_keep as a second wishful-against-blending separator; exploratory readouts for H7_check (the task directs which
@@ -356,6 +357,16 @@ def completes_task(t: dict) -> bool:
     if not p or p[0] != "move" or p[1] != t.get("goal_object") or task_type(t["task_line"]) not in PLACEMENT_TYPES:
         return False
     return re.sub(r"\s+\d+$", "", p[2]) == parse_task_line(t["task_line"]).receptacle
+
+
+def swapped_target_at_rec(t: dict) -> bool:
+    """Is the swapped task's target receptacle of the type of the receptacle the action names (review 4)? There the
+    placebo's claim ("no {swapped_obj} in the {rec}") bears on the swapped task itself, so the placebo is also read
+    without these items."""
+    p = parse_action(t["action"])
+    if not p:
+        return False
+    return re.sub(r"\s+\d+$", "", p[2]) == parse_task_line(t["swapped_task_line"]).receptacle
 
 
 # ---------------- models (amendment after review 1: Mistral-7B-Instruct-v0.3 as a secondary model) ----------------
@@ -884,27 +895,60 @@ def _label(h: str, row: dict[str, Any]) -> str:
 # The contrasts that add an explicit claim to a line (done; the user's report): a model that reads claims contradicts
 # a content-blind salience account on them, whether or not the goal effect itself comes from evidence (review 3).
 CLAIM_CONTRASTS = ("P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed")
-# The mention component on P7's items: the mean of the two reports (denied, affirmed) minus the swapped task. With the
-# claim balanced, what remains is the effect of mentioning the object and the receptacle (review 3). It assumes the
-# denial lowers L about as much as the affirmation raises it; task as evidence's own fingerprint gives about +0.1.
+# M, a mention-associated residual after averaging opposing claims, on P7's items: the mean of the two reports
+# (denied, affirmed) minus the swapped task (review 3). If the denial lowered L exactly as much as the affirmation
+# raises it, the claims would cancel and M would be the effect of mentioning the object and the receptacle. They need
+# not: under task as evidence with an asymmetric reading of affirmations and denials, M is positive or negative with
+# no salience at all (the adversarial check after review 4), so M is consistent with salience but never shows it.
 MENTION_TERMS = ((0.5, "negated"), (0.5, "affirmed"), (-1, "swapped"))
+# Review 4: M's two halves, each read as r on P7's items: the affirmation's lift over the swapped task and the
+# denial's drop below it. M = (affirmed half - denied half) / 2; under a symmetric reading of the claim the claim
+# cancels in M, under an asymmetric one it does not.
+M_HALVES = {"M_half_affirmed_minus_swapped": ((1, "affirmed"), (-1, "swapped")),
+            "M_half_swapped_minus_negated": ((1, "swapped"), (-1, "negated"))}
+PLACEBO_TERMS = ((1, "placebo_negated"), (-1, "placebo_affirmed"))
+P8_NET_TERMS = ((1, "negated"), (-1, "affirmed"), (-1, "placebo_negated"), (1, "placebo_affirmed"))
 
 
 def _mention_text(mention: dict[str, Any]) -> str:
-    return "; ".join(f"{m['ratio']['estimate']:.2f} [{m['ratio']['ci'][0]:.2f}, {m['ratio']['ci'][1]:.2f}] {name}"
-                     for f, name in (("cand", "two-candidate"), ("yn", "yes/no")) for m in [mention[f]])
+    """r with its interval in each format, for a readout given per format (M, the placebo, P8 net of it)."""
+    return " and ".join(f"{m['ratio']['estimate']:.2f} [{m['ratio']['ci'][0]:.2f}, {m['ratio']['ci'][1]:.2f}] {name}"
+                        for f, name in (("cand", "two-candidate"), ("yn", "yes/no")) for m in [mention[f]])
+
+
+def _r_interval_in(res_by_format: dict[str, Any] | None, test: Callable[[float, float], bool]) -> bool:
+    """`test(lo, hi)` holds for r's interval in both formats, and r is estimable in both."""
+    if not res_by_format:
+        return False
+    for f in FORMATS:
+        r = (res_by_format.get(f) or {}).get("ratio") or {}
+        lo, hi = (r.get("ci") or [float("nan")] * 2)
+        if not r.get("estimable") or lo != lo or hi != hi or not test(lo, hi):
+            return False
+    return True
 
 
 def _mention_above_band(mention: dict[str, Any] | None) -> bool:
     """M's r interval lies wholly above the band in both formats (and r is estimable in both)."""
-    if not mention:
-        return False
-    for f in FORMATS:
-        r = (mention.get(f) or {}).get("ratio") or {}
-        lo = (r.get("ci") or [float("nan")])[0]
-        if not r.get("estimable") or lo != lo or lo <= TRIVIAL_BAND:
-            return False
-    return True
+    return _r_interval_in(mention, lambda lo, hi: lo > TRIVIAL_BAND)
+
+
+def _mention_inside_band(mention: dict[str, Any] | None) -> bool:
+    """M's r interval lies inside the band in both formats (amendment after review 4)."""
+    return _r_interval_in(mention, lambda lo, hi: -TRIVIAL_BAND <= lo and hi <= TRIVIAL_BAND)
+
+
+def _placebo_below_band(placebo: dict[str, Any] | None) -> bool:
+    """The negation placebo's r interval lies wholly below the band in both formats (amendment after review 4)."""
+    return _r_interval_in(placebo, lambda lo, hi: hi < -TRIVIAL_BAND)
+
+
+def _resting_on(out: dict[str, Any], contrast_name: str) -> list[str]:
+    """The content accounts whose joint verdict rests on a contrast: contradicted on it, or consistent with it among
+    the contrasts where a rival fails."""
+    return [f"{h} {out[h]['verdict']}" for h in CONTENT_ACCOUNTS
+            if (out[h]["verdict"] == "contradicted" and out[h]["per_contrast"].get(contrast_name) == "contradicted")
+            or (out[h]["verdict"] == "consistent" and contrast_name in out[h]["consistent_where_a_rival_fails"])]
 
 
 def readout(observed: dict[str, tuple[str, ...] | None]) -> dict[str, Any]:
@@ -928,7 +972,8 @@ def _per_contrast(ro: dict[str, Any], h: str) -> dict[str, str]:
     return ro["rivals"][h] if h in RIVAL_READINGS else ro[h]["per_contrast"]
 
 
-def joint_readout(cand: dict[str, Any], yn: dict[str, Any], mention: dict[str, Any] | None = None) -> dict[str, Any]:
+def joint_readout(cand: dict[str, Any], yn: dict[str, Any], mention: dict[str, Any] | None = None,
+                  placebo: dict[str, Any] | None = None, p8_net: dict[str, Any] | None = None) -> dict[str, Any]:
     """The decision rule across formats (amendment after review 1): a contrast is decided for an account only when the
     two formats agree (both consistent, or both contradicted). One consistent and one contradicted is
     `format_dependent`; anything else (one decided, one undecided) is undecided. Both count as undecided in the verdict,
@@ -942,9 +987,17 @@ def joint_readout(cand: dict[str, Any], yn: dict[str, Any], mention: dict[str, A
 
     After review 3 each account is listed with the contrasts its verdict rests on (`_label`), and two fixed sentences
     are added when salience is contradicted only on contrasts that add an explicit claim (`CLAIM_CONTRASTS`): (a) when
-    the mention component M (`mention`, the contrast `MENTION_TERMS` per format) has an r interval wholly above the
-    band in both formats, salience is likely part of the effect; (b) when task as evidence is consistent, its win
-    there shows that the model reads claims, not that the goal effect comes from evidence."""
+    M (`mention`, the contrast `MENTION_TERMS` per format) has an r interval wholly above the
+    band in both formats, a mention-associated residual remains after averaging opposing claims, which is consistent
+    with salience but also with asymmetric processing of affirmations and denials, or word overlap (amended after
+    review 4 and the adversarial check of M: the summary never attributes the residual to salience); (b) when task as
+    evidence is consistent, its win there shows that the model reads claims, not that the goal effect comes from
+    evidence.
+
+    After review 4: (c) under the same condition, when M's interval lies inside the band in both formats, no
+    mention-associated residual remains (which does not show that salience is absent either); (d) when the negation placebo (`placebo`, S2 per format) has an r
+    interval wholly below the band in both formats, the summary names the verdicts that rest on P8 and gives P8 net of
+    the placebo (`p8_net`, S3 per format). No verdict changes."""
     rows = {h: {c: _joint(_per_contrast(cand, h)[c], _per_contrast(yn, h)[c]) for c in preds}
             for h, preds in {**PREDICTIONS, **RIVAL_READINGS}.items()}
     out = _account_rows(rows)
@@ -963,15 +1016,34 @@ def joint_readout(cand: dict[str, Any], yn: dict[str, Any], mention: dict[str, A
         text = lists
     h3_against = [c for c, v in out["H3_salience"]["per_contrast"].items() if v == "contradicted"]
     claims_only = bool(h3_against) and set(h3_against) <= set(CLAIM_CONTRASTS)
-    salience_part = claims_only and _mention_above_band(mention)
+    mention_remains = claims_only and _mention_above_band(mention)
+    mention_absent = claims_only and _mention_inside_band(mention)
     claims_read = claims_only and out["H2_evidence"]["verdict"] == "consistent"
-    if salience_part:
-        text += (". Salience cannot be the sole account, but a mention component remains with the claim balanced "
-                 f"(r = {_mention_text(mention)}): salience is likely part of the effect.")
+    placebo_low = _placebo_below_band(placebo)
+    on_p8 = _resting_on(out, "P8_negated_vs_affirmed")
+    sentences = []
+    if mention_remains:  # review 4 and the adversarial check of M: the residual is never attributed to salience
+        sentences.append(f"Salience cannot be the sole account. A mention-associated residual of r = "
+                         f"{_mention_text(mention)} remains after averaging opposing claims; it is consistent with "
+                         "salience but also with asymmetric processing of affirmations and denials, so it does not show "
+                         "that salience contributes. Word overlap with the action would give the same.")
+    if mention_absent:  # review 4: the symmetric reading, equally limited
+        sentences.append(f"No mention-associated residual remains after averaging opposing claims (r = "
+                         f"{_mention_text(mention)}, inside the band in both formats); task as evidence with a symmetric "
+                         "reading of the claims predicts this, but salience offset by an asymmetric reading would give "
+                         "the same, so it does not show that salience is absent.")
     if claims_read:
-        text += (("" if salience_part else ".") + " H3 is contradicted only on contrasts that add an explicit claim (done; "
-                 "the user's report). This shows the model reads such claims, not that the goal effect comes from "
-                 "evidence rather than salience; see M.")
+        sentences.append("H3 is contradicted only on contrasts that add an explicit claim (done; the user's report). "
+                         "This shows the model reads such claims, not that the goal effect comes from evidence rather "
+                         "than salience; see M.")
+    if placebo_low:  # review 4: the word "no" lowers the reading whatever it denies
+        net = f"; P8 net of the placebo: r = {_mention_text(p8_net)}" if p8_net and all(
+            (p8_net.get(f) or {}).get("ratio", {}).get("ci") for f in FORMATS) else ""
+        sentences.append(f"The negation placebo lies below the band in both formats (r = {_mention_text(placebo)}): the "
+                         "word \"no\" lowers the success reading whatever it denies, so P8 is read net of it. Verdicts "
+                         f"that rest on P8: {', '.join(on_p8) or 'none'}{net}.")
+    if sentences:
+        text += ". " + " ".join(sentences)
     out["summary"] = {
         "content_accounts_consistent": by["consistent"],
         "content_accounts_untested": by["untested"],
@@ -980,10 +1052,14 @@ def joint_readout(cand: dict[str, Any], yn: dict[str, Any], mention: dict[str, A
         "reading": text,
         "position": out["H6_position"]["verdict"],
         "salience_contradicted_only_on_claims": claims_only,
-        "mention_component_above_band_both_formats": _mention_above_band(mention),
-        "salience_likely_part": salience_part,
+        "mention_residual_above_band_both_formats": _mention_above_band(mention),
+        "mention_residual_inside_band_both_formats": _mention_inside_band(mention),
+        "mention_residual_remains": mention_remains,
+        "mention_residual_absent": mention_absent,
         "claims_read_not_evidence_shown": claims_read,
-        "mention_component": ({f: {"estimate": m.get("estimate"), "ci": m.get("ci"), "ratio": m.get("ratio")}
+        "negation_placebo_below_band_both_formats": placebo_low,
+        "verdicts_resting_on_P8": on_p8,
+        "mention_residual": ({f: {"estimate": m.get("estimate"), "ci": m.get("ci"), "ratio": m.get("ratio")}
                                for f, m in mention.items()} if mention else None),
     }
     return out
@@ -1036,9 +1112,14 @@ def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: 
     ref = ((1, "aligned"), (-1, "swapped"))
     block: dict[str, Any] = {"primary": primary_family(by, pops, "cand", **kw),
                              "primary_yes_no": primary_family(by, pops, "yn", **kw)}
-    # review 3: the mention component M on P7's items, both formats, read in the summary and the mixture readout
-    mention = {f: contrast(by, pops["sample_take"], MENTION_TERMS, f, reference=ref, **kw) for f in FORMATS}
-    block["readout_both_formats"] = joint_readout(block["primary"]["readout"], block["primary_yes_no"]["readout"], mention)
+    # review 3: M, the mention-associated residual on P7's items, both formats, read in the summary and the mixture readout;
+    # review 4: the negation placebo (S2) and P8 net of it (S3) are read in the summary too
+    take = pops["sample_take"]
+    mention = {f: contrast(by, take, MENTION_TERMS, f, reference=ref, **kw) for f in FORMATS}
+    placebo = {f: contrast(by, take, PLACEBO_TERMS, f, reference=ref, **kw) for f in FORMATS}
+    p8_net = {f: contrast(by, take, P8_NET_TERMS, f, reference=ref, **kw) for f in FORMATS}
+    block["readout_both_formats"] = joint_readout(block["primary"]["readout"], block["primary_yes_no"]["readout"], mention,
+                                                  placebo, p8_net)
     arms = {}
     for arm in CONTENT_ARMS:
         if arm == "swapped":
@@ -1121,26 +1202,37 @@ def model_block(scores: list[dict], union: list[dict], sample: set[str], step0: 
         for name in ("P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed")}
     # review 3: M = (negated + affirmed)/2 - swapped on P7's items, the mention with the claim balanced; its zones are
     # read from r's unadjusted interval (it is not in the Holm family)
-    block["mixture_readout"]["M_mention_component"] = {
+    block["mixture_readout"]["M_mention_residual"] = {
         f: {**{k: mention[f].get(k) for k in ("n_items", "estimate", "ci", "ratio", "p")}, "zones": secondary_zones(mention[f])}
         for f in FORMATS}
+    # review 4: M's two halves, each as r in both formats on P7's items
+    for name, terms in M_HALVES.items():
+        block["mixture_readout"][name] = {
+            f: {**{k: res.get(k) for k in ("n_items", "estimate", "ci", "ratio")}, "zones": secondary_zones(res)}
+            for f in FORMATS for res in [contrast(by, take, terms, f, reference=ref, **kw)]}
     # review 3: named secondary readouts with predictions written before any score (SECONDARY_PREDICTIONS), outside
     # the Holm family and the verdicts
-    take, shown = pops["sample_take"], [t for t in pops["sample_take"] if negated_status(t)[1] == "shown, without it"]
+    shown = [t for t in take if negated_status(t)[1] == "shown, without it"]
     shown_ids = {t["id"] for t in shown}
     within = [t for t in take if t.get("determination_reason") == "contents_or_open_state"]
     completing = [t for t in pops["sample"] if completes_task(t)]
     other = [t for t in pops["sample"] if not completes_task(t)]
     named = {
         "S1_desire_check_vs_keep": {f: contrast(by, pops["sample"], ((1, "desire_check"), (-1, "desire_keep")), f, reference=ref, **kw) for f in FORMATS},
-        "S2_negation_placebo": {f: contrast(by, take, ((1, "placebo_negated"), (-1, "placebo_affirmed")), f, reference=ref, **kw) for f in FORMATS},
-        "S3_P8_net_of_placebo": {f: contrast(by, take, ((1, "negated"), (-1, "affirmed"), (-1, "placebo_negated"), (1, "placebo_affirmed")),
-                                             f, reference=ref, **kw) for f in FORMATS},
+        "S2_negation_placebo": placebo,
+        "S3_P8_net_of_placebo": p8_net,
         "H7a_desire_check_shown_vs_not": {f: group_difference(by, shown, not_shown, ((1, "desire_check"), (-1, "swapped")), f, B=B) for f in FORMATS},
         "H7a_aligned_shown_vs_not": {f: group_difference(by, shown, not_shown, ref, f, B=B) for f in FORMATS},
         "H7c_aligned_completing_vs_other": {f: group_difference(by, completing, other, ref, f, B=B) for f in FORMATS},
     }
     block["secondary_named"] = {name: {"by_format": res, **read_secondary(name, res)} for name, res in named.items()}
+    # review 4: the placebo also without the items whose swapped task targets a receptacle of the action's receptacle
+    # type (there the placebo's claim bears on the swapped task), descriptive
+    kept = [t for t in take if not swapped_target_at_rec(t)]
+    placebo_kept = {f: contrast(by, kept, PLACEBO_TERMS, f, reference=ref, **kw) for f in FORMATS}
+    block["secondary_named"]["S2_negation_placebo_without_swapped_target_at_rec"] = {
+        "by_format": placebo_kept, "zones": {f: secondary_zones(r) for f, r in placebo_kept.items()},
+        "n_left_out": len(take) - len(kept)}
     # H7_check (i) within the one failure reason where both groups are well populated (the split is confounded with
     # the reason: most shown-without items fail on contents or open state, most not-shown items on distance)
     block["secondary_named"]["H7a_within_contents_or_open_state"] = {
@@ -1405,6 +1497,22 @@ def run_mech2_analysis(cfg: dict) -> int:
     return 0
 
 
+def s1_line(block: dict[str, Any]) -> str:
+    """When wishful prediction and policy blending are both consistent or untested (the verdicts do not tell them
+    apart), S1's reading (desire_check - desire_keep, the second separator of the two): its zones in each format and
+    the two accounts' joint readings (amendment after review 4). Empty otherwise."""
+    ro = block["readout_both_formats"]
+    if not all(ro[h]["verdict"] in ("consistent", "untested") for h in ("H4_wishful", "H5_policy_blend")):
+        return ""
+    s1 = (block.get("secondary_named") or {}).get("S1_desire_check_vs_keep") or {}
+    zs, rd = s1.get("zones") or {}, s1.get("readings") or {}
+    show = lambda z: "/".join(z) if z else "not read"  # noqa: E731
+    return (f"H4 and H5 not told apart by the verdicts; S1 (desire_check - desire_keep): zones two-candidate "
+            f"{show(zs.get('cand'))}, yes/no {show(zs.get('yn'))}; joint: H4_wishful "
+            f"{(rd.get('H4_wishful') or {}).get('joint', 'undecided')}, H5_policy_blend "
+            f"{(rd.get('H5_policy_blend') or {}).get('joint', 'undecided')}")
+
+
 def status_lines(report: dict[str, Any], tags: list[str]) -> list[str]:
     """Per model: each primary contrast's two-candidate estimate and category, its yes/no category, and the joint
     summary: the content accounts consistent, untested and contradicted, each with the contrasts its verdict rests on
@@ -1418,6 +1526,7 @@ def status_lines(report: dict[str, Any], tags: list[str]) -> list[str]:
         lines.append(f"{tag}: " + ", ".join(f"{k.split('_')[0]} {v['estimate']:.2f} ({v['category']}; yes/no {yn[k]['category']})"
                                             for k, v in prim.items())
                      + f"; both formats: {summ['reading']}; position {summ['position']}"
+                     + (f"; {s1}" if (s1 := s1_line(report[tag])) else "")
                      + (f"; undefined L on {undefined} scores of secondary arms" if undefined else ""))
     if report.get("models_not_scored"):
         lines.append("not scored: " + ", ".join(report["models_not_scored"]))

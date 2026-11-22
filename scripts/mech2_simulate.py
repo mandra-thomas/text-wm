@@ -16,10 +16,15 @@ the earlier runs (two-candidate: rq1x_v2 `named_goal`; yes/no: rq1v_v2 `goal_eff
   is the sole survivor (the only content account not contradicted, and consistent), how many (account, contrast)
   readings are decided, and how many are format-dependent;
 - for mixtures, the categories and mean r of P5, P7 and P8 (the readout fixed for mixtures);
-- after review 3, for every scenario: the mention component M (half of negated plus half of affirmed, minus swapped,
-  on P7's items) per format (mean r and the zones of its interval), the negation placebo's zones, how often the
-  summary's two fixed sentences are given (salience likely part of the effect; claims read, evidence not shown), how
-  often an account is untested because it was consistent only where it allows zero, and the most common summary text.
+- after review 3, for every scenario: M, the mention-associated residual after averaging opposing claims (half of
+  negated plus half of affirmed, minus swapped, on P7's items), per format (mean r and the zones of its interval), and
+  its two halves; the negation placebo's zones and P8 net of it; how often each summary sentence is given; how often
+  an account is untested because it was consistent only where it allows zero; and the most common summary text;
+- after the adversarial check of M (2026-11-21): the verdicts of task as evidence and salience across replications,
+  how often the summary attributes any of the effect to salience (it must never), and how often salience is called
+  consistent next to task as evidence. The `asym_*` scenarios plant pure task as evidence with asymmetric responses to
+  affirmations and denials (a grid, a denial-to-affirmation ratio family and a logistic saturation family), each with
+  the placebo at zero and with a placebo effect (`_pl`: the placebo's "no" line 0.4 lower).
 
 A scenario plants one fingerprint in both formats, or one per format (formats that disagree), and may name the account
 it is meant to show and a `truth` fingerprint to judge contradictions against (when it adds artefacts such as a gap in
@@ -27,6 +32,7 @@ the desire lines' generic lift or word copying in one format).
 """
 from __future__ import annotations
 
+import math
 import random
 import sys
 from collections import Counter, defaultdict
@@ -116,7 +122,35 @@ SCENARIOS: dict[str, dict] = {
     "H3_negation_priming": {"cand": {**FP["H3_salience"], "desire_keep_sw": .3, "desire_check": .3, "negated": .3,
                                      "placebo_negated": -.4},
                             "truth": FP["H3_salience"]},
+    # review 4: policy blending plus a lean toward failure at the word "no" (negated and the placebo's "no" line 0.4
+    # lower), which makes P8 look like evidence
+    "H5_negation_art": {"cand": {**FP["H5_policy_blend"], "negated": -.4, "placebo_negated": -.4},
+                        "truth": FP["H5_policy_blend"], "account": "H5_policy_blend"},
 }
+
+
+def _sigmoid(x: float) -> float:
+    return 1 / (1 + math.exp(-x))
+
+
+# The adversarial check of M (2026-11-21): pure task as evidence (the H2 fingerprint, no salience, word overlap,
+# wishful or blending component; the aligned-minus-swapped effect is 1) with the affirmed and negated arms set by an
+# asymmetric response to the user's claim. The same pattern in both formats, no copying, no generic negation priming.
+ASYM: dict[str, tuple[float, float]] = {}
+for aff in (.6, 1.0, 1.4, 1.8):  # (i) a grid of the two responses
+    for neg in (-1.0, -.6, -.2, 0.0):
+        ASYM[f"asym_grid_a{aff:+.1f}_n{neg:+.1f}"] = (aff, neg)
+for g in (.25, .5, 1.0, 2.0):  # (ii) the denial's response a multiple g of the affirmation's (0.8)
+    ASYM[f"asym_ratio_g{g:.2f}"] = (.8, -.8 * g)
+for x0 in (-2, -1, 0, 1, 2):  # (iii) logistic saturation: belief at log-odds x0, each claim moves it by 2, L follows
+    ASYM[f"asym_logit_x{x0:+d}"] = (round(2 * (_sigmoid(x0 + 2) - _sigmoid(x0)), 3), round(2 * (_sigmoid(x0 - 2) - _sigmoid(x0)), 3))
+for name, (aff, neg) in ASYM.items():  # each with the placebo at zero, and with a placebo effect (its "no" line 0.4 lower)
+    base = {**FP["H2_evidence"], "affirmed": aff, "negated": neg}
+    SCENARIOS[name] = {"cand": base, "account": "H2_evidence"}
+    SCENARIOS[name + "_pl"] = {"cand": {**base, "placebo_negated": -.4}, "account": "H2_evidence"}
+# Phrases that would attribute part of the effect to salience on the strength of M (never allowed)
+SALIENCE_ATTRIBUTION = ("salience is likely", "likely part of the effect", "salience is part of the effect",
+                        "upper bound on salience", "salience contributes to", "salience plays")
 
 
 def true_r(f: dict) -> dict[str, float]:
@@ -167,22 +201,33 @@ def main() -> None:
             mix_r = defaultdict(list)
             m_r, m_zones, placebo_zones, flags, readings, why_untested = (defaultdict(list), defaultdict(Counter),
                                                                           defaultdict(Counter), Counter(), Counter(), Counter())
+            halves, net_r, h_verdicts = defaultdict(list), defaultdict(list), Counter()
             for rep in range(reps):
                 rng = random.Random(f"{model}|{name}|{rep}")
                 by = mech2._lookup(synth(sets["union"], fps, params, rng))
                 fam = {f: mech2.primary_family(by, pops, f, B=B, perms=B) for f in ("cand", "yn")}
-                mention = {f: mech2.contrast(by, pops["sample_take"], mech2.MENTION_TERMS, f, reference=mech2._REF, B=B, perms=B)
-                           for f in ("cand", "yn")}
-                joint = mech2.joint_readout(fam["cand"]["readout"], fam["yn"]["readout"], mention)
+                tk = pops["sample_take"]
+                mention, placebo, net = ({f: mech2.contrast(by, tk, terms, f, reference=mech2._REF, B=B, perms=B)
+                                          for f in ("cand", "yn")}
+                                         for terms in (mech2.MENTION_TERMS, mech2.PLACEBO_TERMS, mech2.P8_NET_TERMS))
+                joint = mech2.joint_readout(fam["cand"]["readout"], fam["yn"]["readout"], mention, placebo, net)
                 for f in ("cand", "yn"):
                     m_r[f].append(mention[f]["ratio"]["estimate"])
                     m_zones[f][str(mech2.secondary_zones(mention[f]))] += 1
-                    pl = mech2.contrast(by, pops["sample_take"], ((1, "placebo_negated"), (-1, "placebo_affirmed")), f,
-                                        reference=mech2._REF, B=B, perms=B)
-                    placebo_zones[f][str(mech2.secondary_zones(pl))] += 1
+                    placebo_zones[f][str(mech2.secondary_zones(placebo[f]))] += 1
+                    for half, terms in mech2.M_HALVES.items():
+                        halves[(half, f)].append(mech2.contrast(by, tk, terms, f, reference=mech2._REF, B=B, perms=B)
+                                                 ["ratio"]["estimate"])
+                    net_r[f].append(net[f]["ratio"]["estimate"])
                 summ = joint["summary"]
-                flags["salience_likely_part"] += summ["salience_likely_part"]
-                flags["claims_read_not_evidence_shown"] += summ["claims_read_not_evidence_shown"]
+                for k in ("mention_residual_remains", "mention_residual_absent", "claims_read_not_evidence_shown",
+                          "negation_placebo_below_band_both_formats"):
+                    flags[k] += summ[k]
+                flags["salience_attributed"] += any(ph in summ["reading"] for ph in SALIENCE_ATTRIBUTION)
+                flags["H3_consistent_next_to_H2"] += (joint["H3_salience"]["verdict"] == "consistent"
+                                                      and joint["H2_evidence"]["verdict"] == "consistent")
+                h_verdicts[("H2", joint["H2_evidence"]["verdict"])] += 1
+                h_verdicts[("H3", joint["H3_salience"]["verdict"])] += 1
                 readings[summ["reading"]] += 1
                 for h in mech2.CONTENT_ACCOUNTS:
                     if joint[h]["untested_reason"] == "consistent only where it allows zero":
@@ -229,10 +274,17 @@ def main() -> None:
             print("   verdicts (both formats):", dict(verdicts))
             print("   M (mention, claim balanced): mean r " + ", ".join(f"{f} {sum(v) / len(v):+.2f}" for f, v in m_r.items())
                   + "; zones " + "; ".join(f"{f} {dict(z)}" for f, z in m_zones.items()))
-            print("   negation placebo zones: " + "; ".join(f"{f} {dict(z)}" for f, z in placebo_zones.items()))
-            print(f"   summary sentences: salience likely part {flags['salience_likely_part']}/{reps}, claims read "
-                  f"(evidence not shown) {flags['claims_read_not_evidence_shown']}/{reps}; untested because consistent "
-                  f"only where it allows zero: {dict(why_untested)}")
+            print("   M's halves, mean r: " + "; ".join(f"{h[7:]} {f} {sum(v) / len(v):+.2f}" for (h, f), v in halves.items()))
+            print("   negation placebo zones: " + "; ".join(f"{f} {dict(z)}" for f, z in placebo_zones.items())
+                  + "; P8 net of the placebo, mean r: " + ", ".join(f"{f} {sum(v) / len(v):+.2f}" for f, v in net_r.items()))
+            print("   verdicts of H2 and H3: " + ", ".join(f"{h} {v} {n}" for (h, v), n in sorted(h_verdicts.items()))
+                  + f"; salience attributed in the summary {flags['salience_attributed']}/{reps}; H3 consistent next to H2 "
+                  f"{flags['H3_consistent_next_to_H2']}/{reps}")
+            print(f"   summary sentences: mention residual remains {flags['mention_residual_remains']}/{reps}, none "
+                  f"remains {flags['mention_residual_absent']}/{reps}, claims read (evidence not shown) "
+                  f"{flags['claims_read_not_evidence_shown']}/{reps}, placebo below the band "
+                  f"{flags['negation_placebo_below_band_both_formats']}/{reps}; untested because consistent only where it "
+                  f"allows zero: {dict(why_untested)}")
             top, n = readings.most_common(1)[0]
             print(f"   most common summary ({n}/{reps}): {top}", flush=True)
 

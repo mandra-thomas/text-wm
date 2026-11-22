@@ -10,6 +10,15 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided 2026-11-21: mechanism battery, amendments after review 4 (exploratory, before any score)
+
+**Exploratory, not preregistered.** The mechanism battery (`wf/mech2.py`; runs `mech2_score`, `mech2_score_smoke`, `mech2_analysis`; design, prediction table and readouts in `notes/mechanism2_design.md`, whose section 10 holds the full entry and sections 11 to 14 the amendments after reviews 1 to 4) asks which account the goal effect follows: task as evidence, referent salience, wishful prediction, policy blending or prompt artefacts. Its design was decided on 2026-11-20 and amended four times after review, each time before any score of the battery existed. Review 4's amendments (section 14), none of which changes a prediction, a contrast, a category or a verdict rule:
+
+- M (half of the denied plus half of the affirmed report, minus the swapped task) is described as a mention-associated residual after averaging opposing claims. An adversarial check planted pure task as evidence with no salience and asymmetric responses to affirmations and denials (a grid and two parametric families, 25 patterns, each with and without a placebo effect) and found M anywhere from below zero to far above the band. The summary sentence that read a positive M as "salience is likely part of the effect" is withdrawn; the new one says the residual is consistent with salience but also with asymmetric processing of affirmations and denials, so it does not show that salience contributes (flag `mention_residual_remains`, formerly `salience_likely_part`). M's two halves are reported, and a sentence is added when M lies inside the band in both formats, which does not show that salience is absent either.
+- When the negation placebo lies below the band in both formats, the summary names the verdicts that rest on P8 and gives P8 net of the placebo; verdicts unchanged. The placebo is also reported without the 87 items whose swapped task targets a receptacle of the action's receptacle type.
+- When wishful prediction and policy blending are both still standing, the status line gives the desire_check − desire_keep readout.
+- Tests for the review's surviving mutants and the amendment; the job script's per-shard counts corrected.
+
 ## Decided or found 2026-11-20 (documentation and rigor audit)
 
 ### Changes from the 2026-11-20 audit

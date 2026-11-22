@@ -208,7 +208,7 @@ The gate was rerun on the real tokenizers after the amendment (ICE, `coc-cpu` pa
 | A20 old P2 secondary against can | `test_secondary_readouts_read_the_arms_they_name` |
 | A21 P5 lift ratio on all placement items | `test_p5_lift_reads_p5_items_only` |
 | A22 mixture text when any account is contradicted | `test_readout_verdicts_and_the_joint_rule` |
-| T1 M is P7 | `test_mention_component_is_half_negated_plus_half_affirmed_minus_swapped` |
+| T1 M is P7 | `test_mention_residual_is_half_negated_plus_half_affirmed_minus_swapped` |
 | T2 M above the band in one format suffices | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
 | T3 M read above zero, not above the band | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
 | T4 salience sentence without the claims-only condition | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
@@ -244,7 +244,7 @@ The gate was rerun on the real tokenizers after the amendment (ICE, `coc-cpu` pa
 | T34 secondary joint reading from one format | `test_secondary_zones_need_an_estimable_r` |
 | T35 secondary zones ignore estimable | `test_secondary_zones_need_an_estimable_r` |
 | T36 placebo predicted below zero under H2 | `test_named_secondaries_read_their_arms_in_both_formats` |
-| T37 summary not given M | `test_mention_component_is_half_negated_plus_half_affirmed_minus_swapped` |
+| T37 summary not given M | `test_mention_residual_is_half_negated_plus_half_affirmed_minus_swapped` |
 | T38 M on every sample item | `test_p8_reads_p7_items_only` |
 | N25 affirmed with "a" for every object | `test_templates_read_as_written` |
 | negated built for every verb | `test_every_arm_builds_for_every_task_type_and_verb` |
@@ -253,6 +253,52 @@ The gate was rerun on the real tokenizers after the amendment (ICE, `coc-cpu` pa
 | untested read as consistent | `test_readout_verdicts_and_the_joint_rule` |
 
 The gate was rerun on the real tokenizers after the amendment (ICE, `coc-cpu` partition, CPU job 7219082, the job's environment read-only, 2026-11-21): both candidates of all 1,403 items for each model and every yes/no prompt each model is scored on (20,720, 20,720 and 11,878, the placebo pair's 1,428 per primary model among them), no problem for any model.
+
+**Review 4 and the adversarial check of M (2026-11-21, before any score).** The review's 20 mutants (R1 to R20 of review 4, not to be confused with review 1's R1 to R20; eleven had survived: R1, R2, R3, R6, R7, R9, R10, R13, R15, R16, R18) were added to `scripts/mutation_check.py`, adapted where the amended code moved their text, except two that are equivalent and left out with the reason given there: R10 (the risky rule reads `PREDICTIONS` only; `_risky` is only called for accounts, whose cells are `PREDICTIONS`' own) and R19 (adds a comment). Twelve mutants of the review-4 amendment (U1 to U12: M's halves, the no-residual sentence, the placebo sentence and the verdicts resting on P8, the placebo without the swapped-target items, the S1 line) and two of the adversarial check (W1, W2: the summary attributing the residual, or its absence, to salience) were added; eight round-3 mutants were adapted where the code moved (T2, T3, T4, T14, T15, T27, T37, T38). New tests (18 collected, `tests/test_mech2.py` now 122): one per reviewer survivor (R1, R2, R3, R6, R7, R9, R13, R15, R16, R18, listed in the table), the placebo sentence and its conditions and the unchanged verdicts, the no-residual sentence, M's halves, the placebo without the swapped-target items, the S1 status line, the placebo reaching the summary through `model_block`, and the adversarial regression tests: `test_pure_task_as_evidence_with_asymmetric_claims_is_never_read_as_salience` (four planted pure-task-as-evidence patterns with asymmetric claim responses) and `test_the_m_sentences_never_attribute_the_effect_to_salience`; the summary-sentence test pins the new wording. The end-to-end test now checks the status line's per-contrast pattern ("P1 … (CATEGORY; yes/no CATEGORY)") rather than the word "yes/no", which the S1 line also contains: with the word alone N22 (status line without the yes/no categories) was no longer caught by its own test and timed out on the full suite; rerun alone after the change, it is killed by that test. Run on 2026-11-22 (`MUTANTS_MATCHING=mech2`, four shards, after the change): all 200 mech2 mutants killed in one run, each by a named failing test, none timed out or failed to apply.
+
+| Mutant | Killed by (`tests/test_mech2.py::`) |
+| --- | --- |
+| R1 salience contradictions read from the two-candidate format | `test_mention_sentence_reads_h3_from_the_joint_rows_not_one_format` |
+| R2 claims sentence from the two-candidate H2 verdict | `test_claims_sentence_needs_task_as_evidence_consistent_jointly` |
+| R3 claims-only true when salience is not contradicted | `test_no_claim_sentences_when_salience_is_not_contradicted` |
+| R4 claim contrasts include P3 | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| R5 claim contrasts drop P7 | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| R6 M above the band from its edge | `test_mention_band_edges` |
+| R7 placebo on every sample item | `test_secondary_readouts_per_format_and_population` |
+| R8 M over the affirmed lift | `test_mention_residual_is_half_negated_plus_half_affirmed_minus_swapped` |
+| R9 M zones from the two-candidate format only | `test_mention_halves_and_per_format_zones` |
+| R11 discriminating only against content rivals | `test_position_counts_only_for_the_position_account` |
+| R12 Mistral outside the sample on the start arms only | `test_mistral_is_scored_on_the_sample_and_p6_arms_on_every_step0_item` |
+| R13 placebo on takes of another object | `test_placebo_is_built_only_on_takes_of_the_goal_object` |
+| R14 undefined L on yes/no primary arms not counted | `test_undefined_scores_count_and_refuse_on_primary_arms` |
+| R15 P8 net read in the two-candidate format only | `test_secondary_readouts_per_format_and_population` |
+| R16 H7a within groups reversed | `test_h7a_within_contents_or_open_state_keeps_the_sign` |
+| R17 mention sentence needs H2 consistent too | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| R18 hash check skipped for the secondary model | `test_integrity_catches_a_stale_hash_of_the_secondary_model` |
+| R20 estimable ignored in the interval tests | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| U1 affirmed half reads the denial | `test_mention_halves_and_per_format_zones` |
+| U2 denied half reversed | `test_mention_halves_and_per_format_zones` |
+| U3 absent M checks the upper edge only | `test_mention_band_edges` |
+| U4 absent M without the claims-only condition | `test_mention_band_edges` |
+| U5 placebo read below zero, not below the band | `test_placebo_below_the_band_names_the_verdicts_resting_on_p8` |
+| U6 verdicts on P8 omit consistent accounts | `test_placebo_below_the_band_names_the_verdicts_resting_on_p8` |
+| U7 placebo sentence names the verdicts on P5 | `test_placebo_below_the_band_names_the_verdicts_resting_on_p8` |
+| U8 summary not given the placebo | `test_model_block_passes_the_placebo_and_p8_net_to_the_summary` |
+| U9 placebo subset keeps only the left-out items | `test_placebo_also_read_without_swapped_targets_at_the_action_receptacle` |
+| U10 swapped target read from the real task | `test_placebo_also_read_without_swapped_targets_at_the_action_receptacle` |
+| U11 S1 line whatever the verdicts | `test_status_line_gives_s1_when_wishful_and_blending_both_stand` |
+| U12 status line drops S1 | `test_status_line_gives_s1_when_wishful_and_blending_both_stand` |
+| W1 residual sentence attributes the effect to salience | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| W2 absent residual read as no salience | `test_mention_band_edges` |
+| T2 M above the band in one format suffices | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| T3 M read above zero, not above the band | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| T4 salience sentence without the claims-only condition | `test_summary_sentences_on_salience_contradicted_only_by_claims` |
+| T14 placebo readout reversed | `test_named_secondaries_read_their_arms_in_both_formats` |
+| T15 P8 net adds the placebo | `test_named_secondaries_read_their_arms_in_both_formats` |
+| T27 every move completes the task | `test_completing_actions_move_the_goal_object_into_a_target_type_receptacle` |
+| T37 summary not given M | `test_mention_residual_is_half_negated_plus_half_affirmed_minus_swapped` |
+| T38 M on every sample item | `test_p8_reads_p7_items_only` |
+| N22 status line without yes/no categories | `test_end_to_end_two_shards_then_analysis` |
 
 ## TODO (after 2026-11-19)
 
