@@ -467,7 +467,7 @@ The RQ2 smoke items were scored twice: on an A100 with the bfloat16-rounding sco
 Before any round-2 score, and before the design was frozen, the round-2 design (`notes/textcraft_r2_design.md`, first committed at 4656ec0 and built at f8dd14e) was amended by the owner's decisions and by review 1. All changes are in its section 14.
 
 - **Competence.** It is read per contrast: the yes/no neutral-line AUC is required to be at least 0.70 in each contrast's own action categories, and the other wave-A criteria hold on the full population. It no longer withholds estimates. The first version used one overall gate, which is still reported. These rules were chosen with knowledge of round-1 data, and the note says so.
-- **Parent goal.** Three subsets (strict, word overlap only, whole name contained) are reported beside the pooled P, with a partial-naming reading rule.
+- **Parent goal.** Three subsets (strict, word overlap only, whole name contained) are reported beside the pooled P. A partial-naming reading rule was first added, then withdrawn the same day; the direct comparison of strict against overlapping parents replaces it.
 - **Margin.** The equivalence margin is min(0.3 × SD, 0.4 nats), with each test's power reported.
 - **Mechanism readings.** These are tightened: no completion-only reading unless naming is constrained; the assumptions behind the two-item split are stated; padding is read as sensitivity to added steps.
 - **Controls.** The ingredient controls of the naming, completion and timing contrasts are class-matched (too few, never obtained).
@@ -478,3 +478,6 @@ Before any round-2 score, and before the design was frozen, the round-2 design (
 The records were rebuilt and re-verified, and the ICE tokenization check was rerun on them. None of this affects the confirmatory TextCraft result, which stays as reported.
 
 The same day, also before any round-2 score, the round-2 yes/no question was anchored to TextCraft's replies: "will the environment reply that this action succeeded ("Crafted ..." or "Got ...") or that it failed ("Could not find ...")?", parallel to ALFWorld's "Nothing happens." question. Round 1's question ("Will this action succeed?") can be read as task success: Qwen's Yes on working goal crafts fell from 73% to 14% under the swapped line. Round-2 yes/no scores, and the competence gates built on them, are therefore a different quantity from round 1's, and every round-1 yes/no figure in the design note came from the unanchored question (design section 14.Q).
+
+
+On 2026-11-22, after review 2 and still before any round-2 score, the analysis gained a coded rejection list (R1–R5, each with the competence it needs) and a descriptive mapping for the central question (mechanism, poor state reasoning, combination, undecided). R3 (P against the role gap) fires only when the matched role gap confirms the unmatched one. Readings now state when a contrast is not competent. The analysis also refuses scores for arms a record does not have. No record or prompt changed (design section 15).

@@ -183,7 +183,7 @@ Three fresh processes (hash seeds 0, 1 and 2) run every check, and two fresh bui
 | Parent failures (new) | 675 | 111 | 4 | the within-item penalty |
 | Parent successes (new) | 207 | 73 | 4 | descriptive |
 
-All seeds derive from `RNG_SEED` = 20260924, with the strings given in section 4. Bootstraps use 4,000 resamples of whole goal pairs, and sign-flip permutations 4,000 flips of whole pairs, both seeded with `RNG_SEED`.
+All seeds derive from `RNG_SEED` = 20260924, with the strings given in section 4. Bootstraps use 4,000 resamples of whole goal pairs, and sign-flip permutations 4,000 flips of whole pairs, both seeded with `RNG_SEED`. *(Superseded, 14 and 15.S: the 50 family tests and the rejection criteria's role gap use 20,000 resamples and 20,000 flips; descriptive intervals use 2,000.)*
 
 ## 6. The five confirmatory contrasts (per model)
 
@@ -240,9 +240,9 @@ $$p = \min\left(1,\ \frac{2\min(\#\{b \le 0\},\ \#\{b \ge 0\}) + 1}{B + 1}\right
 
 The predictions follow from round 1 and from ALFWorld, not from what would make the account look good. Where the evidence does not support a direction, none is made. The *account's* predictions (what it must get right) are separated from our *expectations* (what we think will happen, which may be against the account).
 
-**Which models are expected to show an intermediate lift.** *(Corrected, 14.R4: the paragraph below mapped ALFWorld's goal-directed part to Λ. That part holds naming fixed and varies whether the action advances the task, so it corresponds to Dc, not Λ. Λ predictions now rest on TextCraft round 1 only; see the revised table.)* The suggestion was to expect a positive ingredient-role effect for models with an ALFWorld *mention* effect. We do not use that criterion. A TextCraft ingredient action is not named by the goal line (apart from shared words), so the ALFWorld quantity that corresponds to Λ is the *goal-directed* part of ALFWorld's 2×2 (the action serves the task without being its named object), not the mention part. That part was measured only for the two reference models: +0.72 [0.05, 1.38] for Qwen and −0.18 [−0.31, −0.05] for Llama-3.1 (`rq2_results.md`). Their mention parts were +6.93 and +1.04. Gemma 2, Mistral and Llama 3.2 3B have positive ALFWorld goal effects (`families_results.md`: two-candidate 0.80, 1.06 and 0.98 nats; yes/no 1.23, 2.67 and 0.70), but no 2×2 was run for them. In both reference models the ALFWorld effect was mostly mention, so a positive total says little about the goal-directed part. Only Qwen qualifies for a positive prediction on Λ, Llama-3.1 is predicted null, and the three new models get no directional prediction. The word-overlap ingredient stratum is where a mention-like effect could act, and it is reported descriptively.
+**Which models are expected to show an intermediate lift.** *(Superseded twice: by 14.R4, and by 14.V3, which makes every ALFWorld-based entry exploratory motivation only. The paragraph is kept as first written; the predictions table below is the current one.)* *(Corrected, 14.R4: the paragraph below mapped ALFWorld's goal-directed part to Λ. That part holds naming fixed and varies whether the action advances the task, so it corresponds to Dc, not Λ. Λ predictions now rest on TextCraft round 1 only; see the revised table.)* The suggestion was to expect a positive ingredient-role effect for models with an ALFWorld *mention* effect. We do not use that criterion. A TextCraft ingredient action is not named by the goal line (apart from shared words), so the ALFWorld quantity that corresponds to Λ is the *goal-directed* part of ALFWorld's 2×2 (the action serves the task without being its named object), not the mention part. That part was measured only for the two reference models: +0.72 [0.05, 1.38] for Qwen and −0.18 [−0.31, −0.05] for Llama-3.1 (`rq2_results.md`). Their mention parts were +6.93 and +1.04. Gemma 2, Mistral and Llama 3.2 3B have positive ALFWorld goal effects (`families_results.md`: two-candidate 0.80, 1.06 and 0.98 nats; yes/no 1.23, 2.67 and 0.70), but no 2×2 was run for them. In both reference models the ALFWorld effect was mostly mention, so a positive total says little about the goal-directed part. Only Qwen qualifies for a positive prediction on Λ, Llama-3.1 is predicted null, and the three new models get no directional prediction. The word-overlap ingredient stratum is where a mention-like effect could act, and it is reported descriptively.
 
-**Which reading of the penalty we expect.** *(Revised, 14.R4: Dc expectations now come from the goal-directed part on completing moves, and the Dn expectation is softened; see the revised table.)* In ALFWorld's 2×2, naming the action's object in a goal the action does not advance *raised* L for both reference models (mention +6.93 Qwen, +1.04 Llama). A naming *penalty* in TextCraft would contradict that, unless the verbatim item name works differently from an ALFWorld object. So for Qwen and Llama-3.1 we expect the completion reading: Dn not below zero, Dc below zero. For the three new models there is no 2×2 and no expectation; both readings are stated.
+**Which reading of the penalty we expect.** *(Superseded by 14.V3 and 15.S: no expectation in this paragraph is used. Dn has no expectation for any model; Dc has none for Qwen and only a motivated expectation for Llama; ALFWorld's goal-directed contrast is not the same intervention as Dc. The paragraph is kept as first written.)* In ALFWorld's 2×2, naming the action's object in a goal the action does not advance *raised* L for both reference models (mention +6.93 Qwen, +1.04 Llama). A naming *penalty* in TextCraft would contradict that, unless the verbatim item name works differently from an ALFWorld object. So for Qwen and Llama-3.1 we expect the completion reading: Dn not below zero, Dc below zero. For the three new models there is no 2×2 and no expectation; both readings are stated.
 
 **The penalty under the clean prompt.** For Llama-3.1 round 1 supports P below zero: the object-goal run, which tests the same contrast in the other direction, gave −1.40 on failures. The clean prompt shrank Llama's goal-role effect by about 40%, so we expect roughly −0.5 to −0.9. For Qwen the evidence conflicts. Under the verified prompt the object-goal run gave −1.23 on failures, almost all of it on never-obtained items (−4.00), and +0.80 on successes. Under the clean prompt Qwen's goal-role effect (+3.03) exceeded its ingredient effect (+0.77) on the diagnostic sample. That comparison is unmatched, but it points the other way. 77% of the parent failures are never obtained, the class where Qwen's object-goal drop was concentrated. We therefore make no directional prediction for Qwen overall, and expect P to be more negative on never-obtained than on too-few records (descriptive). For the new models the account predicts P below zero, because it calls the penalty "not specific to Llama in kind". That is the account's generality claim, not an expectation backed by data.
 
@@ -253,7 +253,7 @@ The predictions follow from round 1 and from ALFWorld, not from what would make 
 - *Llama-3.1-8B:* yes/no AUC 0.61 (goal role 0.85, ingredient 0.55); Yes to 9.9% of failures and 11.3% of successes; median P(Yes) plus P(No) 0.999. It *would have been classed as not competent*, on the AUC condition. Its two-candidate neutral AUC on the same items is 0.61 (goal role 0.84, ingredient 0.58). The confirmatory metrics' 0.68 is the same model's two-candidate AUC under the aligned line, over the main and usefulness failures.
 - *Qwen3-8B:* yes/no AUC 0.85; Yes to 18.7% of failures and 72.5% of successes; median mass 1.00. It passes.
 
-This is a disclosed observation. It does not change the confirmatory verdicts, which were read under the confirmatory design's own competence rule. It does mean that **Llama-3.1-8B is likely to fail the round-2 gate**: the clean prompt lowered its two-candidate AUC by a further 0.016 on the diagnostic sample. If it fails, every round-2 contrast for Llama-3.1, the model the account was built on, is reported as not interpretable, and the account can be tested only on the models that pass. The role-level readout will show whether Llama discriminates on the goal role, as in round 1, but it does not change the verdict.
+This is a disclosed observation. It does not change the confirmatory verdicts, which were read under the confirmatory design's own competence rule. *(Superseded by 14.U1: no contrast is withheld for competence, and competence is read per contrast; the overall gate below is reported only.)* It does mean that **Llama-3.1-8B is likely to fail the round-2 gate**: the clean prompt lowered its two-candidate AUC by a further 0.016 on the diagnostic sample. If it fails, every round-2 contrast for Llama-3.1, the model the account was built on, is reported as not interpretable, and the account can be tested only on the models that pass. The role-level readout will show whether Llama discriminates on the goal role, as in round 1, but it does not change the verdict.
 
 **Predictions table** (two-candidate, failures; "none" means no directional prediction; the account's own predictions are in the last row). *Revised before the freeze (14.R4).* Λ rests on TextCraft round 1 only. Dc rests on ALFWorld's goal-directed part on completing moves (`notes/textcraft_vs_alfworld.md`, branch `xenv-compare`, section 10: the 2×2 part that holds naming fixed, on the moves that would complete the task). Dn has no directional expectation: ALFWorld's mention part names the object in a goal the action does *not* advance, while in Dn crafting G completes a named sub-goal.
 
@@ -279,7 +279,7 @@ This is a disclosed observation. It does not change the confirmatory verdicts, w
 - adding the parent's lines under the aligned line changes L little;
 - one inventory look-up against none moves the goal-role effect up slightly (round 1's empty-start sentence: +0.14 for Llama).
 
-**What would falsify the account** (each applies to models that pass the competence gate):
+**What would falsify the account** *(superseded by the coded rejection list of 15.R; F1 to F4 below are kept as first written. F1 becomes R1 for every model competent for P, F3 becomes R2, F2 becomes R4 and F4 becomes R5)* (each applies to models that pass the competence gate):
 
 - **F1, no within-item penalty in its home model.** For Llama-3.1-8B, P is equivalent to zero or confirmed above zero. The round-1 penalty would then reflect item structure or the agent-instruction prompt, not the goal line. If Llama-3.1 fails the gate, F1 cannot be tested, and that is reported.
 - **F2, the lift does not explain the model difference.** Llama-3.1's Λ is confirmed above zero and at least Qwen's estimate, or, among the models that pass, the ordering of Λ is unrelated to the ordering of the total goal effect. The second half is descriptive (five models).
@@ -495,7 +495,7 @@ These changes were made on 2026-11-21, before any round-2 score. No model has sc
 
 ### 14.U1 Competence by contrast (user decision; populations and thresholds from review 1)
 
-The first version read every contrast through one overall gate, and a model that failed it was "not interpretable" for everything. Round 1 showed that Llama-3.1's competence differs by action category, so one gate would hide where it is and is not competent. **These rules were chosen with knowledge of round-1 data.** That knowledge includes Llama's round-1 role AUCs (yes/no 0.85 on the goal role, 0.55 on ingredients), its class profile and the competence note's heuristic fits. The disclosure table at the end of this item gives the values the rules would have produced on the confirmatory scores.
+The first version read every contrast through one overall gate, and a model that failed it was "not interpretable" for everything. Round 1 showed that Llama-3.1's competence differs by action category, so one gate would hide where it is and is not competent. **These rules were chosen with knowledge of round-1 data.** That knowledge includes Llama's round-1 role AUCs (yes/no 0.85 on the goal role, 0.55 on ingredients, both from round 1's *unanchored* question, 14.Q), its class profile and the competence note's heuristic fits. The disclosure table at the end of this item gives the values the rules would have produced on the confirmatory scores.
 
 **The final competence rules (verbatim).**
 
@@ -575,7 +575,7 @@ The round-1 replication across models failed under its preregistered rule, and t
 - poor reasoning about the environment's state;
 - or a combination.
 
-The results map to it as follows (for Llama-3.1-8B; the same reading applies to any model):
+*(The mapping below is superseded by the coded, mutually exclusive rule of 15.C, and the rejection list by 15.R.)* The results map to it as follows (for Llama-3.1-8B; the same reading applies to any model):
 
 - *Mechanism:* Llama is competent for P (both goal-crafting populations), P is confirmed below zero, and the mechanism reading of section 8 applies.
 - *Poor state reasoning:* Llama is not competent in the populations where its effect sits, and its scores there track H1 or H2∧H9 more closely than H6. Any confirmed contrast is then a measurable effect, not a distortion of a working state judgement.
@@ -648,7 +648,7 @@ Because crafting G under the two-item line still completes one *item* of a named
 - cells are averaged with the smaller count as the weight, as in round 1's matched comparison;
 - intervals come from a pair bootstrap.
 
-On the records, 13 of 15 cells (985 items) qualify for Dn, Dc and the role gap, and 9 of 10 (663 items) for T. These estimates are reported as sensitivity beside the primary estimates. They do not enter the family or the readings.
+On the records, 13 of 15 cells (981 items, on the 996 rows of the two-item contrasts; corrected in 15.S from 985) qualify for Dn, Dc and the role gap, and 9 of 10 (663 items) for T. These estimates are reported as sensitivity beside the primary estimates. They do not enter the family or the readings.
 
 Dn and Dc do not identify psychological mechanisms on their own. They are differences in predicted log-odds between constructed prompts. Read as "naming" and "completion" effects, they rest on the assumptions stated in 14.U4: additivity, no interaction between the conjunctive goal and the action's role, equal dilution, no interaction between structure and the goal line, and no position effect.
 
@@ -683,3 +683,76 @@ The anchored question keeps "Yes" and "No" as single tokens, equal to each templ
 **Tests and mutants.** `tests/test_textcraft_r2.py`: 102 tests pass. The full suite (`tests/`), run once at the end: 964 passed, 7 skipped. The round-2 test file was rerun after three of its tests were strengthened. `scripts/mutation_check.py` holds 102 round-2 mutants, and all are killed; `notes/testing.md` lists each with the test that killed it.
 
 **What has not been run.** No model has scored any round-2 record: there has been no smoke run and no GPU job. Next come the confirming review, the summary to the owner and the freeze tag; then smoke runs and scoring.
+
+
+## 15. Amendments after review 2, before freeze (2026-11-22)
+
+Review 2 (engineering and science) read the design at a63e956 and passed it with fixes. Nothing has been scored. No model has scored a round-2 record, and no round-2 effect has been computed. The records and prompts do not change in this section, so the record hash, the manifest and the ICE tokenization check of 14.C stand. Everything here is analysis code, tests and text.
+
+### 15.R The rejection list (coded; replaces the falsifiers of section 7 and 14.U5's list)
+
+Each criterion is computed by the analysis: `rejections_for_model` per model, `across` across models. Each states the competence it needs. A criterion whose competence fails is "not testable" and never fires. The role gap uses 20,000 pair resamples, like the family tests.
+
+- **R1, no penalty.** For any model competent for P, P is equivalent to zero or confirmed above zero. *Rejects* the penalty component of the decomposition for that model. (F1, now for every model, not only Llama-3.1.)
+- **R2, the penalty is not shared.** Among the models competent for P:
+  - at least one model other than Llama-3.1 has P equivalent to zero or confirmed above zero, and none is confirmed below zero → R2 fires;
+  - if any is confirmed below zero, R2 does not fire;
+  - otherwise R2 is "undecided".
+
+  *Rejects* the claim that the penalty is shared across families. (F3, 14.R6.)
+- **R3, P and the role gap disagree.** This needs the model to be competent for P, Dn and Dc. It fires when three things hold together:
+  - P is confirmed in one direction;
+  - the round-2 role gap (aligned minus swapped, goal-role minus class-matched ingredient failures, on the 996 rows of the two-item contrasts; equal to Dn + Dc) has a 95% interval on the other side of zero;
+  - the matched role gap (matched on length bin, craftable or raw missing inputs, and number of missing inputs, as in 14.V2) agrees in sign with the unmatched role gap, and its own 95% interval also excludes zero.
+
+  If P and the unmatched role gap disagree but the matched role gap does not confirm, the analysis reports "P and the unmatched role gap disagree; the matched role gap does not confirm (item-structure confound)" and does not reject. *Rejects* the decomposition for that model, since the within-item and between-item measures of the same penalty then disagree. *(Owner decision, adopted from review 2's Qwen objection; flagged for the owner before the freeze.)*
+- **R4, the lift does not explain the model difference.** This needs both Llama-3.1 and Qwen3 to be competent for Λ. It fires when Llama-3.1's Λ is confirmed above zero and its estimate is at least Qwen3's. *Rejects* the claim that the lift carries the Qwen–Llama difference. (F2. Its second half, the Λ ordering across five models, stays a description and never rejects.)
+- **R5, added steps deepen the penalty.** For a model competent for T, T is confirmed below zero. *Rejects* the claim that the penalty is largest early, in either reading. (F4.)
+
+**Not tested.** The account's first claim, that the penalty is "of similar size across models", has no test here. Only its sign is tested (R1, R2). Sizes are reported, but no comparison of sizes across models is planned.
+
+**Qwen's routes to rejection, stated explicitly.**
+
+- R1 can fire for Qwen only through "P confirmed above zero": equivalence is unreachable for Qwen's P at this sample size (section 10).
+- R3 can fire for Qwen if its P and its role gap point in opposite directions and the matched role gap confirms the role gap. Review 2's concern was that Qwen's unmatched role gap could be positive for item-structure reasons; the matched requirement addresses that.
+- R2 counts Qwen like any other model competent for P.
+- R4 uses Qwen's Λ only as the comparison.
+- R5 applies if Qwen is competent for T.
+
+### 15.C The central question: a descriptive mapping (outside the Holm family)
+
+For each model the analysis gives exactly one of four answers (`central_question`). It uses:
+
+- P's verdict;
+- competence for P;
+- within the gated goal-role population (goal-role main failures without used up, against goal-role successes, on the yes/no question under the neutral line), the tracking AUCs of H1 and of H2∧H9 minus that of H6, the true inventory rule. Each difference has a paired pair-bootstrap 95% interval (2,000 resamples; the same resample for both AUCs).
+
+The answers:
+
+- **Mechanism:** P confirmed below zero, the model is competent for P, and H6's tracking AUC is at least H1's and at least H2∧H9's (each difference at or below zero).
+- **Combination:** P confirmed below zero, and H1 or H2∧H9 tracks better than H6, with the difference's 95% interval above zero.
+- **Poor state reasoning:** P not confirmed below zero, and either the model is not competent for P, or H1 or H2∧H9 tracks better than H6 with the difference's 95% interval above zero.
+- **Undecided:** anything else.
+
+The answers are mutually exclusive:
+
+- Mechanism and Combination both need a confirmed P, and Poor state reasoning needs its absence.
+- Mechanism needs both differences at or below zero, while Combination needs one of them above zero with its interval.
+
+*A difference that is undefined counts for neither side.* H2∧H9 calls every goal-role craft a failure, since the goal is a top item, so its tracking AUC within the goal-role population is undefined. The comparison then rests on H1. Inside the goal-role population, H2∧H9's signature is a low success classification rate on goal-role successes, which is reported.
+
+"Λ null" in any description means Λ equivalent to zero, not inconclusive. The mapping is reported per model with its inputs. It is not a test and changes no verdict.
+
+### 15.S Other changes
+
+- **Readings say when competence fails.** `reading()` now appends "measurable effect only; not competent for …" whenever a contrast the reading uses (P, Dn, Dc for the penalty reading; T; Λ) is not competent.
+- **Fallback in the reading table.** Any combination of P confirmed below zero with Dn and Dc not listed in section 8 (for example Dn confirmed above zero with Dc inconclusive, or Dc confirmed above zero) reads "penalty present, mechanism unresolved".
+- **The same rows for the role gap.** The two-item contrasts, the role gap, its matched version and the descriptive two-item readouts all use the same 996 rows: 500 goal-role and 496 class-matched ingredient failures that have a two-item line and no named goal already made. The matched role gap uses 981 of them, in 13 of 15 cells.
+- **What "padded" means for T's competence.** T's populations use the unpadded yes/no question under the neutral line, on the padded subset of failures (the padded records are scored with padding only under the aligned and swapped lines). The successes are the unpadded successes in the 1–3 and 4–8 step bins.
+- **Score checks.** A score whose condition is not one of its record's arms now stops the analysis.
+- **Stale text fixed.** Section 5 (resamples), section 7 (the two ALFWorld paragraphs, the competence paragraph, the falsifiers), 14.U1 (unanchored-question marker), 14.V2 (981 items), the analysis docstring, and the deviations entry (the partial-naming rule was withdrawn).
+- **Tests and mutants.** Tests kill review 2's verdict mutants N1 (a confirmed effect above zero needs the interval), N10 (the two-sided bootstrap p), N19 (difference checked before equivalence) and N24 (the sign flip uses the absolute value), and its survivors N5–N9, N12, N14–N17, N22, N23 and N25. Each new rule has its own test and mutant. Results are in 15.T.
+
+### 15.T Checks after review 2
+
+*(Filled in by the run below.)*

@@ -843,14 +843,27 @@ def test_timing_qualifier_and_no_partial_naming_rule():
     base = {**v, "parent_penalty": "inconclusive"}
     assert A.reading({**base, "timing": "equivalent to zero"})["timing"].startswith("no sensitivity")
     assert A.reading({**base, "timing": "not applicable"})["timing"] == "not applicable"
-    assert A.reading({**base, "timing": "confirmed below zero"})["timing"].endswith("(F4)")
+    assert A.reading({**base, "timing": "confirmed below zero"})["timing"].endswith("(R5)")
     assert A.reading({**base, "lift": "equivalent to zero"})["lift"] == "no lift larger than the margin"
 
 
-def test_model_verdicts_keep_estimates_and_limit_interpretation():
+def _block(p_ci=(-2, -0.5), rg_ci=(-2, -0.5), m_ci=(-2, -0.5), tracking=(-0.1, -0.1, -0.2, -0.2)):
+    """A model block as model_block writes it, with the parts model_verdicts reads."""
     block = {"contrasts": {c: {"estimate": -1.0, "ci95": [-2, -0.5], "applicable": True} for c in A.CONTRASTS},
-             "competence": {"interpretable": False, "local": {"per_contrast": {c: {"competent": True} for c in A.CONTRASTS}}},
+             "competence": {"interpretable": False, "local": {
+                 "per_contrast": {c: {"competent": True} for c in A.CONTRASTS},
+                 "populations": {"goal_main": {"tracking_differences": {
+                     "H1_minus_H6": {"estimate": tracking[0], "ci95": [tracking[2], 0.5]},
+                     "H2andH9_minus_H6": {"estimate": tracking[1], "ci95": [tracking[3], 0.5]}}}}}},
              "descriptive": {"parent": {"penalty_by_subset": {"strict": {"estimate": 0.2}}}}}
+    block["contrasts"]["parent_penalty"]["ci95"] = list(p_ci)
+    block["contrasts"]["role_gap"] = {"estimate": sum(rg_ci) / 2, "ci95": list(rg_ci),
+                                      "matched": {"estimate": sum(m_ci) / 2, "ci95": list(m_ci)}}
+    return block
+
+
+def test_model_verdicts_keep_estimates_and_limit_interpretation():
+    block = _block()
     block["contrasts"]["timing"]["comparable_to_one_lookup_change"] = False
     fam = {f"m:{c}:{t}": {"p_holm": 0.001 if t == "differs" else 1.0} for c in A.CONTRASTS for t in A.TESTS}
     block["competence"]["local"]["per_contrast"]["lift"]["competent"] = False
@@ -1161,6 +1174,8 @@ def test_role_gap_descriptive_equals_naming_plus_completion(small, fast):
     c = A.contrasts(by, pops, 0.4)
     d = A.descriptive(by, pops)
     assert d["role_gap_main"]["estimate"] == pytest.approx(c["naming"]["estimate"] + c["completion"]["estimate"])
+    assert c["role_gap"]["estimate"] == pytest.approx(c["naming"]["estimate"] + c["completion"]["estimate"])
+    assert c["role_gap"]["matched"]["min_items_per_role"] == 5
 
 
 def test_round2_question_is_anchored_to_the_replies():
@@ -1251,3 +1266,250 @@ def test_sensitivity_and_strict_comparison_are_reported(small, fast, monkeypatch
     assert d["sensitivity_matched"]["naming"]["estimate"] == pytest.approx(0.4)
     assert d["sensitivity_matched"]["completion"]["estimate"] == pytest.approx(-1.1)
     assert d["parent"]["penalty_strict_minus_overlapping"]["estimate"] == pytest.approx(1.0)
+
+
+# ---------------- review 2 (2026-11-22) ----------------
+
+
+def _fam(**p):
+    fam = {f"m:{c}:{t}": {"p_holm": 0.5} for c in A.CONTRASTS for t in A.TESTS}
+    for k, v in p.items():
+        c, t = k.rsplit("_", 1)
+        fam[f"m:{c}:{t}"]["p_holm"] = v
+    return fam
+
+
+def test_n1_confirmed_above_needs_the_interval():
+    fam = _fam(lift_differs=0.001)
+    assert A.verdict({"estimate": 0.5, "ci95": [-0.1, 0.8]}, fam, "m", "lift") == "inconclusive"
+    assert A.verdict({"estimate": 0.5, "ci95": [0.1, 0.8]}, fam, "m", "lift") == "confirmed above zero"
+
+
+def test_n10_bootstrap_p_is_two_sided():
+    assert A.bootstrap_p([-1.0] * 99) == pytest.approx(1 / 100)
+    assert A.bootstrap_p([1.0] * 99) == pytest.approx(1 / 100)
+
+
+def test_n19_difference_is_checked_before_equivalence():
+    fam = _fam(lift_differs=0.001, lift_equivalent=0.001)
+    assert A.verdict({"estimate": 0.3, "ci95": [0.2, 0.39]}, fam, "m", "lift") == "confirmed above zero"
+
+
+def test_n24_sign_flip_uses_the_absolute_value():
+    assert A.sign_flip_p([-1.0] * 30, [str(i) for i in range(30)], n=200) < 0.01
+
+
+def test_n7_n8_n9_n23_competence_populations_are_exact():
+    assert A.COMPETENCE_POPULATIONS == {
+        "ingredient_all": ("ingredient", "ingredient_successes"),
+        "ingredient_matched": ("ingredient_matched", "ingredient_successes"),
+        "goal_main": ("goal", "goal_successes"), "parent": ("parent_failures", "parent_successes"),
+        "goal_padded": ("padded_goal", "goal_successes_padded_bins"),
+        "ingredient_padded_matched": ("padded_ingredient_matched", "ingredient_successes_padded_bins")}
+    assert A.CONTRAST_POPULATIONS["lift"] == ("ingredient_all",)
+
+
+def test_n12_underpowered_at_the_first_holm_step():
+    blk = A._power_block([0.118, -0.118] * 500, 0.4)
+    assert blk["equivalence_power_at_zero_alpha_05"] > 0.8 > blk["equivalence_power_at_zero_holm_first_step"]
+    assert blk["equivalence_underpowered"] is True
+
+
+def test_n14_classification_rates(records):
+    pops = A.populations(records)
+    f, s = pops["ingredient"][:20], pops["ingredient_successes"][:20]
+    by = _yn_by(f + s, lambda r: 2.0 if r["population"] == "success" else -2.0)
+    c = A.classification(by, f, s)["yes_no"]
+    assert c["failure_classification_rate"] == 1.0 and c["success_classification_rate"] == 1.0
+
+
+def test_n15_heuristics_are_read_in_the_gated_population(records, fast):
+    pops = A.populations(records)
+    every = pops["main_failures"] + pops["successes"] + pops["parent_failures"] + pops["parent_successes"]
+    by = _yn_by(every, lambda r: 3.0 if r["population"] == "success" else -3.0)
+    lc = A.local_competence(by, pops, A.gate_checks(by, pops["main_failures"], pops["successes"]))
+    want = A.heuristic_fits(by, pops["parent_failures"] + pops["parent_successes"])
+    assert json.dumps(lc["populations"]["parent"]["heuristics"], sort_keys=True) == json.dumps(want, sort_keys=True)
+
+
+def test_n16_across_reads_the_penalty_competence(small, fast, monkeypatch):
+    recs = copy.deepcopy(small)
+    scores = {t: _planted(recs, t) for t in R.TAGS}
+    ing_succ = {r["id"] for r in recs if r["population"] == "success" and r["role"] == "ingredient"}
+    scores["mistral-7b-v0.3"] = [{**x, "L": -abs(x["L"]) - 1} if (x["condition"] == "yn_neutral" and x["transition_id"] in ing_succ)
+                                 else x for x in scores["mistral-7b-v0.3"]]
+    seen = {}
+    orig = A.across
+    monkeypatch.setattr(A, "across", lambda v, comp, *a: (seen.update(comp), orig(v, comp, *a))[1])
+    out = A.analyse(recs, SHOTS, scores, list(R.TAGS))
+    assert out["verdicts"]["mistral-7b-v0.3"]["competent"]["lift"] is False
+    assert seen["mistral-7b-v0.3"] is out["verdicts"]["mistral-7b-v0.3"]["competent"]["parent_penalty"] is True
+
+
+def test_n17_lift_uses_every_ingredient_failure(small, fast):
+    recs = copy.deepcopy(small)
+    base = _planted(recs, "qwen3-8b")
+    uu = {r["id"] for r in recs if r.get("failure_class") == "used_up" and r["role"] == "ingredient"}
+    shifted = [{**x, "L": x["L"] + 5.0} if (x["transition_id"] in uu and x["condition"] == "aligned") else x for x in base]
+    pops = A.populations(recs)
+    a = A.contrasts(A.index_scores(base, recs, SHOTS, "qwen3-8b")[0], pops, 0.4)["lift"]["estimate"]
+    b = A.contrasts(A.index_scores(shifted, recs, SHOTS, "qwen3-8b")[0], pops, 0.4)["lift"]["estimate"]
+    assert b > a
+
+
+def test_n22_yes_share_on_successes(records):
+    pops = A.populations(records)
+    f, s = pops["main_failures"][:30], pops["successes"][:30]
+    by = _yn_by(f + s, lambda r: -1.0 if r["population"] == "success" else -2.0)
+    g = A.gate_checks(by, f, s)
+    assert g["yes_share_neutral_successes"]["pass"] is False
+
+
+def test_n25_tost_low_side_uses_the_margin():
+    assert A.tost_p([-0.6] * 99, 0.5) == 1.0
+    assert A.tost_p([0.0] * 99, 0.5) == pytest.approx(1 / 100)
+
+
+def test_n5_applicability_reads_one_lookup(small, fast):
+    recs = copy.deepcopy(small)
+    goal = {r["id"] for r in recs if r["role"] == "goal"}
+    sc = [{**x, "L": x["L"] + 0.7} if (x["transition_id"] in goal and x["condition"] in ("pad1_aligned", "pad8_aligned")) else x
+          for x in _planted(recs, "qwen3-8b", tau=0.0)]  # the role gap is 0 with one look-up, -0.7 with none
+    c = A.contrasts(A.index_scores(sc, recs, SHOTS, "qwen3-8b")[0], A.populations(recs), 0.4)
+    assert c["timing"]["role_gap_at_one_lookup"]["estimate"] == pytest.approx(0.0) and c["timing"]["applicable"] is False
+
+
+def test_n6_comparable_reads_the_one_lookup_change(small, fast):
+    recs = copy.deepcopy(small)
+    goal = {r["id"] for r in recs if r["role"] == "goal"}
+    sc = [{**x, "L": x["L"] + 0.5} if (x["transition_id"] in goal and x["condition"] in ("pad1_aligned", "pad8_aligned")) else x
+          for x in _planted(recs, "qwen3-8b", tau=0.5)]
+    t = A.contrasts(A.index_scores(sc, recs, SHOTS, "qwen3-8b")[0], A.populations(recs), 0.4)["timing"]
+    assert t["estimate"] == pytest.approx(0.5) and t["one_lookup_vs_none"]["estimate"] == pytest.approx(0.5)
+    assert t["role_gap_at_one_lookup"]["estimate"] == pytest.approx(-0.2) and t["comparable_to_one_lookup_change"] is True
+
+
+def test_scores_must_be_arms_of_their_record(small):
+    recs = copy.deepcopy(small)
+    good = _planted(recs, "qwen3-8b")
+    main = next(x for x in good if x["condition"] == "aligned" and x["transition_id"] in
+                {r["id"] for r in recs if r["kind"] == "main" and r["population"] == "success"})
+    with pytest.raises(A.StaleScore):
+        A.index_scores(good + [{**main, "condition": "pad8_aligned"}], recs, SHOTS, "qwen3-8b")
+
+
+def test_reading_says_when_a_contrast_is_not_competent():
+    v = {"lift": "equivalent to zero", "parent_penalty": "confirmed below zero", "naming": "inconclusive",
+         "completion": "confirmed below zero", "timing": "confirmed above zero"}
+    comp = {c: True for c in A.CONTRASTS}
+    r = A.reading(v, competent=comp)
+    assert not any("not competent" in x for x in r.values())
+    r = A.reading(v, competent={**comp, "naming": False, "timing": False})
+    assert r["penalty"].endswith("; measurable effect only; not competent for naming")
+    assert r["timing"].endswith("; measurable effect only; not competent for timing") and "not competent" not in r["lift"]
+
+
+def test_rejection_list_per_model():
+    fam = _fam(parent_penalty_differs=0.001)
+    out = A.model_verdicts(_block(), fam, "m")["rejections"]
+    assert not out["R1_penalty_absent"]["fires"] and out["R1_penalty_absent"]["testable"]
+    # R1: P equivalent to zero in a model competent for P (any model)
+    eq = A.model_verdicts(_block(p_ci=(-0.1, 0.1)), _fam(parent_penalty_equivalent=0.001), "m")["rejections"]
+    assert eq["R1_penalty_absent"]["fires"]
+    b = _block(p_ci=(-0.1, 0.1))
+    b["competence"]["local"]["per_contrast"]["parent_penalty"]["competent"] = False
+    nt = A.model_verdicts(b, _fam(parent_penalty_equivalent=0.001), "m")["rejections"]
+    assert not nt["R1_penalty_absent"]["testable"] and not nt["R1_penalty_absent"]["fires"]
+    # R3: P below zero, role gap above zero; the matched gap confirms -> rejects; it does not -> the confound note
+    r3 = A.model_verdicts(_block(rg_ci=(0.2, 1.0), m_ci=(0.1, 0.9)), fam, "m")["rejections"]["R3_penalty_and_role_gap_disagree"]
+    assert r3["fires"] and r3["note"] == "rejects"
+    r3 = A.model_verdicts(_block(rg_ci=(0.2, 1.0), m_ci=(-0.3, 0.9)), fam, "m")["rejections"]["R3_penalty_and_role_gap_disagree"]
+    assert not r3["fires"] and r3["note"].endswith("(item-structure confound)")
+    r3 = A.model_verdicts(_block(rg_ci=(0.2, 1.0), m_ci=(-0.9, -0.3)), fam, "m")["rejections"]["R3_penalty_and_role_gap_disagree"]
+    assert not r3["fires"]
+    b = _block(rg_ci=(0.2, 1.0), m_ci=(0.1, 0.9))
+    b["competence"]["local"]["per_contrast"]["naming"]["competent"] = False
+    r3 = A.model_verdicts(b, fam, "m")["rejections"]["R3_penalty_and_role_gap_disagree"]
+    assert not r3["testable"] and not r3["fires"]
+    # R5: T confirmed below zero in a model competent for T
+    t = A.model_verdicts(_block(), _fam(timing_differs=0.001), "m")["rejections"]["R5_added_steps_deepen_penalty"]
+    assert t["fires"]
+    b = _block()
+    b["competence"]["local"]["per_contrast"]["timing"]["competent"] = False
+    assert not A.model_verdicts(b, _fam(timing_differs=0.001), "m")["rejections"]["R5_added_steps_deepen_penalty"]["fires"]
+
+
+def test_rejection_r4_lift_and_r2():
+    v = {t: {"parent_penalty": "inconclusive"} for t in R.TAGS}
+    comp = {t: True for t in R.TAGS}
+    lift = {t: {"verdict": "inconclusive", "estimate": 0.1, "competent": True} for t in R.TAGS}
+    lift["llama3.1-8b"] = {"verdict": "confirmed above zero", "estimate": 0.9, "competent": True}
+    lift["qwen3-8b"] = {"verdict": "confirmed above zero", "estimate": 0.8, "competent": True}
+    a = A.across(v, comp, lift)
+    assert a["R4_lift_does_not_explain_the_difference"]["fires"] and a["R2_penalty_not_shared"]["value"] == "undecided"
+    lift["qwen3-8b"]["estimate"] = 1.0
+    assert not A.across(v, comp, lift)["R4_lift_does_not_explain_the_difference"]["fires"]
+    lift["qwen3-8b"] = {**lift["qwen3-8b"], "estimate": 0.5, "competent": False}
+    r4 = A.across(v, comp, lift)["R4_lift_does_not_explain_the_difference"]
+    assert not r4["testable"] and not r4["fires"]
+
+
+@pytest.mark.parametrize("p_ci,p_comp,tracking,want", [
+    ((-2, -0.5), True, (-0.1, -0.1, -0.2, -0.2), "mechanism"),
+    ((-2, -0.5), True, (0.2, -0.1, 0.05, -0.2), "combination"),
+    ((-2, -0.5), False, (0.2, -0.1, 0.05, -0.2), "combination"),
+    ((-2, -0.5), True, (0.1, -0.1, -0.05, -0.2), "undecided"),
+    ((-2, -0.5), False, (-0.1, -0.1, -0.2, -0.2), "undecided"),
+    ((-0.5, 0.5), False, (-0.1, -0.1, -0.2, -0.2), "poor state reasoning"),
+    ((-0.5, 0.5), True, (-0.1, 0.3, -0.2, 0.1), "poor state reasoning"),
+    ((-0.5, 0.5), True, (-0.1, -0.1, -0.2, -0.2), "undecided"),
+])
+def test_central_question_is_exclusive(p_ci, p_comp, tracking, want):
+    b = _block(p_ci=p_ci, tracking=tracking)
+    b["competence"]["local"]["per_contrast"]["parent_penalty"]["competent"] = p_comp
+    cq = A.model_verdicts(b, _fam(parent_penalty_differs=0.001), "m")["central_question"]
+    assert cq["answer"] == want and cq["descriptive"] is True
+
+
+def test_tracking_differences_are_paired(records, fast):
+    pops = A.populations(records)
+    f, s = pops["goal"][:60], pops["goal_successes"][:60]
+    by = _yn_by(f + s, lambda r: 3.0 if r["population"] == "success" else -3.0)
+    td = A.tracking_differences(by, f + s)
+    assert td["H1_minus_H6"]["estimate"] < 0 and td["H1_minus_H6"]["ci95"][1] <= 1e-9  # the truth is tracked perfectly
+    # H2 and H9 calls every goal craft a failure: undefined in the goal-role population
+    assert td["H2andH9_minus_H6"]["estimate"] != td["H2andH9_minus_H6"]["estimate"]
+    b = _block(tracking=(-0.1, float("nan"), -0.2, float("nan")))
+    assert A.model_verdicts(b, _fam(parent_penalty_differs=0.001), "m")["central_question"]["answer"] == "mechanism"
+    b = _block(tracking=(0.2, float("nan"), 0.05, float("nan")))
+    assert A.model_verdicts(b, _fam(parent_penalty_differs=0.001), "m")["central_question"]["answer"] == "combination"
+
+
+def test_descriptive_two_item_rows_drop_completed_records(records, small, fast):
+    recs = copy.deepcopy(small)
+    by = A.index_scores(_planted(recs, "qwen3-8b"), recs, SHOTS, "qwen3-8b")[0]
+    pops = A.populations(recs)
+    n = A.descriptive(by, pops)["yes_no"]["naming"]["n_items"]
+    g = next(r for r in pops["goal"] if r["both_task_line"])
+    g["history"] = [["get 1 x", f"Got 1 {g['partner']}"]] + g["history"]
+    assert A.descriptive(by, pops)["yes_no"]["naming"]["n_items"] == n - 1
+    assert len(A.two_item_rows(A.populations(records))) == 996
+
+
+def test_n11_between_reports_the_95_percent_interval(fast):
+    import random
+    rng = random.Random(5)
+    rows = [("goal" if i % 2 else "ingredient", rng.gauss(0, 1)) for i in range(80)]
+    cl = [f"p{i % 13}" for i in range(80)]
+    r = A.between(rows, cl, 0.4)
+    d = A.draws(A._gap, rows, cl)
+    assert r["ci95"] == [A.pct(d, 0.025), A.pct(d, 0.975)] and r["ci90"] == [A.pct(d, 0.05), A.pct(d, 0.95)]
+    assert r["ci95"] != r["ci90"]
+
+
+def test_n13_verify_counts_two_item_records_with_a_made_goal(records):
+    rec = copy.deepcopy(next(r for r in records if r["kind"] == "main" and r["both_task_line"] and r["population"] == "main"))
+    rec["history"] = [["get 1 x", f"Got 1 {rec['partner']}"]] + rec["history"]
+    rep = I.check_records([rec], SHOTS)
+    assert rep["two_item_records_with_a_named_goal_already_made_or_held"] == {
+        f"main|main|{rec['role']}|{rec['failure_class']}": 1}
