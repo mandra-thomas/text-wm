@@ -137,7 +137,8 @@ def test_system_message_check_catches_a_changed_closing_paragraph(monkeypatch):
         try:
             monkeypatch.setitem(A.CODA, arm, A.CODA[arm] + " Extra.")
             A.system_message.cache_clear()
-            assert A.check_system_messages(), arm
+            want = "blind is not main" if arm == "blind" else "auth is not blind"
+            assert any(p.startswith(want) for p in A.check_system_messages()), arm
         finally:
             monkeypatch.undo()
             A.system_message.cache_clear()
