@@ -1,0 +1,7 @@
+run_id: tau_family_smoke_analysis
+# The smoke run's format, timing and precision (design §6.4); with project_to set no estimate or verdict is computed.
+source: tau_family_score_smoke
+build_run: tau_build
+models: [mistral-7b-v0.3, llama3.2-3b]
+project_to: tau_family_score
+time_limit_hours: 3  # pace/tau_family_score.sbatch --time (a test keeps them equal)

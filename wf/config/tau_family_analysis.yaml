@@ -1,0 +1,11 @@
+run_id: tau_family_analysis
+# Verdicts, competence, readings and descriptive comparisons (design §7). Reads tau_family_score_<tag> for each model,
+# the placement run, and the reference τ scoring run (scored at c737cd6), linked into runs/ as tau_score_reference
+# before this runs; its recomputed primary results must equal the published ones.
+build_run: tau_build
+models: [mistral-7b-v0.3, llama3.2-3b]
+placement_run: tau_family_placement_mistral-7b-v0.3
+placement_items: 300
+reference_run: tau_score_reference
+reference_commits: [c737cd6]
+published_metrics: notes/tau_metrics.json

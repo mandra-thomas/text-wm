@@ -1420,6 +1420,14 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "tau_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
     "tau_smoke_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
     "tau_contamination": lambda cfg: _lazy("tau.pipeline", "run_tau_contamination")(cfg),
+    # τ-bench, wave-A model families (notes/tau_families_design.md, 2026-11-22): Mistral 7B v0.3 and Llama 3.2 3B
+    "tau_family_token_check": lambda cfg: _lazy("tau.families", "run_tau_family_token_check")(cfg),
+    "tau_family_score_smoke": lambda cfg: _lazy("tau.families", "run_tau_family_score")(cfg),
+    **{f"tau_family_score_{tag}": (lambda cfg: _lazy("tau.families", "run_tau_family_score")(cfg))
+       for tag in ("mistral-7b-v0.3", "llama3.2-3b")},
+    "tau_family_placement_mistral-7b-v0.3": lambda cfg: _lazy("tau.families", "run_tau_family_score")(cfg),
+    "tau_family_smoke_analysis": lambda cfg: _lazy("tau.families", "run_tau_family_analysis")(cfg),
+    "tau_family_analysis": lambda cfg: _lazy("tau.families", "run_tau_family_analysis")(cfg),
     # 2026-11-20, documentation audit: the shared-spot sensitivity (A2), the audit analyses (C) and re-runs of
     # analyses under new run ids, so the original runs stay as they were (A3, B1, B4).
     "rq2_shared_score": lambda cfg: _lazy("rq2_shared", "run_rq2_shared_score")(cfg),

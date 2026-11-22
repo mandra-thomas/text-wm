@@ -1,0 +1,14 @@
+run_id: tau_family_placement_mistral-7b-v0.3
+# Mistral's system text folded into the first user turn (design §4.3, §7.6): 300 seeded primary items, the failing
+# call's first token under the aligned and swapped task lines (600 passes); saved as mistral-7b-v0.3-firstturn.
+build_run: tau_build
+verify_run: tau_verify
+models: [mistral-7b-v0.3]
+placement: true
+n_items: 300
+n_shards: 1
+# The τ-bench build pins (tau_score.yaml); scoring refuses any other or unverified item file.
+expected_outputs_sha256:
+  items.jsonl: 2c8ffeac7dedd4635df5974be955d6ceff84d3f8184f88a73eca579282a578b6
+  natural_items.jsonl: 9bd6c3f7fda464f7cc32307e9a570da564b1bed7d4e3ab0d75dbfd00f6b83502
+  fewshot.json: 231607f79c92580375ada0ce4267fb954e7e0bc0a743ccb9b75813610eb13119

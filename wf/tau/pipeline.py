@@ -536,14 +536,16 @@ def outcome_reading(verdict: str, disc: bool | None, fail_minus_witness: dict | 
     return out
 
 
-def verdicts(primary: dict[str, dict], checks: dict[str, dict] | None = None) -> dict[str, Any]:
-    """Per-model verdicts on the primary contrast, Holm over the two models. A null needs the manipulation check (the
+def verdicts(primary: dict[str, dict], checks: dict[str, dict] | None = None,
+             models: tuple[str, ...] = CO_PRIMARY) -> dict[str, Any]:
+    """Per-model verdicts on the primary contrast, Holm over `models` (the two co-primary models by default; the
+    wave-A families extension passes its own fixed family, wf/tau/families.py). A null needs the manipulation check (the
     task line is read) and discrimination (the visible record is used); a reversal needs discrimination; every
     non-null effect is read through the outcome table (outcome_reading)."""
     checks = checks or {}
-    adjusted = holm({m: primary[m]["perm_p"] if m in primary else 1.0 for m in CO_PRIMARY})
+    adjusted = holm({m: primary[m]["perm_p"] if m in primary else 1.0 for m in models})
     per = {}
-    for m in CO_PRIMARY:
+    for m in models:
         if m not in primary:
             per[m] = {"verdict": "not scored", "holm_p": adjusted[m]}
             continue
@@ -569,14 +571,15 @@ def verdicts(primary: dict[str, dict], checks: dict[str, dict] | None = None) ->
     return out
 
 
-def sensitivity_verdicts(sens: dict[str, dict], primary: dict[str, dict]) -> dict[str, Any]:
+def sensitivity_verdicts(sens: dict[str, dict], primary: dict[str, dict],
+                         models: tuple[str, ...] = CO_PRIMARY) -> dict[str, Any]:
     """The few-shot tool sensitivity analysis (review 2): the §6.3 rule (Holm over the two models) on the primary
     population without the classes whose tool is a few-shot example's, beside the primary's ungated verdict. A
     different category is reported as the primary result being sensitive to few-shot tool matching."""
-    adj_s = holm({m: sens[m]["perm_p"] if m in sens else 1.0 for m in CO_PRIMARY})
-    adj_p = holm({m: primary[m]["perm_p"] if m in primary else 1.0 for m in CO_PRIMARY})
+    adj_s = holm({m: sens[m]["perm_p"] if m in sens else 1.0 for m in models})
+    adj_p = holm({m: primary[m]["perm_p"] if m in primary else 1.0 for m in models})
     out = {}
-    for m in CO_PRIMARY:
+    for m in models:
         if m in sens and m in primary:
             v = tau_verdict(sens[m]["estimate"], sens[m]["ci"], adj_s[m])
             p = tau_verdict(primary[m]["estimate"], primary[m]["ci"], adj_p[m])

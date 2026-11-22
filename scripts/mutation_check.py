@@ -403,6 +403,137 @@ MUTANTS = [
      "pairs += [(a, b) for a, b in planned if (a, b) not in pairs and a in both and b in both]", "pairs += []"),
     ("families comparison readings ignore the equivalence test", "wf/families.py",
      'readings[f"{a} vs {b}"] = "matches" if ev == "supported" else', 'readings[f"{a} vs {b}"] = "inconclusive" if ev == "supported" else'),
+    # τ-bench wave-A families (2026-11-22, wf/tau/families.py, notes/tau_families_design.md): the protocol's jobs,
+    # template handling, the token check and gates, the verdict family and competence gate, the comparisons, the
+    # placement check, the reference results check and the smoke projection.
+    ("tau-fam witness yes/no neutral dropped", "wf/tau/families.py",
+     '    ("main", "witness", "yn", "neutral"),\n)', '\n)'),
+    ("tau-fam witness yes/no under the aligned task", "wf/tau/families.py",
+     '    ("main", "witness", "yn", "neutral"),\n)', '    ("main", "witness", "yn", "aligned"),\n)'),
+    ("tau-fam mention pair on the yes/no question", "wf/tau/families.py",
+     '*[("main", "fail", "first", c) for c in MENTION_CONDITIONS],', '*[("main", "fail", "yn", c) for c in MENTION_CONDITIONS],'),
+    ("tau-fam manipulation check also under neutral", "wf/tau/families.py",
+     '*[("main", "fail", "target", c) for c in ("aligned", "swapped")],', '*[("main", "fail", "target", c) for c in CONDITIONS],'),
+    ("tau-fam witness first token under the aligned task only", "wf/tau/families.py",
+     '*[("main", "witness", "first", c) for c in CONDITIONS],', '*[("main", "witness", "first", c) for c in ("aligned",)],'),
+    ("tau-fam manipulation question scored with the output tokens", "wf/tau/families.py",
+     '"yn": ("Yes", "No"), "target": ("Yes", "No")}', '"yn": ("Yes", "No"), "target": (P.FIRST_PLUS, P.FIRST_MINUS)}'),
+    ("tau-fam manipulation check asks the yes/no question", "wf/tau/families.py",
+     'CUE = {"first": None, "yn": "yn", "target": "target"}', 'CUE = {"first": None, "yn": "yn", "target": "yn"}'),
+    ("tau-fam native templates folded like Gemma", "wf/tau/families.py",
+     'return F.fold_system(msgs) if spec.system == "fold" else msgs', 'return F.fold_system(msgs) if spec.system in ("fold", "native") else msgs'),
+    ("tau-fam placement scored with the native placement", "wf/tau/families.py",
+     'spec = spec_for(tag + FIRST_TURN if placement else tag)', 'spec = spec_for(tag)'),
+    ("tau-fam an item missing a line is scored anyway", "wf/tau/families.py",
+     '    if missing:\n        raise ValueError(f"{t[\'id\']}: missing', '    if False:\n        raise ValueError(f"{t[\'id\']}: missing'),
+    ("tau-fam Gemma's spec not refused", "wf/tau/families.py",
+     'if base in EXCLUDED and not allow_excluded:', 'if False:'),
+    ("tau-fam scoring accepts models outside the extension", "wf/tau/families.py",
+     'if base_tag(tag) in EXCLUDED or base_tag(tag) not in SCORED:', 'if base_tag(tag) in EXCLUDED and base_tag(tag) not in SCORED:'),
+    ("tau-fam scoring skips the token-check gate", "wf/tau/families.py",
+     '        ok, why = token_check_ok(cfg, tag)\n        if not ok:', '        ok, why = True, ""\n        if not ok:'),
+    ("tau-fam token-check gate accepts other item files", "wf/tau/families.py",
+     'if rep.get("files") != P._sha_of_outputs(P._build_dir(cfg)):', 'if False:'),
+    ("tau-fam token-check gate accepts a mock skip in a real run", "wf/tau/families.py",
+     '    if is_mock() and rec.get("skipped"):', '    if rec.get("skipped"):'),
+    ("tau-fam token-check run passes with a failed model", "wf/tau/families.py",
+     'report["passed"] = bool(scored) and all(r["passed"] is True or (is_mock() and r.get("skipped")) for r in scored)',
+     'report["passed"] = bool(scored)'),
+    ("tau-fam token check's context limit off by one", "wf/tau/families.py",
+     '        if n >= limit:\n            problems["context"]', '        if n > limit:\n            problems["context"]'),
+    ("tau-fam in-job length guard off by one", "wf/tau/families.py",
+     'if n is not None and n >= CONTEXT[base_tag(tag)]:', 'if n is not None and n > CONTEXT[base_tag(tag)]:'),
+    ("tau-fam in-job length guard removed", "wf/tau/families.py", '            check_prompt_length(n_tok, spec.tag)\n', ''),
+    ("tau-fam boundary check dropped", "wf/tau/families.py",
+     'if ids(scorer._encode_candidate(text)) != reply:', 'if False:'),
+    ("tau-fam only-task-line check dropped", "wf/tau/families.py",
+     '            for c in _only_task_line(texts, t):\n                problems["only_task_line"]',
+     '            for c in []:\n                problems["only_task_line"]'),
+    ("tau-fam Yes/No checked after the yes/no prompts only", "wf/tau/families.py",
+     'if readout not in ("yn", "target"):', 'if readout not in ("yn",):'),
+    ("tau-fam failure replies' first token not checked", "wf/tau/families.py",
+     '            for text, want in ((plus, alone[P.FIRST_PLUS]), (minus, alone[P.FIRST_MINUS])):\n                try:\n                    reply = F.template_reply(scorer, msgs, text)',
+     '            for text, want in ((plus, alone[P.FIRST_PLUS]),):\n                try:\n                    reply = F.template_reply(scorer, msgs, text)'),
+    ("tau-fam in-job report ignores the failure reply", "wf/tau/families.py",
+     'and starts["failure"] == alone[P.FIRST_MINUS]', 'and True'),
+    ("tau-fam scoring ignores a failed in-job report", "wf/tau/families.py",
+     '        if not report.get("ok"):\n            scorer.close()', '        if False:\n            scorer.close()'),
+    ("tau-fam resume rescores saved jobs", "wf/tau/families.py",
+     '                if (spec.tag, t["id"], *job) not in done]', '                ]'),
+    ("tau-fam shards not split by user", "wf/tau/families.py",
+     '    items = P.shard_by_user(every, i, n)\n    hashes', '    items = every[i::n]\n    hashes'),
+    ("tau-fam competence on every item, not the discrimination population", "wf/tau/families.py",
+     'pop = [t for t in items if t.get("witness_checker") == "PASS"] if population == "discrimination" else list(items)',
+     'pop = list(items)'),
+    ("tau-fam competence reads the aligned task", "wf/tau/families.py",
+     'w = by.get((t["id"], "main", "witness", readout, "neutral"))', 'w = by.get((t["id"], "main", "witness", readout, "aligned"))'),
+    ("tau-fam AUC ties count as wins", "wf/tau/families.py",
+     '(1.0 if p > q else 0.5 if p == q else 0.0)', '(1.0 if p >= q else 0.0)'),
+    ("tau-fam Yes-share bound on failures reversed", "wf/tau/families.py",
+     '"pass": yes_f <= rule["yes_share_neutral_failures_max"]', '"pass": yes_f >= rule["yes_share_neutral_failures_max"]'),
+    ("tau-fam Yes-share bound on successes dropped", "wf/tau/families.py",
+     '"pass": yes_s >= rule["yes_share_neutral_successes_min"]', '"pass": True'),
+    ("tau-fam two-way mass not checked", "wf/tau/families.py",
+     '"pass": med >= rule["median_yes_no_mass_neutral_min"]', '"pass": True'),
+    ("tau-fam competence gate not applied", "wf/tau/families.py",
+     '        if not comp["interpretable"]:\n            per[m]["verdict_before_competence"]', '        if False:\n            per[m]["verdict_before_competence"]'),
+    ("tau-fam competence gate read on the yes/no readout", "wf/tau/families.py",
+     'comp = blocks[m]["competence"]["first"]', 'comp = blocks[m]["competence"]["yn"]'),
+    ("tau-fam Holm over the scored and the reference models", "wf/tau/families.py",
+     'v = P.verdicts(primary, checks, models=models)', 'v = P.verdicts(primary, checks, models=models + REFERENCE)'),
+    ("tau-fam Holm over the models present only", "wf/tau/families.py",
+     'v = P.verdicts(primary, checks, models=models)', 'v = P.verdicts(primary, checks, models=tuple(m for m in models if m in blocks))'),
+    ("tau-fam pipeline verdicts ignore the family they are given", "wf/tau/pipeline.py",
+     '    adjusted = holm({m: primary[m]["perm_p"] if m in primary else 1.0 for m in models})\n    per = {}\n    for m in models:',
+     '    adjusted = holm({m: primary[m]["perm_p"] if m in primary else 1.0 for m in CO_PRIMARY})\n    per = {}\n    for m in models:'),
+    ("tau-fam item share counts ties as moved", "wf/tau/families.py",
+     'rows.append(1.0 if d > 0 else 0.0)', 'rows.append(1.0 if d >= 0 else 0.0)'),
+    ("tau-fam comparison is B minus A", "wf/tau/families.py",
+     'share = lambda v: _mean([a - b for a, b, _, _ in v])', 'share = lambda v: _mean([b - a for a, b, _, _ in v])'),
+    ("tau-fam comparison matches on the 95% interval", "wf/tau/families.py",
+     's_matches = bool(rows) and -F.SHARE_MARGIN < s90[0] and s90[1] < F.SHARE_MARGIN',
+     's_matches = bool(rows) and -F.SHARE_MARGIN < s95[0] and s95[1] < F.SHARE_MARGIN'),
+    ("tau-fam comparison ignores the noise floor", "wf/tau/families.py",
+     ' and abs(l_est) >= F.NOISE_FLOOR_NATS', ''),
+    ("tau-fam comparison resamples unpaired", "wf/tau/families.py",
+     '    return [stat([r for u in rng.choices(keys, k=len(keys)) for r in by[u]]) for _ in range(B)] if keys else []',
+     '    return [stat([(a[0], b[1], a[2], b[3]) for a, b in zip([r for u in rng.choices(keys, k=len(keys)) for r in by[u]], '
+     '[r for u in rng.choices(keys, k=len(keys)) for r in by[u]])]) for _ in range(B)] if keys else []'),
+    ("tau-fam placement difference is native minus first turn", "wf/tau/families.py",
+     'arms=("firstturn", "main"))', 'arms=("main", "firstturn"))'),
+    ("tau-fam placement rule needs only the interval", "wf/tau/families.py",
+     'dependent = bool(excludes and abs(diff["estimate"]) > abs(nat["estimate"]) / 5)', 'dependent = bool(excludes)'),
+    ("tau-fam placement rule at a half of the native effect", "wf/tau/families.py",
+     'abs(nat["estimate"]) / 5)', 'abs(nat["estimate"]) / 2)'),
+    ("tau-fam placement items depend on the input order", "wf/tau/families.py",
+     '    pool = sorted(primary, key=lambda t: t["id"])\n    picked = random.Random(PLACEMENT_SALT)',
+     '    pool = list(primary)\n    picked = random.Random(PLACEMENT_SALT)'),
+    ("tau-fam reference commit not checked", "wf/tau/families.py",
+     '    if commits and not all(any(s.startswith(c) for c in commits) for s in shas):', '    if False:'),
+    ("tau-fam reference item hashes not checked", "wf/tau/families.py",
+     'info["stale"] = sum(1 for x in recs if ids[x["transition_id"]] != x.get("item_hash"))', 'info["stale"] = 0'),
+    ("tau-fam published check ignores the interval", "wf/tau/families.py",
+     'zip([mine["estimate"], *mine["ci"]], [theirs["estimate"], *theirs["ci"]])', 'zip([mine["estimate"]], [theirs["estimate"]])'),
+    ("tau-fam analysis succeeds despite a failed results check", "wf/tau/families.py",
+     '    if report["reference_check"].get("checked") and not report["reference_check"].get("all_equal"):\n        ok = False',
+     '    if False:\n        ok = False'),
+    ("tau-fam projection forgets the placement check", "wf/tau/families.py",
+     "                 if m == PLACEMENT_MODEL else 0.0)", "                 if False else 0.0)"),
+    ("tau-fam projection uses median seconds", "wf/tau/families.py",
+     'sec = blk["format"]["seconds_mean_by_readout"]\n        target', 'sec = blk["format"].get("seconds_median_by_readout", {})\n        target'),
+    ("tau-fam budget not checked", "wf/tau/families.py",
+     '"within_budget": total <= BUDGET_GPU_HOURS', '"within_budget": True'),
+    ("tau-fam smoke analysis computes estimates", "wf/tau/families.py",
+     '            report["models"][m] = {"format": format_block(by_model[m]),',
+     '            report["models"][m] = {**model_block(by_model[m], every), "format": format_block(by_model[m]),'),
+    ("tau-fam smoke analysis reads the config file's items", "wf/tau/families.py",
+     'every = primary_items({**saved, "build_run": scfg["build_run"]})',
+     'every = primary_items({**load_config(cfg["source"]), "build_run": scfg["build_run"]})'),
+    ("tau-fam reading row read by substring", "wf/tau/families.py",
+     'return "failure-specific" if spec.startswith("specific") else "task-consistency"',
+     'return "failure-specific" if "specific" in spec else "task-consistency"'),
+    ("tau-fam patterns include gated models", "wf/tau/families.py",
+     'readable = {m: x for m, x in scored.items() if interpretable_for_comparison(x["verdict"])}', 'readable = dict(scored)'),
 ]
 
 
@@ -418,13 +549,23 @@ def _covering_tests(work: Path, rel: str) -> list[str]:
     return found or ["tests"]
 
 
-def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900) -> str:
+def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900) -> tuple[str, str]:
+    """(outcome, the first failing test's id and error line): every kill is attributed to a named test (added
+    2026-11-22 with the τ-bench families mutants; before, kills were recorded without the test)."""
     try:
-        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", *targets],
+        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=line", "-rfE", *targets],
                                 cwd=work, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return "timeout"
-    return "killed" if result.returncode != 0 else "survived"
+        return "timeout", ""
+    if result.returncode == 0:
+        return "survived", ""
+    lines = result.stdout.splitlines()
+    test = next((x.split(" ", 1)[1].split(" - ")[0] for x in lines if x.startswith(("FAILED ", "ERROR "))), "")
+    err = next((x.strip() for x in lines if x.startswith("E ") or ": assert" in x or "Error" in x), "")
+    if not test:
+        tail = (result.stdout + result.stderr).strip().splitlines()
+        test, err = "no test id (collection or import error)", err or (tail[-1] if tail else "")
+    return "killed", f"{test} | {err[:160]}"
 
 
 def main() -> int:
@@ -458,12 +599,12 @@ def main() -> int:
             path.write_text(source.replace(good, bad), encoding="utf-8")
             # Fast path: the test files that name the mutated module. A mutant that survives them is run
             # against the whole suite before it counts as a survivor; a timeout is never counted as a kill.
-            outcome = _run_tests(python, work, _covering_tests(work, rel), timeout)
+            outcome, by = _run_tests(python, work, _covering_tests(work, rel), timeout)
             if outcome == "survived":
-                outcome = _run_tests(python, work, ["tests"], timeout)
+                outcome, by = _run_tests(python, work, ["tests"], timeout)
             path.write_text(source, encoding="utf-8")
             label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]
-            print(f"{label}  {name}", flush=True)
+            print(f"{label}  {name}" + (f"  <- {by}" if by else ""), flush=True)
             if outcome == "survived":
                 survivors.append(name)
             elif outcome == "timeout":
