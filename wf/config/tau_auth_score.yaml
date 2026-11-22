@@ -1,0 +1,17 @@
+run_id: tau_auth_score
+# τ-bench authorization experiment (notes/tau_auth_design.md): 192 primary items (the first 96 status and 96
+# unavailable items in h(id, "auth") order), three backend descriptions (main, auth, blind), the failing call and the
+# witness under five task lines (first token) and three (yes/no), and the comprehension check (four questions, neutral
+# line) on 24 of them (12 per class in h(id, "auth-comp") order). 48 passes per item, 9,504 per model.
+# Sharded by user: WF_SHARD / WF_N_SHARDS. Time per shard: pace/tau_auth_score.sbatch.
+build_run: tau_build
+verify_run: tau_verify
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+items_per_class: 96
+comprehension_per_class: 12
+n_shards: 4
+# the confirmatory build (notes/tau_design.md B13 and C7); scoring refuses any other files
+expected_outputs_sha256:
+  items.jsonl: 2c8ffeac7dedd4635df5974be955d6ceff84d3f8184f88a73eca579282a578b6
+  natural_items.jsonl: 9bd6c3f7fda464f7cc32307e9a570da564b1bed7d4e3ab0d75dbfd00f6b83502
+  fewshot.json: 231607f79c92580375ada0ce4267fb954e7e0bc0a743ccb9b75813610eb13119

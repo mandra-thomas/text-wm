@@ -38,6 +38,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ["tests/test_tau_retail.py", "tests/test_tau_checker.py", "tests/test_tau_items.py", "tests/test_tau_pipeline.py"]
+# The authorization experiment's mutants (notes/tau_auth_design.md §8) live in scripts/mutation_check.py with every other
+# workstream's; this runner takes them from there and runs them against their own test file, logging each kill.
+AUTH_TESTS = ["tests/test_tau_auth.py"]
+
+
+def _auth_mutants() -> list[tuple[str, str, str, str]]:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_mutation_check", ROOT / "scripts" / "mutation_check.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return [m for m in mod.MUTANTS if m[0].startswith("tau-auth")]
 
 # (bug, file, correct text, buggy text)
 MUTANTS = [
@@ -354,10 +366,10 @@ MUTANTS = [
 ]
 
 
-def _run(python: str, work: Path, timeout: int) -> tuple[str, str]:
+def _run(python: str, work: Path, timeout: int, tests: list[str] = TESTS) -> tuple[str, str]:
     """(outcome, the first failing test's id and error line); never silent about what killed a mutant."""
     try:
-        r = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=line", "-rfE", *TESTS],
+        r = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=line", "-rfE", *tests],
                            cwd=work, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return "timeout", ""
@@ -377,16 +389,18 @@ def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--out")]
     out_path = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--out=")), None)
     shard, shards = map(int, args[0].split("/")) if args else (0, 1)
-    chosen = MUTANTS[shard::shards]
+    chosen = (MUTANTS + _auth_mutants())[shard::shards]
     only = os.environ.get("MUTANTS_MATCHING")  # "a|b": only mutants whose name contains a or b
     if only:
         chosen = [m for m in chosen if any(o in m[0] for o in only.split("|"))]
+    # the authorization mutants alone run against their own test file; any other mix runs every τ test file
+    tests = AUTH_TESTS if chosen and all(m[0].startswith("tau-auth") for m in chosen) else TESTS + AUTH_TESTS
     timeout = int(os.environ.get("MUTATION_TIMEOUT", "900"))
     results: dict[str, list] = {"killed": [], "survived": [], "timeout": [], "not applied": []}
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp) / "repo"
         shutil.copytree(ROOT, work, ignore=lambda folder, names: [n for n in names if n in (".git", ".venv", "runs", "runs_mock", "__pycache__", ".pytest_cache", "pace.env")])
-        base, why = _run(sys.executable, work, timeout)
+        base, why = _run(sys.executable, work, timeout, tests)
         if base != "survived":
             print(f"BASELINE FAILS ({base}): {why}; no mutant is run", flush=True)
             return 2
@@ -399,7 +413,7 @@ def main() -> int:
                 print(f"NOT APPLIED  {name}", flush=True)
                 continue
             path.write_text(src.replace(good, bad), encoding="utf-8")
-            outcome, by = _run(sys.executable, work, timeout)
+            outcome, by = _run(sys.executable, work, timeout, tests)
             path.write_text(src, encoding="utf-8")
             results[outcome].append([name, by] if outcome == "killed" else name)
             print(f"{outcome:<12} {name}" + (f"  <- {by}" if by else ""), flush=True)

@@ -1,0 +1,9 @@
+run_id: tau_auth_smoke_analysis
+# Analysis of tau_auth_score_smoke, for format, timing and spread only (design §10): two-way masses per arm and
+# readout, mean seconds per job, projected hours per tau_auth_score shard against the sbatch limit, and the standard
+# deviations of the per-item W, Z_W and R_W. With project_to set it computes no estimate, CI, p or category.
+source: tau_auth_score_smoke
+build_run: tau_build
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+project_to: tau_auth_score
+time_limit_hours: 4  # pace/tau_auth_score.sbatch --time (a test keeps them equal)

@@ -1420,6 +1420,11 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "tau_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
     "tau_smoke_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
     "tau_contamination": lambda cfg: _lazy("tau.pipeline", "run_tau_contamination")(cfg),
+    # τ-bench: relevance bias or a belief in request-matching authorization? (notes/tau_auth_design.md)
+    "tau_auth_score": lambda cfg: _lazy("tau.auth", "run_tau_auth_score")(cfg),
+    "tau_auth_score_smoke": lambda cfg: _lazy("tau.auth", "run_tau_auth_score")(cfg),
+    "tau_auth_analysis": lambda cfg: _lazy("tau.auth", "run_tau_auth_analysis")(cfg),
+    "tau_auth_smoke_analysis": lambda cfg: _lazy("tau.auth", "run_tau_auth_analysis")(cfg),
     # 2026-11-20, documentation audit: the shared-spot sensitivity (A2), the audit analyses (C) and re-runs of
     # analyses under new run ids, so the original runs stay as they were (A3, B1, B4).
     "rq2_shared_score": lambda cfg: _lazy("rq2_shared", "run_rq2_shared_score")(cfg),

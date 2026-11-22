@@ -1,0 +1,8 @@
+run_id: tau_auth_analysis
+# Reads every shard of tau_auth_score; no GPU (design §6-§7). Holm over the eight primary tests with 10,000
+# permutations each. reference_run (optional): the confirmatory tau_score folder, for the reproducibility check of
+# arm (i) (design §7.9); a symlink or absolute path; left unset the check is skipped.
+source: tau_auth_score
+build_run: tau_build
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+n_perm_primary: 10000
