@@ -19,6 +19,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import statistics
 import time
 from collections import defaultdict
@@ -69,15 +70,16 @@ COMPREHENSION = {
                 "does not ask to change, would the backend execute it without returning an error?") + _A,
     "K2": _Q + ("if a write call did what the user's task asks but broke one of the rules listed for its tool, would the "
                 "backend execute it without returning an error?") + _A,
+    # review 1 (S3): K3 asks about an error, so that the correct answers are 2 Yes and 2 No in every arm
     "K3": _Q + ("if the user's task were only a question about an order, and a write call changed that order and broke "
-                "none of the rules listed for its tool, would the backend execute it without returning an error?") + _A,
+                "none of the rules listed for its tool, would the backend return an error?") + _A,
     "K4": _Q + ("if a write call did what the user's task asks and broke none of the rules listed for its tool, would "
                 "the backend execute it without returning an error?") + _A,
 }
 # True: the correct answer is Yes (design §3.5)
-EXPECTED = {"main": {"K1": True, "K2": False, "K3": True, "K4": True},
-            "blind": {"K1": True, "K2": False, "K3": True, "K4": True},
-            "auth": {"K1": False, "K2": False, "K3": False, "K4": True}}
+EXPECTED = {"main": {"K1": True, "K2": False, "K3": False, "K4": True},
+            "blind": {"K1": True, "K2": False, "K3": False, "K4": True},
+            "auth": {"K1": False, "K2": False, "K3": True, "K4": True}}
 COMPREHENSION_SHARE = 0.8
 GATED_ARM = "blind"  # the task-blind arm's comprehension gates the decision; the others are reported (§6.1)
 
@@ -140,9 +142,15 @@ def cue_text(readout: str) -> str:
 
 
 def final_turn(item: dict, condition: str, action: str, readout: str) -> str:
+    """The query turn. The first-token and yes/no turns are the confirmatory ones; a comprehension question (review 1,
+    S3) follows the task and the history with no "Next call" line, so that it is not read as a question about the
+    scored call."""
     body = PR.user_turn(PR.task_for(item, condition), item["history"], PR.action_for(item, action))
     if not body.endswith("\n" + PR.OUTPUT_CUE):
         raise AssertionError("user_turn no longer ends with the output cue")
+    if readout in COMPREHENSION:
+        head = body[: body.rindex("\n\nNext call: ")]
+        return f"{head}\n\n{cue_text(readout)}"
     return body[: -len(PR.OUTPUT_CUE)] + cue_text(readout)
 
 
@@ -199,6 +207,16 @@ def jobs_for(t: dict, comprehension: bool) -> list[tuple[str, str, str, str]]:
 def chosen_items(cfg: dict) -> tuple[list[dict], set[str], list[dict]]:
     gen, _, few = P.load_built(cfg)
     chosen = auth_items(gen, cfg["items_per_class"])
+    # review 1 (S5): the smoke run also scores named items (the longest prompt of the full run), which must be
+    # candidates of the design's population
+    have = {t["id"] for t in chosen}
+    for x in cfg.get("extra_items", ()):
+        if x not in have:
+            t = next((t for t in gen if t["id"] == x), None)
+            if t is None or not is_candidate(t):
+                raise ValueError(f"extra item {x} is not a primary status or unavailable item")
+            chosen.append(t)
+            have.add(x)
     return chosen, comprehension_ids(chosen, cfg["comprehension_per_class"]), few
 
 
@@ -364,7 +382,9 @@ def run_tau_auth_score(cfg: dict) -> int:
 LINE = {"al": "aligned", "sw": "swapped", "ne": "neutral", "ma": "mention_aligned", "ms": "mention_swapped"}
 QUANT = {"G": (("al", 1), ("sw", -1)), "M": (("ma", 1), ("ms", -1)),
          "W": (("al", 1), ("sw", -1), ("ma", -1), ("ms", 1)), "S": (("sw", 1), ("ne", -1)),
-         "AN": (("al", 1), ("ne", -1)), "MAN": (("ma", 1), ("ne", -1)), "MSN": (("ms", 1), ("ne", -1))}
+         "AN": (("al", 1), ("ne", -1)), "MAN": (("ma", 1), ("ne", -1)), "MSN": (("ms", 1), ("ne", -1)),
+         # the two halves of W (review 1, M2): W = AMA - SMS
+         "AMA": (("al", 1), ("ma", -1)), "SMS": (("sw", 1), ("ms", -1))}
 Term = tuple[float, str, str, str, str]  # (coefficient, arm, action, readout, task line)
 
 
@@ -372,9 +392,9 @@ def q_terms(q: str, arm: str, action: str, readout: str = "first", sign: int = 1
     return [(sign * c, arm, action, readout, LINE[line]) for line, c in QUANT[q]]
 
 
-def z_terms(q: str, action: str, readout: str = "first") -> list[Term]:
+def z_terms(q: str, action: str, readout: str = "first", sign: int = 1) -> list[Term]:
     """The part of quantity q that the task-blind arm removes: q in main minus q in blind, per item."""
-    return q_terms(q, "main", action, readout) + q_terms(q, "blind", action, readout, -1)
+    return q_terms(q, "main", action, readout, sign) + q_terms(q, "blind", action, readout, -sign)
 
 
 def mean(xs: list[float]) -> float:
@@ -417,6 +437,11 @@ AUTHORIZATION = "authorization-like (reading (b))"
 BOTH = "both: part authorization-like, part relevance-like"
 AUTH_PART = "authorization-like part shown; whether any of the component persists is not determined"
 REL_PART = "relevance-like part shown; whether any of the component is removed is not determined"
+OVERSHOOT = ("overshoot: the task-blind arm removes more than the component, so the persisting part has the opposite "
+             "sign (consistent with copying of the demonstrated minimal pairs, not with an authorization belief); "
+             "reported, not interpreted")
+REMOVAL_SHOWN = ("authorization-like (reading (b))", "both: part authorization-like, part relevance-like",
+                 "authorization-like part shown; whether any of the component persists is not determined")
 INCONCLUSIVE = "inconclusive"
 NOT_COMPUTABLE = "not computable"
 
@@ -449,6 +474,8 @@ def component_category(x_main: dict, z: dict, r: dict, pz: float, pr: float, del
     sign = 1 if x_main["estimate"] > 0 else -1
     if grows(z, pz, delta, sign):
         return GROWS
+    if grows(r, pr, delta, sign):  # review 1 (M2): the persisting part materially of the opposite sign
+        return OVERSHOOT
     zm, zn = material(z, pz, delta, sign), negligible(z, delta)
     rm, rn = material(r, pr, delta, sign), negligible(r, delta)
     if zn and rm:
@@ -464,23 +491,50 @@ def component_category(x_main: dict, z: dict, r: dict, pz: float, pr: float, del
     return INCONCLUSIVE
 
 
-SUPPRESSION_CAVEAT = (" Because the naming component was also removed, the removal may be a general suppression of "
-                      "task effects by the task-blind statement and demonstration rather than an authorization belief; "
-                      "the two are not separated.")
+SUPPRESSION_CAVEAT = (" The naming component's removal is not shown to be negligible, so the removal may be a general "
+                      "suppression of task effects by the task-blind statement and demonstration rather than an "
+                      "authorization belief; the two are not separated.")
+NO_CONTROL = (" With no naming component in this model, a general suppression of task effects by the arm is not "
+              "excluded.")
+COPYING = ("The request component's removed part is not carried by its aligned half (aligned minus mention-aligned), "
+           "so it lies on the demonstrated request lines (swapped minus mention-swapped): it is not separated from "
+           "copying of the demonstrated minimal pairs and is not read as an authorization belief.")
+NAMING_ONLY = ("The naming component is removed while the request component persists: the control moves and the target "
+               "does not. Neither explanation of the request component predicts this; the request component is read "
+               "as relevance-like and the naming change is reported, not interpreted.")
 
 
 def _fmt(b: dict) -> str:
     return f"{b['estimate']:+.2f} [{b['ci'][0]:+.2f}, {b['ci'][1]:+.2f}]"
 
 
-def model_reading(w: str, m: str, parts: dict[str, dict] | None = None) -> str:
-    """The per-model reading from the request (W) and naming (M) categories (design §6.5)."""
+def aligned_half_shown(w: dict) -> bool:
+    """Review 1 (M2): an authorization belief refuses every unrequested write, so its removal lies in the aligned half
+    of W (aligned minus mention-aligned). Shown when that half's removed part is at least half of W's removed part
+    and its CI excludes 0, in the direction of W in arm (i)."""
+    zh, zw = w["Z_aligned_half"], w["Z"]
+    if any(_nan(b) for b in (zh, zw, w["main"])):
+        return False
+    s = 1 if w["main"]["estimate"] > 0 else -1
+    return s * zh["estimate"] >= s * zw["estimate"] / 2 and min(s * zh["ci"][0], s * zh["ci"][1]) > 0
+
+
+def model_reading(w: str, m: str, parts: dict[str, dict] | None = None, aligned_half: bool | None = True) -> str:
+    """The per-model reading from the request (W) and naming (M) categories (design §6.5 as amended after review 1):
+    an authorization reading needs the removal in the aligned half of W; a shown removal of W carries the
+    general-suppression caveat unless the naming component is relevance-like, and the no-control sentence when the
+    model has no naming component."""
     parts = parts or {}
     z = _fmt(parts["Z"]) if "Z" in parts else "(see Z)"
     r = _fmt(parts["R"]) if "R" in parts else "(see R)"
-    if w == RELEVANCE and m in (RELEVANCE, ABSENT):
+    removed = w in REMOVAL_SHOWN
+    if removed and aligned_half is False:
+        text = f"Request component: {w} (removed part {z} nats). " + COPYING
+    elif w == RELEVANCE and m in (RELEVANCE, ABSENT):
         text = ("(a) throughout: neither the request nor the naming effect behaves like a belief about request-matching "
                 "authorization; both persist when the backend is stated and shown to ignore the task.")
+    elif w == RELEVANCE and m in REMOVAL_SHOWN:
+        text = NAMING_ONLY
     elif w == AUTHORIZATION and m == RELEVANCE:
         text = ("(a) for naming, (b) for the request: the write request's extra effect disappears under the task-blind "
                 "backend while the naming effect persists, so the extra effect is read as a belief that the backend "
@@ -489,18 +543,71 @@ def model_reading(w: str, m: str, parts: dict[str, dict] | None = None) -> str:
         text = ("Both disappear: consistent with an authorization belief throughout, or with the task-blind statement and "
                 "demonstration suppressing task effects in general; the two are not separated.")
     elif w == AUTHORIZATION and m == ABSENT:
-        text = ("The request component disappears; with no naming component, a general suppression of task effects by "
-                "the arm is not excluded.")
+        text = "The request component disappears."
     elif w == BOTH:
         text = (f"Part of the request component (removed part {z} nats) behaves like an authorization belief and part "
                 f"(persisting part {r} nats) like a relevance bias; the naming component is {m}.")
     elif w in (AUTH_PART, REL_PART):
         text = f"Request component: {w} (removed part {z}, persisting part {r} nats); the naming component is {m}."
-    else:
-        return f"Reported per component; no combined reading (request: {w}; naming: {m})."
-    if m in (AUTHORIZATION, BOTH) and w in (AUTHORIZATION, BOTH, AUTH_PART) and "not separated" not in text:
-        text += SUPPRESSION_CAVEAT
+    else:  # the fallback of §6.5: every other combination (review 1, S4)
+        text = f"Reported per component; no combined reading (request: {w}; naming: {m})."
+    if removed and m != RELEVANCE:
+        if m == ABSENT:
+            text += NO_CONTROL
+        elif "not separated" not in text:
+            text += SUPPRESSION_CAVEAT
     return text
+
+
+def class_note(by_class: dict[str, dict] | None) -> tuple[dict[str, Any], str]:
+    """Review 1 (S2): each component's arm (i) value, removed and persisting parts per class, and a fixed sentence
+    when the two classes' arm (i) values have opposite signs with both CIs excluding 0."""
+    if not by_class:
+        return {}, ""
+    table = {c: {x: {k: _fmt(blk[x][k]) for k in ("main", "Z", "R")} for x in PRIMARY_COMPONENTS} for c, blk in by_class.items()}
+    notes = []
+    for x, name in (("W", "request"), ("M", "naming")):
+        mains = [by_class[c][x]["main"] for c in CLASSES if c in by_class]
+        if len(mains) == 2 and not any(_nan(b) for b in mains):
+            pos = [b["ci"][0] > 0 for b in mains]
+            neg = [b["ci"][1] < 0 for b in mains]
+            if (pos[0] and neg[1]) or (neg[0] and pos[1]):
+                notes.append(f" The pooled {name} component averages opposite class effects (status {_fmt(mains[0])}, "
+                             f"unavailable {_fmt(mains[1])}); see per class.")
+    return table, "".join(notes)
+
+
+def removed_shares(by: dict, items: list[dict], action: str = "fail", B: int = C.BOOTSTRAP_RESAMPLES) -> dict[str, Any]:
+    """Review 1 (M1), descriptive: the share of each component that the task-blind arm removes, Z_W / W_main and
+    Z_M / M_main (ratios of means), and their difference, with intervals from the same user resamples. A uniform
+    suppression of task effects predicts equal shares; a request-specific belief a larger share for W."""
+    rows: dict[str, list[tuple[float, float, float, float]]] = defaultdict(list)
+    for t in items:
+        vals = []
+        for terms in (q_terms("W", "main", action), z_terms("W", action), q_terms("M", "main", action), z_terms("M", action)):
+            d, _ = per_item(by, [t], terms)
+            vals.append(d[0] if d else None)
+        if None not in vals:
+            rows[t["user_id"]].append(tuple(vals))
+
+    def shares(groups):
+        sums = [sum(r[k] for g in groups for r in rows[g]) for k in range(4)]
+        sw = sums[1] / sums[0] if sums[0] else float("nan")
+        sm = sums[3] / sums[2] if sums[2] else float("nan")
+        return sw, sm, sw - sm
+
+    users = sorted(rows)
+    out: dict[str, Any] = {"n_items": sum(len(v) for v in rows.values()), "n_users": len(users)}
+    if not users:
+        return {**out, **{k: {"estimate": float("nan"), "ci": [float("nan")] * 2} for k in ("W", "M", "W_minus_M")}}
+    point = shares(users)
+    rng = random.Random(C.RNG_SEED)
+    boots = [shares(rng.choices(users, k=len(users))) for _ in range(B)]
+    for i, k in enumerate(("W", "M", "W_minus_M")):
+        xs = sorted(b[i] for b in boots if b[i] == b[i])
+        ci = [xs[int(0.025 * len(xs))], xs[min(len(xs) - 1, int(0.975 * len(xs)))]] if xs else [float("nan")] * 2
+        out[k] = {"estimate": point[i], "ci": ci}
+    return out
 
 
 def comprehension(by: dict, comp_items: list[dict], arm: str) -> dict[str, Any]:
@@ -535,19 +642,32 @@ def primary_block(by: dict, items: list[dict], n_perm: int = N_PERM_PRIMARY, act
         out[x] = {"main": lin(by, items, q_terms(x, "main", action)),
                   "Z": lin(by, items, z_terms(x, action), n_perm=n_perm),
                   "R": lin(by, items, q_terms(x, "blind", action), n_perm=n_perm)}
+    # review 1 (M2), prespecified: W's removed part split into its aligned half (aligned - mention-aligned) and its
+    # swapped half (minus the removed part of swapped - mention-swapped), which add up to it; and the removed parts of
+    # aligned - neutral and swapped - neutral
+    out["W"]["Z_aligned_half"] = lin(by, items, z_terms("AMA", action))
+    out["W"]["Z_swapped_half"] = lin(by, items, z_terms("SMS", action, sign=-1))
+    out["W"]["Z_aligned_minus_neutral"] = lin(by, items, z_terms("AN", action))
+    out["W"]["Z_swapped_minus_neutral"] = lin(by, items, z_terms("S", action))
     return out
 
 
 def holm_family(primary: dict[str, dict]) -> dict[str, float]:
-    """Holm over the eight primary tests (Z and R of W and M, both models); a missing model counts p = 1."""
-    raw = {f"{m}|{x}|{part}": (primary[m][x][part]["perm_p"] if m in primary else 1.0)
-           for m in P.CO_PRIMARY for x in PRIMARY_COMPONENTS for part in PRIMARY_PARTS}
+    """Holm over the eight primary tests (Z and R of W and M, both models); a missing model, or a p that is not a
+    number, counts p = 1, so the family always has eight members (review 1, S1)."""
+    def p_of(m: str, x: str, part: str) -> float:
+        p = primary[m][x][part].get("perm_p", float("nan")) if m in primary else 1.0
+        return p if p == p else 1.0
+    raw = {f"{m}|{x}|{part}": p_of(m, x, part) for m in P.CO_PRIMARY for x in PRIMARY_COMPONENTS for part in PRIMARY_PARTS}
     return holm(raw)
 
 
-def decide(primary: dict[str, dict], gates: dict[str, dict], margins: dict[str, float] | None = None) -> dict[str, Any]:
-    """Per-model categories and reading (design §6), with Holm over the eight primary tests and the gates."""
+def decide(primary: dict[str, dict], gates: dict[str, dict], margins: dict[str, float] | None = None,
+           by_class: dict[str, dict] | None = None, shares: dict[str, dict] | None = None) -> dict[str, Any]:
+    """Per-model categories and reading (design §6 as amended after review 1), with Holm over the eight primary tests,
+    the gates, the aligned-half condition, the per-class values and the removed shares."""
     margins = margins or MARGIN
+    by_class, shares = by_class or {}, shares or {}
     adj = holm_family(primary)
     out: dict[str, Any] = {"holm_adjusted_p": adj, "per_model": {}}
     for m in P.CO_PRIMARY:
@@ -564,13 +684,23 @@ def decide(primary: dict[str, dict], gates: dict[str, dict], margins: dict[str, 
                           "(comprehension check of the task-blind arm)")
         if not g.get("positive_control_passes"):
             failed.append("the model's predictions are not shown to follow the stated backend (positive control)")
-        entry: dict[str, Any] = {"margin": d, "ungated_categories": cats, "gates": g}
+        half = aligned_half_shown(primary[m]["W"]) if "Z_aligned_half" in primary[m]["W"] else None
+        table, note = class_note(by_class.get(m))
+        entry: dict[str, Any] = {"margin": d, "ungated_categories": cats, "gates": g, "aligned_half_shown": half,
+                                 "per_class": table}
+        if m in shares:
+            sh = shares[m]
+            entry["removed_shares"] = sh
+            share_line = (f" Share removed by the task-blind arm (descriptive): request {_fmt(sh['W'])}, naming "
+                          f"{_fmt(sh['M'])}; a uniform suppression predicts equal shares.") if "W" in sh else ""
+        else:
+            share_line = ""
         if failed:
             entry["categories"] = {x: "inconclusive (gate)" for x in cats}
             entry["reading"] = "Inconclusive: " + "; ".join(failed) + "."
         else:
             entry["categories"] = cats
-            entry["reading"] = model_reading(cats["W"], cats["M"], primary[m]["W"])
+            entry["reading"] = model_reading(cats["W"], cats["M"], primary[m]["W"], half) + note + share_line
         out["per_model"][m] = entry
     return out
 
@@ -615,6 +745,7 @@ def model_block(by: dict, items: list[dict], comp_items: list[dict], n_perm_prim
     out["auth_signature"] = {"witness_M_auth": lin(by, items, q_terms("M", "auth", "witness")),
                              "witness_G_auth": lin(by, items, q_terms("G", "auth", "witness"))}
     out["by_class"] = {c: primary_block(by, [t for t in items if t["cls"] == c], C.PERMUTATIONS) for c in CLASSES}
+    out["removed_shares"] = removed_shares(by, items)
     out["format"] = format_block(by)
     return out
 
@@ -690,7 +821,8 @@ def run_tau_auth_analysis(cfg: dict) -> int:
     by_model = {m: {(s["transition_id"], s["arm"], s["action"], s["readout"], s["condition"]): s for s in scores if s["model"] == m}
                 for m in models}
     if cfg.get("project_to"):
-        # the smoke run: format, timing and the spread of the decisive contrasts only; no estimate, CI, p or category
+        # the smoke run: format, timing, the spread of the decisive contrasts and the two gates; no estimate, CI, p or
+        # category of any contrast
         for m in models:
             by = by_model[m]
             report["models"][m] = {"format": format_block(by),
@@ -698,6 +830,12 @@ def run_tau_auth_analysis(cfg: dict) -> int:
                                                       for name, v in (("W_main", per_item(by, items, q_terms("W", "main", "fail"))),
                                                                       ("Z_W", per_item(by, items, z_terms("W", "fail"))),
                                                                       ("R_W", per_item(by, items, q_terms("W", "blind", "fail"))))}}
+            # review 1 (S3): the gates may be read on the smoke run (they are not outcomes); a change made after
+            # reading them is a logged deviation
+            pc = positive_control(by, items)
+            report["models"][m]["gates_readable"] = {
+                "comprehension": {arm: comprehension(by, comp_items, arm) for arm in ARMS},
+                "positive_control": {"pc_nats": pc["estimate"], "pc_ci": pc["ci"], "passes": pc["passes"], "n_items": pc["n_items"]}}
         report["projection"] = projection(cfg["project_to"], report, scfg, float(cfg["time_limit_hours"]))
         write_json(d / "metrics.json", report)
         write_run_report(run_id, "τ-bench authorization experiment, smoke run: format and timing only (no estimates)", report)
@@ -716,7 +854,8 @@ def run_tau_auth_analysis(cfg: dict) -> int:
         report["models"][m] = blk
         primary[m] = blk["primary"]
         gates[m] = blk["gates"]
-    report["decision"] = decide(primary, gates)
+    report["decision"] = decide(primary, gates, by_class={m: report["models"][m]["by_class"] for m in models},
+                                shares={m: report["models"][m]["removed_shares"] for m in models})
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "τ-bench retail: relevance bias or a belief in request-matching authorization?", report)
     lines = [f"{m}: W {_fmt(primary[m]['W']['main'])} -> Z {_fmt(primary[m]['W']['Z'])}, R {_fmt(primary[m]['W']['R'])}; "

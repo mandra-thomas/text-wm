@@ -1,12 +1,15 @@
 run_id: tau_auth_score_smoke
 # Format and timing check for tau_auth_score (design §10): the first 3 items of each class in h(id, "auth") order,
-# every job including the comprehension questions, both models. Read for format, timing and the spread of the
+# every job including the comprehension questions, both models, plus the longest-prompt item. Read for format, timing and the spread of the
 # decisive contrasts only, never for estimates.
 build_run: tau_build
 verify_run: tau_verify
 models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
 items_per_class: 3
-comprehension_per_class: 3
+# review 1 (S5): plus the item with the longest prompt of the full run (15,535 Qwen tokens, arm (iii), yes/no;
+# notes/tau_auth_tokcheck.json), so that the longest prompt runs on the GPU before the full run
+extra_items: [tau-g-77cc59152d73]
+comprehension_per_class: 4
 n_shards: 1
 expected_outputs_sha256:
   items.jsonl: 2c8ffeac7dedd4635df5974be955d6ceff84d3f8184f88a73eca579282a578b6

@@ -51,8 +51,8 @@ GOLDEN_COMPREHENSION = {
            "rules listed for its tool, would the backend execute it without returning an error? Answer Yes or No.\n"
            "Answer:"),
     "K3": ("Question: about this backend in general: if the user's task were only a question about an order, and a "
-           "write call changed that order and broke none of the rules listed for its tool, would the backend execute it "
-           "without returning an error? Answer Yes or No.\nAnswer:"),
+           "write call changed that order and broke none of the rules listed for its tool, would the backend return an "
+           "error? Answer Yes or No.\nAnswer:"),
     "K4": ("Question: about this backend in general: if a write call did what the user's task asks and broke none of "
            "the rules listed for its tool, would the backend execute it without returning an error? Answer Yes or No.\n"
            "Answer:"),
@@ -231,20 +231,25 @@ def test_within_an_arm_task_lines_differ_only_in_the_task_line(built):
 
 def test_comprehension_questions_and_expected_answers_are_golden():
     assert A.COMPREHENSION == GOLDEN_COMPREHENSION
-    assert A.EXPECTED == {"main": {"K1": True, "K2": False, "K3": True, "K4": True},
-                          "blind": {"K1": True, "K2": False, "K3": True, "K4": True},
-                          "auth": {"K1": False, "K2": False, "K3": False, "K4": True}}
+    assert A.EXPECTED == {"main": {"K1": True, "K2": False, "K3": False, "K4": True},
+                          "blind": {"K1": True, "K2": False, "K3": False, "K4": True},
+                          "auth": {"K1": False, "K2": False, "K3": True, "K4": True}}
+    for arm in A.ARMS:  # review 1 (S3): two Yes and two No in every arm
+        assert sorted(A.EXPECTED[arm].values()) == [False, False, True, True], arm
     assert A.COMPREHENSION_SHARE == 0.8 and A.GATED_ARM == "blind"
     assert A.cue_text("first") == PR.OUTPUT_CUE and A.cue_text("yn") == PR.YN_QUESTION and A.cue_text("K3") == GOLDEN_COMPREHENSION["K3"]
 
 
-def test_comprehension_prompt_replaces_only_the_cue(built):
+def test_comprehension_prompt_has_the_history_but_no_next_call(built):
     gen, few = built
     t = A.auth_items(gen, 2)[0]
     out = A.build_messages(t, "neutral", few, readout="first", arm="blind")[-1]["content"]
+    head = out[: out.index("\n\nNext call: ")]
     for k, q in GOLDEN_COMPREHENSION.items():
-        got = A.build_messages(t, "neutral", few, readout=k, arm="blind")[-1]["content"]
-        assert got == out[: -len(PR.OUTPUT_CUE)] + q
+        msgs = A.build_messages(t, "neutral", few, readout=k, arm="blind")
+        got = msgs[-1]["content"]
+        assert got == f"{head}\n\n{q}" and "Next call" not in got and PR.render_history(t["history"]) in got
+        assert msgs[:-1] == A.build_messages(t, "neutral", few, readout="first", arm="blind")[:-1]
 
 
 # ---------------- items and jobs ----------------
@@ -290,7 +295,7 @@ def test_jobs_per_item(built):
 def test_scoring_configs():
     full, smoke = load_config("tau_auth_score"), load_config("tau_auth_score_smoke")
     assert full["items_per_class"] == 96 and full["comprehension_per_class"] == 12 and full["n_shards"] == 4
-    assert smoke["items_per_class"] == 3 and smoke["comprehension_per_class"] == 3 and smoke["n_shards"] == 1
+    assert smoke["items_per_class"] == 3 and smoke["comprehension_per_class"] == 4 and smoke["n_shards"] == 1
     conf = load_config("tau_score")["expected_outputs_sha256"]
     assert full["expected_outputs_sha256"] == smoke["expected_outputs_sha256"] == conf
     assert full["models"] == smoke["models"] == list(P.CO_PRIMARY)
@@ -406,7 +411,7 @@ def test_llama_sized_request_component_without_naming_component():
                         noise=0.05)
     lm = dec["per_model"][LLAMA]
     assert lm["margin"] == 0.17 and lm["categories"] == {"W": A.AUTHORIZATION, "M": A.ABSENT}
-    assert "with no naming component, a general suppression" in lm["reading"]
+    assert lm["reading"].startswith("The request component disappears.") and A.NO_CONTROL in lm["reading"]
     dec, _, _ = _decide({QWEN: (_fail((4.0, 1.8), (4.0, 1.8)), _witness(), None), LLAMA: (_fail((0.5, 0.0), (0.5, 0.0)), _witness(), None)},
                         noise=0.05)
     assert dec["per_model"][LLAMA]["categories"] == {"W": A.RELEVANCE, "M": A.ABSENT}
@@ -531,6 +536,9 @@ def _blk(est, lo, hi, n=40):
     (_blk(-2.2, -2.5, -1.9), _blk(-2.2, -2.5, -1.9), _blk(0.0, -0.3, 0.3), 0.001, 0.5, A.AUTHORIZATION),  # a negative component
     (_blk(float("nan"), 0, 0), _blk(0, 0, 0), _blk(0, 0, 0), 0.5, 0.5, A.NOT_COMPUTABLE),
     (_blk(-0.3, -1.0, 0.4), _blk(0.0, -0.3, 0.3), _blk(-0.3, -1.0, 0.4), 0.5, 0.5, A.INCONCLUSIVE),  # not absent: CI below -δ
+    (_blk(2.2, 1.9, 2.5), _blk(1.1, 0.0, 2.2), _blk(1.1, 0.9, 1.3), 0.001, 0.001, A.REL_PART),  # a CI touching 0 is not above 0
+    (_blk(2.2, 1.9, 2.5), _blk(4.0, 3.7, 4.3), _blk(-1.8, -2.1, -1.5), 0.001, 0.001, A.OVERSHOOT),
+    (_blk(2.2, 1.9, 2.5), _blk(0.0, -0.3, 0.3), _blk(0.4, -0.4, 1.2), 0.5, 0.3, A.INCONCLUSIVE),  # Z negligible, R uncertain
 ])
 def test_component_category_table(main, z, r, pz, pr, want):
     assert A.component_category(main, z, r, pz, pr, 0.72) == want
@@ -541,11 +549,14 @@ def test_component_category_table(main, z, r, pz, pr, want):
     (A.RELEVANCE, A.ABSENT, "(a) throughout"),
     (A.AUTHORIZATION, A.RELEVANCE, "(a) for naming, (b) for the request"),
     (A.AUTHORIZATION, A.AUTHORIZATION, "Both disappear"),
-    (A.AUTHORIZATION, A.ABSENT, "with no naming component"),
+    (A.AUTHORIZATION, A.ABSENT, "With no naming component in this model"),
     (A.BOTH, A.RELEVANCE, "Part of the request component"),
     (A.AUTH_PART, A.RELEVANCE, "Request component: authorization-like part shown"),
     (A.REL_PART, A.RELEVANCE, "Request component: relevance-like part shown"),
-    (A.RELEVANCE, A.AUTHORIZATION, "no combined reading"),
+    (A.RELEVANCE, A.AUTHORIZATION, "the control moves and the target does not"),
+    (A.RELEVANCE, A.AUTH_PART, "the control moves and the target does not"),
+    (A.OVERSHOOT, A.RELEVANCE, "no combined reading"),
+    (A.AUTHORIZATION, A.BOTH, "no combined reading"),
     (A.GROWS, A.RELEVANCE, "no combined reading"),
     (A.INCONCLUSIVE, A.RELEVANCE, "no combined reading"),
 ])
@@ -751,3 +762,225 @@ def test_projection_counts_every_job_at_its_arm_and_readout_rate(runs, monkeypat
     assert pr["models"][QWEN]["hours_all_shards"] == pytest.approx(n_jobs / 3600)
     assert pr["models"][LLAMA]["hours_all_shards"] == pytest.approx(2 * n_jobs / 3600)
     assert pr["gpu_hours_full_run"] == pytest.approx(3 * n_jobs / 3600)
+
+
+# ---------------- amendments after review 1 ----------------
+
+
+def _damped(main, share):
+    """Arm (iii) as arm (i) with every task effect damped by `share` (uniform suppression, no belief)."""
+    g, m = main
+    return (g * (1 - share), m * (1 - share))
+
+
+def test_uniform_suppression_carries_the_caveat_end_to_end():
+    """Review 1, M1, scenario 1: a uniform 35% damping of Qwen-sized effects (W 2.2, M 1.8) must not be read as an
+    authorization belief without the suppression caveat, and the removed shares are about equal."""
+    main = (4.0, 1.8)
+    fail = _fail(main, _damped(main, 0.35))
+    dec, primary, blocks = _decide({QWEN: (fail, _witness(), None), LLAMA: (fail, _witness(), None)})
+    q = dec["per_model"][QWEN]
+    assert q["categories"]["W"] in A.REMOVAL_SHOWN and q["categories"]["M"] != A.RELEVANCE, q["categories"]
+    assert A.SUPPRESSION_CAVEAT in q["reading"]
+    by, items = blocks[QWEN]
+    sh = A.removed_shares(by, items)
+    assert sh["W"]["estimate"] == pytest.approx(0.35, abs=0.05) and sh["M"]["estimate"] == pytest.approx(0.35, abs=0.05)
+    assert sh["W_minus_M"]["ci"][0] < 0 < sh["W_minus_M"]["ci"][1]
+    dec2 = A.decide(primary, {m: {"comprehension_blind_passes": True, "positive_control_passes": True} for m in P.CO_PRIMARY},
+                    shares={QWEN: sh})
+    assert "Share removed by the task-blind arm" in dec2["per_model"][QWEN]["reading"]
+    assert dec2["per_model"][QWEN]["removed_shares"] is sh
+
+
+@pytest.mark.parametrize("blind_w", [0.25, 0.32])  # a partial removal of a Llama-sized W without a naming component
+def test_a_partial_removal_without_a_naming_component_carries_the_no_control_sentence(blind_w):
+    fail = _fail((0.5, 0.0), (blind_w, 0.0))
+    dec, _, _ = _decide({QWEN: (_fail((4.0, 1.8), (4.0, 1.8)), _witness(), None), LLAMA: (fail, _witness(), None)}, noise=0.05)
+    lm = dec["per_model"][LLAMA]
+    assert lm["categories"]["M"] == A.ABSENT and lm["categories"]["W"] in A.REMOVAL_SHOWN, lm["categories"]
+    assert A.NO_CONTROL in lm["reading"] and "behaves like an authorization belief" in lm["reading"] or \
+        lm["categories"]["W"] == A.AUTHORIZATION and A.NO_CONTROL in lm["reading"]
+
+
+@pytest.mark.parametrize("w, m, caveat", [
+    (A.BOTH, A.REL_PART, A.SUPPRESSION_CAVEAT), (A.AUTH_PART, A.INCONCLUSIVE, A.SUPPRESSION_CAVEAT),
+    (A.AUTHORIZATION, A.REL_PART, A.SUPPRESSION_CAVEAT), (A.BOTH, A.ABSENT, A.NO_CONTROL),
+    (A.AUTH_PART, A.ABSENT, A.NO_CONTROL), (A.AUTHORIZATION, A.ABSENT, A.NO_CONTROL),
+    (A.BOTH, A.RELEVANCE, None), (A.AUTHORIZATION, A.RELEVANCE, None), (A.RELEVANCE, A.REL_PART, None),
+])
+def test_caveat_rule_follows_the_naming_component(w, m, caveat):
+    parts = {"Z": _blk(1.0, 0.8, 1.2), "R": _blk(1.2, 1.0, 1.4)}
+    text = A.model_reading(w, m, parts)
+    for c in (A.SUPPRESSION_CAVEAT, A.NO_CONTROL):
+        assert (c in text) == (c == caveat), (w, m, c)
+
+
+def _copying(raise_by):
+    """Arm (iii) where the demonstrated request-line pairs are copied: the swapped write line rises toward the aligned
+    one, the question lines do not move."""
+    fail = _fail((4.0, 1.8), (4.0, 1.8))
+    fail["blind"]["swapped"] += raise_by
+    return fail
+
+
+def test_copying_of_the_demonstrated_pairs_is_not_read_as_authorization():
+    """Review 1, M2: a partial copy (swapped raised by W) empties W in arm (iii) through its swapped half."""
+    dec, primary, _ = _decide({QWEN: (_copying(2.2), _witness(), None), LLAMA: (_fail((4.0, 1.8), (4.0, 1.8)), _witness(), None)})
+    q = dec["per_model"][QWEN]
+    w = primary[QWEN]["W"]
+    assert w["Z_aligned_half"]["estimate"] == pytest.approx(0.0, abs=0.15)
+    assert w["Z_swapped_half"]["estimate"] == pytest.approx(2.2, abs=0.15)
+    assert w["Z_swapped_minus_neutral"]["estimate"] == pytest.approx(-2.2, abs=0.15)
+    assert w["Z_aligned_minus_neutral"]["estimate"] == pytest.approx(0.0, abs=0.15)
+    assert q["categories"] == {"W": A.AUTHORIZATION, "M": A.RELEVANCE} and q["aligned_half_shown"] is False
+    assert A.COPYING in q["reading"] and "refuses writes the user did not request" not in q["reading"]
+
+
+def test_full_copying_overshoots_and_is_labelled_so():
+    """Review 1, M2: the swapped line raised all the way to the aligned line gives W in arm (iii) = -M (-1.8)."""
+    dec, primary, _ = _decide({QWEN: (_copying(4.0), _witness(), None), LLAMA: (_fail((4.0, 1.8), (4.0, 1.8)), _witness(), None)})
+    q = dec["per_model"][QWEN]
+    assert primary[QWEN]["W"]["R"]["estimate"] == pytest.approx(-1.8, abs=0.15)
+    assert q["categories"]["W"] == A.OVERSHOOT and "no combined reading" in q["reading"]
+
+
+def test_an_authorization_removal_lies_in_the_aligned_half():
+    """The AB pattern lowers the aligned write line to the question level: the removal is the aligned half's."""
+    dec, primary, _ = _decide({QWEN: (_fail(*PATTERNS["AB"]), _witness(), None), LLAMA: (_fail((4.0, 1.8), (4.0, 1.8)), _witness(), None)})
+    w = primary[QWEN]["W"]
+    assert w["Z_aligned_half"]["estimate"] == pytest.approx(2.2, abs=0.15) and w["Z_swapped_half"]["estimate"] == pytest.approx(0.0, abs=0.15)
+    assert w["Z_aligned_half"]["estimate"] + w["Z_swapped_half"]["estimate"] == pytest.approx(w["Z"]["estimate"], abs=1e-9)
+    assert dec["per_model"][QWEN]["aligned_half_shown"] is True
+    assert "(a) for naming, (b) for the request" in dec["per_model"][QWEN]["reading"]
+
+
+@pytest.mark.parametrize("zh, zw, want", [
+    ((1.2, 0.9, 1.5), (2.2, 1.9, 2.5), True),     # more than half of the removal, CI above 0
+    ((0.9, 0.6, 1.2), (2.2, 1.9, 2.5), False),    # less than half
+    ((1.2, -0.1, 2.5), (2.2, 1.9, 2.5), False),   # CI includes 0
+    ((-1.2, -1.5, -0.9), (-2.2, -2.5, -1.9), True),  # a negative component: the direction of W in arm (i)
+])
+def test_aligned_half_rule(zh, zw, want):
+    main = _blk(2.2, 1.9, 2.5) if zw[0] > 0 else _blk(-2.2, -2.5, -1.9)
+    w = {"main": main, "Z": _blk(*zw), "Z_aligned_half": _blk(*zh)}
+    assert A.aligned_half_shown(w) is want
+
+
+def test_a_nan_test_stays_in_the_holm_family_as_p_one():
+    primary = {m: {x: {part: {"perm_p": 0.004} for part in A.PRIMARY_PARTS} for x in A.PRIMARY_COMPONENTS} for m in P.CO_PRIMARY}
+    primary[LLAMA]["W"]["Z"]["perm_p"] = float("nan")
+    adj = A.holm_family(primary)
+    assert len(adj) == 8 and adj[f"{LLAMA}|W|Z"] == 1.0
+    assert adj[f"{QWEN}|W|Z"] == pytest.approx(0.004 * 8)  # the family has eight members, not seven
+
+
+def test_per_class_values_and_the_opposite_sign_sentence():
+    items = _items()
+    fail = _fail((4.0, 1.8), (4.0, 1.8))
+    by = _scores(items, fail, _witness())
+    for t in items:  # the unavailable class: W reversed in arm (i)
+        if t["cls"] == "unavailable":
+            for arm in A.ARMS:
+                by[(t["id"], arm, "fail", "first", "aligned")] = _rec(by[(t["id"], arm, "fail", "first", "aligned")]["L"] - 4.4)
+    by_class = {c: A.primary_block(by, [t for t in items if t["cls"] == c], 1000) for c in A.CLASSES}
+    table, note = A.class_note(by_class)
+    assert set(table) == set(A.CLASSES) and set(table["status"]) == {"W", "M"} and set(table["status"]["W"]) == {"main", "Z", "R"}
+    assert "The pooled request component averages opposite class effects" in note and "naming" not in note
+    same = {c: A.primary_block(_scores(items, fail, _witness()), [t for t in items if t["cls"] == c], 1000) for c in A.CLASSES}
+    assert A.class_note(same)[1] == ""
+    dec = A.decide({QWEN: A.primary_block(by, items, 1000)}, {QWEN: {"comprehension_blind_passes": True, "positive_control_passes": True}},
+                   by_class={QWEN: by_class})
+    assert "averages opposite class effects" in dec["per_model"][QWEN]["reading"] and dec["per_model"][QWEN]["per_class"] == table
+
+
+def test_smoke_set_adds_the_named_longest_item(built, runs):
+    gen, _ = built
+    cands = [t for t in gen if A.is_candidate(t)]
+    picked = {t["id"] for t in A.auth_items(gen, 1)}
+    extra = next(t["id"] for t in cands if t["id"] not in picked)
+    items, comp, _ = A.chosen_items({**_cfg(), "items_per_class": 1, "extra_items": [extra]})
+    assert [t["id"] for t in items][-1] == extra and len(items) == 3
+    with pytest.raises(ValueError):
+        A.chosen_items({**_cfg(), "extra_items": [next(t["id"] for t in gen if not A.is_candidate(t))]})
+    smoke = load_config("tau_auth_score_smoke")
+    assert smoke["extra_items"] == ["tau-g-77cc59152d73"] and smoke["comprehension_per_class"] == 4
+    sb = (ROOT / "pace" / "tau_auth_score.sbatch").read_text()
+    assert "#SBATCH --constraint=(gpu-l40s|gpu-a40|A100-80GB|gpu-h100)" in sb and "gpu-a100" not in sb
+
+
+def test_inference_in_lin_is_clustered_by_user():
+    """Review 1, S6.1: four users with strong user-level effects; item-level inference would be far narrower."""
+    items = [{"id": f"t{i:02d}", "user_id": f"u{i // 10}", "cls": "status"} for i in range(40)]
+    user_effect = {"u0": 3.0, "u1": 3.0, "u2": 3.0, "u3": -2.0}
+    by = {}
+    for i, t in enumerate(items):
+        by[(t["id"], "main", "fail", "first", "aligned")] = _rec(user_effect[t["user_id"]] + 0.01 * (i % 3))
+        by[(t["id"], "main", "fail", "first", "swapped")] = _rec(0.0)
+    blk = A.lin(by, items, A.q_terms("G", "main", "fail"), n_perm=2000)
+    assert blk["n_users"] == 4
+    assert blk["perm_p"] > 0.1           # 4 clusters: no sign-flip p below 1/8; item-level flips would give ~0
+    assert blk["ci"][0] < 0.5 and blk["ci"][1] > 2.9  # user resampling spans the user means; item resampling would not
+
+
+def test_positive_control_needs_its_ci_above_zero():
+    items = _items(40, 20)
+    by = _scores(items, _fail((4.0, 1.8), (4.0, 1.8)), _witness(False), noise=0.0)
+    for t in items:  # the authorization arm's witness swapped line: half the users -8.4, half +6.0 relative to aligned
+        k = (t["id"], "auth", "witness", "first", "swapped")
+        by[k] = _rec(by[k]["L"] + (-8.4 if int(t["user_id"][1:]) % 2 else 6.0))
+    pc = A.positive_control(by, items)
+    assert pc["estimate"] == pytest.approx(1.2, abs=0.01) and pc["ci"][0] < 0 and not pc["passes"]
+
+
+def test_scoring_refuses_saved_records_of_other_items(runs, monkeypatch):
+    monkeypatch.setenv("WF_SHARD", "0")
+    cfg = _cfg(run_id="tau_auth_stale_resume")
+    assert A.run_tau_auth_score(cfg) == 0
+    path = runs / "tau_auth_stale_resume" / "shard_00_of_02" / "scoring.jsonl"
+    recs = read_jsonl(path)
+    path.write_text("".join(json.dumps(r) + "\n" for r in [{**recs[0], "item_hash": "0" * 16}] + recs[1:5]))
+    with pytest.raises(SystemExit, match="different items"):
+        A.run_tau_auth_score({**cfg, "resume": True})
+
+
+def test_prompt_check_catches_an_arm_dependent_final_turn_and_a_changed_main_arm(built, monkeypatch):
+    gen, few = built
+    t = A.auth_items(gen, 1)[0]
+    real = A.build_messages
+
+    def blind_final(item, cond, fs, *, readout="first", action="fail", arm="main"):
+        ms = real(item, cond, fs, readout=readout, action=action, arm=arm)
+        if arm == "blind":
+            ms[-1] = {**ms[-1], "content": ms[-1]["content"] + " "}
+        return ms
+    monkeypatch.setattr(A, "build_messages", blind_final)
+    assert any("final turn differs from main's" in p for p in A.check_item_prompts(t, few, ("first",)))
+    monkeypatch.setattr(A, "build_messages", real)
+    real_conf = PR.build_messages
+    monkeypatch.setattr(PR, "build_messages", lambda *a, **k: real_conf(*a, **k)[:-1] + [{"role": "user", "content": "x"}])
+    assert any("differs from the confirmatory prompt" in p for p in A.check_item_prompts(t, few, ("first",)))
+
+
+def test_smoke_analysis_reports_the_gates(runs, monkeypatch):
+    smoke = {**load_config("tau_auth_score_smoke"), "run_id": "tau_auth_score_smoke2", "expected_outputs_sha256": _pins(),
+             "items_per_class": 2, "comprehension_per_class": 2, "extra_items": []}
+    assert A.run_tau_auth_score(smoke) == 0
+    real = A.load_config
+    monkeypatch.setattr(A, "load_config", lambda name: smoke if name == "tau_auth_score_smoke2" else
+                        (_cfg() if name == "tau_auth_score" else real(name)))
+    assert A.run_tau_auth_analysis({**load_config("tau_auth_smoke_analysis"), "run_id": "tau_auth_smoke_analysis2",
+                                    "source": "tau_auth_score_smoke2"}) == 0
+    m = json.loads((runs / "tau_auth_smoke_analysis2" / "metrics.json").read_text())
+    g = m["models"][QWEN]["gates_readable"]
+    assert set(g["comprehension"]) == set(A.ARMS) and g["comprehension"]["blind"]["questions"]["K1"]["n"] == 4
+    assert set(g["positive_control"]) == {"pc_nats", "pc_ci", "passes", "n_items"}
+
+
+def test_a_non_finite_per_item_value_is_left_out():
+    items = _items(6, 3)
+    by = {}
+    for i, t in enumerate(items):
+        by[(t["id"], "main", "fail", "first", "aligned")] = _rec(float("nan") if i == 0 else 1.0)
+        by[(t["id"], "main", "fail", "first", "swapped")] = _rec(0.0)
+    blk = A.lin(by, items, A.q_terms("G", "main", "fail"), n_perm=100)
+    assert blk["n_items"] == 5 and blk["estimate"] == 1.0

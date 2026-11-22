@@ -15,8 +15,9 @@
 #SBATCH --mem=48G
 #SBATCH --time=4:00:00
 #SBATCH --gres=gpu:1
-# Any free L40S, A40, A100 or H100; brackets because ICE appends &cuda13 to the constraint.
-#SBATCH --constraint=(gpu-l40s|gpu-a40|gpu-a100|gpu-h100)
+# Any free L40S, A40, 80 GB A100 or H100 (review 1, S5: the longest prompt, 15.5k tokens, is near the memory limit of a
+# 40 GB A100); brackets because ICE appends &cuda13 to the constraint.
+#SBATCH --constraint=(gpu-l40s|gpu-a40|A100-80GB|gpu-h100)
 #SBATCH --output=logs/tau_auth_score_%j.out
 #SBATCH --error=logs/tau_auth_score_%j.err
 #
