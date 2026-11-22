@@ -17,8 +17,13 @@ Overall verdict, by the joint rule fixed in advance: **ALFWorld direction in bot
 
 ## What each model's effect is, by the pre-registered reading table
 
-- **Qwen3-8B: a general task-consistency bias.** The working "witness" call on the same order also moves toward success under the aligned task, and the failing call moves no more than the witness (fail minus witness about 0). So naming the order raises Qwen's predicted success for calls on it whether they fail or not. By the table this is read as goal leakage, not as an override specific to failures. It is also compatible with a belief that the backend checks calls against the request.
-- **Llama-3.1-8B: the ALFWorld effect in its stronger form, but small.** The failing call moves more than the witness (fail minus witness above 0), so the task overrides a visible fact about the named object more for failing calls than for working ones. The size is below the 0.5-nat margin.
+- **Qwen3-8B: a general task-consistency bias.** The pre-registered table's label here is "not specific to failing calls (fail minus witness about 0, negative or uncertain)". The value is in fact strongly negative: fail minus witness is −5.47 [−5.88, −5.05] (`tau_dx.md`, branch `tau-dx`). So the working witness call on the same order moves more than twice as much as the failing call. Naming the order raises Qwen's predicted success for calls on it, working calls more than failing ones. By the table this is read as goal leakage, not as an override specific to failures. A smaller part, about 1 nat, is consistent with a belief that the backend refuses writes the user did not request.
+- **Llama-3.1-8B: small, and not robustly failure-specific.** By the pre-registered table, the failing call moves more than the witness, which reads as the ALFWorld effect in its stronger form, below the 0.5-nat size. The exploratory analysis (`tau_dx.md`) qualifies this:
+  - the failure-specific part is +0.09 [0.04, 0.14] and comes from two cells (exchanges on pending orders, and returns);
+  - the pooled +0.47 averages +1.23 on order-status failures with −0.33 on unavailable-variant failures;
+  - the median item moves +0.25;
+  - the failure-specificity reverses in the arm without the "backend does not see the task" statement.
+  Its largest component is that any write request raises predicted success.
 - **Both:** the request to act adds to merely naming the order (write minus mention above 0; an authorization reading predicts this too).
 
 ## Other readouts (descriptive)
@@ -36,7 +41,12 @@ Overall verdict, by the joint rule fixed in advance: **ALFWorld direction in bot
 
 ## Reading and limits
 
+*(Corrected 2026-11-22 from the exploratory analysis in `tau_dx.md`, branch `tau-dx`; the pre-registered verdicts are unchanged.)*
+
 - τ-bench is the third environment. Qwen3-8B shows a large positive effect here, as in ALFWorld and TextCraft, but in τ-bench it is not specific to failing calls: naming the order raises its predicted success for working calls too. Llama-3.1-8B shows a small effect that is specific to failing calls.
 - Against the neutral line, Qwen's effect is largely the swapped task lowering predicted success (−2.56), the same pattern as in TextCraft.
-- The yes/no question here is anchored to the backend's reply (fixed before scoring), so it is not subject to the task-success reading found in TextCraft. Llama's yes/no effect is null while its first-token effect is positive; Qwen's is large on both.
+- **The yes/no question still carries a task judgement for Qwen.** It is anchored to the backend's reply (fixed before scoring), yet about +3.9 of Qwen's +7.68 nats lies beyond its own predicted output. Among calls whose first token confidently predicts a JSON success, Qwen answers "No" to 90–93% under the swapped line, 51–67% under neutral and 17–32% under aligned. Anchoring to the output format did not remove the task reading found in TextCraft.
+- **Llama's yes/no null is an insensitive readout, not robustness.** Its yes/no moves only 0.29 nats per nat of its first-token prediction.
+- **Full-reply effects are mostly copying.** The success JSON repeats the order number and product named in the aligned line.
+- **Practical size.** Under the aligned line, Qwen answers "Yes" to 57% of unavailable-variant failing calls, against 10% under neutral. Llama's decisions barely move (about 1–2% flips).
 - One scoring run per model; the items are generated calls on real τ-bench users and orders, not agent proposals.
