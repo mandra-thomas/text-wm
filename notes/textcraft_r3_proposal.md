@@ -8,6 +8,29 @@
 
 **Round 2 is not touched.** Round 3 modifies no round-2 file. It has its own configs, run names, results directory and code version, and it reuses validated round-2 code by import (section 6). Round 3 never delays round 2: it scores nothing before round 2 is frozen, and its cross-generation analysis (section 7.4) reads round-2 scores only after round 2 has been scored and its results filed.
 
+## Decisions (2026-11-22)
+
+The owner and the coordinating reviewer decided the open questions of section 8 on 2026-11-22, before round 2's freeze and before any round-2 or round-3 score. Where an earlier or later section of this proposal differs, this section governs.
+
+- **D1. Gemma generation.** Gemma 4 12B-it (`google/gemma-4-12B-it` at 43c9d014b231…) is the core Gemma model, with Gemma 4 E4B-it (4ecc2ba63bca…) as the declared fallback under the rule of section 2.4. Gemma 3 12B is not used.
+- **D2. Scope and staging.** One freeze tag covers the minimum and the expanded design. The minimum (the three core models, the TextCraft environment check, the smoke runs) runs first. The extension models `qwen3.8-27b`, `gemma4-31b-it` and `olmo3-7b-it`, the two format checks and the reasoning arm follow as GPUs allow. Whether each runs depends on GPU availability, not on core results; the families stay fixed in size (a test whose model was not scored enters with p = 1).
+- **D3. Reasoning arm.** Only Qwen3.5-9B with thinking on (`qwen3.5-9b-think`), compared with the same weights with thinking off. It is exploratory (analysis c), reported separately, never pooled with the instruction runs, never entered in a test family and never gated with them, and generated with HF `generate` in serve2 (no vLLM environment). Ministral 3 Reasoning and OLMo 3 Think are dropped, so the question about Ministral's reasoning system prompt (section 8, item 8) no longer arises. OLMo 3 7B Instruct stays in the extension as a fourth developer, without its reasoning twin.
+- **D4. No extra developers.** Granite 4.2 8B and Ministral 3 14B are not used. Family A3x therefore holds the three extension models (30 tests).
+- **D5. Storage.** Route A, as in wave B: weights downloaded per job to node-local disk, every file checked against a per-model hash manifest committed before the freeze.
+- **D6. Replication rule.** The minimum of two competent models in both rounds is accepted. A partial replication (a contrast confirmed in the round-2 direction in some competent round-3 models, with the others inconclusive, equivalent or opposite) is reported per model with its contrasts, labelled "partial", and never counted as a replication. In the table of section 7.3, the "partly replicated" and "replicated in some models, not in general" sub-cases are both reported under this label.
+- **D7. When code is built.** Round-3 code is built only after both of these hold: wave B's scorer fixes have passed their re-review and are merged, and round 2's freeze tag exists. Nothing beyond the compatibility check is built before then.
+
+**Cost for the chosen scope** (estimates, not timings; section 4.4 gives the rates behind them):
+
+| Stage | Runs | GPU-hours |
+|---|---|---|
+| Minimum | `qwen3.5-9b` (2–4), `ministral3-8b-it` (1.7–2.5), `gemma4-12b-it` (2.5–3.5); environment check on Qwen3-8B and Mistral-7B-v0.3 (0.6); smoke runs (0.3); node-local downloads (about 1–2.5) | about 9–13; budget 14; 48 GB cards suffice |
+| Extension | `qwen3.8-27b` (6–9) and `gemma4-31b-it` (6–9) on A100-80GB or two L40S; `olmo3-7b-it` (1.5–2); format checks (0.5); smoke runs (0.3); downloads (about 1–2.5) | about 15–23, of which 12–18 on 80 GB cards |
+| Reasoning arm | `qwen3.5-9b-think` on about 4,500 record-arm generations, then scoring after each trace | about 3–6 |
+| All | | about 27–42; budget 45 |
+
+If the environment check fails, rescoring the three older models fully in serve2 adds about 7 GPU-hours (section 6.3).
+
 ## 1. The question
 
 **Background in one paragraph.** The project tests whether LLM world models violate goal-independence: in a deterministic environment an action's outcome depends only on the state and the action, yet changing the task line changes the predicted success. TextCraft round 1 confirmed a goal effect for Qwen3-8B and not for Llama-3.1-8B, and its exploratory follow-ups suggested a two-part account: an *intermediate lift* (crafts that serve the named goal become more likely to be predicted to succeed) and a *penalty* on crafting the named goal item itself. Round 2 tests that account prospectively in five models with five contrasts (section 7.1), under a clean world-model prompt and an anchored yes/no question.
@@ -207,7 +230,8 @@ Round 2 assumed about 25,600 forward passes per GPU-hour for an 8 B model on the
 | `gemma4-31b-it` | about 42,200 | 6–9 h (A100-80GB) |
 | TextCraft environment check: Qwen3-8B and Mistral-7B-v0.3 rescored in serve2 on 300 seeded records, all arms | about 4,300 each | 0.3 h each |
 | Smoke run, 20 seeded records per model, all arms | about 330 each | 0.1 h each, plus loading |
-| Reasoning arm, per model (section 7.5): about 4,500 generations of up to 2,048 tokens with HF `generate` in serve2, then the two replies scored after each trace | about 4,500 generations and 9,000 passes | 3–6 h |
+| Reasoning arm, `qwen3.5-9b-think` only (Decisions, D3; section 7.5): about 4,500 generations of up to 2,048 tokens with HF `generate` in serve2, then the two replies scored after each trace | about 4,500 generations and 9,000 passes | 3–6 h |
+| Format checks (Gemma 4 12B system placement; Qwen3.8 `preserve_thinking=False`), 300 seeded records each | about 1,800 each | 0.5 h together |
 | Node-local weight download (wave B's route A), per job | — | 0.2–0.4 h |
 
 ## 5. Minimum viable replication against an expanded study
@@ -217,10 +241,10 @@ Round 2 assumed about 25,600 forward passes per GPU-hour for an 8 B model on the
 **Expanded study.** The minimum, plus:
 
 - the extension models `qwen3.8-27b` and `gemma4-31b-it` (the larger external-validity test; 12–18 h on 80 GB cards) and `olmo3-7b-it` (a fourth developer; 1.5–2 h);
-- the reasoning arm: `qwen3.5-9b-think`, `ministral3-8b-reasoning` and `olmo3-7b-think`, each beside its instruction twin (9–18 h);
+- the reasoning arm: `qwen3.5-9b-think` only, beside the same weights with thinking off (3–6 h; Decisions, D3);
 - two format checks: Gemma 4 12B with the system text folded into the first user turn, as Gemma 2 had it, and Qwen3.8 with `preserve_thinking=False` (about 0.5 h together; section 6.3).
 
-Estimated 33–53 GPU-hours in all, of which 12–18 on 80 GB cards; budget 55.
+Estimated 27–42 GPU-hours in all, of which 12–18 on 80 GB cards; budget 45 (cost table in the Decisions section).
 
 **Recommendation.** Freeze the whole design (minimum, extension and exploratory arms) at one tag, so that nothing about the extension is chosen after seeing core results, and run it in stages: the minimum first; then the extension and the reasoning arm as GPU time allows. The core verdicts do not depend on whether the extension runs (separate test families, section 7.6). Whether the extension runs is decided by budget, recorded before the core results are read, and not by them. If the owner wants to spend less, the minimum alone is a complete study.
 
@@ -414,6 +438,8 @@ For analysis (b), there is no success or failure: each pair and contrast reads "
 For analysis (c), nothing is confirmed or rejected.
 
 ## 8. Open decisions for the owner
+
+*All decided on 2026-11-22; see the Decisions section near the top, which governs. The list is kept as first written.*
 
 1. **Gemma generation.** Gemma 4 12B-it (recommended), Gemma 4 E4B-it (wave B's choice; weaker size match), or Gemma 3 12B (older than round 2's newest model; gated, needs the owner's license acceptance and access arrangement; possible only as an exploratory bridge).
 2. **Minimum or expanded.** The minimum (about 14 GPU-hours, 48 GB cards) or the expanded study (about 55 GPU-hours, 12–18 of them on 80 GB cards), and whether to freeze both at one tag and stage the runs (recommended).
