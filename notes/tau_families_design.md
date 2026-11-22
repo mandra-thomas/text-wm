@@ -519,3 +519,15 @@ No design rule changed. What was built and checked:
   jobs of both reference models from a mock reference run, and its reference results check matched that run's τ
   analysis exactly. (A first attempt stopped at its token check because the code was committed while it was
   verifying the items: verification is tied to the commit, so every later stage refused. Rerun at a fixed commit.)
+- **Mutation testing** (`scripts/mutation_check.py`, `MUTANTS_MATCHING="tau-fam"`, 4 shards): 58 mutants of the
+  extension's code (the job list, cues and readout words, template handling, the placement spec, every check of the
+  token check and its gate, the in-job length guard and readout report, resume and sharding, the competence rule and
+  its population, task and thresholds, the competence gate, the Holm family, the item share, the comparison rules and
+  their pairing, the placement rule, the reference commit, hash and results checks, the projection and budget, the
+  smoke analysis's estimate-free output, the reading rows and patterns, and the pipeline's verdict family). 58 of 58
+  killed, each by a named test in `tests/test_tau_families.py` (the runner now records the first failing test of
+  every kill). One mutant (the comparison's bootstrap resampling the two models separately) first survived the
+  targeted tests, because the test's synthetic users all had the same number of moved items, so even unpaired draws
+  gave a mean difference of exactly 0; the test now has users that differ in that number and the mutant is killed.
+  Six older mutants in the same file (targeting rewritten code in `wf/runs.py`) were already inapplicable at the
+  base commit; they are untouched and outside this extension.

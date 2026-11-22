@@ -664,9 +664,11 @@ def test_compare_noise_floor_and_paired_resampling():
     out = T.compare(a, b, items)["delta_L_difference_nats"]
     assert out["estimate"] == pytest.approx(0.2) and out["ci95"][0] > 0  # excludes 0 ...
     assert out["reading"] == "no difference detected"  # ... but under the 0.3-nat floor
-    # paired: A and B identical up to a constant shift of every item: the share difference has no spread at all
-    c = _by(items, lambda k, x, r, cond: {"aligned": 1.0 if k % 3 else -1.0, "swapped": 0.0}.get(cond, 0.0))
-    d = _by(items, lambda k, x, r, cond: {"aligned": 2.0 if k % 3 else -1.0, "swapped": 0.0}.get(cond, 0.0))
+    # paired: A and B move exactly the same items (users differ in how many: user u has items u, u + 20 and u + 40,
+    # and items below 30 move, so users 0-9 move two and users 10-19 one): resampling users once for both models gives
+    # a share difference with no spread at all; resampling each model separately would not
+    c = _by(items, lambda k, x, r, cond: {"aligned": 1.0 if k < 30 else -1.0, "swapped": 0.0}.get(cond, 0.0))
+    d = _by(items, lambda k, x, r, cond: {"aligned": 2.0 if k < 30 else -1.0, "swapped": 0.0}.get(cond, 0.0))
     s = T.compare(c, d, items)["item_share_difference"]
     assert s["ci95"] == [0.0, 0.0] and s["matches"]
 
