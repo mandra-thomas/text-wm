@@ -483,3 +483,39 @@ outcome table); configs `wf/config/tau_family_*.yaml`; job scripts `pace/tau_fam
 Order: this note; code, tests, mutants and a dry run without models; the token check on ICE (results added below);
 independent review (engineering, and scientific validity) with fix rounds until a round finds no must-fix; an
 annotated tag freezing the design; the smoke run, recorded here; full scoring; the analysis; a results check.
+
+## Implementation record (2026-11-22, after the design commit 1b3a756, before any score)
+
+No design rule changed. What was built and checked:
+
+- **Code** (commit 80a59fa): `wf/tau/families.py`, the seven runs and their configs, `pace/tau_family_score.sbatch`
+  (3-hour limit, L40S, A100 or H100) and `pace/tau_family_items.sbatch` (CPU). `wf.tau.pipeline.verdicts` and
+  `sensitivity_verdicts` now take the model family as an argument; the default is the two reference models, so the
+  reference design's behaviour is unchanged (the τ pipeline and families tests pass: 185 passed, 4 skipped). The extension calls them with its own
+  family, so the verdict rule, the gates and the reading table are the reference design's own code.
+- **Token check on ICE** (`tau_family_token_check`, job 7240557, at 80a59fa, after a rebuild and verification at that
+  commit that reproduced all three item pins; 9 minutes on 4 CPUs): **PASS** for both scored models.
+  - For each of Mistral 7B v0.3 and Llama 3.2 3B: all 11,984 scored prompts rendered and measured; all 3,424 replies
+    (twin, failure reply, witness output and witness failure of each of the 856 items) begin with the scored token
+    and tokenize alone exactly as the template writes them; `Yes` and `No` are the template's tokens after all 5,136
+    yes/no and manipulation prompts; the prompts of every call and cue differ only in the task line; no prompt
+    reaches the context. Problems of every kind: 0.
+  - Scored tokens: Mistral `▁{"`, `▁Error`, `▁Yes`, `▁No`; Llama 3.2 `{"`, `Error`, `Yes`, `No`; each a single token.
+  - Prompt lengths in tokens (median and maximum over the 856 items, failing call, output cue): Mistral 11,868 and
+    14,607 (longest prompt of any variant 14,642, the yes/no question on tau-g-77cc59152d73); Llama 3.2 9,763 and
+    11,874 (longest 11,907).
+  - The Mistral placement check's 600 prompts (system text in the first turn): no problem, longest 14,516 tokens.
+  - Gemma 2 9B (lengths only): all 11,984 prompts are at or above its 8,192-token context (median 11,339, longest
+    14,051), confirming the exclusion of section 2.3.
+- **Golden prompts** (`tests/golden/tau_families_rendered.json`): one real primary item (tau-g-f73576420d8e,
+  `unavailable`, few-shot order reversed), the sha256 of the messages of every scored job under each model's handling
+  (checked by the tests everywhere), and the sha256 and token count of each rendered prompt with each pinned tokenizer,
+  written and re-checked identical on ICE (job 7240556; `scripts/tau_families_golden.py`).
+- **Dry run without models** (`scripts/tau_families_dry_run.py`, mock scoring on the full item build in a temporary
+  runs folder, real configs and shard counts): every stage ran. 856 primary items from 175 users; 11,984 passes per
+  model, in shards of 3,080, 2,940, 3,038 and 2,926 (the largest about 1.3 h for Mistral at 1.5 s a pass); a resume of
+  a finished shard adds nothing; 600 placement passes; the smoke set is 21 items (294 passes per model); the smoke
+  analysis wrote a projection and no estimate; the families analysis found no missing or stale score, read all 14
+  jobs of both reference models from a mock reference run, and its reference results check matched that run's τ
+  analysis exactly. (A first attempt stopped at its token check because the code was committed while it was
+  verifying the items: verification is tied to the commit, so every later stage refused. Rerun at a fixed commit.)
