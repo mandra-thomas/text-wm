@@ -830,3 +830,9 @@ Each item was checked by reading the code and by a test that fails if the proper
 - The analysis output did not say which comparisons were confirmatory; `inference_map` now does.
 
 No error was found in the Holm, TOST, margin, clustering or identity code.
+
+**Tests and mutants at sign-off.**
+
+- `tests/test_textcraft_r2.py`: 141 tests pass.
+- Mutants: 145 round-2 mutants. The 22 new or changed ones were run in official mode at 170db45, and all were killed by named tests (log appended to `notes/textcraft_r2_mutation_log.txt`). The other 123 were killed in the official run at ef73d40, and their code is unchanged.
+- The full suite was run once at the end: FULL_SUITE_SIGNOFF.

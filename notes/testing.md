@@ -422,3 +422,21 @@ The survivor, "A role gap on all rows", had become equivalent. After review 2 th
 | W R5 ignores the timing competence | `test_rejection_list_per_model` |
 | W central shortcut on the point estimate | `test_central_question_is_exclusive[p_ci3-True-tracking3-undecided]` |
 | W scores of other arms accepted | `test_scores_must_be_arms_of_their_record` |
+
+### TextCraft round 2, sign-off corrections (2026-11-22)
+
+The sign-off corrections (design 15.F) and the statistical audit (15.A) added tests for:
+
+- R3 labelled a descriptive diagnostic;
+- R4 descriptive, with a paired lift difference resampled over goal pairs;
+- R5's wording;
+- interpretation and reading strings that never call an AUC gate competence or understanding;
+- the neutral central-question labels;
+- the inference map, with no p-value outside the 50 family tests;
+- Holm with padding to 50;
+- TOST from one-sided bootstrap ps;
+- the margin computed once and shared by all contrasts;
+- goal-pair clusters in every resample of a model block;
+- the exact Dn + Dc identity on the 996 shared rows.
+
+The mutation list was updated: two stale mutants were replaced or removed, and ten mutants were added for the corrections. 145 round-2 mutants are now listed. The 22 new or changed ones (the 15.F mutants, the review-2 "W" mutants whose code changed, and the interpretation mutant) were run in official mode at 170db45, and all 22 were killed by named tests. Their log is appended to `notes/textcraft_r2_mutation_log.txt`. The other 123 were killed in the official run at ef73d40 and their code is unchanged.
