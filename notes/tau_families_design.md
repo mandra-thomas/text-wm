@@ -644,3 +644,17 @@ descriptive layer, one restored readout and the tests. Sections edited in place 
 
 What remains as the reviewer noted, unchanged: `wf.analysis.stats.holm` drops a NaN p from its count, which could only
 arise with an empty population, impossible on the real items.
+
+**Checks rerun after these amendments** (at 68ba60e, which holds the amendments and their code):
+
+- **Token check on ICE** (`tau_family_token_check`, job 7244974, 17 minutes, after a rebuild and verification at that
+  commit that reproduced all three item pins; report committed as `notes/tau_families_token_check.json`): **PASS** for
+  both scored models. Each: all 13,696 scored prompts; all 3,424 reply checks; `Yes` and `No` the template's tokens
+  after all 6,848 yes/no and manipulation prompts; prompts differ only in the task line; none reaches the context;
+  0 problems. Longest prompts unchanged (Mistral 14,642, Llama 3.2 11,907). The 600 placement prompts pass. Gemma 2:
+  all 13,696 prompts at or above 8,192.
+- **Golden prompts** (job 7244973): the two restored jobs added per model; every earlier hash unchanged; re-checked
+  identical.
+- **Dry run without models** (at 68ba60e): every stage ran; 13,696 passes per model in shards of 3,520, 3,360, 3,472
+  and 3,344 (the largest about 1.5 h for Mistral at 1.5 s a pass); 600 placement passes; 21 smoke items (336 passes per
+  model); the analysis found no missing or stale score and its reference results check matched exactly.
