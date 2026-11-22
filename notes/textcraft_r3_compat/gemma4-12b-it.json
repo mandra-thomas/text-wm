@@ -1,0 +1,95 @@
+{
+ "tag": "gemma4-12b-it",
+ "kind": "instruct",
+ "hf_id": "google/gemma-4-12B-it",
+ "revision": "43c9d014b231474fa7212dbb48a762566c2b255d",
+ "tokenizer_dir": "google__gemma-4-12B-it@43c9d014b231474fa7212dbb48a762566c2b255d",
+ "tokenizer_class": "GemmaTokenizer",
+ "apply_chat_template_tokenize_returns": "BatchEncoding",
+ "template_kwargs": {
+  "enable_thinking": false
+ },
+ "generation_suffix": "<|channel>thought\n<channel|>",
+ "thinking_off_ending": "<|turn>model\n<|channel>thought\n<channel|>",
+ "ok": true,
+ "n_problems": 0,
+ "problems": [],
+ "n_records": 2982,
+ "n_arms": 25743,
+ "n_candidates_checked": 32942,
+ "n_yes_no_prompts_checked": 9272,
+ "n_arm_pairs_checked": 17057,
+ "yes_no_ids": {
+  "Yes": [
+   10784
+  ],
+  "No": [
+   3771
+  ]
+ },
+ "yes_no_decoded": {
+  "Yes": "Yes",
+  "No": "No"
+ },
+ "first_token_pairs": {
+  "'Craft' vs 'Could'": 16471
+ },
+ "candidate_tokens": {
+  "o_plus": {
+   "mean": 9.655,
+   "median": 10,
+   "min": 7,
+   "max": 16
+  },
+  "o_minus": {
+   "mean": 12.643,
+   "median": 12,
+   "min": 10,
+   "max": 18
+  }
+ },
+ "max_input_tokens": 1717,
+ "sliding_window": 1024,
+ "inputs_over_sliding_window": 41755,
+ "switch": {
+  "checked": 8,
+  "off_ending_rendered": "bservation:<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+  "on_ending_rendered": "t using 1 iron ingot\n\nNext observation:<turn|>\n<|turn>model\n"
+ },
+ "info": {
+  "template_ids_not_plain_tokenization": 0,
+  "prompts_with_empty_think_in_examples": 0,
+  "joined_plain_text_differs": 0
+ },
+ "golden": {
+  "tc-p001-1e56f799a78e|aligned": {
+   "n_ids": 1013,
+   "ids_sha256": "948f1d0c05ce3d4a52c0c7e7f0bbfc7d377f79ad029af516832ae5f9f5c99ce5",
+   "text": "<bos><|turn>system\nYou are a text world model for TextCraft, a Minecraft crafting game. Given the interaction history and the next action, predict the environment's next observation exactly in TextCraft style. Output only the observation text.\n\nThe environment's rules: crafting commands are of the format \"craft [target object] using [input ingredients]\". Each action is \"get\" with a quantity and an object, \"inventory\" to look up the inventory, or \"craft\" with a quantity and one of the crafting commands shown. If a crafting command uses a generic ingredient like \"planks\", a special type of the same ingredient, e.g. \"dark oak planks\", can be used instead.<turn|>\n<|turn>user\nHistory:\nCrafting commands:\ncraft 1 light gray dye using 1 white tulip\ncraft 1 white dye using 1 bone meal\ncraft 3 bone meal using 1 bone\ncraft 2 light gray dye using 1 gray dye, 1 white dye\ncraft 2 gray dye using 1 black dye, 1 white dye\ncraft 1 gold ingot using 9 gold nugget\ncraft 1 light gray dye using 1 azure bluet\ncraft 1 black dye using 1 ink sac\ncraft 1 black dye using 1 wither rose\ncraft 1 white dye using 1 lily of the valley\ncraft 3 light gray dye using 1 black dye, 2 white dye\ncraft 1 light gray dye using 1 oxeye daisy\n\nGoal: craft light gray dye.\n> get 3 azure bluet\nGot 3 azure bluet\n> inventory\nInventory: [azure bluet] (3) \n> get 4 lily of the valley\nGot 4 lily of the valley\n\nAction: craft 1 white dye using 1 lily of the valley\n\nNext observation:<turn|>\n<|turn>model\nCrafted 1 minecraft:white_dye<turn|>\n<|turn>user\nHistory:\nCrafting commands:\ncraft 4 jungle planks using 1 jungle logs\ncraft 4 oak planks using 1 oak logs\ncraft 4 warped planks using 1 warped stems\ncraft 2 blaze powder using 1 blaze rod\ncraft 4 dark oak planks using 1 dark oak logs\ncraft 4 crimson planks using 1 crimson stems\ncraft 1 stick using 2 bamboo\ncraft 4 spruce planks using 1 spruce logs\ncraft 3 acacia sign using 6 acacia planks, 1 stick\ncraft 4 birch planks using 1 birch logs\ncraft 3 fire charge using 1 gunpowder, 1 blaze powder, 1 coal\ncraft 4 acacia planks using 1 acacia logs\ncraft 4 stick using 2 planks\n\nGoal: craft acacia sign.\n> get 3 spruce logs\nGot 3 spruce logs\n> inventory\nInventory: [spruce logs] (3) \n\nAction: craft 4 stick using 2 acacia planks\n\nNext observation:<turn|>\n<|turn>model\nCould not find enough items to craft minecraft:stick<turn|>\n<|turn>user\nHistory:\nCrafting commands:\ncraft 3 birch sign using 6 birch planks, 1 stick\ncraft 4 warped planks using 1 warped stems\ncraft 4 birch planks using 1 birch logs\ncraft 1 stick using 2 bamboo\ncraft 4 stick using 2 planks\ncraft 4 jungle planks using 1 jungle logs\ncraft 4 spruce planks using 1 spruce logs\ncraft 2 diorite using 2 quartz, 2 cobblestone\ncraft 4 oak planks using 1 oak logs\ncraft 4 dark oak planks using 1 dark oak logs\ncraft 4 acacia planks using 1 acacia logs\ncraft 4 crimson planks using 1 crimson stems\ncraft 1 granite using 1 diorite, 1 quartz\n\nGoal: craft granite.\n> get 2 birch logs\nGot 2 birch logs\n> get 3 birch logs\nGot 3 birch logs\n> craft 4 birch planks using 1 birch logs\nCrafted 4 minecraft:birch_planks\n> craft 4 stick using 2 birch planks\nCrafted 4 minecraft:stick\n> inventory\nInventory: [birch logs] (4) [birch planks] (2) [stick] (4) \n\nAction: get 2 jungle logs\n\nNext observation:<turn|>\n<|turn>model\nGot 2 jungle logs<turn|>\n<|turn>user\nHistory:\nCrafting commands:\ncraft 3 stripped birch wood using 4 stripped birch log\ncraft 1 melon using 9 melon slice\n\nGoal: craft melon.\n> get 2 stripped birch log\nGot 2 stripped birch log\n> get 2 melon slice\nGot 2 melon slice\n\nAction: craft 1 melon using 9 melon slice\n\nNext observation:<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"
+  },
+  "tc-p001-1e56f799a78e|both": {
+   "n_ids": 1017,
+   "ids_sha256": "aad194fc4c7ed4a23dd17222d9bc7d114da81bb8fb0ba8a2c7294d3819892816"
+  },
+  "tc-p001-1e56f799a78e|yn_both": {
+   "n_ids": 1058,
+   "ids_sha256": "c05f48302d97261422c3a6737f0a46c76ee4df2add27e72fc73fa81e1b281d3c",
+   "text": "<bos><|turn>system\nYou are a text world model for TextCraft, a Minecraft crafting game. Given the interaction history and the next action, predict the environment's next observation exactly in TextCraft style. Output only the observation text.\n\nThe environment's rules: crafting commands are of the format \"craft [target object] using [input ingredients]\". Each action is \"get\" with a quantity and an object, \"inventory\" to look up the inventory, or \"craft\" with a quantity and one of the crafting commands shown. If a crafting command uses a generic ingredient like \"planks\", a special type of the same ingredient, e.g. \"dark oak planks\", can be used instead.<turn|>\n<|turn>user\nHistory:\nCrafting commands:\ncraft 1 light gray dye using 1 white tulip\ncraft 1 white dye using 1 bone meal\ncraft 3 bone meal using 1 bone\ncraft 2 light gray dye using 1 gray dye, 1 white dye\ncraft 2 gray dye using 1 black dye, 1 white dye\ncraft 1 gold ingot using 9 gold nugget\ncraft 1 light gray dye using 1 azure bluet\ncraft 1 black dye using 1 ink sac\ncraft 1 black dye using 1 wither rose\ncraft 1 white dye using 1 lily of the valley\ncraft 3 light gray dye using 1 black dye, 2 white dye\ncraft 1 light gray dye using 1 oxeye daisy\n\nGoal: craft light gray dye.\n> get 3 azure bluet\nGot 3 azure bluet\n> inventory\nInventory: [azure bluet] (3) \n> get 4 lily of the valley\nGot 4 lily of the valley\n\nAction: craft 1 white dye using 1 lily of the valley\n\nNext observation:<turn|>\n<|turn>model\nCrafted 1 minecraft:white_dye<turn|>\n<|turn>user\nHistory:\nCrafting commands:\ncraft 4 jungle planks using 1 jungle logs\ncraft 4 oak planks using 1 oak logs\ncraft 4 warped planks using 1 warped stems\ncraft 2 blaze powder using 1 blaze rod\ncraft 4 dark oak planks using 1 dark oak logs\ncraft 4 crimson planks using 1 crimson stems\ncraft 1 stick using 2 bamboo\ncraft 4 spruce planks using 1 spruce logs\ncraft 3 acacia sign using 6 acacia planks, 1 stick\ncraft 4 birch planks using 1 birch logs\ncraft 3 fire charge using 1 gunpowder, 1 blaze powder, 1 coal\ncraft 4 acacia planks using 1 acacia logs\ncraft 4 stick using 2 planks\n\nGoal: craft acacia sign.\n> get 3 spruce logs\nGot 3 spruce logs\n> inventory\nInventory: [spruce logs] (3) \n\nAction: craft 4 stick using 2 acacia planks\n\nNext observation:<turn|>\n<|turn>model\nCould not find enough items to craft minecraft:stick<turn|>\n<|turn>user\nHistory:\nCrafting commands:\ncraft 3 birch sign using 6 birch planks, 1 stick\ncraft 4 warped planks using 1 warped stems\ncraft 4 birch planks using 1 birch logs\ncraft 1 stick using 2 bamboo\ncraft 4 stick using 2 planks\ncraft 4 jungle planks using 1 jungle logs\ncraft 4 spruce planks using 1 spruce logs\ncraft 2 diorite using 2 quartz, 2 cobblestone\ncraft 4 oak planks using 1 oak logs\ncraft 4 dark oak planks using 1 dark oak logs\ncraft 4 acacia planks using 1 acacia logs\ncraft 4 crimson planks using 1 crimson stems\ncraft 1 granite using 1 diorite, 1 quartz\n\nGoal: craft granite.\n> get 2 birch logs\nGot 2 birch logs\n> get 3 birch logs\nGot 3 birch logs\n> craft 4 birch planks using 1 birch logs\nCrafted 4 minecraft:birch_planks\n> craft 4 stick using 2 birch planks\nCrafted 4 minecraft:stick\n> inventory\nInventory: [birch logs] (4) [birch planks] (2) [stick] (4) \n\nAction: get 2 jungle logs\n\nNext observation:<turn|>\n<|turn>model\nGot 2 jungle logs<turn|>\n<|turn>user\nHistory:\nCrafting commands:\ncraft 3 stripped birch wood using 4 stripped birch log\ncraft 1 melon using 9 melon slice\n\nGoal: craft melon and stripped birch wood.\n> get 2 stripped birch log\nGot 2 stripped birch log\n> get 2 melon slice\nGot 2 melon slice\n\nAction: craft 1 melon using 9 melon slice\n\nQuestion: will the environment reply that this action succeeded (\"Crafted ...\" or \"Got ...\") or that it failed (\"Could not find ...\")? Answer Yes if it succeeds and No if it fails.\nAnswer:<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"
+  },
+  "tc-p001-1e56f799a78e|pad8_aligned": {
+   "n_ids": 1109,
+   "ids_sha256": "63b54f362e757f5c1249df96eb48c75eca109caa4813591e16d59b9c54976c6f"
+  },
+  "tc-p000-51fd5b09ab3c|ext_parent": {
+   "n_ids": 1022,
+   "ids_sha256": "1b408bf915584fd7989eceb4c01f509cef1e7f40ea18d2d10b65dd5b6c1819e9"
+  }
+ },
+ "seconds": 631.1,
+ "r2_items_sha256": "e6da991f9eb6c927213d31a6c22814c8080db1945543060e67779eb7e47c22f0",
+ "transformers": "5.23.0",
+ "tokenizers": "0.23.3",
+ "python": "3.11.18",
+ "wall_seconds": 704.4,
+ "limit": null
+}

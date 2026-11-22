@@ -1,0 +1,67 @@
+{
+ "tag": "gpt-oss-20b",
+ "kind": "reasoning",
+ "hf_id": "openai/gpt-oss-20b",
+ "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+ "tokenizer_dir": "openai__gpt-oss-20b@6cee5e81ee83917806bbde320786a8fb61efebee",
+ "tokenizer_class": "TokenizersBackend",
+ "template_kwargs": {
+  "enable_thinking": false
+ },
+ "renders": {
+  "tc-p001-1e56f799a78e|aligned": {
+   "ending": "n: craft 1 melon using 9 melon slice\n\nNext observation:<|end|><|start|>assistant",
+   "n_ids": 1109,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|both": {
+   "ending": "n: craft 1 melon using 9 melon slice\n\nNext observation:<|end|><|start|>assistant",
+   "n_ids": 1114,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|yn_both": {
+   "ending": "? Answer Yes if it succeeds and No if it fails.\nAnswer:<|end|><|start|>assistant",
+   "n_ids": 1154,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|pad8_aligned": {
+   "ending": "n: craft 1 melon using 9 melon slice\n\nNext observation:<|end|><|start|>assistant",
+   "n_ids": 1197,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p000-51fd5b09ab3c|ext_parent": {
+   "ending": "aft 9 iron nugget using 1 iron ingot\n\nNext observation:<|end|><|start|>assistant",
+   "n_ids": 1119,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  }
+ },
+ "boundary_after_close": {
+  "<|end|><|start|>assistant<|channel|>final<|message|>": {
+   "n_strings": 832,
+   "n_merge_across_close": 0,
+   "examples": []
+  }
+ },
+ "yes_no_ids": {
+  "Yes": [
+   13022
+  ],
+  "No": [
+   3160
+  ]
+ },
+ "yes_no_single": true,
+ "n_problems": 0,
+ "problems": [],
+ "r2_items_sha256": "e6da991f9eb6c927213d31a6c22814c8080db1945543060e67779eb7e47c22f0",
+ "transformers": "5.23.0",
+ "tokenizers": "0.23.3",
+ "python": "3.11.18",
+ "wall_seconds": 71.7,
+ "limit": null
+}

@@ -1,0 +1,67 @@
+{
+ "tag": "ministral3-8b-reasoning",
+ "kind": "reasoning",
+ "hf_id": "mistralai/Ministral-3-8B-Reasoning-2512",
+ "revision": "81eaece1948f3875421d9a45bc55487d10e2d894",
+ "tokenizer_dir": "mistralai__Ministral-3-8B-Reasoning-2512@81eaece1948f3875421d9a45bc55487d10e2d894",
+ "tokenizer_class": "TokenizersBackend",
+ "template_kwargs": {
+  "enable_thinking": false
+ },
+ "renders": {
+  "tc-p001-1e56f799a78e|aligned": {
+   "ending": "melon slice\n\nAction: craft 1 melon using 9 melon slice\n\nNext observation:[/INST]",
+   "n_ids": 1070,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|both": {
+   "ending": "melon slice\n\nAction: craft 1 melon using 9 melon slice\n\nNext observation:[/INST]",
+   "n_ids": 1075,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|yn_both": {
+   "ending": "uld not find ...\")? Answer Yes if it succeeds and No if it fails.\nAnswer:[/INST]",
+   "n_ids": 1118,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|pad8_aligned": {
+   "ending": "melon slice\n\nAction: craft 1 melon using 9 melon slice\n\nNext observation:[/INST]",
+   "n_ids": 1158,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p000-51fd5b09ab3c|ext_parent": {
+   "ending": " brick\n\nAction: craft 9 iron nugget using 1 iron ingot\n\nNext observation:[/INST]",
+   "n_ids": 1076,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  }
+ },
+ "boundary_after_close": {
+  "[/THINK]": {
+   "n_strings": 832,
+   "n_merge_across_close": 0,
+   "examples": []
+  }
+ },
+ "yes_no_ids": {
+  "Yes": [
+   16860
+  ],
+  "No": [
+   4753
+  ]
+ },
+ "yes_no_single": true,
+ "n_problems": 0,
+ "problems": [],
+ "r2_items_sha256": "e6da991f9eb6c927213d31a6c22814c8080db1945543060e67779eb7e47c22f0",
+ "transformers": "5.23.0",
+ "tokenizers": "0.23.3",
+ "python": "3.11.18",
+ "wall_seconds": 71.3,
+ "limit": null
+}

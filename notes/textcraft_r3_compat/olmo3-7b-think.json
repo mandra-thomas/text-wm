@@ -1,0 +1,78 @@
+{
+ "tag": "olmo3-7b-think",
+ "kind": "reasoning",
+ "hf_id": "allenai/Olmo-3-7B-Think",
+ "revision": "d97e442d7cc678210054dbcc9b440894d62c89a4",
+ "tokenizer_dir": "allenai__Olmo-3-7B-Think@d97e442d7cc678210054dbcc9b440894d62c89a4",
+ "tokenizer_class": "TokenizersBackend",
+ "template_kwargs": {
+  "enable_thinking": false
+ },
+ "renders": {
+  "tc-p001-1e56f799a78e|aligned": {
+   "ending": "n using 9 melon slice\n\nNext observation:<|im_end|>\n<|im_start|>assistant\n<think>",
+   "n_ids": 1083,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|both": {
+   "ending": "n using 9 melon slice\n\nNext observation:<|im_end|>\n<|im_start|>assistant\n<think>",
+   "n_ids": 1088,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|yn_both": {
+   "ending": " it succeeds and No if it fails.\nAnswer:<|im_end|>\n<|im_start|>assistant\n<think>",
+   "n_ids": 1128,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|pad8_aligned": {
+   "ending": "n using 9 melon slice\n\nNext observation:<|im_end|>\n<|im_start|>assistant\n<think>",
+   "n_ids": 1171,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  },
+  "tc-p000-51fd5b09ab3c|ext_parent": {
+   "ending": "et using 1 iron ingot\n\nNext observation:<|im_end|>\n<|im_start|>assistant\n<think>",
+   "n_ids": 1086,
+   "thinking_off_renders_differently": false,
+   "system_text_verbatim": true
+  }
+ },
+ "boundary_after_close": {
+  "</think>": {
+   "n_strings": 832,
+   "n_merge_across_close": 423,
+   "examples": [
+    "Crafted 1 minecraft:acacia_boat",
+    "Crafted 1 minecraft:acacia_button",
+    "Crafted 1 minecraft:acacia_fence_gate",
+    "Crafted 1 minecraft:acacia_pressure_plate",
+    "Crafted 1 minecraft:armor_stand"
+   ]
+  },
+  "</think>\n\n": {
+   "n_strings": 832,
+   "n_merge_across_close": 0,
+   "examples": []
+  }
+ },
+ "yes_no_ids": {
+  "Yes": [
+   9642
+  ],
+  "No": [
+   2822
+  ]
+ },
+ "yes_no_single": true,
+ "n_problems": 0,
+ "problems": [],
+ "r2_items_sha256": "e6da991f9eb6c927213d31a6c22814c8080db1945543060e67779eb7e47c22f0",
+ "transformers": "5.23.0",
+ "tokenizers": "0.23.3",
+ "python": "3.11.18",
+ "wall_seconds": 70.9,
+ "limit": null
+}

@@ -1,0 +1,67 @@
+{
+ "tag": "qwen3.5-9b-think",
+ "kind": "reasoning",
+ "hf_id": "Qwen/Qwen3.5-9B",
+ "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+ "tokenizer_dir": "Qwen__Qwen3.5-9B@c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+ "tokenizer_class": "Qwen3_5Tokenizer",
+ "template_kwargs": {
+  "enable_thinking": true
+ },
+ "renders": {
+  "tc-p001-1e56f799a78e|aligned": {
+   "ending": " using 9 melon slice\n\nNext observation:<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "n_ids": 1080,
+   "thinking_off_renders_differently": true,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|both": {
+   "ending": " using 9 melon slice\n\nNext observation:<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "n_ids": 1085,
+   "thinking_off_renders_differently": true,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|yn_both": {
+   "ending": "it succeeds and No if it fails.\nAnswer:<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "n_ids": 1126,
+   "thinking_off_renders_differently": true,
+   "system_text_verbatim": true
+  },
+  "tc-p001-1e56f799a78e|pad8_aligned": {
+   "ending": " using 9 melon slice\n\nNext observation:<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "n_ids": 1176,
+   "thinking_off_renders_differently": true,
+   "system_text_verbatim": true
+  },
+  "tc-p000-51fd5b09ab3c|ext_parent": {
+   "ending": "t using 1 iron ingot\n\nNext observation:<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "n_ids": 1084,
+   "thinking_off_renders_differently": true,
+   "system_text_verbatim": true
+  }
+ },
+ "boundary_after_close": {
+  "</think>\n\n": {
+   "n_strings": 832,
+   "n_merge_across_close": 0,
+   "examples": []
+  }
+ },
+ "yes_no_ids": {
+  "Yes": [
+   9175
+  ],
+  "No": [
+   2665
+  ]
+ },
+ "yes_no_single": true,
+ "n_problems": 0,
+ "problems": [],
+ "r2_items_sha256": "e6da991f9eb6c927213d31a6c22814c8080db1945543060e67779eb7e47c22f0",
+ "transformers": "5.23.0",
+ "tokenizers": "0.23.3",
+ "python": "3.11.18",
+ "wall_seconds": 71.2,
+ "limit": null
+}
