@@ -300,6 +300,18 @@ The gate was rerun on the real tokenizers after the amendment (ICE, `coc-cpu` pa
 | T38 M on every sample item | `test_p8_reads_p7_items_only` |
 | N22 status line without yes/no categories | `test_end_to_end_two_shards_then_analysis` |
 
+**Review 5 (2026-11-22, before any score).** The review's surviving mutants X1 and X2 (a sentence attributing the residual to salience appended to the summary), X8 (the S1 line only when both wishful prediction and policy blending are consistent) and X9 (P8 net of the placebo quoted without an interval in both formats) were added to `scripts/mutation_check.py`, with two mutants of the new M-below-band sentence (Y1, Y2); U5 was anchored to the placebo's own comparison, which the new below-band test repeats. New tests: the whole summary text for M above, inside and below the band; the below-band sentence's conditions; the S1 line with one of the two accounts untested; P8 net quoted only with an interval in both formats. `tests/test_mech2.py`: 126 pass. Run on 2026-11-22 (these seven mutants by name): all killed by a named test; 206 mech2 mutants in all.
+
+| Mutant | Killed by (`tests/test_mech2.py::`) |
+| --- | --- |
+| X1 attribution appended after the residual sentence | `test_the_whole_summary_is_exactly_as_written` |
+| X2 claims sentence says M indicates salience | `test_the_whole_summary_is_exactly_as_written` |
+| X8 S1 line only when both accounts are consistent | `test_s1_line_when_one_of_wishful_and_blending_is_only_untested` |
+| X9 P8 net quoted without an interval in both formats | `test_p8_net_text_needs_an_interval_in_both_formats` |
+| Y1 below-band sentence without the claims-only condition | `test_the_below_band_sentence_needs_both_formats_and_the_claims_only_condition` |
+| Y2 below-band read below zero, not below the band | `test_the_below_band_sentence_needs_both_formats_and_the_claims_only_condition` |
+| U5 placebo read below zero, not below the band (re-anchored) | `test_placebo_below_the_band_names_the_verdicts_resting_on_p8` |
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:

@@ -1811,3 +1811,63 @@ def test_the_m_sentences_never_attribute_the_effect_to_salience():
         for phrase in SALIENCE_ATTRIBUTION:
             assert phrase not in text
         assert "does not show that salience" in text
+
+
+# ---------------- amendment after review 5 (2026-11-22, before any score) ----------------
+
+_CLAIMS_LISTS = ("consistent: H2_evidence [risky: P4, P5, P8; allows zero: P1, P2, P3, P7]; untested: none; contradicted "
+                 "(cannot be the sole account): H3_salience [P5, P7, P8], H4_wishful [P1, P2, P3, P7, P8], H5_policy_blend "
+                 "[P3, P5, P7, P8], H6_lexical [P4, P5, P7, P8]. ")
+_CLAIMS_SENTENCE = ("H3 is contradicted only on contrasts that add an explicit claim (done; the user's report). This shows "
+                    "the model reads such claims, not that the goal effect comes from evidence rather than salience; see M.")
+
+
+def test_the_whole_summary_is_exactly_as_written():
+    """Review 5, X1 and X2: the whole reading, not phrases in it, for M above, inside and below the band, so that no
+    sentence (an attribution to salience, say) can be appended unnoticed."""
+    ro = mech2.readout(_claims_obs())
+    read = lambda m: mech2.joint_readout(ro, ro, m)["summary"]["reading"]  # noqa: E731
+    assert read(_mention(0.3, 0.7)) == (
+        _CLAIMS_LISTS + "Salience cannot be the sole account. A mention-associated residual of r = 0.50 [0.30, 0.70] "
+        "two-candidate and 0.50 [0.30, 0.70] yes/no remains after averaging opposing claims; it is consistent with "
+        "salience but also with asymmetric processing of affirmations and denials, so it does not show that salience "
+        "contributes. Word overlap with the action would give the same. " + _CLAIMS_SENTENCE)
+    assert read(_mention(-0.1, 0.2)) == (
+        _CLAIMS_LISTS + "No mention-associated residual remains after averaging opposing claims (r = 0.05 [-0.10, 0.20] "
+        "two-candidate and 0.05 [-0.10, 0.20] yes/no, inside the band in both formats); task as evidence with a symmetric "
+        "reading of the claims predicts this, but salience offset by an asymmetric reading would give the same, so it does "
+        "not show that salience is absent. " + _CLAIMS_SENTENCE)
+    assert read(_mention(-0.6, -0.3)) == (
+        _CLAIMS_LISTS + "After averaging opposing claims the mention-associated residual lies below the band in both "
+        "formats (r = -0.45 [-0.60, -0.30] two-candidate and -0.45 [-0.60, -0.30] yes/no): the denial moves the reading "
+        "more than the affirmation; this does not attribute anything to salience. " + _CLAIMS_SENTENCE)
+
+
+def test_the_below_band_sentence_needs_both_formats_and_the_claims_only_condition():
+    """Review 5 (optional, adopted): M below the band in both formats gets a description that attributes nothing."""
+    ro = mech2.readout(_claims_obs())
+    assert mech2.joint_readout(ro, ro, _mention(-0.6, -0.3))["summary"]["mention_residual_below_band"]
+    for m in (_ratio_by_format(-0.6, -0.3, -0.6, -0.2), _ratio_by_format(-0.6, -0.25), _mention(-0.6, -0.3, False)):
+        j = mech2.joint_readout(ro, ro, m)
+        assert not j["summary"]["mention_residual_below_band"] and "below the band in both" not in j["summary"]["reading"]
+    ro1 = mech2.readout({**_claims_obs(), "P1_keep_vs_ignore": ("L",)})  # salience fails beyond the claims
+    assert not mech2.joint_readout(ro1, ro1, _mention(-0.6, -0.3))["summary"]["mention_residual_below_band"]
+
+
+def test_s1_line_when_one_of_wishful_and_blending_is_only_untested():
+    """Review 5, X8: wishful prediction consistent and policy blending untested (both standing) gives the S1 line."""
+    none = {c: None for c in mech2.PRIMARY}
+    ro = mech2.readout({**none, "P1_keep_vs_ignore": ("N",)})  # H4 consistent (risky N); H5 consistent only where it allows Z
+    j = mech2.joint_readout(ro, ro)
+    assert j["H4_wishful"]["verdict"] == "consistent" and j["H5_policy_blend"]["verdict"] == "untested"
+    assert mech2.s1_line({"readout_both_formats": j, "secondary_named": {}}).startswith("H4 and H5 not told apart")
+
+
+def test_p8_net_text_needs_an_interval_in_both_formats():
+    """Review 5, X9: P8 net of the placebo is quoted only when it has an interval in both formats."""
+    ro = mech2.readout(_claims_obs())
+    net = _mention(-0.9, -0.5)
+    net["yn"] = {"estimate": float("nan"), "ci": [float("nan")] * 2}  # no ratio in the yes/no format
+    j = mech2.joint_readout(ro, ro, None, _mention(-0.6, -0.3), net)
+    assert j["summary"]["negation_placebo_below_band_both_formats"]
+    assert "Verdicts that rest on P8:" in j["summary"]["reading"] and "P8 net of the placebo" not in j["summary"]["reading"]

@@ -938,6 +938,11 @@ def _mention_inside_band(mention: dict[str, Any] | None) -> bool:
     return _r_interval_in(mention, lambda lo, hi: -TRIVIAL_BAND <= lo and hi <= TRIVIAL_BAND)
 
 
+def _mention_below_band(mention: dict[str, Any] | None) -> bool:
+    """M's r interval lies wholly below the band in both formats (amendment after review 5)."""
+    return _r_interval_in(mention, lambda lo, hi: hi < -TRIVIAL_BAND)
+
+
 def _placebo_below_band(placebo: dict[str, Any] | None) -> bool:
     """The negation placebo's r interval lies wholly below the band in both formats (amendment after review 4)."""
     return _r_interval_in(placebo, lambda lo, hi: hi < -TRIVIAL_BAND)
@@ -1018,6 +1023,7 @@ def joint_readout(cand: dict[str, Any], yn: dict[str, Any], mention: dict[str, A
     claims_only = bool(h3_against) and set(h3_against) <= set(CLAIM_CONTRASTS)
     mention_remains = claims_only and _mention_above_band(mention)
     mention_absent = claims_only and _mention_inside_band(mention)
+    mention_below = claims_only and _mention_below_band(mention)
     claims_read = claims_only and out["H2_evidence"]["verdict"] == "consistent"
     placebo_low = _placebo_below_band(placebo)
     on_p8 = _resting_on(out, "P8_negated_vs_affirmed")
@@ -1032,6 +1038,10 @@ def joint_readout(cand: dict[str, Any], yn: dict[str, Any], mention: dict[str, A
                          f"{_mention_text(mention)}, inside the band in both formats); task as evidence with a symmetric "
                          "reading of the claims predicts this, but salience offset by an asymmetric reading would give "
                          "the same, so it does not show that salience is absent.")
+    if mention_below:  # review 5: a description of the pattern, which attributes nothing
+        sentences.append(f"After averaging opposing claims the mention-associated residual lies below the band in both "
+                         f"formats (r = {_mention_text(mention)}): the denial moves the reading more than the "
+                         "affirmation; this does not attribute anything to salience.")
     if claims_read:
         sentences.append("H3 is contradicted only on contrasts that add an explicit claim (done; the user's report). "
                          "This shows the model reads such claims, not that the goal effect comes from evidence rather "
@@ -1056,6 +1066,7 @@ def joint_readout(cand: dict[str, Any], yn: dict[str, Any], mention: dict[str, A
         "mention_residual_inside_band_both_formats": _mention_inside_band(mention),
         "mention_residual_remains": mention_remains,
         "mention_residual_absent": mention_absent,
+        "mention_residual_below_band": mention_below,
         "claims_read_not_evidence_shown": claims_read,
         "negation_placebo_below_band_both_formats": placebo_low,
         "verdicts_resting_on_P8": on_p8,

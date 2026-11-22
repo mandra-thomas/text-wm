@@ -463,7 +463,7 @@ MUTANTS = [
     ('mech2 U2 denied half reversed', 'wf/mech2.py', '"M_half_swapped_minus_negated": ((1, "swapped"), (-1, "negated"))}', '"M_half_swapped_minus_negated": ((1, "negated"), (-1, "swapped"))}'),
     ('mech2 U3 absent M checks the upper edge only', 'wf/mech2.py', 'lambda lo, hi: -TRIVIAL_BAND <= lo and hi <= TRIVIAL_BAND)', 'lambda lo, hi: hi <= TRIVIAL_BAND)'),
     ('mech2 U4 absent M without the claims-only condition', 'wf/mech2.py', 'mention_absent = claims_only and _mention_inside_band(mention)', 'mention_absent = _mention_inside_band(mention)'),
-    ('mech2 U5 placebo read below zero, not below the band', 'wf/mech2.py', 'lambda lo, hi: hi < -TRIVIAL_BAND)', 'lambda lo, hi: hi < 0)'),
+    ('mech2 U5 placebo read below zero, not below the band', 'wf/mech2.py', '    return _r_interval_in(placebo, lambda lo, hi: hi < -TRIVIAL_BAND)', '    return _r_interval_in(placebo, lambda lo, hi: hi < 0)'),
     ('mech2 U6 verdicts on P8 omit consistent accounts', 'wf/mech2.py', 'or (out[h]["verdict"] == "consistent" and contrast_name in out[h]["consistent_where_a_rival_fails"])]', 'or False]'),
     ('mech2 U7 placebo sentence names the verdicts on P5', 'wf/mech2.py', 'on_p8 = _resting_on(out, "P8_negated_vs_affirmed")', 'on_p8 = _resting_on(out, "P5_done_vs_cancelled")'),
     ('mech2 U8 summary not given the placebo', 'wf/mech2.py', 'mention,\n                                                  placebo, p8_net)', 'mention)'),
@@ -474,6 +474,14 @@ MUTANTS = [
     # The adversarial check of M (2026-11-21): the summary must never attribute the residual, or its absence, to salience.
     ('mech2 W1 residual sentence attributes the effect to salience', 'wf/mech2.py', '"that salience contributes. Word overlap with the action would give the same.")', '"that salience is likely part of the effect.")'),
     ('mech2 W2 absent residual read as no salience', 'wf/mech2.py', '"the same, so it does not show that salience is absent.")', '"the same, so salience is absent.")'),
+    # Mechanism battery, review 5 (2026-11-22, before any score): the review's surviving mutants X1, X2, X8, X9, and
+    # mutants of the M-below-band sentence (Y1, Y2).
+    ('mech2 X1 attribution appended after the residual sentence', 'wf/mech2.py', '"that salience contributes. Word overlap with the action would give the same.")', '"that salience contributes. Word overlap with the action would give the same. Salience therefore explains the residual.")'),
+    ('mech2 X2 claims sentence says M indicates salience', 'wf/mech2.py', '"than salience; see M.")', '"than salience; see M. M indicates salience.")'),
+    ('mech2 X8 S1 line only when both accounts are consistent', 'wf/mech2.py', 'in ("consistent", "untested") for h in ("H4_wishful", "H5_policy_blend")', 'in ("consistent",) for h in ("H4_wishful", "H5_policy_blend")'),
+    ('mech2 X9 P8 net quoted without an interval in both formats', 'wf/mech2.py', 'if p8_net and all(\n            (p8_net.get(f) or {}).get("ratio", {}).get("ci") for f in FORMATS) else ""', 'if p8_net else ""'),
+    ('mech2 Y1 below-band sentence without the claims-only condition', 'wf/mech2.py', 'mention_below = claims_only and _mention_below_band(mention)', 'mention_below = _mention_below_band(mention)'),
+    ('mech2 Y2 below-band read below zero, not below the band', 'wf/mech2.py', '    return _r_interval_in(mention, lambda lo, hi: hi < -TRIVIAL_BAND)', '    return _r_interval_in(mention, lambda lo, hi: hi < 0)'),
     # Model families, wave A (2026-11-20, wf/families.py, the scorer settings and the prefetch tool).
     ("families fold drops the system text", "wf/families.py",
      'first = {"role": "user", "content": messages[0]["content"] + FOLD_SEPARATOR + messages[1]["content"]}',
