@@ -3,9 +3,9 @@
 #SBATCH --no-requeue
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=12
+#SBATCH --cpus-per-task=14
 #SBATCH --mem=64G
-#SBATCH --time=2:00:00
+#SBATCH --time=3:00:00
 #SBATCH --output=logs/tc3compat_%j.out
 #SBATCH --error=logs/tc3compat_%j.err
 #
