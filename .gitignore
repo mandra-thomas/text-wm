@@ -48,3 +48,6 @@ logs/
 
 # Tool caches kept off the ICE home quota (pace/_common.sh)
 .cache/
+
+# Local copies of cluster data for re-analysis (never committed)
+data_local/
