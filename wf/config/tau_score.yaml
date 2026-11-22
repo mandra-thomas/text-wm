@@ -1,0 +1,26 @@
+run_id: tau_score
+# τ-bench retail scoring (notes/tau_design.md §6, amended 2026-11-20 after review 1): main population and natural set,
+# both co-primary models. Per item: the failing call under the aligned, swapped and neutral task lines (first token,
+# yes/no, full replies), the mention-only pair (first token, yes/no), the manipulation check (aligned, swapped), the
+# success witness (all readouts), and for the exploratory arms' 500 items (the same items in both) the failing call
+# without the agent policy (rules-only) and without the statement of what the backend sees, with own-order few-shot
+# examples (ALFWorld-matched; amendment after review 2). Few-shot order reversed for about half of the items.
+# Sharded by user: WF_SHARD / WF_N_SHARDS. Time per shard: pace/tau_score.sbatch.
+build_run: tau_build
+verify_run: tau_verify
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+readouts: [first, yn, full]
+witness: true
+mention: true
+target_check: true
+rules_arm_items: 500
+matched_arm_items: 500
+matched_witness: true  # fix round 3: the witness's first token in the matched arm (aligned, swapped, neutral)
+score_natural: true
+score_unachievable: false
+n_shards: 16
+# sha256 of the local build at f389f97 (amendments after review 2; an ICE rebuild must reproduce them; scoring refuses others)
+expected_outputs_sha256:
+  items.jsonl: 2c8ffeac7dedd4635df5974be955d6ceff84d3f8184f88a73eca579282a578b6
+  natural_items.jsonl: 9bd6c3f7fda464f7cc32307e9a570da564b1bed7d4e3ab0d75dbfd00f6b83502
+  fewshot.json: 231607f79c92580375ada0ce4267fb954e7e0bc0a743ccb9b75813610eb13119

@@ -1,0 +1,4 @@
+run_id: tau_verify
+# Replays every τ-bench item in a fresh environment and runs the text-only checker (notes/tau_design.md §8). CPU.
+build_run: tau_build
+fresh_sample: 100

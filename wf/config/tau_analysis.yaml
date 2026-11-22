@@ -1,0 +1,5 @@
+run_id: tau_analysis
+# Reads every shard of tau_score; no GPU. The item set is the one tau_score's config selects.
+source: tau_score
+build_run: tau_build
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]

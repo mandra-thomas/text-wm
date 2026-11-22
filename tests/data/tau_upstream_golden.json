@@ -1,0 +1,543 @@
+{
+ "pinned_commit": "c06b07dd7c4d4ec61ba6ff9bcdf0b15dd7ef36d4",
+ "source": "upstream tau2-bench Environment.get_response content",
+ "cases": [
+  {
+   "name": "modify_items_unrounded_difference",
+   "patches": [],
+   "calls": [
+    {
+     "name": "modify_pending_order_items",
+     "arguments": {
+      "order_id": "#W1006327",
+      "item_ids": [
+       "5925362855"
+      ],
+      "new_item_ids": [
+       "6117189161"
+      ],
+      "payment_method_id": "credit_card_4998749"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"6117189161\", \"price\": 481.5, \"options\": {\"resolution\": \"4K\", \"waterproof\": \"yes\", \"color\": \"silver\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending (item modified)\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}, {\"transaction_type\": \"refund\", \"amount\": 22.00999999999999, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "james_johnson_9321"
+     },
+     "output": "{\"user_id\": \"james_johnson_9321\", \"name\": {\"first_name\": \"James\", \"last_name\": \"Johnson\"}, \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"email\": \"james.johnson7869@example.com\", \"payment_methods\": {\"credit_card_4998749\": {\"source\": \"credit_card\", \"id\": \"credit_card_4998749\", \"brand\": \"visa\", \"last_four\": \"2429\"}}, \"orders\": [\"#W1006327\", \"#W3723163\", \"#W7836908\", \"#W6266831\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1006327"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"6117189161\", \"price\": 481.5, \"options\": {\"resolution\": \"4K\", \"waterproof\": \"yes\", \"color\": \"silver\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending (item modified)\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}, {\"transaction_type\": \"refund\", \"amount\": 22.00999999999999, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "modify_items_gift_card",
+   "patches": [
+    {
+     "user_id": "juan_garcia_9528",
+     "pm": "gift_card_6369065",
+     "balance": 5000.0
+    }
+   ],
+   "calls": [
+    {
+     "name": "modify_pending_order_items",
+     "arguments": {
+      "order_id": "#W1013897",
+      "item_ids": [
+       "8293778132"
+      ],
+      "new_item_ids": [
+       "1906487464"
+      ],
+      "payment_method_id": "gift_card_6369065"
+     },
+     "output": "{\"order_id\": \"#W1013897\", \"user_id\": \"juan_garcia_9528\", \"address\": {\"address1\": \"963 Elm Avenue\", \"address2\": \"Suite 469\", \"city\": \"Dallas\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"75253\"}, \"items\": [{\"name\": \"Tea Kettle\", \"product_id\": \"9832717871\", \"item_id\": \"1906487464\", \"price\": 102.02, \"options\": {\"material\": \"stainless steel\", \"capacity\": \"2 liters\", \"stovetop compatibility\": \"induction\"}}, {\"name\": \"Water Bottle\", \"product_id\": \"8310926033\", \"item_id\": \"3229676465\", \"price\": 51.94, \"options\": {\"capacity\": \"500ml\", \"material\": \"plastic\", \"color\": \"black\"}}], \"status\": \"pending (item modified)\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 152.56, \"payment_method_id\": \"gift_card_6369065\"}, {\"transaction_type\": \"payment\", \"amount\": 1.3999999999999915, \"payment_method_id\": \"gift_card_6369065\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "juan_garcia_9528"
+     },
+     "output": "{\"user_id\": \"juan_garcia_9528\", \"name\": {\"first_name\": \"Juan\", \"last_name\": \"Garcia\"}, \"address\": {\"address1\": \"963 Elm Avenue\", \"address2\": \"Suite 469\", \"city\": \"Dallas\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"75253\"}, \"email\": \"juan.garcia2336@example.com\", \"payment_methods\": {\"gift_card_6369065\": {\"source\": \"gift_card\", \"id\": \"gift_card_6369065\", \"balance\": 4998.6}}, \"orders\": [\"#W3858003\", \"#W1013897\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1013897"
+     },
+     "output": "{\"order_id\": \"#W1013897\", \"user_id\": \"juan_garcia_9528\", \"address\": {\"address1\": \"963 Elm Avenue\", \"address2\": \"Suite 469\", \"city\": \"Dallas\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"75253\"}, \"items\": [{\"name\": \"Tea Kettle\", \"product_id\": \"9832717871\", \"item_id\": \"1906487464\", \"price\": 102.02, \"options\": {\"material\": \"stainless steel\", \"capacity\": \"2 liters\", \"stovetop compatibility\": \"induction\"}}, {\"name\": \"Water Bottle\", \"product_id\": \"8310926033\", \"item_id\": \"3229676465\", \"price\": 51.94, \"options\": {\"capacity\": \"500ml\", \"material\": \"plastic\", \"color\": \"black\"}}], \"status\": \"pending (item modified)\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 152.56, \"payment_method_id\": \"gift_card_6369065\"}, {\"transaction_type\": \"payment\", \"amount\": 1.3999999999999915, \"payment_method_id\": \"gift_card_6369065\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "modify_items_gift_card_at_rounded_difference",
+   "patches": [
+    {
+     "user_id": "juan_garcia_9528",
+     "pm": "gift_card_6369065",
+     "balance": 0.85
+    }
+   ],
+   "calls": [
+    {
+     "name": "modify_pending_order_items",
+     "arguments": {
+      "order_id": "#W1013897",
+      "item_ids": [
+       "3229676465"
+      ],
+      "new_item_ids": [
+       "3453331371"
+      ],
+      "payment_method_id": "gift_card_6369065"
+     },
+     "output": "Error: Insufficient gift card balance to pay for the new item"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "juan_garcia_9528"
+     },
+     "output": "{\"user_id\": \"juan_garcia_9528\", \"name\": {\"first_name\": \"Juan\", \"last_name\": \"Garcia\"}, \"address\": {\"address1\": \"963 Elm Avenue\", \"address2\": \"Suite 469\", \"city\": \"Dallas\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"75253\"}, \"email\": \"juan.garcia2336@example.com\", \"payment_methods\": {\"gift_card_6369065\": {\"source\": \"gift_card\", \"id\": \"gift_card_6369065\", \"balance\": 0.85}}, \"orders\": [\"#W3858003\", \"#W1013897\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1013897"
+     },
+     "output": "{\"order_id\": \"#W1013897\", \"user_id\": \"juan_garcia_9528\", \"address\": {\"address1\": \"963 Elm Avenue\", \"address2\": \"Suite 469\", \"city\": \"Dallas\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"75253\"}, \"items\": [{\"name\": \"Tea Kettle\", \"product_id\": \"9832717871\", \"item_id\": \"8293778132\", \"price\": 100.62, \"options\": {\"material\": \"ceramic\", \"capacity\": \"1.5 liters\", \"stovetop compatibility\": \"electric\"}}, {\"name\": \"Water Bottle\", \"product_id\": \"8310926033\", \"item_id\": \"3229676465\", \"price\": 51.94, \"options\": {\"capacity\": \"500ml\", \"material\": \"plastic\", \"color\": \"black\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 152.56, \"payment_method_id\": \"gift_card_6369065\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "modify_items_two_products",
+   "patches": [],
+   "calls": [
+    {
+     "name": "modify_pending_order_items",
+     "arguments": {
+      "order_id": "#W1006327",
+      "item_ids": [
+       "5925362855",
+       "1994478369"
+      ],
+      "new_item_ids": [
+       "6117189161",
+       "1355937109"
+      ],
+      "payment_method_id": "credit_card_4998749"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"6117189161\", \"price\": 1985.3, \"options\": {\"strap material\": \"leather\", \"dial color\": \"white\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1355937109\", \"price\": 1985.3, \"options\": {\"strap material\": \"leather\", \"dial color\": \"white\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending (item modified)\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}, {\"transaction_type\": \"refund\", \"amount\": 62.22000000000003, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "james_johnson_9321"
+     },
+     "output": "{\"user_id\": \"james_johnson_9321\", \"name\": {\"first_name\": \"James\", \"last_name\": \"Johnson\"}, \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"email\": \"james.johnson7869@example.com\", \"payment_methods\": {\"credit_card_4998749\": {\"source\": \"credit_card\", \"id\": \"credit_card_4998749\", \"brand\": \"visa\", \"last_four\": \"2429\"}}, \"orders\": [\"#W1006327\", \"#W3723163\", \"#W7836908\", \"#W6266831\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1006327"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"6117189161\", \"price\": 1985.3, \"options\": {\"strap material\": \"leather\", \"dial color\": \"white\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1355937109\", \"price\": 1985.3, \"options\": {\"strap material\": \"leather\", \"dial color\": \"white\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending (item modified)\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}, {\"transaction_type\": \"refund\", \"amount\": 62.22000000000003, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "payment_after_modification",
+   "patches": [],
+   "calls": [
+    {
+     "name": "modify_pending_order_items",
+     "arguments": {
+      "order_id": "#W1006327",
+      "item_ids": [
+       "5925362855"
+      ],
+      "new_item_ids": [
+       "6117189161"
+      ],
+      "payment_method_id": "credit_card_4998749"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"6117189161\", \"price\": 481.5, \"options\": {\"resolution\": \"4K\", \"waterproof\": \"yes\", \"color\": \"silver\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending (item modified)\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}, {\"transaction_type\": \"refund\", \"amount\": 22.00999999999999, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "modify_pending_order_payment",
+     "arguments": {
+      "order_id": "#W1006327",
+      "payment_method_id": "credit_card_4998749"
+     },
+     "output": "Error: There should be exactly one payment for a pending order"
+    },
+    {
+     "name": "modify_pending_order_address",
+     "arguments": {
+      "order_id": "#W1006327",
+      "address1": "593 Cedar Avenue",
+      "address2": "Suite 826",
+      "city": "Chicago",
+      "state": "IL",
+      "country": "USA",
+      "zip": "60625"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"6117189161\", \"price\": 481.5, \"options\": {\"resolution\": \"4K\", \"waterproof\": \"yes\", \"color\": \"silver\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending (item modified)\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}, {\"transaction_type\": \"refund\", \"amount\": 22.00999999999999, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "james_johnson_9321"
+     },
+     "output": "{\"user_id\": \"james_johnson_9321\", \"name\": {\"first_name\": \"James\", \"last_name\": \"Johnson\"}, \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"email\": \"james.johnson7869@example.com\", \"payment_methods\": {\"credit_card_4998749\": {\"source\": \"credit_card\", \"id\": \"credit_card_4998749\", \"brand\": \"visa\", \"last_four\": \"2429\"}}, \"orders\": [\"#W1006327\", \"#W3723163\", \"#W7836908\", \"#W6266831\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1006327"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"6117189161\", \"price\": 481.5, \"options\": {\"resolution\": \"4K\", \"waterproof\": \"yes\", \"color\": \"silver\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending (item modified)\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}, {\"transaction_type\": \"refund\", \"amount\": 22.00999999999999, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "payment_gift_card_to_card",
+   "patches": [],
+   "calls": [
+    {
+     "name": "modify_pending_order_payment",
+     "arguments": {
+      "order_id": "#W1068289",
+      "payment_method_id": "paypal_5398626"
+     },
+     "output": "{\"order_id\": \"#W1068289\", \"user_id\": \"yara_patel_8545\", \"address\": {\"address1\": \"736 Willow Lane\", \"address2\": \"Suite 550\", \"city\": \"Fort Worth\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"76130\"}, \"items\": [{\"name\": \"Headphones\", \"product_id\": \"6992792935\", \"item_id\": \"3374679624\", \"price\": 370.53, \"options\": {\"type\": \"over-ear\", \"connectivity\": \"wired\", \"color\": \"black\"}}, {\"name\": \"Grill\", \"product_id\": \"6819683148\", \"item_id\": \"5946177616\", \"price\": 1057.24, \"options\": {\"type\": \"gas\", \"size\": \"portable\", \"features\": \"none\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 3453.28, \"payment_method_id\": \"gift_card_9105630\"}, {\"transaction_type\": \"payment\", \"amount\": 3453.28, \"payment_method_id\": \"paypal_5398626\"}, {\"transaction_type\": \"refund\", \"amount\": 3453.28, \"payment_method_id\": \"gift_card_9105630\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "yara_patel_8545"
+     },
+     "output": "{\"user_id\": \"yara_patel_8545\", \"name\": {\"first_name\": \"Yara\", \"last_name\": \"Patel\"}, \"address\": {\"address1\": \"736 Willow Lane\", \"address2\": \"Suite 550\", \"city\": \"Fort Worth\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"76130\"}, \"email\": \"yara.patel5445@example.com\", \"payment_methods\": {\"paypal_5398626\": {\"source\": \"paypal\", \"id\": \"paypal_5398626\"}, \"gift_card_9105630\": {\"source\": \"gift_card\", \"id\": \"gift_card_9105630\", \"balance\": 3544.28}}, \"orders\": [\"#W1068289\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1068289"
+     },
+     "output": "{\"order_id\": \"#W1068289\", \"user_id\": \"yara_patel_8545\", \"address\": {\"address1\": \"736 Willow Lane\", \"address2\": \"Suite 550\", \"city\": \"Fort Worth\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"76130\"}, \"items\": [{\"name\": \"Headphones\", \"product_id\": \"6992792935\", \"item_id\": \"3374679624\", \"price\": 370.53, \"options\": {\"type\": \"over-ear\", \"connectivity\": \"wired\", \"color\": \"black\"}}, {\"name\": \"Grill\", \"product_id\": \"6819683148\", \"item_id\": \"5946177616\", \"price\": 1057.24, \"options\": {\"type\": \"gas\", \"size\": \"portable\", \"features\": \"none\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 3453.28, \"payment_method_id\": \"gift_card_9105630\"}, {\"transaction_type\": \"payment\", \"amount\": 3453.28, \"payment_method_id\": \"paypal_5398626\"}, {\"transaction_type\": \"refund\", \"amount\": 3453.28, \"payment_method_id\": \"gift_card_9105630\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "payment_card_to_gift_card_exact",
+   "patches": [
+    {
+     "user_id": "omar_kim_3528",
+     "pm": "gift_card_3749819",
+     "balance": 53.434
+    }
+   ],
+   "calls": [
+    {
+     "name": "modify_pending_order_payment",
+     "arguments": {
+      "order_id": "#W1080318",
+      "payment_method_id": "gift_card_3749819"
+     },
+     "output": "{\"order_id\": \"#W1080318\", \"user_id\": \"omar_kim_3528\", \"address\": {\"address1\": \"542 Lakeview Drive\", \"address2\": \"Suite 811\", \"city\": \"Jacksonville\", \"country\": \"USA\", \"state\": \"FL\", \"zip\": \"32214\"}, \"items\": [{\"name\": \"T-Shirt\", \"product_id\": \"9523456873\", \"item_id\": \"8349118980\", \"price\": 53.43, \"options\": {\"color\": \"blue\", \"size\": \"S\", \"material\": \"cotton\", \"style\": \"v-neck\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 53.43, \"payment_method_id\": \"credit_card_3577130\"}, {\"transaction_type\": \"payment\", \"amount\": 53.43, \"payment_method_id\": \"gift_card_3749819\"}, {\"transaction_type\": \"refund\", \"amount\": 53.43, \"payment_method_id\": \"credit_card_3577130\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "omar_kim_3528"
+     },
+     "output": "{\"user_id\": \"omar_kim_3528\", \"name\": {\"first_name\": \"Omar\", \"last_name\": \"Kim\"}, \"address\": {\"address1\": \"542 Lakeview Drive\", \"address2\": \"Suite 811\", \"city\": \"Jacksonville\", \"country\": \"USA\", \"state\": \"FL\", \"zip\": \"32214\"}, \"email\": \"omar.kim8981@example.com\", \"payment_methods\": {\"gift_card_3749819\": {\"source\": \"gift_card\", \"id\": \"gift_card_3749819\", \"balance\": 0.0}, \"credit_card_3577130\": {\"source\": \"credit_card\", \"id\": \"credit_card_3577130\", \"brand\": \"mastercard\", \"last_four\": \"9843\"}}, \"orders\": [\"#W8557584\", \"#W1080318\", \"#W7111824\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1080318"
+     },
+     "output": "{\"order_id\": \"#W1080318\", \"user_id\": \"omar_kim_3528\", \"address\": {\"address1\": \"542 Lakeview Drive\", \"address2\": \"Suite 811\", \"city\": \"Jacksonville\", \"country\": \"USA\", \"state\": \"FL\", \"zip\": \"32214\"}, \"items\": [{\"name\": \"T-Shirt\", \"product_id\": \"9523456873\", \"item_id\": \"8349118980\", \"price\": 53.43, \"options\": {\"color\": \"blue\", \"size\": \"S\", \"material\": \"cotton\", \"style\": \"v-neck\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 53.43, \"payment_method_id\": \"credit_card_3577130\"}, {\"transaction_type\": \"payment\", \"amount\": 53.43, \"payment_method_id\": \"gift_card_3749819\"}, {\"transaction_type\": \"refund\", \"amount\": 53.43, \"payment_method_id\": \"credit_card_3577130\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "payment_gift_card_cent_short",
+   "patches": [
+    {
+     "user_id": "omar_kim_3528",
+     "pm": "gift_card_3749819",
+     "balance": 53.42
+    }
+   ],
+   "calls": [
+    {
+     "name": "modify_pending_order_payment",
+     "arguments": {
+      "order_id": "#W1080318",
+      "payment_method_id": "gift_card_3749819"
+     },
+     "output": "Error: Insufficient gift card balance to pay for the order"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "omar_kim_3528"
+     },
+     "output": "{\"user_id\": \"omar_kim_3528\", \"name\": {\"first_name\": \"Omar\", \"last_name\": \"Kim\"}, \"address\": {\"address1\": \"542 Lakeview Drive\", \"address2\": \"Suite 811\", \"city\": \"Jacksonville\", \"country\": \"USA\", \"state\": \"FL\", \"zip\": \"32214\"}, \"email\": \"omar.kim8981@example.com\", \"payment_methods\": {\"gift_card_3749819\": {\"source\": \"gift_card\", \"id\": \"gift_card_3749819\", \"balance\": 53.42}, \"credit_card_3577130\": {\"source\": \"credit_card\", \"id\": \"credit_card_3577130\", \"brand\": \"mastercard\", \"last_four\": \"9843\"}}, \"orders\": [\"#W8557584\", \"#W1080318\", \"#W7111824\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1080318"
+     },
+     "output": "{\"order_id\": \"#W1080318\", \"user_id\": \"omar_kim_3528\", \"address\": {\"address1\": \"542 Lakeview Drive\", \"address2\": \"Suite 811\", \"city\": \"Jacksonville\", \"country\": \"USA\", \"state\": \"FL\", \"zip\": \"32214\"}, \"items\": [{\"name\": \"T-Shirt\", \"product_id\": \"9523456873\", \"item_id\": \"8349118980\", \"price\": 53.43, \"options\": {\"color\": \"blue\", \"size\": \"S\", \"material\": \"cotton\", \"style\": \"v-neck\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 53.43, \"payment_method_id\": \"credit_card_3577130\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "exchange_gift_card_at_rounded_difference",
+   "patches": [
+    {
+     "user_id": "sophia_garcia_1101",
+     "pm": "gift_card_9450778",
+     "balance": 43.59
+    }
+   ],
+   "calls": [
+    {
+     "name": "exchange_delivered_order_items",
+     "arguments": {
+      "order_id": "#W1023987",
+      "item_ids": [
+       "8926329222"
+      ],
+      "new_item_ids": [
+       "6301799585"
+      ],
+      "payment_method_id": "gift_card_9450778"
+     },
+     "output": "{\"order_id\": \"#W1023987\", \"user_id\": \"sophia_garcia_1101\", \"address\": {\"address1\": \"197 Elm Street\", \"address2\": \"Suite 737\", \"city\": \"San Antonio\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"78263\"}, \"items\": [{\"name\": \"Luggage Set\", \"product_id\": \"5426915165\", \"item_id\": \"8926329222\", \"price\": 452.28, \"options\": {\"piece count\": \"2-piece\", \"color\": \"black\", \"material\": \"softshell\"}}, {\"name\": \"Pet Bed\", \"product_id\": \"2747247837\", \"item_id\": \"5067898160\", \"price\": 209.95, \"options\": {\"size\": \"medium\", \"material\": \"memory foam\", \"color\": \"brown\"}}], \"status\": \"exchange requested\", \"fulfillments\": [{\"tracking_id\": [\"974703204371\"], \"item_ids\": [\"8926329222\", \"5067898160\"]}], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 662.23, \"payment_method_id\": \"gift_card_9450778\"}], \"cancel_reason\": null, \"exchange_items\": [\"8926329222\"], \"exchange_new_items\": [\"6301799585\"], \"exchange_payment_method_id\": \"gift_card_9450778\", \"exchange_price_difference\": 43.59, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "sophia_garcia_1101"
+     },
+     "output": "{\"user_id\": \"sophia_garcia_1101\", \"name\": {\"first_name\": \"Sophia\", \"last_name\": \"Garcia\"}, \"address\": {\"address1\": \"197 Elm Street\", \"address2\": \"Suite 737\", \"city\": \"San Antonio\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"78263\"}, \"email\": \"sophia.garcia9791@example.com\", \"payment_methods\": {\"gift_card_9450778\": {\"source\": \"gift_card\", \"id\": \"gift_card_9450778\", \"balance\": 43.59}}, \"orders\": [\"#W8727985\", \"#W1023987\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1023987"
+     },
+     "output": "{\"order_id\": \"#W1023987\", \"user_id\": \"sophia_garcia_1101\", \"address\": {\"address1\": \"197 Elm Street\", \"address2\": \"Suite 737\", \"city\": \"San Antonio\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"78263\"}, \"items\": [{\"name\": \"Luggage Set\", \"product_id\": \"5426915165\", \"item_id\": \"8926329222\", \"price\": 452.28, \"options\": {\"piece count\": \"2-piece\", \"color\": \"black\", \"material\": \"softshell\"}}, {\"name\": \"Pet Bed\", \"product_id\": \"2747247837\", \"item_id\": \"5067898160\", \"price\": 209.95, \"options\": {\"size\": \"medium\", \"material\": \"memory foam\", \"color\": \"brown\"}}], \"status\": \"exchange requested\", \"fulfillments\": [{\"tracking_id\": [\"974703204371\"], \"item_ids\": [\"8926329222\", \"5067898160\"]}], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 662.23, \"payment_method_id\": \"gift_card_9450778\"}], \"cancel_reason\": null, \"exchange_items\": [\"8926329222\"], \"exchange_new_items\": [\"6301799585\"], \"exchange_payment_method_id\": \"gift_card_9450778\", \"exchange_price_difference\": 43.59, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "exchange_two_items_unsorted",
+   "patches": [],
+   "calls": [
+    {
+     "name": "exchange_delivered_order_items",
+     "arguments": {
+      "order_id": "#W1067251",
+      "item_ids": [
+       "7848293342",
+       "6452271382"
+      ],
+      "new_item_ids": [
+       "3876764226",
+       "1646531091"
+      ],
+      "payment_method_id": "credit_card_3362387"
+     },
+     "output": "{\"order_id\": \"#W1067251\", \"user_id\": \"raj_sanchez_2970\", \"address\": {\"address1\": \"557 Sunset Drive\", \"address2\": \"Suite 454\", \"city\": \"San Diego\", \"country\": \"USA\", \"state\": \"CA\", \"zip\": \"92147\"}, \"items\": [{\"name\": \"Wireless Earbuds\", \"product_id\": \"9924732112\", \"item_id\": \"6452271382\", \"price\": 258.84, \"options\": {\"color\": \"blue\", \"battery life\": \"4 hours\", \"water resistance\": \"IPX4\"}}, {\"name\": \"Grill\", \"product_id\": \"6819683148\", \"item_id\": \"7848293342\", \"price\": 942.71, \"options\": {\"type\": \"charcoal\", \"size\": \"medium\", \"features\": \"side burner\"}}], \"status\": \"exchange requested\", \"fulfillments\": [{\"tracking_id\": [\"787450420748\"], \"item_ids\": [\"6452271382\", \"7848293342\"]}], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 1201.55, \"payment_method_id\": \"credit_card_3362387\"}], \"cancel_reason\": null, \"exchange_items\": [\"6452271382\", \"7848293342\"], \"exchange_new_items\": [\"1646531091\", \"3876764226\"], \"exchange_payment_method_id\": \"credit_card_3362387\", \"exchange_price_difference\": 12.41, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "raj_sanchez_2970"
+     },
+     "output": "{\"user_id\": \"raj_sanchez_2970\", \"name\": {\"first_name\": \"Raj\", \"last_name\": \"Sanchez\"}, \"address\": {\"address1\": \"557 Sunset Drive\", \"address2\": \"Suite 454\", \"city\": \"San Diego\", \"country\": \"USA\", \"state\": \"CA\", \"zip\": \"92147\"}, \"email\": \"raj.sanchez2046@example.com\", \"payment_methods\": {\"credit_card_3362387\": {\"source\": \"credit_card\", \"id\": \"credit_card_3362387\", \"brand\": \"mastercard\", \"last_four\": \"2130\"}, \"gift_card_2259499\": {\"source\": \"gift_card\", \"id\": \"gift_card_2259499\", \"balance\": 30.0}}, \"orders\": [\"#W7736708\", \"#W4566809\", \"#W1067251\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1067251"
+     },
+     "output": "{\"order_id\": \"#W1067251\", \"user_id\": \"raj_sanchez_2970\", \"address\": {\"address1\": \"557 Sunset Drive\", \"address2\": \"Suite 454\", \"city\": \"San Diego\", \"country\": \"USA\", \"state\": \"CA\", \"zip\": \"92147\"}, \"items\": [{\"name\": \"Wireless Earbuds\", \"product_id\": \"9924732112\", \"item_id\": \"6452271382\", \"price\": 258.84, \"options\": {\"color\": \"blue\", \"battery life\": \"4 hours\", \"water resistance\": \"IPX4\"}}, {\"name\": \"Grill\", \"product_id\": \"6819683148\", \"item_id\": \"7848293342\", \"price\": 942.71, \"options\": {\"type\": \"charcoal\", \"size\": \"medium\", \"features\": \"side burner\"}}], \"status\": \"exchange requested\", \"fulfillments\": [{\"tracking_id\": [\"787450420748\"], \"item_ids\": [\"6452271382\", \"7848293342\"]}], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 1201.55, \"payment_method_id\": \"credit_card_3362387\"}], \"cancel_reason\": null, \"exchange_items\": [\"6452271382\", \"7848293342\"], \"exchange_new_items\": [\"1646531091\", \"3876764226\"], \"exchange_payment_method_id\": \"credit_card_3362387\", \"exchange_price_difference\": 12.41, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "return_two_items_to_other_gift_card",
+   "patches": [],
+   "calls": [
+    {
+     "name": "return_delivered_order_items",
+     "arguments": {
+      "order_id": "#W1067251",
+      "item_ids": [
+       "7848293342",
+       "6452271382"
+      ],
+      "payment_method_id": "gift_card_2259499"
+     },
+     "output": "{\"order_id\": \"#W1067251\", \"user_id\": \"raj_sanchez_2970\", \"address\": {\"address1\": \"557 Sunset Drive\", \"address2\": \"Suite 454\", \"city\": \"San Diego\", \"country\": \"USA\", \"state\": \"CA\", \"zip\": \"92147\"}, \"items\": [{\"name\": \"Wireless Earbuds\", \"product_id\": \"9924732112\", \"item_id\": \"6452271382\", \"price\": 258.84, \"options\": {\"color\": \"blue\", \"battery life\": \"4 hours\", \"water resistance\": \"IPX4\"}}, {\"name\": \"Grill\", \"product_id\": \"6819683148\", \"item_id\": \"7848293342\", \"price\": 942.71, \"options\": {\"type\": \"charcoal\", \"size\": \"medium\", \"features\": \"side burner\"}}], \"status\": \"return requested\", \"fulfillments\": [{\"tracking_id\": [\"787450420748\"], \"item_ids\": [\"6452271382\", \"7848293342\"]}], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 1201.55, \"payment_method_id\": \"credit_card_3362387\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": [\"6452271382\", \"7848293342\"], \"return_payment_method_id\": \"gift_card_2259499\"}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "raj_sanchez_2970"
+     },
+     "output": "{\"user_id\": \"raj_sanchez_2970\", \"name\": {\"first_name\": \"Raj\", \"last_name\": \"Sanchez\"}, \"address\": {\"address1\": \"557 Sunset Drive\", \"address2\": \"Suite 454\", \"city\": \"San Diego\", \"country\": \"USA\", \"state\": \"CA\", \"zip\": \"92147\"}, \"email\": \"raj.sanchez2046@example.com\", \"payment_methods\": {\"credit_card_3362387\": {\"source\": \"credit_card\", \"id\": \"credit_card_3362387\", \"brand\": \"mastercard\", \"last_four\": \"2130\"}, \"gift_card_2259499\": {\"source\": \"gift_card\", \"id\": \"gift_card_2259499\", \"balance\": 30.0}}, \"orders\": [\"#W7736708\", \"#W4566809\", \"#W1067251\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1067251"
+     },
+     "output": "{\"order_id\": \"#W1067251\", \"user_id\": \"raj_sanchez_2970\", \"address\": {\"address1\": \"557 Sunset Drive\", \"address2\": \"Suite 454\", \"city\": \"San Diego\", \"country\": \"USA\", \"state\": \"CA\", \"zip\": \"92147\"}, \"items\": [{\"name\": \"Wireless Earbuds\", \"product_id\": \"9924732112\", \"item_id\": \"6452271382\", \"price\": 258.84, \"options\": {\"color\": \"blue\", \"battery life\": \"4 hours\", \"water resistance\": \"IPX4\"}}, {\"name\": \"Grill\", \"product_id\": \"6819683148\", \"item_id\": \"7848293342\", \"price\": 942.71, \"options\": {\"type\": \"charcoal\", \"size\": \"medium\", \"features\": \"side burner\"}}], \"status\": \"return requested\", \"fulfillments\": [{\"tracking_id\": [\"787450420748\"], \"item_ids\": [\"6452271382\", \"7848293342\"]}], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 1201.55, \"payment_method_id\": \"credit_card_3362387\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": [\"6452271382\", \"7848293342\"], \"return_payment_method_id\": \"gift_card_2259499\"}"
+    }
+   ]
+  },
+  {
+   "name": "cancel_gift_card_refund",
+   "patches": [],
+   "calls": [
+    {
+     "name": "cancel_pending_order",
+     "arguments": {
+      "order_id": "#W2403075",
+      "reason": "ordered by mistake"
+     },
+     "output": "{\"order_id\": \"#W2403075\", \"user_id\": \"aarav_davis_4756\", \"address\": {\"address1\": \"808 Chestnut Street\", \"address2\": \"Suite 832\", \"city\": \"Phoenix\", \"country\": \"USA\", \"state\": \"AZ\", \"zip\": \"85072\"}, \"items\": [{\"name\": \"Electric Toothbrush\", \"product_id\": \"7352963235\", \"item_id\": \"3320557165\", \"price\": 188.67, \"options\": {\"color\": \"blue\", \"speed settings\": \"high\", \"battery type\": \"AA batteries\"}}], \"status\": \"cancelled\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 188.67, \"payment_method_id\": \"gift_card_9708163\"}, {\"transaction_type\": \"refund\", \"amount\": 188.67, \"payment_method_id\": \"gift_card_9708163\"}], \"cancel_reason\": \"ordered by mistake\", \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "aarav_davis_4756"
+     },
+     "output": "{\"user_id\": \"aarav_davis_4756\", \"name\": {\"first_name\": \"Aarav\", \"last_name\": \"Davis\"}, \"address\": {\"address1\": \"178 Lakeview Drive\", \"address2\": \"Suite 576\", \"city\": \"Fort Worth\", \"country\": \"USA\", \"state\": \"TX\", \"zip\": \"76150\"}, \"email\": \"aarav.davis1165@example.com\", \"payment_methods\": {\"gift_card_9708163\": {\"source\": \"gift_card\", \"id\": \"gift_card_9708163\", \"balance\": 278.67}}, \"orders\": [\"#W7430166\", \"#W2403075\", \"#W3196599\", \"#W3223435\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W2403075"
+     },
+     "output": "{\"order_id\": \"#W2403075\", \"user_id\": \"aarav_davis_4756\", \"address\": {\"address1\": \"808 Chestnut Street\", \"address2\": \"Suite 832\", \"city\": \"Phoenix\", \"country\": \"USA\", \"state\": \"AZ\", \"zip\": \"85072\"}, \"items\": [{\"name\": \"Electric Toothbrush\", \"product_id\": \"7352963235\", \"item_id\": \"3320557165\", \"price\": 188.67, \"options\": {\"color\": \"blue\", \"speed settings\": \"high\", \"battery type\": \"AA batteries\"}}], \"status\": \"cancelled\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 188.67, \"payment_method_id\": \"gift_card_9708163\"}, {\"transaction_type\": \"refund\", \"amount\": 188.67, \"payment_method_id\": \"gift_card_9708163\"}], \"cancel_reason\": \"ordered by mistake\", \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "modify_order_address",
+   "patches": [],
+   "calls": [
+    {
+     "name": "modify_pending_order_address",
+     "arguments": {
+      "order_id": "#W1006327",
+      "address1": "1 Main St",
+      "address2": "Apt 2",
+      "city": "Springfield",
+      "state": "IL",
+      "country": "USA",
+      "zip": "62701"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"1 Main St\", \"address2\": \"Apt 2\", \"city\": \"Springfield\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"62701\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"5925362855\", \"price\": 503.51, \"options\": {\"resolution\": \"1080p\", \"waterproof\": \"yes\", \"color\": \"black\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "james_johnson_9321"
+     },
+     "output": "{\"user_id\": \"james_johnson_9321\", \"name\": {\"first_name\": \"James\", \"last_name\": \"Johnson\"}, \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"email\": \"james.johnson7869@example.com\", \"payment_methods\": {\"credit_card_4998749\": {\"source\": \"credit_card\", \"id\": \"credit_card_4998749\", \"brand\": \"visa\", \"last_four\": \"2429\"}}, \"orders\": [\"#W1006327\", \"#W3723163\", \"#W7836908\", \"#W6266831\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1006327"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"1 Main St\", \"address2\": \"Apt 2\", \"city\": \"Springfield\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"62701\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"5925362855\", \"price\": 503.51, \"options\": {\"resolution\": \"1080p\", \"waterproof\": \"yes\", \"color\": \"black\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "modify_user_address",
+   "patches": [],
+   "calls": [
+    {
+     "name": "modify_user_address",
+     "arguments": {
+      "user_id": "james_johnson_9321",
+      "address1": "1 Main St",
+      "address2": "",
+      "city": "Springfield",
+      "state": "IL",
+      "country": "USA",
+      "zip": "62701"
+     },
+     "output": "{\"user_id\": \"james_johnson_9321\", \"name\": {\"first_name\": \"James\", \"last_name\": \"Johnson\"}, \"address\": {\"address1\": \"1 Main St\", \"address2\": \"\", \"city\": \"Springfield\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"62701\"}, \"email\": \"james.johnson7869@example.com\", \"payment_methods\": {\"credit_card_4998749\": {\"source\": \"credit_card\", \"id\": \"credit_card_4998749\", \"brand\": \"visa\", \"last_four\": \"2429\"}}, \"orders\": [\"#W1006327\", \"#W3723163\", \"#W7836908\", \"#W6266831\"]}"
+    },
+    {
+     "name": "get_user_details",
+     "arguments": {
+      "user_id": "james_johnson_9321"
+     },
+     "output": "{\"user_id\": \"james_johnson_9321\", \"name\": {\"first_name\": \"James\", \"last_name\": \"Johnson\"}, \"address\": {\"address1\": \"1 Main St\", \"address2\": \"\", \"city\": \"Springfield\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"62701\"}, \"email\": \"james.johnson7869@example.com\", \"payment_methods\": {\"credit_card_4998749\": {\"source\": \"credit_card\", \"id\": \"credit_card_4998749\", \"brand\": \"visa\", \"last_four\": \"2429\"}}, \"orders\": [\"#W1006327\", \"#W3723163\", \"#W7836908\", \"#W6266831\"]}"
+    },
+    {
+     "name": "get_order_details",
+     "arguments": {
+      "order_id": "#W1006327"
+     },
+     "output": "{\"order_id\": \"#W1006327\", \"user_id\": \"james_johnson_9321\", \"address\": {\"address1\": \"593 Cedar Avenue\", \"address2\": \"Suite 826\", \"city\": \"Chicago\", \"country\": \"USA\", \"state\": \"IL\", \"zip\": \"60625\"}, \"items\": [{\"name\": \"Action Camera\", \"product_id\": \"3377618313\", \"item_id\": \"5925362855\", \"price\": 503.51, \"options\": {\"resolution\": \"1080p\", \"waterproof\": \"yes\", \"color\": \"black\"}}, {\"name\": \"Wristwatch\", \"product_id\": \"6066914160\", \"item_id\": \"1994478369\", \"price\": 2025.51, \"options\": {\"strap material\": \"silicone\", \"dial color\": \"black\"}}, {\"name\": \"Jigsaw Puzzle\", \"product_id\": \"1808611083\", \"item_id\": \"5172162216\", \"price\": 48.51, \"options\": {\"pieces\": \"2000\", \"theme\": \"landscape\", \"difficulty level\": \"intermediate\"}}], \"status\": \"pending\", \"fulfillments\": [], \"payment_history\": [{\"transaction_type\": \"payment\", \"amount\": 2577.53, \"payment_method_id\": \"credit_card_4998749\"}], \"cancel_reason\": null, \"exchange_items\": null, \"exchange_new_items\": null, \"exchange_payment_method_id\": null, \"exchange_price_difference\": null, \"return_items\": null, \"return_payment_method_id\": null}"
+    }
+   ]
+  },
+  {
+   "name": "calculate",
+   "patches": [],
+   "calls": [
+    {
+     "name": "calculate",
+     "arguments": {
+      "expression": "1/3"
+     },
+     "output": "0.33"
+    },
+    {
+     "name": "calculate",
+     "arguments": {
+      "expression": "10 / 3"
+     },
+     "output": "3.33"
+    },
+    {
+     "name": "calculate",
+     "arguments": {
+      "expression": "2.675 * 3"
+     },
+     "output": "8.02"
+    },
+    {
+     "name": "calculate",
+     "arguments": {
+      "expression": "(1 + 2) * 0.1"
+     },
+     "output": "0.3"
+    }
+   ]
+  }
+ ]
+}

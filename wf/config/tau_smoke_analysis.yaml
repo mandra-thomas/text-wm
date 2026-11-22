@@ -1,0 +1,11 @@
+run_id: tau_smoke_analysis
+# Analysis of the smoke (tau_score_smoke), for format, timing and precision only; with project_to set it computes no
+# estimate and no verdict (review 2): P('{"')+P('Error'), P(Yes)+P(No) for the yes/no and manipulation questions,
+# mean seconds per job, the projected GPU hours per tau_score shard against the sbatch limit, the projected CI
+# half-widths, and the chance of a "replicates" verdict if each model's τ effect equalled its ALFWorld first-token ΔL.
+source: tau_score_smoke
+build_run: tau_build
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+project_to: tau_score
+time_limit_hours: 8  # pace/tau_score.sbatch --time (a test keeps them equal)
+alfworld_first_token_delta_l: {qwen3-8b-fewshot: 2.52, llama3.1-8b-fewshot: 0.68}

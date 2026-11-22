@@ -1,0 +1,25 @@
+run_id: tau_score_smoke
+# Format and timing check for tau_score: 20 main-population items (by hash) plus the longest generated main item and
+# the longest natural item (review 2), both models, every job type (both exploratory arms on the primary items among
+# them). Read for format, timing and precision only (token checks, two-way masses of the first-token, yes/no and
+# manipulation readouts, seconds per job, standard deviations of paired differences), never for results.
+build_run: tau_build
+verify_run: tau_verify
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+readouts: [first, yn, full]
+witness: true
+mention: true
+target_check: true
+rules_arm_items: 20
+matched_arm_items: 20
+matched_witness: true  # fix round 3: the witness's first token in the matched arm (aligned, swapped, neutral)
+score_natural: false
+score_unachievable: false
+limit_items: 20
+add_longest: true
+n_shards: 1
+# sha256 of the local build at f389f97 (amendments after review 2; an ICE rebuild must reproduce them; scoring refuses others)
+expected_outputs_sha256:
+  items.jsonl: 2c8ffeac7dedd4635df5974be955d6ceff84d3f8184f88a73eca579282a578b6
+  natural_items.jsonl: 9bd6c3f7fda464f7cc32307e9a570da564b1bed7d4e3ab0d75dbfd00f6b83502
+  fewshot.json: 231607f79c92580375ada0ce4267fb954e7e0bc0a743ccb9b75813610eb13119

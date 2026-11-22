@@ -1418,6 +1418,14 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "textcraft_score_examples_on_goal": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
     "textcraft_score_empty_start": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
     "textcraft_analysis": lambda cfg: _lazy("textcraft.analysis", "run_textcraft_analysis")(cfg),
+    # τ-bench retail replication (notes/tau_design.md)
+    "tau_build": lambda cfg: _lazy("tau.pipeline", "run_tau_build")(cfg),
+    "tau_verify": lambda cfg: _lazy("tau.pipeline", "run_tau_verify")(cfg),
+    "tau_score": lambda cfg: _lazy("tau.pipeline", "run_tau_score")(cfg),
+    "tau_score_smoke": lambda cfg: _lazy("tau.pipeline", "run_tau_score")(cfg),
+    "tau_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
+    "tau_smoke_analysis": lambda cfg: _lazy("tau.pipeline", "run_tau_analysis")(cfg),
+    "tau_contamination": lambda cfg: _lazy("tau.pipeline", "run_tau_contamination")(cfg),
     # 2026-11-20, documentation audit: the shared-spot sensitivity (A2), the audit analyses (C) and re-runs of
     # analyses under new run ids, so the original runs stay as they were (A3, B1, B4).
     "rq2_shared_score": lambda cfg: _lazy("rq2_shared", "run_rq2_shared_score")(cfg),
