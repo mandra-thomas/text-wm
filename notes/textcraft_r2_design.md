@@ -835,4 +835,4 @@ No error was found in the Holm, TOST, margin, clustering or identity code.
 
 - `tests/test_textcraft_r2.py`: 141 tests pass.
 - Mutants: 145 round-2 mutants. The 22 new or changed ones were run in official mode at 170db45, and all were killed by named tests (log appended to `notes/textcraft_r2_mutation_log.txt`). The other 123 were killed in the official run at ef73d40, and their code is unchanged.
-- The full suite was run once at the end: FULL_SUITE_SIGNOFF.
+- The full suite was run once at the end, at 6734c35: 1,003 passed, 7 skipped.
