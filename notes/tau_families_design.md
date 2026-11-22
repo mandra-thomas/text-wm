@@ -27,16 +27,21 @@ primary readout is the first token of the predicted tool output: $L_1 = \log P(\
 since every success reply begins with `{"` and every failure reply with `Error`. The goal effect is the mean over
 the 856 status-matched primary items of $L_1$ under the aligned task minus $L_1$ under the swapped task.
 
-**What it showed.** Qwen3-8B: +3.98 nats [3.61, 4.35], "replicates", read as a general task-consistency bias (the
-working witness call on the same order moves as much). Llama-3.1-8B: +0.47 [0.41, 0.54], "small effect, positive",
-specific to failing calls (fail minus witness above 0). The joint verdict was "ALFWorld direction in both models, size
-met by one; not a replication".
+**What it showed** (corrected after review 1, R1-M1, from the exploratory diagnostics `notes/tau_dx.md` on `main`).
+Qwen3-8B: +3.98 nats [3.61, 4.35], "replicates", with the pre-registered reading "a general task-consistency bias".
+The working witness call on the same order does not move "as much": it moves +9.45 [8.94, 9.94], more than twice as
+much, so failing minus witness is −5.47 [−5.87, −5.05]. Llama-3.1-8B: +0.47 [0.41, 0.54], "small effect, positive",
+pre-registered as "specific to failing calls". That row rests on failing minus witness +0.09 [0.04, 0.14], about a
+fifth of the effect: the witness moves +0.38, about 80% as much as the failing call; failing minus witness is positive
+in 49% of items, +0.68 in one status cell and −0.27 in the unavailable class; and the pooled +0.47 averages +1.23 in the
+status class and −0.33 in the unavailable class. So on closer reading both reference models shift working and failing
+calls together, and Llama-3.1-8B's pooled effect depends on the class mix. The joint verdict was "ALFWorld direction in
+both models, size met by one; not a replication".
 
-**What this extension asks.** Does the τ-bench goal effect appear in instruct models of other families and of
-Llama's next release, and do they look like Qwen3-8B (naming the order raises the success belief of any call on it)
-or like Llama-3.1-8B (the shift is specific to calls the record shows will fail)? Two readings of the two reference
-models are open, and the extension can speak to them: the split could follow the developer (Qwen against Meta), or
-it could be a property of individual models with no family pattern. One model of another developer (Mistral) and one
+**What this extension asks** (amended after review 1, R1-M1). Does the τ-bench goal effect appear in instruct models
+of other families and of Llama's next release? Is the shift shared by working and failing calls, as in both reference
+models on closer reading, or specific to failing calls by the rule fixed in section 7.5? And does the pooled effect
+hold across the two main failure classes, or depend on their mix, as Llama-3.1-8B's did? One model of another developer (Mistral) and one
 of Meta's next release (Llama 3.2) can describe this; they cannot separate family, size, tokenizer, chat format and
 post-training, so every cross-model statement is descriptive (section 7.5).
 
@@ -158,9 +163,9 @@ later wave of the families study (Gemma 4, with a longer context) can add Gemma 
 | failing call | first token | mention-aligned, mention-swapped | 2 | the mention pair: write minus mention in the reading table |
 | failing call | manipulation question | aligned, swapped | 2 | the manipulation check that gates a null |
 | witness (the working call that achieves the aligned task) | first token | aligned, swapped, neutral | 3 | discrimination (gates a null and a reversal), the witness's own effect, fail minus witness |
-| witness | reply-anchored yes/no | neutral | 1 | the families competence rule on the yes/no format |
+| witness | reply-anchored yes/no | aligned, swapped, neutral | 3 | the families competence rule on the yes/no format (neutral); the task judgement on working calls and yes/no fail minus witness (aligned, swapped; restored after review 1, R1-S4) |
 
-That is 14 forward passes per item, **11,984 passes per model**. Every one is a single forward pass that reads one
+That is 16 forward passes per item, **13,696 passes per model** (14 and 11,984 before review 1). Every one is a single forward pass that reads one
 next-token distribution (`score_one_token_pair`), with the same scorer, precision and log-softmax as the reference
 runs.
 
@@ -181,8 +186,10 @@ runs.
   separately (A3); the natural set was too small for inference even for the reference models.
 - **The mention pair on the yes/no question** (2 passes). The reading table reads write minus mention on the first
   token only (`checks_of`); the yes/no mention contrasts were descriptive.
-- **The witness's yes/no under the aligned and swapped task lines** (2 passes). Descriptive in the reference design;
-  only the neutral one is needed, for the competence rule.
+- *(Restored after review 1, R1-S4; the cut is withdrawn.)* ~~The witness's yes/no under the aligned and swapped task
+  lines (2 passes).~~ They measure whether the yes/no answer on working calls carries a task judgement (Qwen3-8B
+  answered No for 91% of working calls it confidently predicted to succeed under the swapped line), which is one of the
+  cross-cutting findings, and they make yes/no fail minus witness identifiable.
 - **The contamination check.** Exploratory. Both models' training data predate τ-bench's release (June 2024): Mistral
   7B v0.3 was released in May 2024, and Llama 3.2's stated knowledge cutoff is December 2023. tau2's database extends
   τ-bench's, so this is approximate.
@@ -212,12 +219,12 @@ Seconds per pass are estimated from the reference smoke run (Qwen3-8B 1.50 s at 
 
 | Run | Mistral 7B v0.3 | Llama 3.2 3B |
 |---|---|---|
-| protocol (11,984 passes) | 5.0 h | 2.2 h |
-| smoke (21 items, 294 passes) | 0.1 h | 0.05 h |
+| protocol (13,696 passes; R1-S4) | 5.7 h | 2.5 h |
+| smoke (21 items, 336 passes) | 0.14 h | 0.06 h |
 | placement check (600 passes) | 0.25 h | none |
-| **total per model** | **about 5.4 GPU-hours** | **about 2.2 GPU-hours** |
+| **total per model** | **about 6.1 GPU-hours** | **about 2.5 GPU-hours** |
 
-About 7.6 GPU-hours for the extension, against about 38 for the reference models' full run; the protocol itself is
+(Before review 1: 5.4 and 2.2.) About 8.6 GPU-hours for the extension, against about 38 for the reference models' full run; the protocol itself is
 about a quarter of what the reference protocol would cost for the same model. These are estimates; the smoke run
 measures the seconds per pass by readout and the projection decides (section 6).
 
@@ -252,7 +259,7 @@ also stores the prompt's length in tokens.
      (after the item's output-cue prompt for that call) begins with the `{"` token, and of the failure reply and the
      witness failure begins with the `Error` token; each whole reply tokenized alone equals the template's tokens for
      it (no merge at the prompt/answer boundary);
-   - after every yes/no and manipulation prompt that will be scored (6 per item), `Yes` and `No` as the template writes
+   - after every yes/no and manipulation prompt that will be scored (8 per item since R1-S4), `Yes` and `No` as the template writes
      them as the reply equal the scored single tokens;
    - for every call and cue, the rendered prompts under the different task lines differ only in the task line;
    - every scored prompt is shorter than the model's trained context (Mistral 32,768, Llama 3.2 131,072).
@@ -267,7 +274,7 @@ also stores the prompt's length in tokens.
    every job type; then `tau_family_smoke_analysis`). Read for format, timing and precision only, never for effects:
    the median two-way masses of each readout (below 0.5 is a red flag), the token reports, mean seconds per job by
    readout, the projected hours of the largest shard of each model against the job limit and the projected total
-   against the 6-hour budget, and the standard deviation of the per-item aligned minus swapped differences with the
+   against the budget (6 hours as first written; flagged above 6.5 since R1-S4, informational), and the standard deviation of the per-item aligned minus swapped differences with the
    projected 95% half-widths (no mean, no estimate, no verdict). The projection is copied into this note and
    committed before full scoring.
 
@@ -336,6 +343,9 @@ at least 1 nat, against a rank-based separation and two coverage bounds). Both r
 reference models, descriptively: their published verdicts stand, and a failure would be disclosed beside them, not
 turned into a new verdict (as was done for Llama-3.1-8B in TextCraft).
 
+Of the 447 items, 405 are `unavailable`, so the gate is in practice a rule on that class; a model whose effect lives in
+the `status` class (as Llama-3.1-8B's does) is gated on the other class (review 1, note).
+
 ### 7.4 Secondary estimates (descriptive)
 
 Per model, on the primary population, each with a user-clustered 95% interval and sign-flip p (no family):
@@ -348,11 +358,20 @@ Per model, on the primary population, each with a user-clustered 95% interval an
 
 $$\text{share} = \frac{1}{|F|} \sum_{i \in F} \mathbf{1}\left[L(i, \text{aligned}) > L(i, \text{swapped})\right],$$
 
-  null one half, ties counted as not moved;
+  null one half, ties counted as not moved, with the share of exact ties and the median item effect reported beside
+  it (R1-S1);
 - per class (`status`, `unavailable`), and the descriptive classes with estimate and n only;
 - the controls: witness effects, discrimination (first token and yes/no, and per class), the mention pair, the
   manipulation check, fail minus witness and write minus mention;
-- format: median two-way masses and seconds per job by readout; prompt lengths in tokens.
+- format: median two-way masses and seconds per job by readout; prompt lengths in tokens;
+- (R1-S4) fail minus witness anchored on the neutral line, on both readouts: the failing call's aligned minus neutral
+  minus the witness's, and the same for swapped minus neutral (an authorization belief lowers swapped below neutral for
+  both calls); yes/no fail minus witness;
+- (R1-S4) the yes/no task judgement, per call (failing and witness) and task line: among calls whose first token
+  confidently predicts JSON ($L_1 \ge 3$, the threshold of `notes/tau_dx.md`), the share answered No on yes/no; and
+  yes/no regressed on $L_1$ with one slope and one intercept per line, with user-clustered intervals for the intercept
+  differences;
+- (R1-M1) per class (`status`, `unavailable`): the failing call's effect, the witness's and fail minus witness.
 
 ### 7.5 Comparisons across models (descriptive, rules fixed now)
 
@@ -375,21 +394,49 @@ resample). For each comparison of models A and B:
   detected"). Log-odds scales differ across models (Qwen3-8B's τ effect is 8 times Llama-3.1-8B's in nats), so this is
   read beside the item share, never alone.
 - **The same two numbers on the yes/no readout**, for models interpretable on it.
-- **The reading row** of each model (section 7.1), set side by side.
+- **The label** of each model by the rule below, set side by side, with its qualifiers (R1-M1).
 
 A model that is not interpretable (fails the competence rule) or whose verdict is gated to "inconclusive" is left
-out of every cross-model reading, with the reason.
+out of every cross-model reading, with the reason; in the metrics file every comparison entry of such a model, and
+every yes/no comparison of a model that fails the yes/no competence rule, has its readings replaced by "not read:
+<why>" (the computed reading kept as `reading_unread`), so no unmarked "differs" or "matches" remains (R1-S6).
+
+**"Matches" is expected to be unreachable (R1-S3, stated before data).** "Matches" needs the 90% paired interval of
+the item-share difference inside ±0.05. With 856 items in 175 users the 90% half-width is about 0.04 without
+clustering (two models with shares near 0.6 whose moves are uncorrelated: per-item variance about 0.48, standard error
+about 0.024) and about 0.06 to 0.10 with the within-user correlation seen in ALFWorld wave A. So a small difference
+will almost always read "no difference detected", and the Llama-line row below will very probably not be met whatever
+the models do. The bar is not lowered.
+
+**The cross-model label (R1-M1, fixed before data).** The τ outcome table and its reading stay exactly as they are
+(they are the τ rule), but the table's row is not used as the cross-model label. Instead, for each model with a positive
+verdict, discrimination holding and the competence rule passed:
+
+- the row is named by its mechanical criterion, "fail minus witness above 0" or "fail minus witness not above 0";
+- always reported beside it: the witness's effect as a share of the failing call's effect, and per pre-specified class
+  (`status`, `unavailable`) the failing call's effect and fail minus witness, each with its interval;
+- the label "failure-specific" may appear in cross-model text only if all three hold: fail minus witness has its 95%
+  interval above 0; the witness's effect is less than half the failing call's; and fail minus witness is not below 0
+  (its interval wholly below 0) in either class. Otherwise the model is described as "a shift shared by working and
+  failing calls", with the numbers (and "working calls move more" when fail minus witness has its interval below 0).
+  By this rule neither reference model is failure-specific (Llama-3.1-8B: witness at 80%, unavailable class below 0).
+- **class mix:** when the two classes' failing-call effects have intervals on opposite sides of 0, "the pooled effect
+  depends on the class mix; reported per class";
+- **minority (R1-S1):** when the verdict is positive but the item share's 95% interval includes or lies below one half,
+  "the mean is carried by a minority of items; reported as such, not as a general shift". The mean governs the verdict;
+  the share qualifies the reading and governs statements about breadth, $\Delta L_1$ about size on each model's scale.
 
 How the patterns will be read (all descriptive):
 
 | Pattern | Reading |
 |---|---|
-| Both scored models' first-token effect has a CI above 0 | The direction of the τ goal effect is not specific to Qwen3-8B and Llama-3.1-8B: it appears in every interpretable model tested on τ-bench |
+| Both scored models' first-token effect has a CI above 0 | The direction of the τ goal effect is not specific to Qwen3-8B and Llama-3.1-8B: it appears in every interpretable model tested on τ-bench; qualified by name for a model carried by a minority of items or not shown to use the record (R1-S1) |
 | A scored model, interpretable, with a CI inside ±0.5 and its gates passed | No leak of more than 0.5 nats in that model on τ-bench (with the C2 witness qualification) |
-| Both scored models have the task-consistency reading (fail minus witness not above 0), as Qwen3-8B | The task-consistency pattern is not specific to Qwen3; the failure-specific pattern is the exception among the models tested |
-| Both scored models have the failure-specific reading, as Llama-3.1-8B | The task-consistency pattern is specific to Qwen3-8B among the models tested |
-| Mistral and Llama 3.2 3B differ in reading row | The pattern varies by model; with one model per developer outside Meta, no family or developer explanation is drawn |
-| Llama 3.2 3B has Llama-3.1-8B's reading row and their item shares "match" | Descriptive similarity within the Llama line; size, distillation and post-training all differ, so no cause is named |
+| Both scored models labelled "a shift shared by working and failing calls" (R1-M1) | In both scored models the task shifts working and failing calls alike (or working calls more), as in both reference models; no model tested shows a shift specific to failing calls by the pre-stated rule |
+| Both scored models labelled "failure-specific" (R1-M1) | Both scored models show a shift specific to failing calls by the pre-stated rule, which neither reference model meets |
+| Mistral and Llama 3.2 3B differ in label | The pattern varies by model; with one model per developer outside Meta, no family or developer explanation is drawn |
+| A scored model's class effects have intervals on opposite sides of 0 (R1-M1) | The pooled effect depends on the class mix; reported per class |
+| Llama 3.2 3B has Llama-3.1-8B's label by the rule and their item shares "match" | Descriptive similarity within the Llama line; size, distillation and post-training all differ, so no cause is named (very probably unreachable, R1-S3) |
 | A comparison "no difference detected" or a $\Delta L_1$ difference under 0.3 nats | No difference detected, never "the same" |
 | Mistral's placement check moves its effect (7.6) | Mistral's position in every comparison is reported as format-dependent, with both numbers |
 
@@ -406,8 +453,10 @@ is reported as not shown to move the effect on this sample. It changes no verdic
 | Outcome for a scored model | Meaning |
 |---|---|
 | fails the competence rule on the first token | Not interpretable on τ-bench: it does not tell working calls from failing ones, or answers one way to everything, on these prompts; no statement about goal sensitivity |
-| "replicates" or "small effect, positive", gates passed, fail minus witness above 0 | The task overrides a visible fact about the named object, more for failing calls than working ones (Llama-3.1-8B's pattern) |
-| the same, fail minus witness about 0 or negative | Goal leakage as a general task-consistency bias or an authorization belief (Qwen3-8B's pattern) |
+| "replicates" or "small effect, positive", gates passed, labelled "failure-specific" by the rule of 7.5 | The task overrides a visible fact about the named object, more for failing calls than working ones; neither reference model meets this rule (R1-M1) |
+| the same, labelled "a shift shared by working and failing calls" (including fail minus witness above 0 that does not meet the rule) | Goal leakage shared by working and failing calls: a task-consistency bias or an authorization belief, the pattern of both reference models on closer reading (`notes/tau_dx.md`); the τ table's own reading is printed beside it unchanged |
+| class effects with intervals on opposite sides of 0 (R1-M1) | The pooled effect depends on the class mix; reported per class |
+| a positive mean with an item share whose interval includes or lies below one half (R1-S1) | The mean is carried by a minority of items; reported as such, not as a general shift; the median item effect is given |
 | a positive effect with discrimination failing | The task shifts predictions, but the model is not shown to use the record |
 | "reversed", discrimination holding | Naming the order sharpens failure prediction in that model; reported as a counter-example to the direction found in every model so far |
 | null with both gates | No leak of more than 0.5 nats (or, if the witness moves, the C2 reading) |
@@ -429,18 +478,23 @@ models.
   with the CI above 0, and the verdict "replicates" (at least 0.5 nats). The reading row is not predicted: there is no
   reference model of its developer. Competence is the main risk: in ALFWorld Mistral answered Yes to 56% of failures
   under the neutral task (yes/no), far more than any other interpretable model, while its AUC was 0.94.
-- **Llama 3.2 3B.** Scaled by Llama-3.1-8B's ratio (same developer, same tokenizer and prompt bytes), about 0.48 nats,
-  at the threshold. Predicted: a positive first-token effect with the CI above 0 and an estimate below 0.5 nats
-  ("small effect, positive"); the failure-specific reading of Llama-3.1-8B, weakly. Competence and the manipulation
+- **Llama 3.2 3B** (restated after review 1, R1-M1). Scaled by Llama-3.1-8B's ratio (same developer, same tokenizer
+  and prompt bytes), about 0.48 nats, at the threshold. Predicted: a positive first-token effect with the CI above 0
+  and an estimate below 0.5 nats ("small effect, positive"); labelled "a shift shared by working and failing calls"
+  (the witness moving more than half as much, as Llama-3.1-8B's did), and plausibly the class-mix reading (status
+  positive, unavailable at or below 0). Competence and the manipulation
   check are a real risk for a 3B model reading 10k-token JSON prompts.
 - **Gemma 2 9B.** Excluded (2.3); no prediction.
 
 The same, as logged forecasts (subjective probabilities, used by no rule):
 
-| Model | CI above 0 | Verdict "replicates" | Failure-specific reading, given a positive effect | Passes competence (first token) and both τ gates |
-|---|---|---|---|---|
-| Mistral 7B v0.3 | 0.85 | 0.6 | 0.5 | 0.7 |
-| Llama 3.2 3B | 0.7 | 0.35 | 0.55 | 0.6 |
+| Model | CI above 0 | Verdict "replicates" | Labelled "failure-specific" by the rule of 7.5, given a positive effect (R1-M1) | Class-mix reading | Passes competence (first token) and both τ gates |
+|---|---|---|---|---|---|
+| Mistral 7B v0.3 | 0.85 | 0.6 | 0.2 | 0.3 | 0.7 |
+| Llama 3.2 3B | 0.7 | 0.35 | 0.15 | 0.5 | 0.6 |
+
+(Before review 1 the third column was "the failure-specific reading", by the τ table's row: 0.5 and 0.55. The new
+column uses the stricter rule, which neither reference model meets, so its forecasts are lower.)
 
 Not predicted: the yes/no results (the reference models split there, Qwen3-8B +7.68 and Llama-3.1-8B −0.02), the
 ordering of the models, and the placement check's direction.
@@ -459,8 +513,10 @@ ordering of the models, and the placement check's direction.
   tested for them. The natural (agent-made) failures are not scored.
 - **One scoring run per model**; GPU numerics move scores slightly across GPU types (about 0.02 nats in $\Delta L$ on
   the archived ALFWorld runs); the reference models were scored on a mix of GPU types.
-- **The `status` class has no discrimination evidence** (its witness is not determined by the history), as for the
-  reference models.
+- **The `status` class has no determined witness** (reworded after review 1, R1-S6): its witness's success needs a
+  variant's availability that the history does not show, so the discrimination check reads the other classes. That is
+  not a lack of evidence that the models read the status record: both reference models score a call whose tool matches
+  the order's status +4.9 (Qwen3-8B) and +3.0 (Llama-3.1-8B) nats higher (`notes/tau_dx.md`).
 - Every caveat of the τ design (A16 and its additions) applies.
 
 ## 10. Runs, code and order of work
@@ -538,3 +594,53 @@ No design rule changed. What was built and checked:
   the extension; steps 2 to 6 are inherited unchanged from the τ-bench build (the items are the same files). Not yet
   done: the independent engineering and scientific-validity reviews (steps 9 and 9b), the freeze at an annotated tag,
   the smoke run, scoring and the results check. Nothing has been scored.
+
+## Amendments after review 1, before any score (2026-11-22)
+
+Review 1 (`notes/tau_families_review1.md`, engineering and scientific validity, steps 9 and 9b) read the design and code
+at 7c4a571 and found the engineering sound but the extension not ready to freeze: one must-fix and six should-fix.
+`notes/tau_dx.md` (on `main`, 4df8ed9, with the results-note qualification eac03f7) had landed 28 seconds before this
+note's design commit and was not taken into account; it overturns both reference descriptions. Every amendment below
+was decided before any score of these models exists. The confirmatory rule (the per-model verdict, its gates, the Holm
+family of the two scored models and the τ outcome table's reading) is unchanged; the amendments concern the
+descriptive layer, one restored readout and the tests. Sections edited in place are marked "R1-".
+
+- **R1-M1, the reference patterns and the cross-model label.** Sections 1, 7.5, 7.7 and 8 now describe the reference
+  models as `notes/tau_dx.md` found them (Qwen3-8B's witness moves +9.45 against +3.98; Llama-3.1-8B's "failure-specific"
+  row rests on +0.09 of +0.47 with its witness at about 80%, and its pooled effect averages +1.23 and −0.33 by class).
+  `wf.tau.pipeline.verdicts` and `outcome_reading` are unchanged and still printed. The cross-model label is now the
+  extension's own (`describe` in `wf/tau/families.py`): the row by its mechanical criterion, the witness share and the
+  per-class failing effect and fail minus witness always beside it, "failure-specific" only under the three conditions
+  of section 7.5 (fail minus witness interval above 0; witness less than half the failing effect; no class with fail
+  minus witness below 0), otherwise "a shift shared by working and failing calls"; a class-mix row for class effects of
+  opposite sign. The Llama 3.2 3B prediction is restated in these terms. Tests: the reviewer's scenario end to end
+  (+0.40-like, witness about 80%, fail minus witness above 0, classes of opposite sign: not failure-specific, class mix
+  reported, no pattern sentence calls it failure-specific), the Llama-3.1-8B and Qwen3-8B profiles, and each of the
+  three conditions at its boundary.
+- **R1-S1, minority of items.** A positive mean with an item share whose interval includes or lies below one half is
+  reported as carried by a minority of items (a qualifier beside the verdict, and named in the direction sentence); the
+  median item effect and the share of exact ties are reported.
+- **R1-S2, the Holm family on the run path.** `run_tau_family_analysis` now passes both scored models to
+  `family_verdicts` and `sensitivity_verdicts` whatever the config lists, so a model left out enters with p = 1. Test:
+  the analysis with only Mistral in its config gives Mistral's Holm p as twice its raw p.
+- **R1-S3, "matches".** Stated in section 7.5 before data: very probably unreachable at this sample size; the bar is not
+  lowered.
+- **R1-S4, the witness's yes/no restored** under the aligned and swapped lines (2 passes per item; 16 per item, 13,696
+  per model). New descriptive analyses: fail minus witness anchored on neutral (both readouts), yes/no fail minus
+  witness, per-class witness and fail minus witness, and the yes/no task judgement (share answered No among calls whose
+  first token confidently predicts JSON, per call and line; line intercepts of yes/no on the first token). Cost: about
+  6.1 GPU-hours for Mistral and 2.5 for Llama 3.2 3B; the largest shard is 3,520 passes, about 1.5 h for Mistral at
+  1.5 s a pass, well inside the 3-hour limit. The budget flag in the smoke projection is raised from 6 to 6.5 hours
+  (informational; the shard limit decides). The token check and the golden renders are rerun on ICE (record below).
+- **R1-S5, tests for the reviewer's surviving mutants:** the placement threshold at 0.42 and 0.38 against a native
+  effect of 2.0; no cross-model label without discrimination; the competence bounds at exactly AUC 0.70 and a Yes share
+  of exactly 0.95 (both pass); the two-way mass as a median (a distribution whose mean and median lie on opposite sides
+  of 0.5); the paired comparison bootstrap's interval width against the cluster bootstrap; the item share's interval
+  clustered by user; the Llama-line row refusing "differs, within the margin"; the in-job readout report's witness
+  check. The reviewer's mutants and mutants of the new logic are in `scripts/mutation_check.py` and recorded in
+  `notes/testing.md`.
+- **R1-S6, reporting.** Comparison entries of gated models are marked "not read: <why>"; section 9's status-class
+  sentence is reworded.
+
+What remains as the reviewer noted, unchanged: `wf.analysis.stats.holm` drops a NaN p from its count, which could only
+arise with an empty population, impossible on the real items.

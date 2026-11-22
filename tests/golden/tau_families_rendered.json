@@ -253,6 +253,8 @@
    "witness/first/aligned": "f46b6fecc477dac0514a2b12d848333762eaad414b84a529861a3b6221dc9261",
    "witness/first/swapped": "68962d088f86151548936a0981e280981aa62e9c7b1cdda3759b470d3577cb4a",
    "witness/first/neutral": "e13715f0da6339df9a7c2c044adf04723d7b6afe5266f6caec4782608670f354",
+   "witness/yn/aligned": "4ed8c7bf1a4e7f8c3b1abd4cbd75db6ffafd5865127527f2ae35f43a7d829bcf",
+   "witness/yn/swapped": "a342672988faf6dd8e48592289083e373cf3346c5a801fc8b05c7053d1b801fd",
    "witness/yn/neutral": "c2a9962d6bbcc6d1ccb545bc6c2db84ef5d3e3528519f2e950ec0573ab8c856f"
   },
   "llama3.2-3b": {
@@ -269,6 +271,8 @@
    "witness/first/aligned": "f46b6fecc477dac0514a2b12d848333762eaad414b84a529861a3b6221dc9261",
    "witness/first/swapped": "68962d088f86151548936a0981e280981aa62e9c7b1cdda3759b470d3577cb4a",
    "witness/first/neutral": "e13715f0da6339df9a7c2c044adf04723d7b6afe5266f6caec4782608670f354",
+   "witness/yn/aligned": "4ed8c7bf1a4e7f8c3b1abd4cbd75db6ffafd5865127527f2ae35f43a7d829bcf",
+   "witness/yn/swapped": "a342672988faf6dd8e48592289083e373cf3346c5a801fc8b05c7053d1b801fd",
    "witness/yn/neutral": "c2a9962d6bbcc6d1ccb545bc6c2db84ef5d3e3528519f2e950ec0573ab8c856f"
   },
   "mistral-7b-v0.3-firstturn": {

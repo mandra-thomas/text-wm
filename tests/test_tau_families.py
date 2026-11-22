@@ -142,12 +142,12 @@ def test_the_smoke_limit_equals_the_job_script_limit():
 # ---------------- jobs and prompts ----------------
 
 
-def test_protocol_is_the_designs_fourteen_jobs():
-    assert len(T.PROTOCOL_JOBS) == 14 and len(set(T.PROTOCOL_JOBS)) == 14
+def test_protocol_is_the_designs_sixteen_jobs():
+    assert len(T.PROTOCOL_JOBS) == 16 and len(set(T.PROTOCOL_JOBS)) == 16
     want = ({("fail", "first", c) for c in ("aligned", "swapped", "neutral", "mention_aligned", "mention_swapped")}
             | {("fail", "yn", c) for c in ("aligned", "swapped", "neutral")}
             | {("fail", "target", c) for c in ("aligned", "swapped")}
-            | {("witness", "first", c) for c in ("aligned", "swapped", "neutral")} | {("witness", "yn", "neutral")})
+            | {("witness", r, c) for r in ("first", "yn") for c in ("aligned", "swapped", "neutral")})
     assert {j[1:] for j in T.PROTOCOL_JOBS} == want and {j[0] for j in T.PROTOCOL_JOBS} == {"main"}
     assert T.PLACEMENT_JOBS == (("main", "fail", "first", "aligned"), ("main", "fail", "first", "swapped"))
     assert T.READOUT_WORDS == {"first": ('{"', "Error"), "yn": ("Yes", "No"), "target": ("Yes", "No")}
@@ -200,7 +200,7 @@ def _check(tok=None, **kw):
 def test_token_check_passes_with_template_tokens(runs):
     rec = _check(placement=_primary()[:2])
     assert rec["passed"], rec["examples"]
-    assert rec["n_prompts"] == 3 * 14 and rec["n_replies_checked"] == 12 and rec["n_yes_no_prompts_checked"] == 3 * 6
+    assert rec["n_prompts"] == 3 * 16 and rec["n_replies_checked"] == 12 and rec["n_yes_no_prompts_checked"] == 3 * 8
     assert rec["placement"]["n_prompts"] == 4 and rec["placement"]["n_problems"] == 0
     assert set(rec["prompt_tokens"]) == {"fail/first", "fail/yn", "fail/target", "witness/first", "witness/yn"}
 
@@ -242,7 +242,7 @@ def test_token_check_fails_when_prompts_differ_outside_the_task_line(runs, monke
         return m
     monkeypatch.setattr(T, "build_messages", leaky)
     rec = _check()
-    assert not rec["passed"] and rec["problems"]["only_task_line"] == 3
+    assert not rec["passed"] and rec["problems"]["only_task_line"] == 6  # failing call and witness, 3 items
 
 
 def test_token_check_fails_on_a_boundary_merge(runs):
@@ -257,7 +257,7 @@ def test_token_check_fails_on_a_boundary_merge(runs):
 
 def test_gemma_is_checked_for_lengths_only(runs):
     rec = T.check_model("gemma2-9b-it", TauTok(), _primary()[:2], _fewshot(), length_only=True)
-    assert rec["length_only"] and rec["passed"] is None and rec["n_prompts"] == 28 and "excluded" in rec["excluded"]
+    assert rec["length_only"] and rec["passed"] is None and rec["n_prompts"] == 32 and "excluded" in rec["excluded"]
 
 
 def test_token_check_run_writes_a_passing_report_for_the_scored_models(token_checked):
@@ -387,7 +387,7 @@ def test_scoring_writes_every_job_once_per_model(scored):
     prim = _primary()
     for tag in T.SCORED:
         recs = [r for i in (0, 1) for r in read_jsonl(scored / f"tau_family_score_{tag}" / f"shard_{i:02d}_of_02" / "scoring.jsonl")]
-        assert len(recs) == 14 * len(prim) and {r["model"] for r in recs} == {tag}
+        assert len(recs) == 16 * len(prim) and {r["model"] for r in recs} == {tag}
         keys = [T.score_key(r) for r in recs]
         assert len(set(keys)) == len(keys)
         assert {k[2:] for k in keys} == set(T.PROTOCOL_JOBS)
@@ -491,7 +491,7 @@ def test_smoke_run_and_projection_report_no_estimate(token_checked):
     found = set(keys(m))
     assert not found & {"estimate", "perm_p", "verdicts", "verdict", "aligned_minus_swapped", "comparisons"}
     pr = m["projection"]
-    assert set(pr["models"]) == set(T.SCORED) and pr["time_limit_hours"] == 3 and pr["budget_gpu_hours"] == 6.0
+    assert set(pr["models"]) == set(T.SCORED) and pr["time_limit_hours"] == 3 and pr["budget_gpu_hours"] == 6.5
     assert pr["models"]["mistral-7b-v0.3"]["hours_placement"] > 0 and pr["models"]["llama3.2-3b"]["hours_placement"] == 0
     assert len(pr["models"]["llama3.2-3b"]["hours_per_shard"]) == 4
     assert "ΔL" not in (token_checked / "tau_family_smoke_analysis" / "STATUS.md").read_text()
@@ -503,13 +503,13 @@ def test_projection_arithmetic(runs, monkeypatch):
     report = {"models": {"mistral-7b-v0.3": {"format": {"seconds_mean_by_readout": sec, "seconds_total": 3600.0},
                                              "sd_of_differences": {"first": {"sd": 1.0, "n": 5}}}}}
     pr = T.projection({"time_limit_hours": 3}, report, prim)["models"]["mistral-7b-v0.3"]
-    per_item = (3 * 2 + 3 * 3 + 2 * 2 + 2 * 5 + 3 * 2 + 3) / 3600  # first 8 jobs, yn 4, target 2
+    per_item = (3 * 2 + 3 * 3 + 2 * 2 + 2 * 5 + 3 * 2 + 3 * 3) / 3600  # first 8 jobs, yn 6, target 2
     shards = [P.shard_by_user(prim, i, 4) for i in range(4)]
     assert pr["hours_per_shard"] == pytest.approx([len(s) * per_item for s in shards])
     assert pr["hours_max_shard"] == pytest.approx(max(len(s) for s in shards) * per_item)
     assert pr["hours_placement"] == pytest.approx(len(T.placement_items(prim)) * 2 * 2.0 / 3600)
     assert pr["gpu_hours_total"] == pytest.approx(len(prim) * per_item + pr["hours_placement"] + 1.0)
-    assert pr["within_budget"] == (pr["gpu_hours_total"] <= 6.0)
+    assert pr["within_budget"] == (pr["gpu_hours_total"] <= 6.5)
     report["models"]["mistral-7b-v0.3"]["format"]["seconds_mean_by_readout"] = {"first": 4000.0, "yn": 1.0, "target": 1.0}
     pr = T.projection({"time_limit_hours": 3}, report, prim)
     assert not pr["fits_time_limit"] and not pr["within_budget"]
@@ -628,8 +628,10 @@ def test_tau_gates_and_reading_table_are_applied():
               "llama3.2-3b": _block(1.0, [0.5, 1.5], 0.001)}
     v = T.family_verdicts(blocks)["per_model"]
     assert v["mistral-7b-v0.3"]["reading"].startswith("A general task-consistency bias")
-    assert v["llama3.2-3b"]["reading"].startswith("The task overrides a visible fact")
-    assert T.specificity(v["mistral-7b-v0.3"]) == "task-consistency" and T.specificity(v["llama3.2-3b"]) == "failure-specific"
+    assert v["llama3.2-3b"]["reading"].startswith("The task overrides a visible fact")  # the τ table, unchanged
+    fs, shared = {"failure_specific": True}, {"failure_specific": False}
+    assert T.specificity(v["llama3.2-3b"], fs) == "failure-specific" and T.specificity(v["llama3.2-3b"], shared) == "shared"
+    assert T.specificity(v["llama3.2-3b"], None) is None  # the cross-model label never comes from the τ table's row
 
 
 def test_compare_is_a_minus_b_on_shared_items_with_paired_draws():
@@ -688,28 +690,52 @@ def test_placement_rule_needs_an_interval_off_zero_and_a_fifth_of_the_native_eff
     assert big["native"]["estimate"] == pytest.approx(2.0) and big["first_turn"]["estimate"] == pytest.approx(2.52)
 
 
+def _desc(fs=False, mix=False, minority=False):
+    return {"failure_specific": fs, "class_mix": mix, "minority": minority, "label": "x"}
+
+
 def test_pattern_readings():
-    v = lambda verdict, spec, ci=True: {"verdict": verdict, "discrimination_holds": True, "ci_above_0": ci,
-                                        "outcome_table": {"specificity": spec}}
-    fs, tc = "specific to failing calls (fail minus witness above 0)", "not specific to failing calls (...)"
-    both_tc = T.pattern_readings({"mistral-7b-v0.3": v("replicates (ALFWorld direction)", tc),
-                                  "llama3.2-3b": v("small effect, direction positive", tc)}, {})
-    assert any("not specific to Qwen3-8B and Llama-3.1-8B" in r for r in both_tc["readings"])
-    assert any(r.startswith("The task-consistency pattern is not specific to Qwen3") for r in both_tc["readings"])
-    both_fs = T.pattern_readings({"mistral-7b-v0.3": v("replicates (ALFWorld direction)", fs),
-                                  "llama3.2-3b": v("replicates (ALFWorld direction)", fs)},
-                                 {"llama3.2-3b vs llama3.1-8b-fewshot": {"item_share_difference": {"reading": "matches"}}})
-    assert any(r.startswith("The task-consistency pattern is specific to Qwen3-8B") for r in both_fs["readings"])
-    assert any(r.startswith("Llama 3.2 3B has Llama-3.1-8B's reading row") for r in both_fs["readings"])
-    split = T.pattern_readings({"mistral-7b-v0.3": v("replicates (ALFWorld direction)", fs),
-                                "llama3.2-3b": v("replicates (ALFWorld direction)", tc)}, {})
+    v = lambda verdict, ci=True, disc=True: {"verdict": verdict, "discrimination_holds": disc, "ci_above_0": ci}
+    rep_, small = "replicates (ALFWorld direction)", "small effect, direction positive"
+    shared = T.pattern_readings({"mistral-7b-v0.3": v(rep_), "llama3.2-3b": v(small)}, {},
+                                {"mistral-7b-v0.3": _desc(), "llama3.2-3b": _desc()})
+    assert any(r.startswith("The direction of the τ goal effect is not specific") and "qualified" not in r for r in shared["readings"])
+    assert any(r.startswith("In both scored models the task shifts working and failing calls alike") for r in shared["readings"])
+    both_fs = T.pattern_readings({"mistral-7b-v0.3": v(rep_), "llama3.2-3b": v(rep_)},
+                                 {"llama3.2-3b vs llama3.1-8b-fewshot": {"item_share_difference": {"reading": "matches"}}},
+                                 {"mistral-7b-v0.3": _desc(fs=True), "llama3.2-3b": _desc(fs=True)},
+                                 {"llama3.1-8b-fewshot": {**_desc(), "label": "a shift shared by working and failing calls"}})
+    assert any(r.startswith("Both scored models show a shift specific to failing calls") for r in both_fs["readings"])
+    assert not any("Llama 3.2 3B has Llama-3.1-8B's label" in r for r in both_fs["readings"])  # labels differ
+    split = T.pattern_readings({"mistral-7b-v0.3": v(rep_), "llama3.2-3b": v(rep_)}, {},
+                               {"mistral-7b-v0.3": _desc(fs=True), "llama3.2-3b": _desc()})
     assert any(r.startswith("The pattern varies by model") for r in split["readings"])
-    gated = T.pattern_readings({"mistral-7b-v0.3": v(T.NOT_INTERPRETABLE, tc),
-                                "llama3.2-3b": v("replicates (ALFWorld direction)", tc)}, {})
+    gated = T.pattern_readings({"mistral-7b-v0.3": v(T.NOT_INTERPRETABLE), "llama3.2-3b": v(rep_)}, {},
+                               {"mistral-7b-v0.3": _desc(), "llama3.2-3b": _desc()})
     assert gated["readings"] == [] and gated["left_out"] == {"mistral-7b-v0.3": T.NOT_INTERPRETABLE}
-    nul = T.pattern_readings({"mistral-7b-v0.3": v("no effect larger than 0.5 nats", tc, ci=False),
-                              "llama3.2-3b": v("replicates (ALFWorld direction)", tc)}, {})
-    assert nul["readings"] == [] and nul["reading_rows"]["mistral-7b-v0.3"] is None
+    nul = T.pattern_readings({"mistral-7b-v0.3": v("no effect larger than 0.5 nats", ci=False), "llama3.2-3b": v(rep_)}, {},
+                             {"mistral-7b-v0.3": _desc(), "llama3.2-3b": _desc()})
+    assert nul["readings"] == [] and nul["labels"]["mistral-7b-v0.3"] is None
+
+
+def test_pattern_direction_sentence_is_qualified_for_a_minority_or_a_failed_discrimination():
+    v = lambda disc=True: {"verdict": "small effect, direction positive", "discrimination_holds": disc, "ci_above_0": True}
+    out = T.pattern_readings({"mistral-7b-v0.3": v(), "llama3.2-3b": v(disc=False)}, {},
+                             {"mistral-7b-v0.3": _desc(minority=True), "llama3.2-3b": _desc()})
+    r = next(x for x in out["readings"] if x.startswith("The direction"))
+    assert "mistral-7b-v0.3: carried by a minority of items" in r and "llama3.2-3b: not shown to use the visible record" in r
+    assert out["labels"]["llama3.2-3b"] is None  # no cross-model label without discrimination (reviewer's R3)
+
+
+def test_class_mix_and_llama_line_readings():
+    v = {"verdict": "small effect, direction positive", "discrimination_holds": True, "ci_above_0": True}
+    ref = {"llama3.1-8b-fewshot": _desc()}
+    per = {"mistral-7b-v0.3": v, "llama3.2-3b": v}
+    d = {"mistral-7b-v0.3": _desc(), "llama3.2-3b": _desc(mix=True)}
+    for reading, want in (("matches", True), ("differs, within the margin", False), ("no difference detected", False)):
+        out = T.pattern_readings(per, {"llama3.2-3b vs llama3.1-8b-fewshot": {"item_share_difference": {"reading": reading}}}, d, ref)
+        assert any(r.startswith("Llama 3.2 3B has Llama-3.1-8B's label") for r in out["readings"]) == want, reading
+        assert "llama3.2-3b: the pooled effect depends on the class mix; reported per class" in out["readings"]
 
 
 def test_reference_check_compares_estimate_interval_and_n(tmp_path):
@@ -767,3 +793,261 @@ def test_golden_rendered_prompts_with_the_pinned_tokenizers(tag):
         text = tok.apply_chat_template(T.messages(spec, g["item"], cond, g["fewshot"], readout, action), tokenize=False,
                                        add_generation_prompt=True, **kw)
         assert hashlib.sha256(text.encode()).hexdigest() == want["sha256"] and len(tok(text, add_special_tokens=False).input_ids) == want["tokens"]
+
+
+# ---------------- amendments after review 1 ----------------
+
+
+def _eff(est, lo, hi, n=50):
+    return {"estimate": est, "ci": [lo, hi], "n_items": n}
+
+
+def _blk(fail, wit, fmw, cls=None, share=(0.7, 0.62, 0.78)):
+    """A model block with the fields `describe` reads: effects as (estimate, low, high)."""
+    cls = cls or {"status": ((1.0, 0.8, 1.2), (0.3, 0.1, 0.5)), "unavailable": ((1.0, 0.8, 1.2), (0.3, 0.1, 0.5))}
+    return {"primary": {"first": {"aligned_minus_swapped": _eff(*fail)},
+                        "item_share": {"first": {"estimate": share[0], "ci": [share[1], share[2]], "n_items": 50,
+                                                 "median_item_effect": 0.2}}},
+            "primary_controls": {"witness": {"first": {"aligned_minus_swapped": _eff(*wit)}},
+                                 "fail_minus_witness_effect": {"first": _eff(*fmw)},
+                                 "by_class": {k: {"failing": _eff(*f), "fail_minus_witness": _eff(*d)} for k, (f, d) in cls.items()}}}
+
+
+def test_llama31_like_profile_is_not_failure_specific():
+    """tau_dx's Llama-3.1-8B: +0.47, witness +0.38 (80%), fail minus witness +0.09 [0.04, 0.14], classes +1.23 and -0.33."""
+    d = T.describe(_blk((0.47, 0.40, 0.54), (0.38, 0.31, 0.45), (0.09, 0.04, 0.14),
+                        {"status": ((1.23, 1.10, 1.34), (0.40, 0.25, 0.55)), "unavailable": ((-0.33, -0.39, -0.27), (-0.27, -0.33, -0.20))}))
+    assert d["row"] == "fail minus witness above 0" and not d["failure_specific"]
+    assert d["label"] == "a shift shared by working and failing calls"
+    assert d["witness_share_of_failing_effect"] == pytest.approx(0.38 / 0.47)
+    assert d["classes_with_fail_minus_witness_below_0"] == ["unavailable"] and d["class_mix"]
+    assert d["class_mix_reading"] == "the pooled effect depends on the class mix; reported per class"
+
+
+@pytest.mark.parametrize("wit,cls_unav_fmw,want", [
+    ((0.49, 0.4, 0.6), (0.3, 0.1, 0.5), True),     # all three conditions hold
+    ((0.50, 0.4, 0.6), (0.3, 0.1, 0.5), False),    # the witness moves exactly half as much: not less than half
+    ((0.30, 0.2, 0.4), (-0.2, -0.3, -0.1), False),  # one class's fail minus witness below 0
+    ((0.30, 0.2, 0.4), (-0.2, -0.4, 0.1), True),   # a negative class estimate whose interval includes 0 does not block
+])
+def test_failure_specific_needs_all_three_conditions(wit, cls_unav_fmw, want):
+    d = T.describe(_blk((1.0, 0.8, 1.2), wit, (0.6, 0.3, 0.9),
+                        {"status": ((1.0, 0.8, 1.2), (0.3, 0.1, 0.5)), "unavailable": ((1.0, 0.8, 1.2), cls_unav_fmw)}))
+    assert d["failure_specific"] is want and (d["label"] == "failure-specific") is want
+
+
+def test_failure_specific_needs_the_pooled_interval_above_zero():
+    d = T.describe(_blk((1.0, 0.8, 1.2), (0.3, 0.2, 0.4), (0.7, -0.1, 1.5)))
+    assert not d["failure_specific"] and d["row"] == "fail minus witness not above 0"
+
+
+def test_qwen_like_profile_says_working_calls_move_more():
+    d = T.describe(_blk((3.98, 3.61, 4.35), (9.45, 8.94, 9.94), (-5.47, -5.87, -5.05)))
+    assert d["label"] == "a shift shared by working and failing calls (working calls move more)"
+    assert d["witness_share_of_failing_effect"] == pytest.approx(9.45 / 3.98) and not d["class_mix"]
+
+
+@pytest.mark.parametrize("share,want", [((0.55, 0.48, 0.62), True), ((0.45, 0.38, 0.52), True), ((0.56, 0.51, 0.61), False)])
+def test_minority_reading_when_the_item_share_interval_is_not_above_one_half(share, want):
+    d = T.describe(_blk((1.0, 0.8, 1.2), (0.3, 0.2, 0.4), (0.7, 0.4, 1.0), share=share))
+    assert d["minority"] is want and (d["minority_reading"] is not None) is want
+
+
+def test_minority_and_class_mix_become_verdict_qualifiers_without_changing_the_verdict():
+    blocks = {m: {**_block(1.0, [0.5, 1.5], 0.001)} for m in T.SCORED}
+    blocks["mistral-7b-v0.3"]["description"] = {"minority": True, "minority_reading": "MIN", "class_mix": True,
+                                                "class_mix_reading": "MIX"}
+    blocks["llama3.2-3b"]["description"] = {"minority": False, "minority_reading": None, "class_mix": False,
+                                            "class_mix_reading": None}
+    v = T.family_verdicts(blocks)["per_model"]
+    assert v["mistral-7b-v0.3"]["verdict"].startswith("replicates") and v["mistral-7b-v0.3"]["qualifiers"] == ["MIN", "MIX"]
+    assert v["llama3.2-3b"]["qualifiers"] == []
+
+
+def _constructed(t, action, readout, cond, scheme):
+    """A score for the reviewer's scenario (review 1, M1): aligned minus swapped by class, failing call and witness."""
+    import hashlib
+    noise = (int(hashlib.sha256(f"{t['id']}|{action}|{readout}|{cond}".encode()).hexdigest()[:6], 16) / 0xFFFFFF - 0.5) * 0.04
+    if readout == "target":
+        return {"aligned": 2.0, "swapped": -2.0}[cond] + noise
+    base = 2.0 if action == "witness" else -2.0  # neutral: witnesses succeed, failing calls fail (competent, discriminating)
+    eff = scheme[(t["cls"] if t["cls"] in ("status", "unavailable") else "other", action)]
+    shift = {"aligned": eff / 2, "swapped": -eff / 2, "neutral": 0.0, "mention_aligned": 0.1, "mention_swapped": 0.0}[cond]
+    return base + shift + noise
+
+
+def test_reviewers_scenario_end_to_end_is_not_called_failure_specific(scored):
+    """Review 1, M1: a Llama 3.2 3B result like +0.40 with the witness at about 80% of it, fail minus witness a little
+    above 0, and class effects of opposite sign. The τ table's reading may print its stronger-form text (the τ rule is
+    unchanged), but the extension's label, class-mix reading and pattern sentences must not call it failure-specific."""
+    scheme = {("status", "fail"): 1.2, ("status", "witness"): 0.9, ("unavailable", "fail"): -0.4,
+              ("unavailable", "witness"): -0.3, ("other", "fail"): 0.4, ("other", "witness"): 0.32}
+    prim = {t["id"]: t for t in _primary()}
+    assert {t["cls"] for t in prim.values()} >= {"status", "unavailable"}
+    d = scored / "tau_family_score_llama3.2-3b"
+    saved = {p: (p / "scoring.jsonl").read_text() for p in d.glob("shard_*")}
+    try:
+        for p in saved:
+            recs = read_jsonl(p / "scoring.jsonl")
+            for r in recs:
+                L = _constructed(prim[r["transition_id"]], r["action"], r["readout"], r["condition"], scheme)
+                r.update({"L": L, **{k: v for k, v in _rec(L).items() if k != "L"}})
+            (p / "scoring.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+        T.run_tau_family_analysis(_analysis_cfg(scored, run_id="tf_ana_scenario"))
+        m = json.loads((scored / "tf_ana_scenario" / "metrics.json").read_text())
+    finally:
+        for p, text in saved.items():
+            (p / "scoring.jsonl").write_text(text)
+    dsc = m["models"]["llama3.2-3b"]["description"]
+    assert dsc["row"] == "fail minus witness above 0" and not dsc["failure_specific"]
+    assert dsc["label"].startswith("a shift shared by working and failing calls")
+    assert dsc["class_mix"] and dsc["classes_with_fail_minus_witness_below_0"] == ["unavailable"]
+    assert 0.5 < dsc["witness_share_of_failing_effect"] < 1.0
+    assert m["models"]["llama3.2-3b"]["competence"]["first"]["interpretable"]
+    v = m["verdicts"]["per_model"]["llama3.2-3b"]
+    assert "the pooled effect depends on the class mix; reported per class" in v["qualifiers"]
+    assert m["patterns"]["labels"].get("llama3.2-3b") in (None, "shared")
+    text = " ".join(m["patterns"]["readings"])
+    assert "specific to failing calls by the pre-stated rule, which" not in text
+    assert "task-consistency pattern is specific to Qwen3-8B" not in text
+    assert "llama3.2-3b: the pooled effect depends on the class mix; reported per class" in m["patterns"]["readings"]
+
+
+def test_holm_family_is_both_scored_models_on_the_run_path(scored):
+    """Review 1, S2: with one model in the analysis config, the other enters the Holm family with p = 1."""
+    assert T.run_tau_family_analysis(_analysis_cfg(scored, run_id="tf_ana_one", models=["mistral-7b-v0.3"])) == 0
+    m = json.loads((scored / "tf_ana_one" / "metrics.json").read_text())
+    v = m["verdicts"]
+    assert v["family"] == list(T.SCORED) and v["per_model"]["llama3.2-3b"]["verdict"] == "not scored"
+    p = m["models"]["mistral-7b-v0.3"]["primary"]["first"]["aligned_minus_swapped"]["perm_p"]
+    assert v["per_model"]["mistral-7b-v0.3"]["holm_p"] == pytest.approx(min(1.0, 2 * p))
+    assert set(m["sensitivity_without_fewshot_tool_classes"]) == {"mistral-7b-v0.3"}
+
+
+def test_comparisons_of_gated_models_are_marked_not_read():
+    cmp = lambda: {"item_share_difference": {"reading": "differs"}, "delta_L_difference_nats": {"reading": "differs"}}
+    report = {"verdicts": {"per_model": {"mistral-7b-v0.3": {"verdict": T.NOT_INTERPRETABLE},
+                                         "llama3.2-3b": {"verdict": "replicates (ALFWorld direction)"}}},
+              "models": {"llama3.2-3b": {"competence": {"first": {"interpretable": True}, "yn": {"interpretable": False}}}},
+              "reference": {"qwen3-8b-fewshot": {"competence": {"first": {"interpretable": True}, "yn": {"interpretable": True}}}},
+              "comparisons": {"mistral-7b-v0.3 vs qwen3-8b-fewshot": {"first": cmp(), "yn": cmp()},
+                              "llama3.2-3b vs qwen3-8b-fewshot": {"first": cmp(), "yn": cmp()}}}
+    T.mark_comparisons(report)
+    c = report["comparisons"]
+    for r in ("first", "yn"):
+        assert c["mistral-7b-v0.3 vs qwen3-8b-fewshot"][r]["read"] is False
+        assert c["mistral-7b-v0.3 vs qwen3-8b-fewshot"][r]["item_share_difference"]["reading"].startswith("not read: mistral-7b-v0.3")
+        assert c["mistral-7b-v0.3 vs qwen3-8b-fewshot"][r]["delta_L_difference_nats"]["reading_unread"] == "differs"
+    assert c["llama3.2-3b vs qwen3-8b-fewshot"]["first"]["read"] is True
+    assert c["llama3.2-3b vs qwen3-8b-fewshot"]["first"]["item_share_difference"]["reading"] == "differs"
+    assert c["llama3.2-3b vs qwen3-8b-fewshot"]["yn"]["read"] is False
+    assert "competence rule on the yn readout" in c["llama3.2-3b vs qwen3-8b-fewshot"]["yn"]["not_read_because"][0]
+
+
+def test_neutral_anchored_fail_minus_witness_and_class_controls():
+    items = [{**t, "cls": "status" if int(t["id"][1:]) % 2 else "unavailable"} for t in _items(40, users=10)]
+    shift = {("fail", "aligned"): 1.0, ("fail", "swapped"): -0.5, ("witness", "aligned"): 0.4, ("witness", "swapped"): -1.5}
+    by = _by(items, lambda k, a, r, c: shift.get((a, c), 0.0) + (0.3 if a == "fail" and k % 2 else 0.0) * (c == "aligned"))
+    ctl = T.controls_block(by, items)
+    an = ctl["fail_minus_witness_vs_neutral"]["first"]
+    assert an["aligned_minus_neutral"]["estimate"] == pytest.approx(0.6 + 0.15)
+    assert an["swapped_minus_neutral"]["estimate"] == pytest.approx(1.0)
+    assert ctl["witness"]["yn"]["aligned_minus_swapped"]["estimate"] == pytest.approx(1.9)
+    assert ctl["fail_minus_witness_effect"]["yn"]["estimate"] == pytest.approx(1.5 - 1.9 + 0.15)
+    assert ctl["by_class"]["status"]["fail_minus_witness"]["estimate"] == pytest.approx(1.5 + 0.3 - 1.9)
+    assert ctl["by_class"]["unavailable"]["failing"]["estimate"] == pytest.approx(1.5)
+    assert ctl["by_class"]["unavailable"]["witness"]["estimate"] == pytest.approx(1.9)
+
+
+def test_task_judgement_share_no_and_line_intercepts():
+    items = _items(60, users=20)
+    icpt = {"aligned": 1.0, "neutral": 0.0, "swapped": -2.0}
+
+    def f(k, action, readout, cond):
+        x = 4.0 + (k % 5)  # first token: confidently JSON for every call
+        if readout == "first":
+            return x
+        if readout == "yn":
+            return 0.5 * x + icpt.get(cond, 0.0) - (5.0 if cond == "swapped" and k % 10 else 0.0) * (action == "fail")
+        return 0.0
+    tj = T.task_judgement(_by(items, f), items)
+    assert tj["confident_json_threshold"] == 3.0
+    w = tj["witness"]
+    assert w["fit"]["slope"] == pytest.approx(0.5)
+    assert w["intercept_differences"]["aligned_minus_neutral"]["estimate"] == pytest.approx(1.0)
+    assert w["intercept_differences"]["swapped_minus_neutral"]["estimate"] == pytest.approx(-2.0)
+    assert w["share_no_when_first_token_confident_json"]["aligned"] == {"n_confident_json": 60, "share_no": 0.0}
+    sw = tj["fail"]["share_no_when_first_token_confident_json"]["swapped"]
+    assert sw["n_confident_json"] == 60 and sw["share_no"] == pytest.approx(54 / 60)
+    below = _by(items, lambda k, a, r, c: 2.9 if r == "first" else -1.0)
+    assert T.task_judgement(below, items)["fail"]["share_no_when_first_token_confident_json"]["neutral"]["n_confident_json"] == 0
+
+
+# ---------------- review 1, S5: the reviewer's surviving mutants ----------------
+
+
+@pytest.mark.parametrize("shift,want", [(0.42, True), (0.38, False)])
+def test_placement_threshold_is_one_fifth_of_the_native_effect(shift, want):
+    items = _items(40, users=20)
+    native = _by(items, lambda k, x, r, c: {"aligned": 2.0, "swapped": 0.0}.get(c, 0.0))
+    first = {k: _rec(v["L"] + (shift + 0.001 * (int(k[0][1:]) % 3) if k[4] == "aligned" else 0.0)) for k, v in native.items()}
+    out = T.placement_block(native, first, items)
+    assert out["first_turn_minus_native"]["ci"][0] > 0 and out["format_dependent"] is want
+
+
+def test_competence_boundaries_are_inclusive():
+    items = _items(10)
+    by = _by(items, lambda k, a, r, c: 0.5 if a == "witness" else (-1.0 if k < 7 else 1.0))  # AUC exactly 0.70
+    c = T.competence(by, items, "first")
+    assert c["checks"]["auc_neutral"]["value"] == 0.7 and c["checks"]["auc_neutral"]["pass"]
+    items = _items(20)
+    by = _by(items, lambda k, a, r, c: 5.0 if a == "witness" else (1.0 if k < 19 else -1.0))  # Yes on exactly 95% of failures
+    c = T.competence(by, items, "first")
+    assert c["checks"]["yes_share_neutral_failures"]["value"] == 0.95 and c["checks"]["yes_share_neutral_failures"]["pass"]
+
+
+def test_competence_mass_is_a_median_not_a_mean():
+    items = _items(20)
+    by = _by(items, lambda k, a, r, c: 2.0 if a == "witness" else -2.0)
+    for (iid, _, action, readout, cond), v in by.items():
+        k = int(iid[1:])
+        low = (action == "fail" and k < 16)  # 16 of the 40 neutral records carry almost no two-way mass
+        v["logp_plus"], v["logp_minus"] = (math.log(0.005), math.log(0.005)) if low else (math.log(0.3), math.log(0.3))
+    c = T.competence(by, items, "first")
+    assert c["checks"]["median_two_way_mass_neutral"]["value"] == pytest.approx(0.6) and c["checks"]["median_two_way_mass_neutral"]["pass"]
+
+
+def test_paired_draws_resample_every_user_like_the_cluster_bootstrap():
+    from wf.analysis.stats import cluster_bootstrap
+    import random
+    rng = random.Random(1)
+    rows, users = [], []
+    for u in range(40):
+        level = rng.gauss(0, 1)
+        for _ in range(5):
+            rows.append((level + rng.gauss(0, 0.3), 0.0, 0.0, 0.0))
+            users.append(f"u{u}")
+    draws = T._paired_draws(rows, users, lambda v: T._mean([r[0] for r in v]))
+    width = T._pct(draws, 0.975) - T._pct(draws, 0.025)
+    ref = cluster_bootstrap(lambda v: T._mean([r[0] for r in v]), rows, users, seed=C.RNG_SEED)
+    assert 0.8 < width / (ref["ci_high"] - ref["ci_low"]) < 1.25
+
+
+def test_item_share_interval_is_clustered_by_user():
+    from wf.analysis.stats import cluster_bootstrap
+    items = _items(100, users=20)  # user u holds items u, u+20, ..., u+80
+    by = _by(items, lambda k, a, r, c: {"aligned": 1.0 if (k % 20) % 2 == 0 else -1.0, "swapped": 0.0}.get(c, 0.0))
+    s = T.item_share(by, items, "first")
+    flat = cluster_bootstrap(T._mean, [1.0 if (k % 20) % 2 == 0 else 0.0 for k in range(100)], [f"i{k}" for k in range(100)], seed=C.RNG_SEED)
+    assert (s["ci"][1] - s["ci"][0]) > 1.5 * (flat["ci_high"] - flat["ci_low"])
+    assert s["estimate"] == 0.5 and s["tie_share"] == 0.0 and s["median_item_effect"] == 0.0
+
+
+def test_in_job_readout_report_checks_the_witness_reply(runs):
+    t, few = _primary()[0], _fewshot()
+    spec = T.spec_for("mistral-7b-v0.3")
+    marker = render_call(t["aligned_witness"]["name"], t["aligned_witness"]["arguments"])
+    s = T._scorer_for(spec, TauTok(odd_reply_after=((marker, '{"'),)))
+    s.mock = False
+    rep = T.readout_report(s, spec, t, few)
+    assert not rep["ok"] and rep["reply_starts"]["twin"] == rep["alone"]['{"'] and rep["reply_starts"]["witness"] != rep["alone"]['{"']

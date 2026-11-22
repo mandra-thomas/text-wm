@@ -51,20 +51,22 @@ PLACEMENT_MODEL = "mistral-7b-v0.3"
 PLACEMENT_ITEMS = 300
 PLACEMENT_SALT = f"{C.RNG_SEED}|tau_family_placement"
 FIRST_TURN = F.FIRST_TURN  # tag suffix of the placement check's scores
-BUDGET_GPU_HOURS = 6.0  # design §4.4: the aim per model
+BUDGET_GPU_HOURS = 6.5  # design §4.4 and amendment R1-S4: the aim was about 6; restoring the witness's yes/no puts
+# Mistral at about 6.1, so the projection flags a total above 6.5 (informational; the shard limit decides)
 NOT_INTERPRETABLE = "not interpretable (fails the families competence rule on the first-token readout)"
 
 READOUT_WORDS = {"first": (P.FIRST_PLUS, P.FIRST_MINUS), "yn": ("Yes", "No"), "target": ("Yes", "No")}
 CUE = {"first": None, "yn": "yn", "target": "target"}
 
-# Design §4.1: per primary item, 14 single-token passes: (arm, action, readout, condition)
+# Design §4.1, as amended after review 1 (R1-S4: the witness's yes/no under all three task lines): per primary item,
+# 16 single-token passes: (arm, action, readout, condition)
 PROTOCOL_JOBS: tuple[tuple[str, str, str, str], ...] = (
     *[("main", "fail", "first", c) for c in CONDITIONS],
     *[("main", "fail", "yn", c) for c in CONDITIONS],
     *[("main", "fail", "first", c) for c in MENTION_CONDITIONS],
     *[("main", "fail", "target", c) for c in ("aligned", "swapped")],
     *[("main", "witness", "first", c) for c in CONDITIONS],
-    ("main", "witness", "yn", "neutral"),
+    *[("main", "witness", "yn", c) for c in CONDITIONS],
 )
 PLACEMENT_JOBS: tuple[tuple[str, str, str, str], ...] = (("main", "fail", "first", "aligned"),
                                                           ("main", "fail", "first", "swapped"))
@@ -100,7 +102,7 @@ def jobs_for(t: dict) -> list[tuple[str, str, str, str]]:
     scored with fewer jobs."""
     missing = [k for k in REQUIRED_FIELDS if not t.get(k)]
     if missing:
-        raise ValueError(f"{t['id']}: missing {missing}; every primary item needs all 14 jobs")
+        raise ValueError(f"{t['id']}: missing {missing}; every primary item needs all 16 jobs")
     return list(PROTOCOL_JOBS)
 
 
@@ -472,7 +474,7 @@ def _mean(xs: list[float]) -> float:
 def item_share(by: dict, items: list[dict], readout: str) -> dict[str, Any]:
     """The share of items whose L is higher under the aligned than under the swapped task (ties: not moved); null one
     half; user-clustered CI and the user-level sign-flip p of the per-item signs (descriptive)."""
-    rows, users, signs = [], [], []
+    rows, users, signs, diffs = [], [], [], []
     for t in items:
         a, s = by.get((t["id"], "main", "fail", readout, "aligned")), by.get((t["id"], "main", "fail", readout, "swapped"))
         if a is None or s is None:
@@ -480,10 +482,14 @@ def item_share(by: dict, items: list[dict], readout: str) -> dict[str, Any]:
         d = a["L"] - s["L"]
         rows.append(1.0 if d > 0 else 0.0)
         signs.append((d > 0) - (d < 0))
+        diffs.append(d)
         users.append(t["user_id"])
     boot = cluster_bootstrap(_mean, rows, users, seed=C.RNG_SEED)
     return {"estimate": _mean(rows), "ci": [boot["ci_low"], boot["ci_high"]], "null": 0.5, "n_items": len(rows),
-            "perm_p": pair_permutation(signs, seed=C.RNG_SEED, cluster_ids=users) if signs else float("nan")}
+            "perm_p": pair_permutation(signs, seed=C.RNG_SEED, cluster_ids=users) if signs else float("nan"),
+            # amendment R1-S1: the median item effect beside the mean, and the share of exact ties (not moved)
+            "median_item_effect": statistics.median(diffs) if diffs else float("nan"),
+            "tie_share": _mean([1.0 if d == 0 else 0.0 for d in diffs])}
 
 
 def _auc(pos: list[float], neg: list[float]) -> float:
@@ -538,7 +544,7 @@ def population_block(by: dict, pop: list[dict]) -> dict[str, Any]:
 
 def controls_block(by: dict, pop: list[dict]) -> dict[str, Any]:
     """The controls the reading table needs, on the readouts this protocol scores (design §4.1)."""
-    out: dict[str, Any] = {"witness": {"first": P.effects(by, pop, "first", action="witness")}}
+    out: dict[str, Any] = {"witness": {r: P.effects(by, pop, r, action="witness") for r in ("first", "yn")}}
     determined = [t for t in pop if t.get("witness_checker") == "PASS"]
     out["discrimination"] = {r: P.discrimination(by, determined, r) for r in ("first", "yn")}
     out["discrimination_all_witnesses"] = {"first": P.discrimination(by, pop, "first")}
@@ -558,8 +564,22 @@ def controls_block(by: dict, pop: list[dict]) -> dict[str, Any]:
                                 "mention_aligned_minus_neutral": P.paired(by, pop, "first", "mention_aligned", "neutral"),
                                 "aligned_minus_mention_aligned": P.paired(by, pop, "first", "aligned", "mention_aligned")}}
     out["manipulation"] = P.paired(by, pop, "target", "aligned", "swapped")
-    out["fail_minus_witness_effect"] = {"first": P.contrast_of_effects(by, pop, "first", ("fail", "aligned", "swapped"),
-                                                                       ("witness", "aligned", "swapped"))}
+    out["fail_minus_witness_effect"] = {r: P.contrast_of_effects(by, pop, r, ("fail", "aligned", "swapped"),
+                                                                 ("witness", "aligned", "swapped")) for r in ("first", "yn")}
+    # amendment R1-S4 (descriptive): fail minus witness anchored on the neutral line, which separates a lift under the
+    # named order from a penalty under the other order (an authorization belief lowers swapped below neutral for both)
+    out["fail_minus_witness_vs_neutral"] = {
+        r: {f"{c}_minus_neutral": P.contrast_of_effects(by, pop, r, ("fail", c, "neutral"), ("witness", c, "neutral"))
+            for c in ("aligned", "swapped")} for r in ("first", "yn")}
+    # amendment R1-M1: per pre-specified class, the failing call's and the witness's effect and fail minus witness
+    out["by_class"] = {}
+    for k, v in sorted(P._group(pop, lambda t: t["cls"]).items()):
+        if k in P.PRESPECIFIED_CLASSES:
+            out["by_class"][k] = {
+                "failing": P.paired(by, v, "first", "aligned", "swapped"),
+                "witness": P.paired(by, v, "first", "aligned", "swapped", action="witness"),
+                "fail_minus_witness": P.contrast_of_effects(by, v, "first", ("fail", "aligned", "swapped"),
+                                                            ("witness", "aligned", "swapped"))}
     out["write_minus_mention_effect"] = {"first": P.contrast_of_effects(by, pop, "first", ("fail", "aligned", "swapped"),
                                                                         ("fail", "mention_aligned", "mention_swapped"))}
     return out
@@ -574,10 +594,106 @@ def format_block(by: dict) -> dict[str, Any]:
 
 def model_block(by: dict, items: list[dict]) -> dict[str, Any]:
     ctl = controls_block(by, items)
-    return {"primary": population_block(by, items), "primary_controls": ctl,
-            "competence": {"first": competence(by, items, "first"), "yn": competence(by, items, "yn"),
-                           "first_all_items": competence(by, items, "first", population="all")},
-            "checks": P.checks_of(ctl), "format": format_block(by)}
+    out = {"primary": population_block(by, items), "primary_controls": ctl,
+           "competence": {"first": competence(by, items, "first"), "yn": competence(by, items, "yn"),
+                          "first_all_items": competence(by, items, "first", population="all")},
+           "checks": P.checks_of(ctl), "task_judgement_yes_no": task_judgement(by, items), "format": format_block(by)}
+    out["description"] = describe(out)
+    return out
+
+
+CONFIDENT_JSON = 3.0  # notes/tau_dx.md: a first-token score of at least +3 "confidently predicts a JSON success"
+
+
+def _intercepts(rows: list[tuple]) -> dict[str, float]:
+    """Yes/no log-odds regressed on the first-token log-odds with one slope and an intercept per task line; rows are
+    (line, first-token L, yes/no L)."""
+    by: dict[str, list] = defaultdict(list)
+    for c, x, y in rows:
+        by[c].append((x, y))
+    num = den = 0.0
+    for v in by.values():
+        mx, my = _mean([x for x, _ in v]), _mean([y for _, y in v])
+        num += sum((x - mx) * (y - my) for x, y in v)
+        den += sum((x - mx) ** 2 for x, _ in v)
+    b = num / den if den > 0 else float("nan")
+    a = {c: _mean([y for _, y in v]) - b * _mean([x for x, _ in v]) for c, v in by.items()}
+    return {"slope": b, **{f"intercept_{c}": a[c] for c in a}}
+
+
+def task_judgement(by: dict, items: list[dict]) -> dict[str, Any]:
+    """Amendment R1-S4 (descriptive): does the yes/no answer carry a task judgement beyond the predicted output
+    (notes/tau_dx.md, section 5)? Per call (failing, witness) and task line: among calls whose first token confidently
+    predicts JSON (L1 >= +3), the share answered No on yes/no; and yes/no regressed on the first token with a common
+    slope and one intercept per line, with user-clustered intervals for the intercept differences."""
+    out: dict[str, Any] = {"confident_json_threshold": CONFIDENT_JSON}
+    for action in ("fail", "witness"):
+        share, rows, users = {}, [], []
+        for c in CONDITIONS:
+            sel = []
+            for t in items:
+                f, y = by.get((t["id"], "main", action, "first", c)), by.get((t["id"], "main", action, "yn", c))
+                if f is None or y is None:
+                    continue
+                rows.append((c, f["L"], y["L"]))
+                users.append(t["user_id"])
+                if f["L"] >= CONFIDENT_JSON:
+                    sel.append(1.0 if y["L"] < 0 else 0.0)
+            share[c] = {"n_confident_json": len(sel), "share_no": _mean(sel)}
+        fit = _intercepts(rows)
+        diffs = {}
+        for a, b in (("aligned", "neutral"), ("swapped", "neutral"), ("aligned", "swapped")):
+            stat = lambda v, a=a, b=b: (lambda r: r.get(f"intercept_{a}", float("nan")) - r.get(f"intercept_{b}", float("nan")))(_intercepts(v))
+            boot = cluster_bootstrap(stat, rows, users, seed=C.RNG_SEED)
+            diffs[f"{a}_minus_{b}"] = {"estimate": boot["estimate"], "ci": [boot["ci_low"], boot["ci_high"]]}
+        out[action] = {"share_no_when_first_token_confident_json": share, "fit": fit, "intercept_differences": diffs}
+    return out
+
+
+def _ci_below(block: dict | None) -> bool:
+    return bool(block) and block.get("n_items", 0) > 0 and block["ci"][1] < 0
+
+
+def describe(blk: dict[str, Any]) -> dict[str, Any]:
+    """Amendment R1-M1 and R1-S1: the extension's own description of a model's effect, beside (never instead of) the τ
+    verdict and its outcome-table reading.
+
+    - row: the mechanical criterion of the τ table, "fail minus witness above 0" or "fail minus witness not above 0";
+    - qualifiers always reported: the witness's effect as a share of the failing call's; per class (status,
+      unavailable) the failing call's effect and fail minus witness;
+    - label: "failure-specific" only if fail minus witness has its interval above 0, the witness moves less than half as
+      much as the failing call, and fail minus witness is not below 0 (interval below 0) in either class; otherwise
+      "a shift shared by working and failing calls";
+    - class_mix: the two classes' failing-call effects have intervals on opposite sides of 0: the pooled effect depends on
+      the class mix and is reported per class;
+    - minority: the item share's interval includes or lies below one half: the mean is carried by a minority of items.
+    """
+    ctl = blk["primary_controls"]
+    fail = blk["primary"]["first"]["aligned_minus_swapped"]
+    wit = ctl["witness"]["first"]["aligned_minus_swapped"]
+    fmw = ctl["fail_minus_witness_effect"]["first"]
+    share = wit["estimate"] / fail["estimate"] if fail["estimate"] == fail["estimate"] and fail["estimate"] > 0 else float("nan")
+    classes = {k: {"failing": v["failing"], "fail_minus_witness": v["fail_minus_witness"]} for k, v in ctl.get("by_class", {}).items()}
+    class_fmw_below = [k for k, v in classes.items() if _ci_below(v["fail_minus_witness"])]
+    fs = bool(P._ci_above(fmw) and share == share and share < 0.5 and not class_fmw_below)
+    cls_fail = [v["failing"] for v in classes.values()]
+    class_mix = (len(cls_fail) == 2 and ((P._ci_above(cls_fail[0]) and _ci_below(cls_fail[1]))
+                                         or (_ci_below(cls_fail[0]) and P._ci_above(cls_fail[1]))))
+    item = blk["primary"]["item_share"]["first"]
+    minority = bool(item["n_items"] > 0 and not item["ci"][0] > 0.5)
+    label = "failure-specific" if fs else "a shift shared by working and failing calls"
+    if not fs and _ci_below(fmw):
+        label += " (working calls move more)"
+    return {"row": "fail minus witness above 0" if P._ci_above(fmw) else "fail minus witness not above 0",
+            "label": label, "failure_specific": fs, "witness_share_of_failing_effect": share,
+            "fail_minus_witness": fmw, "witness_effect": wit, "failing_effect": fail, "by_class": classes,
+            "classes_with_fail_minus_witness_below_0": class_fmw_below,
+            "class_mix": class_mix,
+            "class_mix_reading": "the pooled effect depends on the class mix; reported per class" if class_mix else None,
+            "minority": minority, "item_share_first": item["estimate"], "item_share_first_ci": item["ci"],
+            "median_item_effect": item.get("median_item_effect"),
+            "minority_reading": ("the mean is carried by a minority of items (item share's interval not above one half); "
+                                 "reported as such, not as a general shift") if minority else None}
 
 
 def family_verdicts(blocks: dict[str, dict], models: tuple[str, ...] = SCORED) -> dict[str, Any]:
@@ -599,6 +715,17 @@ def family_verdicts(blocks: dict[str, dict], models: tuple[str, ...] = SCORED) -
             per[m]["verdict"] = NOT_INTERPRETABLE
             per[m]["reading"] = ("Not interpretable: on these prompts the model is not shown to tell working calls from "
                                  "failing ones, or answers one way to everything; no statement about goal sensitivity")
+    for m in models:  # amendment R1-S1 and R1-M1: qualifiers beside the verdict (the verdict itself is unchanged)
+        if m in blocks and "description" in blocks[m]:
+            dsc = blocks[m]["description"]
+            q = []
+            if per[m]["verdict"].startswith(P.POSITIVE) and dsc["minority"]:
+                q.append(dsc["minority_reading"])
+            if dsc["class_mix"]:
+                q.append(dsc["class_mix_reading"])
+            if per[m]["verdict"].startswith(P.POSITIVE) and not per[m].get("discrimination_holds"):
+                q.append("the model is not shown to use the visible record (discrimination fails)")
+            per[m]["qualifiers"] = q
     return {"per_model": per, "family": list(models), "alpha_holm": P.P_MAX,
             "correction": "Holm over the scored models at a fixed size (a missing model enters with p = 1)"}
 
@@ -607,15 +734,13 @@ def interpretable_for_comparison(verdict: str) -> bool:
     return not verdict.startswith(("not interpretable", "inconclusive", "not scored", "not computable"))
 
 
-def specificity(entry: dict) -> str | None:
-    """The reading-table row of a positive, interpretable verdict: 'failure-specific' (fail minus witness above 0) or
-    'task-consistency' (not above 0); None otherwise."""
-    if not entry["verdict"].startswith(P.POSITIVE):
+def specificity(entry: dict, description: dict | None) -> str | None:
+    """Amendment R1-M1: the cross-model label of a positive, interpretable verdict with discrimination holding: the
+    extension's `describe` label ("failure-specific" only under the three pre-stated conditions, otherwise "a shift
+    shared by working and failing calls"), never the τ outcome table's row; None otherwise."""
+    if not entry["verdict"].startswith(P.POSITIVE) or not entry.get("discrimination_holds") or not description:
         return None
-    spec = entry.get("outcome_table", {}).get("specificity", "")
-    if not entry.get("discrimination_holds"):
-        return None
-    return "failure-specific" if spec.startswith("specific") else "task-consistency"
+    return "failure-specific" if description["failure_specific"] else "shared"
 
 
 def _paired_draws(rows: list[tuple], users: list[str], stat, B: int = C.BOOTSTRAP_RESAMPLES) -> list:
@@ -681,31 +806,51 @@ def placement_block(by_native: dict, by_first: dict, items: list[dict]) -> dict[
                         if dependent else "placement is not shown to move Mistral's effect on this sample")}
 
 
-def pattern_readings(per: dict[str, dict], comparisons: dict[str, dict]) -> dict[str, Any]:
-    """The descriptive readings of design §7.5 that the results meet."""
+def pattern_readings(per: dict[str, dict], comparisons: dict[str, dict], descriptions: dict[str, dict] | None = None,
+                     reference: dict[str, dict] | None = None) -> dict[str, Any]:
+    """The descriptive readings of design §7.5, as amended after review 1 (R1-M1, R1-S1): labels by the pre-stated
+    rule of `describe`, never by the τ outcome table's row; the class-mix and minority qualifiers; the reference models
+    described by the same rule."""
+    descriptions = descriptions or {}
     scored = {m: per[m] for m in SCORED if m in per}
     readable = {m: x for m, x in scored.items() if interpretable_for_comparison(x["verdict"])}
-    rows = {m: specificity(x) for m, x in readable.items()}
+    rows = {m: specificity(x, descriptions.get(m)) for m, x in readable.items()}
     out: dict[str, Any] = {"left_out": {m: x["verdict"] for m, x in scored.items() if m not in readable},
-                           "reading_rows": rows, "readings": []}
+                           "labels": rows, "readings": [],
+                           "reference_labels": {m: (d["label"] if d else None) for m, d in (reference or {}).items()}}
     if len(readable) == len(SCORED) and all(x.get("ci_above_0") for x in readable.values()):
+        caveats = []
+        for m in SCORED:
+            d = descriptions.get(m) or {}
+            if d.get("minority"):
+                caveats.append(f"{m}: carried by a minority of items")
+            if not readable[m].get("discrimination_holds"):
+                caveats.append(f"{m}: not shown to use the visible record")
         out["readings"].append("The direction of the τ goal effect is not specific to Qwen3-8B and Llama-3.1-8B: it "
-                               "appears in every interpretable model tested on τ-bench")
+                               "appears in every interpretable model tested on τ-bench"
+                               + (f" (qualified: {'; '.join(caveats)})" if caveats else ""))
     vals = [rows.get(m) for m in SCORED]
     if len(readable) == len(SCORED) and None not in vals:
-        if set(vals) == {"task-consistency"}:
-            out["readings"].append("The task-consistency pattern is not specific to Qwen3; the failure-specific pattern "
-                                   "is the exception among the models tested")
+        if set(vals) == {"shared"}:
+            out["readings"].append("In both scored models the task shifts working and failing calls alike (or working "
+                                   "calls more), as in both reference models (notes/tau_dx.md); no model tested shows a "
+                                   "shift specific to failing calls by the pre-stated rule")
         elif set(vals) == {"failure-specific"}:
-            out["readings"].append("The task-consistency pattern is specific to Qwen3-8B among the models tested")
+            out["readings"].append("Both scored models show a shift specific to failing calls by the pre-stated rule, "
+                                   "which neither reference model meets")
         else:
             out["readings"].append("The pattern varies by model; with one model per developer outside Meta, no family "
                                    "or developer explanation is drawn")
+    for m in SCORED:
+        d = descriptions.get(m) or {}
+        if d.get("class_mix"):
+            out["readings"].append(f"{m}: the pooled effect depends on the class mix; reported per class")
     c = comparisons.get("llama3.2-3b vs llama3.1-8b-fewshot", {})
-    if (rows.get("llama3.2-3b") and rows.get("llama3.2-3b") == "failure-specific"
+    ref = (reference or {}).get("llama3.1-8b-fewshot")
+    if (rows.get("llama3.2-3b") and ref and rows["llama3.2-3b"] == ("failure-specific" if ref["failure_specific"] else "shared")
             and c.get("item_share_difference", {}).get("reading") == "matches"):
-        out["readings"].append("Llama 3.2 3B has Llama-3.1-8B's reading row and their item shares match: descriptive "
-                               "similarity within the Llama line; no cause is named")
+        out["readings"].append("Llama 3.2 3B has Llama-3.1-8B's label by the pre-stated rule and their item shares "
+                               "match: descriptive similarity within the Llama line; no cause is named")
     return out
 
 
@@ -782,6 +927,34 @@ def projection(cfg: dict, report: dict, items_all: list[dict]) -> dict[str, Any]
     return out
 
 
+def comparison_gate(report: dict, model: str, readout: str) -> str | None:
+    """Why a model's comparisons on a readout are not read (amendment R1-S6), or None: a scored model whose verdict is
+    not interpretable or gated to inconclusive, or any model failing the competence rule on that readout."""
+    v = report.get("verdicts", {}).get("per_model", {}).get(model)
+    if v is not None and not interpretable_for_comparison(v["verdict"]):
+        return f"{model}: {v['verdict']}"
+    blk = report.get("models", {}).get(model) or report.get("reference", {}).get(model)
+    comp = (blk or {}).get("competence", {}).get(readout)
+    if comp is not None and not comp["interpretable"]:
+        return f"{model}: fails the competence rule on the {readout} readout"
+    return None
+
+
+def mark_comparisons(report: dict) -> None:
+    """Every comparison entry says whether it is read; an entry with a gated model has its readings replaced by
+    'not read: <why>' (the computed reading kept under reading_unread), so no unmarked 'differs' or 'matches' remains."""
+    for key, by_readout in report.get("comparisons", {}).items():
+        a, b = key.split(" vs ")
+        for readout, cmp in by_readout.items():
+            why = [w for w in (comparison_gate(report, a, readout), comparison_gate(report, b, readout)) if w]
+            cmp["read"] = not why
+            cmp["not_read_because"] = why
+            if why:
+                for part in ("item_share_difference", "delta_L_difference_nats"):
+                    cmp[part]["reading_unread"] = cmp[part]["reading"]
+                    cmp[part]["reading"] = "not read: " + "; ".join(why)
+
+
 def run_tau_family_analysis(cfg: dict) -> int:
     """tau_family_analysis, and tau_family_smoke_analysis (with `project_to`: format, timing and precision only)."""
     from wf.rq2 import complete_shards
@@ -846,11 +1019,12 @@ def run_tau_family_analysis(cfg: dict) -> int:
     report["reference"] = {m: model_block(b, every) for m, b in ref_by.items()}
     pub = cfg.get("published_metrics")
     report["reference_check"] = reference_check(report["reference"], (REPO_ROOT / pub) if pub else None)
-    report["verdicts"] = family_verdicts(report["models"], tuple(m for m in SCORED if m in cfg["models"]))
+    # amendment R1-S2: the family is always both scored models; a model absent from this config enters with p = 1
+    report["verdicts"] = family_verdicts(report["models"], SCORED)
     report["sensitivity_without_fewshot_tool_classes"] = P.sensitivity_verdicts(
         {m: report["models"][m]["primary"]["first_without_fewshot_tool_classes"]["aligned_minus_swapped"] for m in report["models"]},
         {m: report["models"][m]["primary"]["first"]["aligned_minus_swapped"] for m in report["models"]},
-        models=tuple(m for m in SCORED if m in cfg["models"]))
+        models=SCORED)
     for m, x in report["verdicts"]["per_model"].items():
         blk = report["models"].get(m)
         x["ci_above_0"] = bool(blk) and P._ci_above(blk["primary"]["first"]["aligned_minus_swapped"])
@@ -861,8 +1035,11 @@ def run_tau_family_analysis(cfg: dict) -> int:
     report["comparisons_note"] = ("descriptive; a model not interpretable or gated to inconclusive is left out of every "
                                   "cross-model reading (design §7.5); the yes/no comparison is read only for models "
                                   "interpretable on the yes/no readout")
+    mark_comparisons(report)
     report["patterns"] = pattern_readings(report["verdicts"]["per_model"],
-                                          {k: v["first"] for k, v in report["comparisons"].items()})
+                                          {k: v["first"] for k, v in report["comparisons"].items()},
+                                          {m: b["description"] for m, b in report["models"].items()},
+                                          {m: b["description"] for m, b in report["reference"].items()})
     place_run = cfg.get("placement_run")
     if place_run and PLACEMENT_MODEL in by_model:
         folders, problems = complete_shards(place_run)

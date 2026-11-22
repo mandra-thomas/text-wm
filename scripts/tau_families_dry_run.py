@@ -77,7 +77,7 @@ def main() -> int:
     for tag in T.SCORED:
         shards = sorted((tmp / f"tau_family_score_{tag}").glob("shard_*"))
         per = [len(read_jsonl(p / "scoring.jsonl")) for p in shards]
-        counts[tag] = {"passes_per_shard": per, "passes": sum(per), "expected": 14 * len(prim)}
+        counts[tag] = {"passes_per_shard": per, "passes": sum(per), "expected": 16 * len(prim)}
     place = read_jsonl(tmp / "tau_family_placement_mistral-7b-v0.3" / "shard_00_of_01" / "scoring.jsonl")
     smoke = read_jsonl(tmp / "tau_family_score_smoke" / "shard_00_of_01" / "scoring.jsonl")
     m = json.loads((tmp / "tau_family_analysis" / "metrics.json").read_text())

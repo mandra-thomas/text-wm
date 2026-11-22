@@ -461,3 +461,16 @@ Three of four verification jobs on one node failed to bind their own ALFWorld se
 ## Scores across GPU types (2026-11-18)
 
 The RQ2 smoke items were scored twice: on an A100 with the bfloat16-rounding scorer, and on an A40 with the float32 scorer. Most per-item differences are larger than rounding can explain, so they come from the GPU type: bfloat16 forward passes differ across hardware. The change in an item's aligned-minus-swapped L had SD 0.55 nats for Qwen3 and 0.17 for Llama. The item-to-item SD of L is 10.1 and 1.9, so the GPU adds under 1% to the variance. The mean change was −0.09 and −0.03 nats, 1.3 and 1.4 standard errors from zero over 65 items, so there is no sign of bias. The aligned and swapped versions of an item are scored in the same job on the same GPU, unless a job was cut off between them and a resume finished the item (2026-11-20 above). The confirmatory scoring jobs may land on different GPU types; each job's log records its GPU. Individual scores reproduce only on the same GPU type.
+
+## τ-bench wave-A families extension: amendments after review 1, before any score (2026-11-22)
+
+The extension's design (`notes/tau_families_design.md`, branch `tau-families`) was written without the exploratory
+τ diagnostics (`notes/tau_dx.md`), which overturn its descriptions of the two reference models: Qwen3-8B's working
+calls move more than twice as much as its failing calls, and Llama-3.1-8B's "specific to failing calls" rests on about a
+fifth of its effect, with class effects of opposite sign. Before any score of the new models, the design now uses its
+own cross-model label ("failure-specific" only if fail minus witness is above 0, the witness moves less than half as
+much, and no class is below 0; otherwise "a shift shared by working and failing calls"), reports class-mix and
+minority-of-items qualifiers, keeps both scored models in the Holm family on every run path, restores the witness's
+yes/no under the aligned and swapped lines (16 passes per item instead of 14; about 6.1 GPU-hours for Mistral), and adds
+tests. The confirmatory per-model rule and the τ outcome table are unchanged. Details: the design note's "Amendments
+after review 1" and `notes/tau_families_review1.md`.
