@@ -25,7 +25,9 @@ from typing import Any
 
 from wf.constants import REVISIONS
 
-ALLOW = ["*.json", "*.safetensors", "*.model", "*.model.v3"]
+# Wave B (2026-11-22): Gemma 4, Ministral 3 and Qwen3.8 keep their chat template only in chat_template.jinja, and
+# Qwen's tokenizer ships merges.txt; without them a downloaded snapshot could not render a prompt.
+ALLOW = ["*.json", "*.safetensors", "*.model", "*.model.v3", "*.jinja", "merges.txt"]
 IGNORE = ["original/*", "consolidated*", "*.pth", "*.bin", "*.gguf", "*.msgpack", "*.h5"]
 GOLDEN = Path(__file__).resolve().parents[2] / "tests" / "golden" / "default_prompt.json"
 

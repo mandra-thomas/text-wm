@@ -476,6 +476,7 @@ MUTANTS = [
     ('families wave B B1 holds when the share is not supported', 'wf/families.py', '        else:  # "not supported" or "not computable"\n            holds = False', '        else:  # "not supported" or "not computable"\n            holds = both'),
     ('families wave B serve2 job reads the hub/ cache', 'pace/family_score_serve2.sbatch', 'export HF_HUB_CACHE="${TRANSFORMERS_CACHE}"\nactivate_serve', 'activate_serve'),
     ('families wave B serve2 job may download while scoring', 'pace/family_score_serve2.sbatch', 'export HF_HUB_OFFLINE=1\n', ''),
+    ('families wave B prefetch skips the chat template', 'wf/tools/prefetch_models.py', '"*.model.v3", "*.jinja", "merges.txt"]', '"*.model.v3", "merges.txt"]'),
     ('families wave B prefetch asks transformers 5 for TRANSFORMERS_CACHE', 'wf/tools/prefetch_models.py', '        if hasattr(hub, "TRANSFORMERS_CACHE"):', '        if True:'),
 ]
 
@@ -539,7 +540,13 @@ def main() -> int:
             path.write_text(source.replace(good, bad), encoding="utf-8")
             # Fast path: the test files that name the mutated module. A mutant that survives them is run
             # against the whole suite before it counts as a survivor; a timeout is never counted as a kill.
-            outcome = _run_tests(python, work, _covering_tests(work, rel), timeout, name)
+            # MUTATION_TESTS_FIRST="tests/test_x.py": run that file first (same tests, another order), so the kill
+            # comes sooner when that file holds the test for the mutated code.
+            first = os.environ.get("MUTATION_TESTS_FIRST")
+            covering = _covering_tests(work, rel)
+            if first:
+                covering = [first] + [t for t in covering if t != first]
+            outcome = _run_tests(python, work, covering, timeout, name)
             if outcome == "survived":
                 outcome = _run_tests(python, work, ["tests"], timeout, name)
             path.write_text(source, encoding="utf-8")

@@ -114,6 +114,8 @@ def test_unexpected_tensor_patterns_allow_exactly_the_unused_checkpoint_tensors(
     assert not gemma.search("model.language_model.layers.30.self_attn.q_proj.weight")
     for tag in ("ministral3-8b-it", "gemma4-31b-it"):
         assert B[tag].unexpected_keys_allowed == ""
+    for tag in ("qwen3.5-9b", "qwen3.5-9b-plain", "qwen3.5-9b-base-plain", "qwen3.8-27b"):
+        assert B[tag].unexpected_keys_allowed == r"^mtp\."  # the 15 multi-token-prediction tensors, nothing else
 
 
 # ---------------- plain format ----------------
@@ -221,11 +223,11 @@ class ChatTok:
     rendered reply lacks, optional forbidden text, and options to break each property."""
 
     def __init__(self, reads_switch=True, marker_when_off=False, suffix="", off="OFF", system_text="",
-                 off_on_yes_no=True):
+                 off_on_yes_no=True, on_text="THINK"):
         self.vocab: dict[str, int] = {"<s>": 0, "<e>": 1, "<u>": 2, "<a>": 3}
         self.all_special_ids, self.added_tokens_decoder = [0, 1, 2, 3], {}
         self.reads_switch, self.marker_when_off, self.suffix, self.off = reads_switch, marker_when_off, suffix, off
-        self.system_text, self.off_on_yes_no = system_text, off_on_yes_no
+        self.system_text, self.off_on_yes_no, self.on_text = system_text, off_on_yes_no, on_text
 
     def _id(self, w):
         return self.vocab.setdefault(w, len(self.vocab))
@@ -243,7 +245,7 @@ class ChatTok:
                         else f"<u> {m['content']} <e>" for k, m in enumerate(turns))
         text = "<s> " + ("MARKER " if self.marker_when_off else "") + self.system_text + body
         if add_generation_prompt:
-            text += " <a> " + ("THINK" if on else off) + (" " + self.suffix if self.suffix and not on else "")
+            text += " <a> " + (self.on_text if on else off) + (" " + self.suffix if self.suffix and not on else "")
         return self(text).input_ids if tokenize else text
 
     def decode(self, ids):
@@ -275,6 +277,7 @@ def test_wave_b_gate_passes_a_template_that_honours_thinking_off(mock_score):
     (ChatTok(marker_when_off=True, off="OFF"), None),  # MARKER is not the spec's marker: passes unless marker matches
     (ChatTok(off_on_yes_no=False), "yn_aligned: the prompt does not end with"),
     (ChatTok(off="DIFFERENT"), "does not end with"),
+    (ChatTok(on_text="THINK EXTRA"), "thinking on does not end with 'THINK'"),  # the switch is read, but not as pinned
 ])
 def test_wave_b_gate_fails_when_thinking_is_not_pinned_off(mock_score, tok, words):
     spec = _chat_spec()
@@ -641,6 +644,21 @@ def test_prefetch_uses_the_cache_transformers_5_reads(monkeypatch):
     monkeypatch.setitem(sys.modules, "transformers.utils", types.SimpleNamespace(hub=hub_v4))
     monkeypatch.setitem(sys.modules, "transformers.utils.hub", hub_v4)
     assert pm.transformers_cache() == "/tc4"
+
+
+def test_prefetch_fetches_the_template_files_wave_b_needs():
+    import fnmatch
+
+    from wf.tools import prefetch_models as pm
+
+    def kept(name):
+        return any(fnmatch.fnmatch(name, a) for a in pm.ALLOW) and not any(fnmatch.fnmatch(name, i) for i in pm.IGNORE)
+
+    for name in ("chat_template.jinja", "merges.txt", "tokenizer.json", "tokenizer_config.json", "tekken.json",
+                 "config.json", "model-00001-of-00018.safetensors", "model.safetensors.index.json"):
+        assert kept(name), name
+    for name in ("consolidated.safetensors", "SYSTEM_PROMPT.txt", "README.md", "original/params.json"):
+        assert not kept(name), name
 
 
 def test_prefetch_knows_wave_b_tags_and_reports_unknown_ones(capsys):
