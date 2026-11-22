@@ -32,7 +32,7 @@ A task-blind Qwen verifier improves on executing the agent's own proposal. A tas
 
 ## Where Qwen's harm arises
 
-*(Revised 2026-11-22 from the exploratory analysis in `decisionsim_dx.md`, branch `decisionsim-dx`. That analysis recomputes every number above independently. The frozen verdict is unchanged.)*
+*(Revised 2026-11-22 from the exploratory analysis in [decisionsim_dx.md](decisionsim_dx.md). That analysis recomputes every number above independently. The frozen verdict is unchanged.)*
 
 **Robustness.** Dropping any one game leaves +19.0 to +19.7 points; dropping any task type leaves +18.2 to +20.5. All six task types are positive. 110 of 134 games contribute harm, none more than 5 states. Any yes/no cutoff from −8 to +8 nats gives +16.9 to +21.0. The flips are large shifts, not small ones crossing zero: the median shift on a rejected first move is −38.9 nats.
 
