@@ -1,6 +1,6 @@
-# Decision simulation, Stage 1a (fixed candidate menus): results for the primary models (2026-11-22)
+# Decision simulation, Stage 1a (fixed candidate menus): results (2026-11-22)
 
-Design frozen before scoring at tag `decisionsim-stage1a-frozen-2026-11-21` (commit `eeeb7dd`; [decisionsim_design.md](decisionsim_design.md), gate at line 143). Scoring: Qwen3-8B (ICE job 7230581) and Llama-3.1-8B (job 7230582) at `eeeb7dd`. Analysis: `decisionsim_analysis` (job 7239661). The three secondary models (Mistral-7B, Gemma-2-9B, Llama-3.2-3B) are being scored and will be added; the gate needs only the primary models. Numbers are from [decisionsim_metrics.json](decisionsim_metrics.json).
+Design frozen before scoring at tag `decisionsim-stage1a-frozen-2026-11-21` (commit `eeeb7dd`; [decisionsim_design.md](decisionsim_design.md), gate at line 143). Scoring: Qwen3-8B (ICE job 7230581) and Llama-3.1-8B (job 7230582) at `eeeb7dd`. Analysis: `decisionsim_analysis` (job 7239661). The three secondary models (Mistral-7B, Gemma-2-9B, Llama-3.2-3B) were scored afterwards and are reported below; they never decide the gate, which needs only the primary models. Numbers are from [decisionsim_metrics.json](decisionsim_metrics.json).
 
 ## Question
 

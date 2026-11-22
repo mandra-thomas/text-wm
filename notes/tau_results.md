@@ -43,7 +43,7 @@ Overall verdict, by the joint rule fixed in advance: **ALFWorld direction in bot
 
 *(Corrected 2026-11-22 from the exploratory analysis in [tau_dx.md](tau_dx.md); the pre-registered verdicts are unchanged.)*
 
-- τ-bench is the third environment. Qwen3-8B shows a large positive effect here, as in ALFWorld and TextCraft, but in τ-bench it is not specific to failing calls: naming the order raises its predicted success for working calls too. Llama-3.1-8B shows a small effect that is specific to failing calls.
+- τ-bench is the third environment. Qwen3-8B shows a large positive effect here, as in ALFWorld and TextCraft, but in τ-bench it is not specific to failing calls: naming the order raises its predicted success for working calls too. Llama-3.1-8B shows a small effect; by the pre-registered table it is specific to failing calls, but the failure-specific part is only +0.09 and comes from two cells (see above).
 - Against the neutral line, Qwen's effect is largely the swapped task lowering predicted success (−2.56), the same pattern as in TextCraft.
 - **The yes/no question still carries a task judgement for Qwen.** It is anchored to the backend's reply (fixed before scoring), yet about +3.9 of Qwen's +7.68 nats lies beyond its own predicted output. Among calls whose first token confidently predicts a JSON success, Qwen answers "No" to 90–93% under the swapped line, 51–67% under neutral and 17–32% under aligned. Anchoring to the output format did not remove the task reading found in TextCraft.
 - **Llama's yes/no null is an insensitive readout, not robustness.** Its yes/no moves only 0.29 nats per nat of its first-token prediction.
