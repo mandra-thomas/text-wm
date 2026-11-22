@@ -1440,6 +1440,15 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
        for suffix in ("", "_smoke")},
     **{f"decisionsim_agent_score{suffix}_{tag}": (lambda cfg: _lazy("decisionsim_agent", "run_decisionsim_agent_score")(cfg))
        for tag in ("llama3.1-8b", "mistral-7b-v0.3", "qwen3-8b") for suffix in ("", "_smoke")},
+    # 2026-11-22, Option C: the RQ3 agent in closed loop with a world-model verifier (wf/optionc.py,
+    # notes/optionc_design.md).
+    **{name: (lambda cfg: _lazy("optionc", "run_optionc_episodes")(cfg))
+       for name in ("optionc_smoke", "optionc_qwen3-8b_yn", "optionc_qwen3-8b_yn_argmax", "optionc_llama3.1-8b_yn",
+                    "optionc_qwen3-8b_obs", "optionc_gemma2-9b-it_yn")},
+    **{f"optionc_step0_{tag}": (lambda cfg: _lazy("optionc", "run_optionc_step0")(cfg))
+       for tag in ("qwen3-8b", "llama3.1-8b", "gemma2-9b-it")},
+    "optionc_step0_analysis": lambda cfg: _lazy("optionc", "run_optionc_step0_analysis")(cfg),
+    **{name: (lambda cfg: _lazy("optionc", "run_optionc_analysis")(cfg)) for name in ("optionc_analysis", "optionc_smoke_analysis")},
 }
 
 

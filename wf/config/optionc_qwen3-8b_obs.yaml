@@ -1,0 +1,18 @@
+run_id: optionc_qwen3-8b_obs
+# Option C, Tier 2 (pre-registered secondary, gated): the anchored observation readout, log(1 - P(Nothing)) -
+# log P(Nothing) at the first token of the predicted observation, Qwen3-8B, primary rule, task-blind, task-aware and
+# swapped arms, one seed. Refuses to start unless optionc_step0_analysis found the readout competent for Qwen3-8B
+# (or obs_gate_override is set, with a reason, which is logged).
+model: qwen3-8b
+readout: obs
+rules: [accepted_only]
+arms: [blind, aware, swapped]
+seeds: [1]
+split: valid_unseen
+n_games: 134
+step_cap: 30
+n_samples: 20
+k_max: 8
+n_shards: 4
+max_episodes_per_job: 40
+step0_analysis: optionc_step0_analysis

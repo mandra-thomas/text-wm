@@ -583,6 +583,11 @@ from mutants_decisionsim_agent import MUTANTS as _DSA_MUTANTS  # noqa: E402
 
 MUTANTS += _DSA_MUTANTS
 
+# Option C mutants (2026-11-22), likewise in their own file.
+from mutants_optionc import MUTANTS as _OPTIONC_MUTANTS  # noqa: E402
+
+MUTANTS += _OPTIONC_MUTANTS
+
 
 def main() -> int:
     python = sys.executable

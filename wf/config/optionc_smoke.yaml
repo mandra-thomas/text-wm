@@ -1,0 +1,17 @@
+run_id: optionc_smoke
+# Option C engineering smoke (notes/optionc_design.md, "Order of runs and gates"): two train games, Qwen3-8B yes/no,
+# every arm, both rules, one seed; then every episode of the first game is replayed from the cache with no model
+# (cache_check). The gate (smoke_gate in metrics.json) reads format errors and the cache check, never outcomes; the
+# time per step sets the census chain length.
+model: qwen3-8b
+readout: yn
+rules: [accepted_only, argmax]
+arms: [none, blind, aware, swapped]
+seeds: [1]
+split: train
+n_games: 2
+step_cap: 30
+n_samples: 20
+k_max: 8
+n_shards: 1
+cache_check: true

@@ -1,0 +1,13 @@
+run_id: optionc_step0_llama3.1-8b
+# Option C step-0 check (notes/optionc_design.md, "The step-0 check"): Stage 1a's 134 step-0 states and full candidate
+# sets, scored by llama3.1-8b under the task-aware, task-blind, swapped and neutral prompts, each with the yes/no and the
+# observation readout (one forward pass per prompt). Runs before any Option C episode.
+model: llama3.1-8b
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+steps: [0]
+arms: [aware, blind, swapped, neutral]
+readouts: [yn, obs]
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

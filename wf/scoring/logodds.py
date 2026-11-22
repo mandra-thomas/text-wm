@@ -293,6 +293,38 @@ class LogoddsScorer:
                            logp_first_plus=plus, logp_first_minus=minus, first_token_plus=self._tok.decode(ids[0]),
                            first_token_minus=self._tok.decode(ids[1]), model_revision=self.revision)
 
+    def next_token_logprobs(self, messages: list[dict[str, str]], words: tuple[str, ...],
+                            complement: str | None = None) -> dict[str, float]:
+        """Log-probabilities of single-token `words` as the reply's first token, read off one forward pass (Option C's
+        observation readout, 2026-11-22). With `complement`, also "not:<complement>": the log of the total
+        probability of every other token, computed as a log-sum-exp over the vocabulary without that token (exact,
+        and finite even when the token's own probability rounds to one). Words longer than one token are refused."""
+        if self.mock:
+            prefer = self._mock_prefer_success(messages)
+            jitter = int(hashlib.sha256(repr(messages).encode()).hexdigest()[2:6], 16) / 0xFFFF
+            lp_fail = (-6.0 - jitter) if prefer else (-0.05 - 0.01 * jitter)
+            out = {w: (lp_fail if w == complement else (-0.2 - jitter if prefer else -5.0 - jitter)) for w in words}
+            if complement is not None:
+                out[f"not:{complement}"] = math.log1p(-math.exp(lp_fail))
+            return out
+        import torch
+
+        assert self._model is not None and self._tok is not None
+        ids = {w: self._encode_candidate(w)[0].tolist() for w in words}
+        bad = {w: i for w, i in ids.items() if len(i) != 1}
+        if bad:
+            raise ValueError(f"not single tokens: {bad}")
+        prompt_ids = self._encode(messages).to(next(self._model.parameters()).device)
+        with torch.no_grad():
+            logits = self._model(input_ids=prompt_ids).logits
+        lp = torch.log_softmax(logits[0, -1].float(), dim=-1)
+        out = {w: lp[i[0]].item() for w, i in ids.items()}
+        if complement is not None:
+            mask = torch.ones_like(lp, dtype=torch.bool)
+            mask[ids[complement][0]] = False
+            out[f"not:{complement}"] = torch.logsumexp(lp[mask], dim=0).item()
+        return out
+
     def _stop_tokens(self) -> list[int]:
         """Every end-of-turn token. Fine-tuned checkpoints leave the tokenizer's out of their generation config."""
         configured = self._model.generation_config.eos_token_id

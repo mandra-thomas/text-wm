@@ -315,3 +315,94 @@ Fix round 1 (after review 1, before any score) adds tests for: odd-step states l
 | precision floor off by one | `test_precision_script_floor_and_holm_threshold` |
 | format error becomes look | `test_format_errors_count_and_add_no_candidate` |
 | seed check reads one seed | `test_seed_check_flags_a_seed_that_changes_nothing` |
+
+## Option C: the closed-loop agent with a world-model verifier (2026-11-22)
+
+`tests/test_optionc.py` (77 tests) covers `wf/optionc.py`. Prompts: for every verifier model and both readouts, the aware, blind, swapped and neutral prompts differ only in the query's task line (blind deletes it, swapped replaces only the object, neutral is "explore the room"), the examples are identical, the yes/no prompts end with the yes/no question and the observation prompts with "Next observation:", and each equals the earlier runs' prompt (`sizes.arm_messages`, `families.family_messages` for Gemma). Readouts: yes/no log-odds and the observation readout's complement of "Nothing" (with "You" against "Nothing" reported), rounding to 1/64 nat before acceptance, a non-finite readout refused, the mock complement consistent, and the first-token gate (passing, split tokens, a template that writes the reply differently, no prompts). Decision rules: an accepted proposal is executed without sampling; accepted-only takes the first accepted alternative in rank order and stops scoring there, keeps the proposal when nothing is accepted or no alternative exists; argmax takes the highest alternative whatever its sign, ties by the seeded hash; the sample seed depends on the seed, game and prompt only. The cache: made once, saved, reloaded per game. Episodes on the simulator with stand-in models: no verifier executes the greedy proposal; an accepting verifier reproduces the agent and never samples; a rejecting one with nothing accepted abstains at every step; sampling uses the agent's own prompt and the designed settings and seed; an override records the proposal's true outcome from a fresh replay; the agent never sees the verifier; the verifier reads the live state's world-model history and its arm's task line; argument checks; common random numbers through the cache (shared prefix, a repeated episode identical); format errors become `look` and are flagged; alternatives cut at `k_max`; repeats and the score of a loss. Runs end to end on the mock agent, scorer and simulator: every episode once; shards split the games; a partial job resumes to the same episodes as an uninterrupted run; a fresh run starts a new cache; the smoke cache check and gate (and a cache that does not reproduce); games without a swap object skip only the swapped arm; bad configs refused; the observation readout's episodes wait for the step-0 analysis of their own model, and an override is logged. Analysis on synthetic episodes: per-game seed means, paired contrasts, the verdict categories with attribution at exactly half and below it, help and no difference, invalid actions read with the reversed sign, the interval and p both needed, the primary run's no-verifier episodes serving other runs, divergence, step rates by the proposal's true outcome, drift against the archived agent, and the analysis refusing incomplete, repeated or unfinished runs. The step-0 check: the four classifications and their thresholds at the boundaries, competence read under the blind arm, the naming lift and any-task drop, agreement with Stage 1a's rounded scores, the scoring run (every candidate, arm and readout; no swapped arm without a swap object; resume; refusing other prompts; waiting for the collection) and its analysis (waiting for every scoring run). Registry and configs.
+
+`scripts/mutants_optionc.py` holds 80 Option C mutants (`MUTANTS_MATCHING="optionc "`), hooked into `scripts/mutation_check.py`. Each was applied to a copy of the repository and `tests/test_optionc.py` run with `-x`; the table gives the first test that fails.
+
+| Mutant | First test that fails |
+|---|---|
+| accept at zero | `test_rounding_decides_acceptance` |
+| no rounding | `test_yes_no_readout_is_the_log_odds_rounded_to_a_64th` |
+| blind keeps the task line | `test_arms_differ_only_in_the_query_task_line[yn-qwen3-8b]` |
+| swapped arm shows the real task | `test_arms_differ_only_in_the_query_task_line[yn-qwen3-8b]` |
+| neutral arm shows the real task | `test_arms_differ_only_in_the_query_task_line[yn-qwen3-8b]` |
+| observation readout on the yes/no prompt | `test_arms_differ_only_in_the_query_task_line[obs-qwen3-8b]` |
+| observation readout is You against Nothing | `test_observation_readout_is_the_complement_of_nothing` |
+| observation readout sign flipped | `test_observation_readout_is_the_complement_of_nothing` |
+| mock complement wrong | `test_mock_next_token_logprobs_complement_is_consistent` |
+| mock yes/no rejects everything | `test_mock_yes_no_accepts_some_and_rejects_some` |
+| gate passes split tokens | `test_first_token_gate_passes_and_catches_split_tokens` |
+| gate ignores the template | `test_first_token_gate_passes_and_catches_split_tokens` |
+| gate passes with no prompts | `test_first_token_gate_passes_and_catches_split_tokens` |
+| proposal never accepted | `test_an_accepted_proposal_is_executed_without_sampling[accepted_only]` |
+| accepted-only scans from the last rank | `test_accepted_only_takes_the_first_accepted_in_rank_order_not_the_best` |
+| abstaining executes an alternative | `test_accepted_only_keeps_the_proposal_when_nothing_is_accepted` |
+| no alternative executes look | `test_no_alternative_keeps_the_proposal[accepted_only]` |
+| argmax takes the lowest | `test_argmax_takes_the_highest_alternative_whatever_its_sign` |
+| argmax ties by order | `test_argmax_ties_go_to_the_smallest_seeded_hash` |
+| argmax only among accepted | `test_argmax_takes_the_highest_alternative_whatever_its_sign` |
+| sample seed ignores the prompt | `test_sample_seed_depends_on_seed_game_and_prompt_only` |
+| sample seed ignores the seed | `test_sample_seed_depends_on_seed_game_and_prompt_only` |
+| alternatives at temperature 1 | `test_sampling_uses_the_agent_prompt_and_the_designed_settings` |
+| ten samples | `test_sampling_uses_the_agent_prompt_and_the_designed_settings` |
+| k_max ignored | `test_alternatives_are_cut_at_k_max` |
+| greedy cache ignores the prompt | `test_no_verifier_executes_the_greedy_proposal` |
+| score cache ignores the arm's prompt | `test_common_random_numbers_share_the_prefix_through_the_cache` |
+| cache never written | `test_cache_makes_once_saves_and_reloads` |
+| agent sees the rejected proposal | `test_the_agent_never_sees_the_verifier` |
+| verifier sees only the first observation | `test_the_verifier_reads_the_world_model_history_of_the_live_state` |
+| proposal executed after an override | `test_override_records_the_proposals_true_outcome` |
+| counterfactual on the live env | `test_smoke_cache_check_and_gate` |
+| counterfactual skipped | `test_override_records_the_proposals_true_outcome` |
+| failure never recorded | `test_no_verifier_executes_the_greedy_proposal` |
+| override never flagged | `test_override_records_the_proposals_true_outcome` |
+| repeats never flagged | `test_repeats_and_score` |
+| format error never flagged | `test_format_error_becomes_look_and_is_flagged` |
+| override harm counts both failing | `test_episode_summary_classifies_overrides_and_runs` |
+| rejection run never resets | `test_episode_summary_classifies_overrides_and_runs` |
+| a loss scores like the cap | `test_repeats_and_score` |
+| no-verifier arm never played | `test_episode_jobs_order` |
+| arms in config order | `test_episode_jobs_order` |
+| episodes saved at the end of each game | `test_partial_job_resumes_to_the_same_episodes` |
+| resume replays saved episodes | `test_partial_job_resumes_to_the_same_episodes` |
+| fresh run keeps the old cache | `test_a_fresh_run_starts_a_new_cache_and_episodes` |
+| partial job never stops | `test_partial_job_resumes_to_the_same_episodes` |
+| swapped arm without a swap object | `test_games_without_a_swap_object_skip_only_the_swapped_arm` |
+| observation gate ignored | `test_observation_episodes_wait_for_the_step0_check` |
+| observation gate reads another model | `test_observation_episodes_wait_for_the_step0_check` |
+| observation gate always open | `test_observation_episodes_wait_for_the_step0_check` |
+| cache check always passes | `test_cache_check_catches_a_cache_that_does_not_reproduce` |
+| smoke gate ignores the cache check | `test_smoke_gate_reads_format_errors_and_the_cache_check` |
+| smoke format threshold inclusive | `test_smoke_gate_reads_format_errors_and_the_cache_check` |
+| seeds summed, not averaged | `test_per_game_means_over_seeds` |
+| per game mixes rules | `test_per_game_means_over_seeds` |
+| attribution ignores the half | `test_verdict_harm_not_attributable_below_half` |
+| attribution strict at half | `test_verdict_harm_attributable_at_exactly_half` |
+| attribution ignores the sign | `test_attributable_needs_a_positive_cost` |
+| invalid actions read like success | `test_invalid_actions_verdict_has_the_reversed_sign` |
+| harm without the permutation p | `test_verdict_needs_both_interval_and_p` |
+| harm read from the lower bound | `test_verdict_needs_both_interval_and_p` |
+| help without the interval | `test_verdict_needs_both_interval_and_p` |
+| analysis accepts a run that does not match the design | `test_analysis_end_to_end_and_its_refusals` |
+| analysis accepts repeated episodes | `test_analysis_end_to_end_and_its_refusals` |
+| analysis ignores the primary run's no-verifier episodes | `test_the_primary_runs_no_verifier_episodes_serve_other_runs` |
+| diverging lengths counted as never diverging | `test_divergence` |
+| acceptance of working proposals reads failing ones | `test_step_rates_by_the_proposals_true_outcome` |
+| drift compares every condition | `test_drift_against_the_archived_agent` |
+| collapse threshold inclusive | `test_collapse_thresholds_at_their_boundaries` |
+| blind threshold strict | `test_collapse_thresholds_at_their_boundaries` |
+| question-specific without the gap | `test_collapse_thresholds_at_their_boundaries` |
+| observation collapse not checked | `test_step0_not_question_specific_mixed_and_no_collapse` |
+| competence AUC strict | `test_step0_competence_rule` |
+| competence read under the aware arm | `test_step0_not_question_specific_mixed_and_no_collapse` |
+| step-0 swapped arm without a swap | `test_step0_run_scores_every_candidate_arm_and_readout` |
+| step-0 resume trusts other prompts | `test_step0_run_scores_every_candidate_arm_and_readout` |
+| naming lift sign flipped | `test_step0_shifts_naming_and_any_task` |
+| Stage 1a agreement unrounded | `test_stage1a_agreement` |
+| step-0 analysis does not wait | `test_step0_run_scores_every_candidate_arm_and_readout` |
+| step-0 waits for nothing | `test_step0_waits_for_the_collection` |
+
+All 80 are killed (2026-11-22). Five survived the first pass (ten samples, the proposal executed after an override, a failure never recorded, override harm counting both-fail overrides, a rejection run that never resets) and were killed by tests strengthened for them; the whole list was then rerun against the final tests, and the table is that rerun. The real (non-mock) branch of `LogoddsScorer.next_token_logprobs` needs a model and is not covered here; the step-0 check is its first real use, behind the first-token gate.

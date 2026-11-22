@@ -1,0 +1,15 @@
+run_id: optionc_llama3.1-8b_yn
+# Option C, Tier 2 (pre-registered secondary): the contrast verifier, Llama-3.1-8B-Instruct, yes/no readout, primary
+# rule, task-blind, task-aware and swapped arms, one seed. The agent is always the RQ3 Qwen3-8B agent.
+model: llama3.1-8b
+readout: yn
+rules: [accepted_only]
+arms: [blind, aware, swapped]
+seeds: [1]
+split: valid_unseen
+n_games: 134
+step_cap: 30
+n_samples: 20
+k_max: 8
+n_shards: 4
+max_episodes_per_job: 40

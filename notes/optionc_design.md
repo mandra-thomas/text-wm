@@ -217,7 +217,7 @@ Estimates, not timings; the smoke run measures them. Assumptions: RQ3 ran at abo
 | 2 (pre-registered secondary) | Qwen3-8B argmax rule, one seed; Llama-3.1-8B primary rule, one seed; Qwen3-8B observation readout, primary rule, one seed (only if the step-0 check's competence rule passes); three arms each | 54 (36–80) |
 | 3 (optional) | Gemma-2-9B primary rule, one seed (+1 step-0 check); neutral arm for Qwen yes/no, one seed; more seeds for Tier 2; `valid_seen` games | 6–20 each |
 
-Tiers 1 and 2 come to about 100 GPU-hours (70–145). Each job runs vLLM (the agent, `--gpu-memory-utilization 0.45`) and the verifier (Hugging Face, bf16) on one GPU, so it needs at least 48 GB (L40S, A40 or A100); jobs are sharded by game (four shards per run) and chained with resume jobs of 6 hours. The smoke run's measured time per step fixes the chain length before the census; if it projects Tier 1 at more than 1.5 times the upper estimate, the run stops for an amendment of the size (a cost rule, read from timings, never from outcomes).
+Tiers 1 and 2 come to about 100 GPU-hours (70–145). Each job runs vLLM (the agent, `--gpu-memory-utilization 0.50`; 0.45 in the first version of this note, see the build facts below) and the verifier (Hugging Face, bf16) on one GPU, so it needs at least 48 GB (L40S or A40; an 80 GB A100 would also do); jobs are sharded by game (four shards per run) and chained with resume jobs of 6 hours. The smoke run's measured time per step fixes the chain length before the census; if it projects Tier 1 at more than 1.5 times the upper estimate, the run stops for an amendment of the size (a cost rule, read from timings, never from outcomes).
 
 ## Order of runs and gates
 
@@ -242,3 +242,14 @@ Tiers 1 and 2 come to about 100 GPU-hours (70–145). Each job runs vLLM (the ag
 2. **More games.** Adding the 140 solvable `valid_seen` games would roughly halve the variance of the primary comparison (power 0.8 at about 4 to 6 points with three seeds) for about twice the cost. They are not part of RQ3, so they have no archived no-foresight episodes for the drift check.
 3. **Readout.** Yes/no is primary for continuity with the gate. If you would rather make the anchored observation readout primary (the stronger world-model claim, but with no gate behind it), the step-0 check can still run first and the swap is a one-line config change before the freeze.
 4. **Order with Stage 1b.** Option C does not depend on Stage 1b's results, but Stage 1b's encounter rates would sharpen the predictions; running the step-0 check and the smoke while Stage 1b's census runs is the suggested order.
+
+## Facts added with the build, before any data (2026-11-22)
+
+The code (`wf/optionc.py`) was written after this note and before any Option C data; nothing below changes a rule, threshold, arm, outcome or prediction.
+
+- **GPU share.** vLLM is held to half the GPU (`--gpu-memory-utilization 0.50`, not 0.45), because the 20-sample requests need room for about 5,000 new tokens of KV cache on top of a 3,000-4,000 token prompt; the verifier gets the other 24 GB (Gemma-2-9B's 18.5 GB of weights plus a 256,000-word vocabulary's logits is the tightest fit). `pace/optionc.sbatch` asks for an L40S or A40.
+- **Gates in code.** The observation readout's episode run refuses to start unless `optionc_step0_analysis` has finished and found the readout competent for the run's model (or an `obs_gate_override` with a reason is set, which is saved in `obs_gate.json`). Every verifier run checks the tokenization before its first episode, on each game's first-state prompt under every arm: wave A's Yes/No gate for the yes/no readout (enforced for Gemma, recorded for Qwen and Llama, as in Stage 1a) and the first-token gate for the observation readout (enforced for every model).
+- **Smoke cache check.** After the smoke episodes, every episode of the first game is replayed from the saved cache with every model replaced by a stand-in that fails if called; the episodes must come out identical. This checks the common-random-numbers machinery and the environment's determinism together.
+- **Mock scorer.** The project's mock scorer gives "Yes" and "No" the same log-probability, so every mock yes/no score would round to zero; mock runs (tests and dry runs only) use a hash of the prompt instead, accepting about two thirds of prompts.
+- **Dry run.** `python -m wf.runs optionc_smoke --mock` and `optionc_smoke_analysis --mock` (mock agent, scorer and simulator, two games, every arm, both rules) ran end to end, with the cache check and the smoke gate passing.
+

@@ -1,0 +1,13 @@
+run_id: optionc_step0_analysis
+# Option C step-0 check, analysis (CPU): per model, readout and arm, acceptance of working step-0 proposals and go to
+# actions, AUC, naming lift and any-task drop; the pre-registered classification; the observation readout's
+# competence, which gates optionc_qwen3-8b_obs. stage1a_scores: Stage 1a's scoring runs, if present in runs/, for
+# the agreement check of the identical yes/no prompts.
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+steps: [0]
+models:
+  qwen3-8b: optionc_step0_qwen3-8b
+  llama3.1-8b: optionc_step0_llama3.1-8b
+stage1a_scores:
+  qwen3-8b: decisionsim_score_qwen3-8b
+  llama3.1-8b: decisionsim_score_llama3.1-8b

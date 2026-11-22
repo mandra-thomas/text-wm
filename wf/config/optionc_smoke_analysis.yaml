@@ -1,0 +1,5 @@
+run_id: optionc_smoke_analysis
+# The analysis code run on the smoke episodes (and the mock dry run); its numbers are engineering checks, not results.
+runs:
+  optionc_smoke: optionc_smoke
+primary_run: optionc_smoke

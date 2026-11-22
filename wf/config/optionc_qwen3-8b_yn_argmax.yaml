@@ -1,0 +1,16 @@
+run_id: optionc_qwen3-8b_yn_argmax
+# Option C, Tier 2 (pre-registered secondary): Stage 1a's rule 2 (on rejection, the highest-scored alternative,
+# whatever its sign), Qwen3-8B yes/no verifier, task-blind, task-aware and swapped arms, one seed. Compared with the
+# no-verifier episodes of optionc_qwen3-8b_yn in optionc_analysis.
+model: qwen3-8b
+readout: yn
+rules: [argmax]
+arms: [blind, aware, swapped]
+seeds: [1]
+split: valid_unseen
+n_games: 134
+step_cap: 30
+n_samples: 20
+k_max: 8
+n_shards: 4
+max_episodes_per_job: 40

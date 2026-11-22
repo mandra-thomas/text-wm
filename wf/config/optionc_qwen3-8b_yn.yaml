@@ -1,0 +1,18 @@
+run_id: optionc_qwen3-8b_yn
+# Option C, Tier 1 (primary; notes/optionc_design.md). The RQ3 Qwen3-8B ReAct agent (greedy, thinking off) on the 134
+# solvable valid_unseen games, 30-step cap, with a Qwen3-8B yes/no verifier: no verifier, task-blind, task-aware and
+# swapped arms; primary rule (switch only to an accepted agent-sampled alternative); three sampling seeds. Primary
+# outcome: success, aware minus blind. WF_SHARD / WF_N_SHARDS split the games; the job restarts the ALFWorld server
+# after max_episodes_per_job new episodes (memory leak) and resumes.
+model: qwen3-8b
+readout: yn
+rules: [accepted_only]
+arms: [none, blind, aware, swapped]
+seeds: [1, 2, 3]
+split: valid_unseen
+n_games: 134
+step_cap: 30
+n_samples: 20
+k_max: 8
+n_shards: 4
+max_episodes_per_job: 40
