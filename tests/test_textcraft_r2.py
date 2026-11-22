@@ -807,9 +807,13 @@ def test_verdicts_are_statistical_and_never_withheld():
 
 
 def test_interpretation_separates_measurable_effects_from_distortions():
-    assert A.interpretation("confirmed below zero", True, {}) == "distortion in a competent predictor"
+    assert A.interpretation("confirmed below zero", True, {}) == "distortion in a model that discriminates successes from failures in these categories"
     assert A.interpretation("confirmed above zero", False, {}).startswith("statistically measurable goal effect")
-    assert A.interpretation("equivalent to zero", True, {}).startswith("no effect larger than the margin, in a competent")
+    assert A.interpretation("equivalent to zero", True, {}) == "no effect larger than the margin, in a model that discriminates successes from failures in these categories"
+    for v in ("confirmed below zero", "equivalent to zero"):  # 15.F: an AUC gate is never called understanding
+        for c in (True, False):
+            text = A.interpretation(v, c, {})
+            assert "competent" not in text and "understand" not in text
     assert "limited interpretation" in A.interpretation("equivalent to zero", False, {})
     assert A.interpretation("inconclusive", True, {"equivalence_underpowered": True}) == "inconclusive (equivalence underpowered)"
     assert A.interpretation("inconclusive", False, {"equivalence_underpowered": False}) == "inconclusive"
@@ -869,7 +873,7 @@ def test_model_verdicts_keep_estimates_and_limit_interpretation():
     block["competence"]["local"]["per_contrast"]["lift"]["competent"] = False
     out = A.model_verdicts(block, fam, "m")
     assert out["contrasts"]["lift"] == "confirmed below zero" and out["interpretation"]["lift"].startswith("statistically measurable")
-    assert out["interpretation"]["parent_penalty"] == "distortion in a competent predictor"
+    assert out["interpretation"]["parent_penalty"] == "distortion in a model that discriminates successes from failures in these categories"
     assert out["overall_gate_interpretable"] is False and "partial naming" not in out["reading"]["penalty"]
 
 
@@ -1405,8 +1409,9 @@ def test_reading_says_when_a_contrast_is_not_competent():
     r = A.reading(v, competent=comp)
     assert not any("not competent" in x for x in r.values())
     r = A.reading(v, competent={**comp, "naming": False, "timing": False})
-    assert r["penalty"].endswith("; measurable effect only; not competent for naming")
-    assert r["timing"].endswith("; measurable effect only; not competent for timing") and "not competent" not in r["lift"]
+    assert r["penalty"].endswith("; measurable effect only; does not discriminate successes from failures for naming")
+    assert r["timing"].endswith("; measurable effect only; does not discriminate successes from failures for timing")
+    assert "discriminate" not in r["lift"]
 
 
 def test_rejection_list_per_model():
@@ -1422,7 +1427,8 @@ def test_rejection_list_per_model():
     assert not nt["R1_penalty_absent"]["testable"] and not nt["R1_penalty_absent"]["fires"]
     # R3: P below zero, role gap above zero; the matched gap confirms -> rejects; it does not -> the confound note
     r3 = A.model_verdicts(_block(rg_ci=(0.2, 1.0), m_ci=(0.1, 0.9)), fam, "m")["rejections"]["R3_penalty_and_role_gap_disagree"]
-    assert r3["fires"] and r3["note"] == "rejects"
+    assert r3["fires"] and r3["note"] == "P and the role gap disagree, and the matched role gap confirms the role gap"
+    assert r3["kind"] == A.DIAGNOSTIC and "no familywise error control" in r3["kind"] and "descriptive" in r3["rejects"]
     r3 = A.model_verdicts(_block(rg_ci=(0.2, 1.0), m_ci=(-0.3, 0.9)), fam, "m")["rejections"]["R3_penalty_and_role_gap_disagree"]
     assert not r3["fires"] and r3["note"].endswith("(item-structure confound)")
     r3 = A.model_verdicts(_block(rg_ci=(0.2, 1.0), m_ci=(-0.9, -0.3)), fam, "m")["rejections"]["R3_penalty_and_role_gap_disagree"]
@@ -1439,30 +1445,48 @@ def test_rejection_list_per_model():
     assert not A.model_verdicts(b, _fam(timing_differs=0.001), "m")["rejections"]["R5_added_steps_deepen_penalty"]["fires"]
 
 
-def test_rejection_r4_lift_and_r2():
+def test_r4_is_descriptive_and_r2_still_decides():
     v = {t: {"parent_penalty": "inconclusive"} for t in R.TAGS}
     comp = {t: True for t in R.TAGS}
     lift = {t: {"verdict": "inconclusive", "estimate": 0.1, "competent": True} for t in R.TAGS}
     lift["llama3.1-8b"] = {"verdict": "confirmed above zero", "estimate": 0.9, "competent": True}
     lift["qwen3-8b"] = {"verdict": "confirmed above zero", "estimate": 0.8, "competent": True}
-    a = A.across(v, comp, lift)
-    assert a["R4_lift_does_not_explain_the_difference"]["fires"] and a["R2_penalty_not_shared"]["value"] == "undecided"
-    lift["qwen3-8b"]["estimate"] = 1.0
-    assert not A.across(v, comp, lift)["R4_lift_does_not_explain_the_difference"]["fires"]
-    lift["qwen3-8b"] = {**lift["qwen3-8b"], "estimate": 0.5, "competent": False}
-    r4 = A.across(v, comp, lift)["R4_lift_does_not_explain_the_difference"]
-    assert not r4["testable"] and not r4["fires"]
+    diff = {"difference": {"estimate": 0.1, "ci95": [-0.2, 0.4]}}
+    a = A.across(v, comp, lift, diff)
+    r4 = a["R4_lift_comparison"]
+    assert "fires" not in r4 and r4["kind"].startswith("descriptive") and r4["difference_llama_minus_qwen"] == diff["difference"]
+    assert r4["llama3.1-8b"] == lift["llama3.1-8b"] and a["R2_penalty_not_shared"]["value"] == "undecided"
+    assert "R4_lift_does_not_explain_the_difference" not in a
+
+
+def test_lift_difference_is_paired(small, fast):
+    recs = copy.deepcopy(small)
+    pops = A.populations(recs)
+    by_a = A.index_scores(_planted(recs, "llama3.1-8b", lam=0.9, noise=1.0, seed=7), recs, SHOTS, "llama3.1-8b")[0]
+    by_b = {k: {**v, "L": v["L"] - (0.5 if k[1] == "aligned" else 0.0)} for k, v in by_a.items()}
+    d = A.lift_difference(by_a, by_b, pops, B=200)["difference"]
+    # the same items and the same resamples: an exact shift of 0.5 has a zero-width interval
+    assert d["estimate"] == pytest.approx(0.5) and d["ci95"][0] == pytest.approx(0.5) and d["ci95"][1] == pytest.approx(0.5)
+    assert d["n_items"] == len(pops["ingredient"]) and d["resampling"] == "paired, whole goal pairs"
+    seen = []
+    orig = A.draws
+    try:
+        A.draws = lambda stat, rows, clusters, *a, **k: (seen.append(list(clusters)), orig(stat, rows, clusters, *a, **k))[1]
+        A.lift_difference(by_a, by_b, pops, B=20)
+    finally:
+        A.draws = orig
+    assert seen == [[r["pair_id"] for r in pops["ingredient"]]]  # one resample of goal pairs for both models
 
 
 @pytest.mark.parametrize("p_ci,p_comp,tracking,want", [
-    ((-2, -0.5), True, (-0.1, -0.1, -0.2, -0.2), "mechanism"),
-    ((-2, -0.5), True, (0.2, -0.1, 0.05, -0.2), "combination"),
-    ((-2, -0.5), False, (0.2, -0.1, 0.05, -0.2), "combination"),
-    ((-2, -0.5), True, (0.1, -0.1, -0.05, -0.2), "undecided"),
-    ((-2, -0.5), False, (-0.1, -0.1, -0.2, -0.2), "undecided"),
-    ((-0.5, 0.5), False, (-0.1, -0.1, -0.2, -0.2), "poor state reasoning"),
-    ((-0.5, 0.5), True, (-0.1, 0.3, -0.2, 0.1), "poor state reasoning"),
-    ((-0.5, 0.5), True, (-0.1, -0.1, -0.2, -0.2), "undecided"),
+    ((-2, -0.5), True, (-0.1, -0.1, -0.2, -0.2), "penalty with inventory-consistent tracking"),
+    ((-2, -0.5), True, (0.2, -0.1, 0.05, -0.2), "penalty with shortcut-consistent tracking"),
+    ((-2, -0.5), False, (0.2, -0.1, 0.05, -0.2), "penalty with shortcut-consistent tracking"),
+    ((-2, -0.5), True, (0.1, -0.1, -0.05, -0.2), "undetermined"),
+    ((-2, -0.5), False, (-0.1, -0.1, -0.2, -0.2), "undetermined"),
+    ((-0.5, 0.5), False, (-0.1, -0.1, -0.2, -0.2), "no confirmed penalty; shortcut-consistent or non-discriminating"),
+    ((-0.5, 0.5), True, (-0.1, 0.3, -0.2, 0.1), "no confirmed penalty; shortcut-consistent or non-discriminating"),
+    ((-0.5, 0.5), True, (-0.1, -0.1, -0.2, -0.2), "undetermined"),
 ])
 def test_central_question_is_exclusive(p_ci, p_comp, tracking, want):
     b = _block(p_ci=p_ci, tracking=tracking)
@@ -1480,9 +1504,9 @@ def test_tracking_differences_are_paired(records, fast):
     # H2 and H9 calls every goal craft a failure: undefined in the goal-role population
     assert td["H2andH9_minus_H6"]["estimate"] != td["H2andH9_minus_H6"]["estimate"]
     b = _block(tracking=(-0.1, float("nan"), -0.2, float("nan")))
-    assert A.model_verdicts(b, _fam(parent_penalty_differs=0.001), "m")["central_question"]["answer"] == "mechanism"
+    assert A.model_verdicts(b, _fam(parent_penalty_differs=0.001), "m")["central_question"]["answer"] == "penalty with inventory-consistent tracking"
     b = _block(tracking=(0.2, float("nan"), 0.05, float("nan")))
-    assert A.model_verdicts(b, _fam(parent_penalty_differs=0.001), "m")["central_question"]["answer"] == "combination"
+    assert A.model_verdicts(b, _fam(parent_penalty_differs=0.001), "m")["central_question"]["answer"] == "penalty with shortcut-consistent tracking"
 
 
 def test_descriptive_two_item_rows_drop_completed_records(records, small, fast):
@@ -1513,3 +1537,97 @@ def test_n13_verify_counts_two_item_records_with_a_made_goal(records):
     rep = I.check_records([rec], SHOTS)
     assert rep["two_item_records_with_a_named_goal_already_made_or_held"] == {
         f"main|main|{rec['role']}|{rec['failure_class']}": 1}
+
+
+
+# ---------------- sign-off corrections and statistical audit (15.F, 15.A; 2026-11-22) ----------------
+
+
+def test_r5_rejects_only_the_predicted_attenuation():
+    out = A.model_verdicts(_block(), _fam(timing_differs=0.001), "m")["rejections"]["R5_added_steps_deepen_penalty"]
+    assert out["fires"] and "predicted attenuation" in out["rejects"] and "not content-based" in out["rejects"]
+
+
+def test_central_labels_are_neutral():
+    labels = set()
+    for p_ci, comp, tr in (((-2, -0.5), True, (-0.1, -0.1, -0.2, -0.2)), ((-2, -0.5), True, (0.2, -0.1, 0.05, -0.2)),
+                           ((-0.5, 0.5), False, (-0.1, -0.1, -0.2, -0.2)), ((-0.5, 0.5), True, (-0.1, -0.1, -0.2, -0.2))):
+        b = _block(p_ci=p_ci, tracking=tr)
+        b["competence"]["local"]["per_contrast"]["parent_penalty"]["competent"] = comp
+        labels.add(A.model_verdicts(b, _fam(parent_penalty_differs=0.001), "m")["central_question"]["answer"])
+    assert labels == {"penalty with inventory-consistent tracking", "penalty with shortcut-consistent tracking",
+                      "no confirmed penalty; shortcut-consistent or non-discriminating", "undetermined"}
+    assert not any(w in " ".join(labels) for w in ("mechanism", "reasoning", "combination"))
+
+
+def test_audit_holm_family_of_fifty_with_missing_as_one():
+    from wf.analysis.stats import holm
+    per = {"qwen3-8b": {"contrasts": {c: {"p_differs": 0.001, "p_equivalent": float("nan")} for c in A.CONTRASTS}}}
+    fam = A.family(per, list(R.TAGS))
+    assert len(fam) == 50
+    padded = [k for k, v in fam.items() if v["p_in_family"] == 1.0]
+    assert len(padded) == 45  # 40 tests of unscored models and 5 NaN equivalence ps
+    assert all(fam[k]["p_holm"] == pytest.approx(min(1.0, 50 * 0.001)) for k in fam if k.endswith("differs") and k.startswith("qwen"))
+    assert holm({"a": 0.01, "b": 1.0})["a"] == pytest.approx(0.02)  # every padded p counts in the family size
+
+
+def test_audit_tost_uses_one_sided_bootstrap_ps():
+    d = [0.1] * 60 + [0.45] * 40  # 40 of 100 draws at or above the margin 0.4, none at or below -0.4
+    assert A.tost_p(d, 0.4) == pytest.approx(max((0 + 1) / 101, (40 + 1) / 101))
+
+
+def test_audit_margin_is_fixed_before_equivalence(small, fast, monkeypatch):
+    recs = copy.deepcopy(small)
+    by = A.index_scores(_planted(recs, "qwen3-8b", noise=2.0, seed=9), recs, SHOTS, "qwen3-8b")[0]
+    pops = A.populations(recs)
+    calls = []
+    orig = A.margin_of
+    monkeypatch.setattr(A, "margin_of", lambda *a: (calls.append(1), orig(*a))[1])
+    blk = A.model_block(by, pops)
+    assert calls == [1]  # computed once per model
+    assert all(blk["contrasts"][c]["margin"] == blk["equivalence_margin"]["margin"] for c in A.CONTRASTS)
+    assert blk["equivalence_margin"]["margin"] == min(0.3 * blk["equivalence_margin"]["sd_delta_L_main"], 0.4)
+
+
+def test_audit_every_resample_is_over_goal_pairs(small, fast, monkeypatch):
+    """Every bootstrap and permutation in a model block receives goal-pair ids as its clusters."""
+    recs = copy.deepcopy(small)
+    by = A.index_scores(_planted(recs, "qwen3-8b", noise=1.0, seed=2), recs, SHOTS, "qwen3-8b")[0]
+    pairs = {r["pair_id"] for r in recs}
+    seen = []
+    orig_d, orig_s = A.draws, A.sign_flip_p
+    monkeypatch.setattr(A, "draws", lambda stat, rows, clusters, *a, **k: (seen.append(set(clusters)), orig_d(stat, rows, clusters, *a, **k))[1])
+    monkeypatch.setattr(A, "sign_flip_p", lambda v, clusters, *a, **k: (seen.append(set(clusters)), orig_s(v, clusters, *a, **k))[1])
+    A.model_block(by, A.populations(recs))
+    assert seen and all(c <= pairs for c in seen)
+
+
+def test_audit_naming_plus_completion_is_the_role_gap_on_the_shared_rows(records):
+    import random
+    pops = A.populations(records)
+    rows = A.two_item_rows(pops)
+    assert len(rows) == 996 and Counter(r["role"] for r in rows) == {"goal": 500, "ingredient": 496}
+    rng = random.Random(11)
+    by = {(r["id"], a): {"L": rng.gauss(0, 3)} for r in rows for a in ("aligned", "swapped", "both")}
+    g = lambda f: A._gap(A.gap_rows(by, rows, f)[0])
+    naming = g(lambda i: A.L(by, i, "both") - A.L(by, i, "swapped"))
+    completion = g(lambda i: A.L(by, i, "aligned") - A.L(by, i, "both"))
+    gap = g(lambda i: A.L(by, i, "aligned") - A.L(by, i, "swapped"))
+    assert naming + completion == pytest.approx(gap, abs=1e-12)
+
+
+def test_audit_inference_map(small, fast):
+    recs = copy.deepcopy(small)
+    out = A.analyse(recs, SHOTS, {t: _planted(recs, t) for t in R.TAGS}, list(R.TAGS))
+    m = out["inference_map"]
+    assert "50 tests" in m["confirmatory"] and any("R3" in x for x in m["descriptive"]) and any("R4" in x for x in m["descriptive"])
+    assert out["across_models"]["R4_lift_comparison"]["difference_llama_minus_qwen"]["n_items"] > 0
+    # no p-value anywhere outside the family's five contrasts per model
+    def ps(x, path=""):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k.startswith("p_") and k not in ("p_in_family", "p_holm"):
+                    yield path + "/" + k
+                yield from ps(v, path + "/" + k)
+    found = [p for p in ps(out["per_model"]) if not any(f"/contrasts/{c}/" in p for c in A.CONTRASTS)]
+    assert found == []

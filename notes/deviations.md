@@ -481,3 +481,15 @@ The same day, also before any round-2 score, the round-2 yes/no question was anc
 
 
 On 2026-11-22, after review 2 and still before any round-2 score, the analysis gained a coded rejection list (R1–R5, each with the competence it needs) and a descriptive mapping for the central question (mechanism, poor state reasoning, combination, undecided). R3 (P against the role gap) fires only when the matched role gap confirms the unmatched one. Readings now state when a contrast is not competent. The analysis also refuses scores for arms a record does not have. No record or prompt changed (design section 15).
+
+
+At sign-off (2026-11-22), before any round-2 score, the owner's final corrections were applied (design section 15.F):
+
+- R3 is a descriptive consistency diagnostic outside the 50-test family;
+- R4 is a descriptive comparison with a paired interval, not a rejection;
+- R5 rejects only the predicted attenuation of the penalty with added steps;
+- competence is described as predictive discrimination, not inventory-rule competence;
+- the central question's answers have neutral labels;
+- the analysis reports which comparisons are confirmatory.
+
+A statistical audit (section 15.A) found no error in the Holm, TOST, margin, clustering or identity code. Records, prompts, populations, sample sizes and the model set did not change.

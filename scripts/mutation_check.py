@@ -484,7 +484,6 @@ MUTANTS = [
     ('textcraft r2 A two-item rows use all ingredients', 'wf/textcraft/r2_analysis.py', 'return [r for r in pops["goal"] + pops["ingredient_matched"] if r["both_task_line"]', 'return [r for r in pops["goal"] + pops["ingredient"] if r["both_task_line"]'),
     ('textcraft r2 A padded rows use all ingredients', 'wf/textcraft/r2_analysis.py', '    padded = pops["padded_goal"] + pops["padded_ingredient_matched"]\n    delta', '    padded = pops["padded_goal"] + [r for r in pops["padded"] if r["role"] == "ingredient"]\n    delta'),
     ('textcraft r2 A margin not capped', 'wf/textcraft/r2_analysis.py', '"margin": min(MARGIN_SD * sd, MARGIN_CAP),', '"margin": MARGIN_SD * sd,'),
-    ('textcraft r2 A interpretation ignores competence', 'wf/textcraft/r2_analysis.py', '        return ("distortion in a competent predictor" if competent else', '        return ("distortion in a competent predictor" if True else'),
     ('textcraft r2 A inconclusive naming counts as constrained', 'wf/textcraft/r2_analysis.py', 'naming_constrained = dn in ("equivalent to zero", "confirmed above zero")', 'naming_constrained = dn in ("equivalent to zero", "confirmed above zero", "inconclusive")'),
     ('textcraft r2 A timing comparison ignored', 'wf/textcraft/r2_analysis.py', '        if timing_comparable:', '        if False:'),
     ('textcraft r2 A F3 true when another model is below zero', 'wf/textcraft/r2_analysis.py', '    if [t for t in others if t in below]:\n        f3 = False', '    if False:\n        f3 = False'),
@@ -534,7 +533,6 @@ MUTANTS = [
     ('textcraft r2 W R3 without the matched confirmation', 'wf/textcraft/r2_analysis.py', '    fires = bool(testable and disagree and m_sign == rg_sign)', '    fires = bool(testable and disagree)'),
     ('textcraft r2 W R3 testable on P competence only', 'wf/textcraft/r2_analysis.py', '    testable = bool(comp["parent_penalty"] and comp["naming"] and comp["completion"])', '    testable = bool(comp["parent_penalty"])'),
     ('textcraft r2 W R5 ignores the timing competence', 'wf/textcraft/r2_analysis.py', '"fires": bool(comp["timing"] and t == "confirmed below zero"),', '"fires": bool(t == "confirmed below zero"),'),
-    ('textcraft r2 W R4 without the size comparison', 'wf/textcraft/r2_analysis.py', 'fires = bool(testable and ll["verdict"] == "confirmed above zero" and ll["estimate"] >= qq["estimate"])', 'fires = bool(testable and ll["verdict"] == "confirmed above zero")'),
     ('textcraft r2 W central mechanism without P competence', 'wf/textcraft/r2_analysis.py', '    if p_conf and p_comp and h6_best:', '    if p_conf and h6_best:'),
     ('textcraft r2 W central poor reasoning needs incompetence only', 'wf/textcraft/r2_analysis.py', '    elif not p_conf and (not p_comp or shortcut):', '    elif not p_conf and not p_comp:'),
     ('textcraft r2 W central shortcut on the point estimate', 'wf/textcraft/r2_analysis.py', '    shortcut = any(tr[k]["ci95"][0] > 0 for k in defined)', '    shortcut = any(tr[k]["estimate"] > 0 for k in defined)'),
@@ -542,6 +540,18 @@ MUTANTS = [
     ('textcraft r2 W reading competence qualifier off', 'wf/textcraft/r2_analysis.py', '            if missing:\n', '            if False:\n'),
     ('textcraft r2 W two-item rows keep records without the line', 'wf/textcraft/r2_analysis.py', 'if r["both_task_line"] and not R.two_item_partner_done(r)]', 'if not R.two_item_partner_done(r)]'),
     ('textcraft r2 W scores of other arms accepted', 'wf/textcraft/r2_analysis.py', '        if s["condition"] not in arms[s["transition_id"]]:', '        if False:'),
+    # TextCraft round 2, sign-off corrections (15.F, 2026-11-22)
+    ('textcraft r2 F R3 not labelled a diagnostic', 'wf/textcraft/r2_analysis.py', '        "kind": DIAGNOSTIC,\n', ''),
+    ('textcraft r2 F R5 rejects the whole largest-early claim', 'wf/textcraft/r2_analysis.py', '"rejects": "the predicted attenuation of the penalty with added steps (the "', '"rejects": "the claim that the penalty is largest early (the "'),
+    ('textcraft r2 F distortion called competent', 'wf/textcraft/r2_analysis.py', 'DISCRIMINATING_MODEL = "a model that discriminates successes from failures in these categories"', 'DISCRIMINATING_MODEL = "a competent predictor"'),
+    ('textcraft r2 F reading says not competent', 'wf/textcraft/r2_analysis.py', 'out[key] += "; measurable effect only; does not discriminate successes from failures for " + ", ".join(missing)', 'out[key] += "; measurable effect only; not competent for " + ", ".join(missing)'),
+    ('textcraft r2 F central label mechanism', 'wf/textcraft/r2_analysis.py', 'answer = "penalty with inventory-consistent tracking"', 'answer = "mechanism"'),
+    ('textcraft r2 F central label poor reasoning', 'wf/textcraft/r2_analysis.py', 'answer = "no confirmed penalty; shortcut-consistent or non-discriminating"', 'answer = "poor state reasoning"'),
+    ('textcraft r2 F lift difference reversed', 'wf/textcraft/r2_analysis.py', '            rows.append(a - b)', '            rows.append(b - a)'),
+    ('textcraft r2 F lift difference resampled by item', 'wf/textcraft/r2_analysis.py', '    d = draws(mean, rows, cl, B=DESC_DRAWS if B is None else B)\n    return {"difference"', '    d = draws(mean, rows, [str(i) for i in range(len(rows))], B=DESC_DRAWS if B is None else B)\n    return {"difference"'),
+    ('textcraft r2 F lift difference not reported', 'wf/textcraft/r2_analysis.py', '                                  lift_difference(bys["llama3.1-8b"], bys["qwen3-8b"], pops)', '                                  None'),
+    ('textcraft r2 F inference map missing', 'wf/textcraft/r2_analysis.py', ', "inference_map": INFERENCE_MAP}', '}'),
+    ('textcraft r2 A interpretation ignores competence', 'wf/textcraft/r2_analysis.py', '        return (DISCRIMINATING_DISTORTION if competent else', '        return (DISCRIMINATING_DISTORTION if True else'),
 ]
 
 
