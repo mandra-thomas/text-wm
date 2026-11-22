@@ -264,3 +264,161 @@ The script now logs the first failing test of every kill:
 | U2 matched cells of one item | `test_matched_sensitivity_removes_a_profile_confound` |
 | U2 craftable and raw swapped | `test_matched_sensitivity_removes_a_profile_confound` |
 | U4 strict against overlapping not pooled | `test_sensitivity_and_strict_comparison_are_reported` |
+
+### TextCraft round 2, after review 2 (2026-11-22)
+
+New tests cover:
+
+- review 2's verdict mutants: a confirmed effect above zero needs its interval (N1); the bootstrap p is two-sided (N10); difference is checked before equivalence (N19); the sign flip compares absolute values (N24);
+- review 2's surviving competence and contrast mutants: the competence populations exactly (N7–N9, N23); applicability read at one look-up (N5); the comparison with the one-look-up change (N6); the underpowered flag at Holm's first step (N12); the classification rates (N14); heuristics in the gated population (N15); the penalty competence passed across models (N16); the lift on every ingredient failure (N17); the Yes share on successes (N22); the TOST lower side (N25); the 95% interval in `between` (N11); verify's count of completed two-item records (N13);
+- the coded rejection list R1–R5, each firing, not firing and not testable, including R3's matched confirmation and its item-structure note;
+- the central question's four answers, which are mutually exclusive, with undefined tracking differences counting for neither side;
+- the paired tracking differences;
+- readings that say when a contrast is not competent;
+- scores refused for arms a record does not have;
+- the shared row set of the two-item contrasts and role gaps.
+
+The official run's log, `notes/textcraft_r2_mutation_log.txt`, is committed with the results below.
+
+**Official run (2026-11-22, at ef73d40, four shards; log `notes/textcraft_r2_mutation_log.txt`).** 137 round-2 mutants: 136 killed, 1 survivor, no timeouts, none not applied.
+
+The survivor, "A role gap on all rows", had become equivalent. After review 2 the role-gap readout reads `two_item_rows`, which already keeps only rows with a two-item line, so the guard that mutant removed did nothing. The guard was deleted, and the mutant with it. The row filter itself is covered by "W two-item rows keep records without the line", which was killed. The list now holds 136 round-2 mutants, all killed in the official run:
+
+| Mutant | First test that failed |
+|---|---|
+| two-item line kept for names with and | `test_two_item_line_is_sorted_and_shared_by_a_couple` |
+| hash misses the system text | `test_item_hash_covers_fields_and_context` |
+| eight look-ups become four | `test_parse_arm` |
+| padding on 9-12 steps too | `test_check_records_reports_and_passes` |
+| padded twin not checked | `test_padded_twin_and_class_checks` |
+| gate failure ignored | `test_scores_every_record_and_arm_then_resumes` |
+| shards by record not pair | `test_scores_every_record_and_arm_then_resumes` |
+| gate unfolded for Gemma | `test_gate_folds_for_gemma` |
+| completion lines reversed | `test_planted_effects_are_recovered_exactly` |
+| family without Holm | `test_family_is_holm_adjusted` |
+| competence AUC 0.6 | `test_competence_gate_uses_wave_a_rule` |
+| stale scores accepted | `test_stale_unknown_duplicate_or_foreign_scores_stop` |
+| sign flips single items | `test_sign_flip_flips_whole_pairs` |
+| R1-M1 hash misses action | `test_hash_covers_every_field_and_context_key` |
+| R1-M6 prompt check of system and examples off | `test_prompt_check_catches_a_changed_system_text` |
+| R1-M13 list-is-pair-list check off | `test_text_checks_catch_a_named_strict_parent_and_a_changed_list` |
+| R1-M21 mass on failures only | `test_mass_criterion_uses_failures_and_successes` |
+| R1-M48 sign-flip p unsmoothed | `test_sign_flip_p_is_smoothed` |
+| A penalty competence without the parent population | `test_local_competence_rules_and_the_boundary` |
+| A padded rows use all ingredients | `test_contrasts_use_class_matched_ingredients` |
+| A timing comparison ignored | `test_timing_qualifier_and_no_partial_naming_rule` |
+| A provenance revision check off | `test_provenance_requires_one_commit_and_pinned_revisions` |
+| A power at the 0.05 level only | `test_equivalence_power` |
+| U1 partner-made check off | `test_a_made_partner_is_detected_and_leaves_naming_and_completion` |
+| U4 strict against overlapping not pooled | `test_sensitivity_and_strict_comparison_are_reported` |
+| R2-N6 comparable uses role gap not one-lookup change | `test_n6_comparable_reads_the_one_lookup_change` |
+| R2-N10 bootstrap p one-sided | `test_n10_bootstrap_p_is_two_sided` |
+| R2-N14 failure classification rate inverted | `test_n14_classification_rates` |
+| R2-N18 lift competence on matched ingredients | `test_local_competence_rules_and_the_boundary` |
+| R2-N22 yes share successes check off | `test_n22_yes_share_on_successes` |
+| W R1 ignores the penalty competence | `test_rejection_list_per_model` |
+| W R4 without the size comparison | `test_rejection_r4_lift_and_r2` |
+| W tracking difference unpaired | `test_tracking_differences_are_paired` |
+| padding after the history | `test_every_arm_changes_only_what_its_name_says` |
+| hash misses the extended list | `test_item_hash_covers_fields_and_context` |
+| parent may share craftables with the partner | `test_a_parent_sharing_a_craftable_with_the_partner_does_not_qualify` |
+| frozen items reused as parents | `test_rebuilding_two_pairs_gives_the_committed_records` |
+| padded class not checked | `test_padded_twin_and_class_checks` |
+| resume ignores record hashes | `test_resume_refuses_scores_of_changed_records` |
+| gate candidate check off | `test_gate_catches_a_candidate_written_differently_by_the_template` |
+| lift on the goal role | `test_planted_effects_are_recovered_exactly` |
+| naming against neutral | `test_planted_effects_are_recovered_exactly` |
+| family shrinks with missing p | `test_family_is_fixed_at_fifty_and_pads_missing` |
+| competence on the two-candidate score | `test_competence_gate_uses_wave_a_rule` |
+| verdicts with missing scores | `test_missing_scores_withhold_verdicts` |
+| heuristic H9 always true | `test_heuristics_agree_with_the_competence_script_on_every_item` |
+| R1-M2 hash misses swapped line | `test_hash_covers_every_field_and_context_key` |
+| R1-M9 excluded goals allowed as parents | `test_excluded_goals_never_qualify_as_parents` |
+| R1-M14 NaN L not counted missing | `test_nan_scores_count_as_missing` |
+| R1-M35 contrasts get twice the margin | `test_margin_is_capped_at_four_tenths` |
+| R1-M51 padded replay without the no-goal game | `test_padded_replay_covers_no_goal` |
+| A naming competence on all ingredients | `test_local_competence_rules_and_the_boundary` |
+| A margin not capped | `test_margin_is_capped_at_four_tenths` |
+| A F3 true when another model is below zero | `test_across_models_patterns_and_f3` |
+| A family draws 4000 | `test_family_tests_use_at_least_20000_draws` |
+| A parent records without the neutral question | `test_record_counts_and_arms` |
+| Q round-1 question in the prompts | `test_every_arm_changes_only_what_its_name_says` |
+| U2 matched cells unweighted | `test_matched_sensitivity_removes_a_profile_confound` |
+| R2-N1 confirmed above without interval | `test_n1_confirmed_above_needs_the_interval` |
+| R2-N7 goal_main competence vs all successes | `test_n7_n8_n9_n23_competence_populations_are_exact` |
+| R2-N11 ci95 is a 90% interval in between() | `test_n11_between_reports_the_95_percent_interval` |
+| R2-N15 heuristics on the full population, not the gated one | `test_n15_heuristics_are_read_in_the_gated_population` |
+| R2-N19 equivalence checked before differs | `test_n19_difference_is_checked_before_equivalence` |
+| R2-N23 parent competence vs main goal successes | `test_n7_n8_n9_n23_competence_populations_are_exact` |
+| W R3 without the matched confirmation | `test_rejection_list_per_model` |
+| W central mechanism without P competence | `test_central_question_is_exclusive[p_ci4-False-tracking4-undecided]` |
+| W reading competence qualifier off | `test_reading_says_when_a_contrast_is_not_competent` |
+| ext arm shows the item's own list | `test_every_arm_changes_only_what_its_name_says` |
+| Gemma not folded | `test_gemma_folds_the_system_text_and_the_others_do_not` |
+| strict parent not preferred | `test_every_parent_is_the_rules_choice` |
+| parent draw seed drops the bin | `test_rebuilding_two_pairs_gives_the_committed_records` |
+| text-only partner check off | `test_text_parent_check_catches_bad_parents` |
+| golden problems ignored | `test_run_gate_requires_the_golden_and_the_attention` |
+| gate single-token check off | `test_gate_fails_on_each_tokenization_problem[tok1-not one token]` |
+| penalty against the swapped line | `test_planted_effects_are_recovered_exactly` |
+| timing reversed | `test_planted_effects_are_recovered_exactly` |
+| margin half an SD | `test_margin_is_capped_at_four_tenths` |
+| confirmed without the interval | `test_verdicts_are_statistical_and_never_withheld` |
+| used-up goal items kept | `test_populations_on_the_full_records` |
+| heuristic H2 counts crafted units twice | `test_heuristics_agree_with_the_competence_script_on_every_item` |
+| R1-M3 hash misses recipe_lines | `test_hash_covers_every_field_and_context_key` |
+| R1-M10 text strict-word check off | `test_text_checks_catch_a_named_strict_parent_and_a_changed_list` |
+| R1-M15 timing applicable on the estimate | `test_timing_applicability_reads_the_interval` |
+| R1-M38 resume ignores the model | `test_resume_refuses_scores_of_another_model` |
+| A local AUC 0.6 | `test_local_auc_boundary_is_inclusive[4-False]` |
+| A contrast competence ignores the other criteria | `test_local_competence_rules_and_the_boundary` |
+| A interpretation ignores competence | `test_interpretation_separates_measurable_effects_from_distortions` |
+| A F3 never undecided | `test_across_models_patterns_and_f3` |
+| A parent whole-name subset reversed | `test_parent_subsets_overlap_kinds_and_splits` |
+| A fast bootstrap ignores the ingredient side | `test_fast_draws_equal_the_general_path` |
+| Q hash covers round 1's question | `test_hash_covers_every_field_and_context_key` |
+| U2 matched cells of one item | `test_role_gap_descriptive_equals_naming_plus_completion` |
+| R2-N3 completion confirmatory reversed only | `test_planted_effects_are_recovered_exactly` |
+| R2-N8 goal_padded competence vs all goal successes | `test_n7_n8_n9_n23_competence_populations_are_exact` |
+| R2-N12 underpowered flag at the 0.05 level | `test_n12_underpowered_at_the_first_holm_step` |
+| R2-N16 across uses lift competence | `test_n16_across_reads_the_penalty_competence` |
+| R2-N20 margin from all main records incl successes | `test_margin_is_capped_at_four_tenths` |
+| R2-N24 sign flip obs not absolute | `test_n24_sign_flip_uses_the_absolute_value` |
+| W R3 testable on P competence only | `test_rejection_list_per_model` |
+| W central poor reasoning needs incompetence only | `test_central_question_is_exclusive[p_ci6-True-tracking6-poor state reasoning]` |
+| W two-item rows keep records without the line | `test_role_gap_descriptive_equals_naming_plus_completion` |
+| two-item line not sorted | `test_two_item_line_is_sorted_and_shared_by_a_couple` |
+| yes/no query keeps Next observation | `test_every_arm_changes_only_what_its_name_says` |
+| yes/no candidates reversed | `test_candidates` |
+| added lines appended | `test_structure_check_catches_changes` |
+| three failures per bin | `test_rebuilding_two_pairs_gives_the_committed_records` |
+| yes/no scored with two passes | `test_yes_no_arms_use_one_forward_pass` |
+| attention not checked | `test_run_gate_requires_the_golden_and_the_attention` |
+| gate first-token check off | `test_gate_fails_on_each_tokenization_problem[tok2-share their first token]` |
+| gap without the ingredient term | `test_planted_effects_are_recovered_exactly` |
+| timing always applicable | `test_timing_not_applicable_without_a_role_gap` |
+| TOST from the smaller side | `test_statistics_helpers` |
+| naming reading only without completion | `test_reading_table[confirmed below zero-confirmed below zero-confirmed below zero-naming / partial-completion penalty]` |
+| bootstrap resamples items | `test_fast_draws_equal_the_general_path` |
+| used-up AUC not role-matched | `test_used_up_auc_is_role_matched` |
+| R1-M4 hash context misses NEXT | `test_hash_covers_every_field_and_context_key` |
+| R1-M11 padded verdict check off | `test_padded_reply_check` |
+| R1-M16 padded goal keeps used up | `test_populations_on_the_full_records` |
+| R1-M40 shards from an unsorted pair set | `test_shards_are_sorted_pair_slices` |
+| A local AUC strict boundary | `test_local_auc_boundary_is_inclusive[3-True]` |
+| A two-item rows use all ingredients | `test_contrasts_use_class_matched_ingredients` |
+| A inconclusive naming counts as constrained | `test_reading_table[confirmed below zero-inconclusive-confirmed below zero-completion contributes; naming not constrained]` |
+| A provenance commit check off | `test_provenance_requires_one_commit_and_pinned_revisions` |
+| A overlap kind by characters | `test_parent_subsets_overlap_kinds_and_splits` |
+| A fast bootstrap resamples items | `test_statistics_helpers` |
+| U1 completed two-item records kept | `test_a_made_partner_is_detected_and_leaves_naming_and_completion` |
+| U2 craftable and raw swapped | `test_matched_sensitivity_removes_a_profile_confound` |
+| R2-N5 applicability on the unpadded gap | `test_n5_applicability_reads_one_lookup` |
+| R2-N9 ingredient padded competence vs all ingredient successes | `test_n7_n8_n9_n23_competence_populations_are_exact` |
+| R2-N13 verify partner-done count off | `test_n13_verify_counts_two_item_records_with_a_made_goal` |
+| R2-N17 lift on class-matched ingredients | `test_n17_lift_uses_every_ingredient_failure` |
+| R2-N21 F3 counts Llama | `test_across_models_patterns_and_f3` |
+| R2-N25 tost low side at twice the margin | `test_n25_tost_low_side_uses_the_margin` |
+| W R5 ignores the timing competence | `test_rejection_list_per_model` |
+| W central shortcut on the point estimate | `test_central_question_is_exclusive[p_ci3-True-tracking3-undecided]` |
+| W scores of other arms accepted | `test_scores_must_be_arms_of_their_record` |

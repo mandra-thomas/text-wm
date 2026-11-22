@@ -827,9 +827,9 @@ def descriptive(by: dict, pops: dict[str, list[dict]]) -> dict[str, Any]:
             pos[f"{name}|{side}"] = describe_gap(*gap_rows(by, sub, f))
     out["two_item_by_position"] = pos
     # the round-2 role gap on the rows both two-item contrasts use (equals naming plus completion exactly; 14.R3)
-    has_both = lambda i: L(by, i, "both") == L(by, i, "both")
-    out["role_gap_main"] = describe_gap(*gap_rows(by, roles, lambda i: (L(by, i, "aligned") - L(by, i, "swapped"))
-                                                  if has_both(i) else float("nan")))
+    # (the rows already all have a two-item line, so no further guard is needed; review 2's official mutation run
+    # showed the earlier guard had become redundant)
+    out["role_gap_main"] = describe_gap(*gap_rows(by, roles, lambda i: L(by, i, "aligned") - L(by, i, "swapped")))
     # user point 2: matched sensitivity analyses of the role comparisons (not primary)
     roles_all = two_item_rows(pops)  # review 2: the same rows as role_gap_main
     pad_rows = pops["padded_goal"] + pops["padded_ingredient_matched"]
