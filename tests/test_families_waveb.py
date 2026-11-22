@@ -223,11 +223,12 @@ class ChatTok:
     rendered reply lacks, optional forbidden text, and options to break each property."""
 
     def __init__(self, reads_switch=True, marker_when_off=False, suffix="", off="OFF", system_text="",
-                 off_on_yes_no=True, on_text="THINK"):
+                 off_on_yes_no=True, on_text="THINK", examples_off=False):
         self.vocab: dict[str, int] = {"<s>": 0, "<e>": 1, "<u>": 2, "<a>": 3}
         self.all_special_ids, self.added_tokens_decoder = [0, 1, 2, 3], {}
         self.reads_switch, self.marker_when_off, self.suffix, self.off = reads_switch, marker_when_off, suffix, off
         self.system_text, self.off_on_yes_no, self.on_text = system_text, off_on_yes_no, on_text
+        self.examples_off = examples_off  # every earlier reply carries the thinking-off text too (Qwen3.8's default)
 
     def _id(self, w):
         return self.vocab.setdefault(w, len(self.vocab))
@@ -241,7 +242,7 @@ class ChatTok:
         yes_no = any("Answer:" in m["content"] for m in turns if m["role"] == "user")
         off = self.off if (self.off_on_yes_no or not yes_no) else ""
         # a final assistant reply is written after the thinking-off text, as Qwen's template writes its empty block
-        body = " ".join(f"<a> {off + ' ' if (k == len(turns) - 1) else ''}{m['content']} <e>" if m["role"] == "assistant"
+        body = " ".join(f"<a> {off + ' ' if (k == len(turns) - 1 or self.examples_off) else ''}{m['content']} <e>" if m["role"] == "assistant"
                         else f"<u> {m['content']} <e>" for k, m in enumerate(turns))
         text = "<s> " + ("MARKER " if self.marker_when_off else "") + self.system_text + body
         if add_generation_prompt:
@@ -559,10 +560,14 @@ def test_environment_gate_blocks_every_read_verdict_unless_passed():
     fam = _family({"a:item_share_toward_yes": ("supported", 0.8), "b:item_share_toward_yes": ("not interpretable", 0.5),
                    "a vs b:share_differs": ("not supported", 0.0)}, {"a vs b": "inconclusive (no difference detected)",
                                                                      "c vs d": "waiting"})
+    fam["tests"]["c:item_share_toward_yes"] = {"verdict": "waiting", "estimate": 0.5}
     out = families.apply_environment_gate(json.loads(json.dumps(fam)), False)
     assert out["tests"]["a:item_share_toward_yes"]["verdict"] == families.ENVIRONMENT_BLOCKED
     assert out["tests"]["a vs b:share_differs"]["verdict"] == families.ENVIRONMENT_BLOCKED
-    assert out["tests"]["b:item_share_toward_yes"]["verdict"] == "not interpretable"
+    # review 1 (S5): a competence verdict is a reading of wave B scores too, and no estimate stays in the record
+    assert out["tests"]["b:item_share_toward_yes"]["verdict"] == families.ENVIRONMENT_BLOCKED
+    assert out["tests"]["c:item_share_toward_yes"]["verdict"] == "waiting"
+    assert all(t["estimate"] is None for t in out["tests"].values())
     assert out["comparison_readings"] == {"a vs b": families.ENVIRONMENT_BLOCKED, "c vs d": "waiting"}
     for missing in (None, False):
         assert families.apply_environment_gate(json.loads(json.dumps(fam)), missing)["tests"][
@@ -570,11 +575,12 @@ def test_environment_gate_blocks_every_read_verdict_unless_passed():
     assert families.apply_environment_gate(json.loads(json.dumps(fam)), True)["tests"] == fam["tests"]
 
 
-def _report(readings, estimates, share_verdicts, both=True):
+def _report(readings, estimates, share_verdicts, both=True, passed=True, yn_ci=(0.5, 1.5)):
     tests = {f"{t}:item_share_toward_yes": {"verdict": v, "estimate": 0.8} for t, v in share_verdicts.items()}
     tests.update({f"{k}:share_differs": {"verdict": "supported", "estimate": e} for k, e in estimates.items()})
-    return {"models": {t: {} for t in B}, "prediction_check": {t: {"holds": both} for t in B},
-            "primary_family": {"tests": tests, "comparison_readings": readings}}
+    return {"models": {t: {} for t in B}, "prediction_check": {t: {"holds": both, "yes_no_ci": list(yn_ci)} for t in B},
+            "primary_family": {"tests": tests, "comparison_readings": readings},
+            "environment_check": {"pass": passed}}
 
 
 def test_wave_b_predictions_are_read_as_logged():
@@ -601,6 +607,118 @@ def test_wave_b_predictions_are_read_as_logged():
     verdicts["ministral3-8b-it"] = "waiting"
     assert families.waveb_predictions(_report(readings, est, verdicts))["B1"]["ministral3-8b-it"]["holds"] is None
     assert families.waveb_predictions(_report(readings, est, verdicts, both=False))["B1"]["gemma4-31b-it"]["holds"] is False
+
+
+def test_b2_generation_pairs_carry_the_size_caveat():
+    pairs = [f"{a} vs {b}" for a, b in families.WAVE_B_PLANNED]
+    readings = {k: "inconclusive (no difference detected)" for k in pairs}
+    p = families.waveb_predictions(_report(readings, {k: 0.0 for k in pairs}, {t: "supported" for t in families.WAVE_B_SHARE_TESTS}))
+    for k in pairs[:4]:
+        assert p["B2"][k]["caveat"] == families.PAIR_CAVEAT and p["B2"][k]["holds"] is True
+    assert "0.49 / 0.89 / 0.70 / 0.71" in families.PAIR_CAVEAT and "not a generation effect" in families.PAIR_CAVEAT
+    assert "caveat" not in p["B3"][pairs[4]]
+    assert families.QWEN3_SIZE_SERIES["qwen3-4b"] == {"share": 0.491, "yes_no_delta_L": 2.27}
+
+
+@pytest.mark.parametrize("share, ci, reading", [
+    ("supported", (0.5, 1.0), "effect present (share supported)"),
+    ("not supported", (0.4, 3.0), "effect carried by a minority of items (as Qwen3-4B)"),
+    ("not supported", (-0.2, 0.3), "no detectable effect"),
+    ("not supported", (0.0, 0.3), "no detectable effect"),  # a CI touching zero is not above it
+    ("not supported", (-0.9, -0.1), "yes/no effect reversed (aligned below swapped)"),
+    ("not interpretable", (0.5, 1.0), None),
+    ("waiting", (0.5, 1.0), None),
+    (None, (0.5, 1.0), None),
+])
+def test_b1_reading_separates_a_minority_effect_from_no_effect(share, ci, reading):
+    """Review 1, M2: 'no detectable effect' only when the share and the yes/no effect are both null; a share that is
+    not supported with the yes/no CI above zero is the Qwen3-4B pattern."""
+    assert families.b1_reading(share, list(ci)) == reading
+
+
+def test_b1_reading_in_the_predictions():
+    verdicts = {t: "supported" for t in families.WAVE_B_SHARE_TESTS}
+    verdicts["qwen3.8-27b"] = "not supported"
+    p = families.waveb_predictions(_report({}, {}, verdicts, yn_ci=(0.3, 2.0)))
+    assert p["B1"]["qwen3.8-27b"]["reading"] == families.B1_READINGS["minority"] and p["B1"]["qwen3.8-27b"]["holds"] is False
+    assert p["B1"]["ministral3-8b-it"]["reading"] == families.B1_READINGS["supported"]
+    assert p["B1"]["qwen3.5-9b-plain"]["reading"] is None  # no share test for the plain-format instruct run
+    p = families.waveb_predictions(_report({}, {}, verdicts, yn_ci=(-0.3, 0.2)))
+    assert p["B1"]["qwen3.8-27b"]["reading"] == families.B1_READINGS["null"]
+    assert "Qwen3-4B" in families.PREDICTION_B and "0.49" in families.PREDICTION_B
+
+
+def test_predictions_read_nothing_unless_the_environment_check_passed():
+    """Review 1, S5(a): B1 held for runs without a share test (qwen3.5-9b-plain) although the check had failed."""
+    pairs = [f"{a} vs {b}" for a, b in families.WAVE_B_PLANNED]
+    readings = {k: "differs" for k in pairs}
+    verdicts = {t: "supported" for t in families.WAVE_B_SHARE_TESTS}
+    for passed in (False, None):
+        p = families.waveb_predictions(_report(readings, {k: 0.1 for k in pairs}, verdicts, passed=passed))
+        assert all(v["holds"] is None and v["both_formats_positive"] is None and v["reading"] is None
+                   for v in p["B1"].values()), p["B1"]
+        assert all(v["holds"] is None and v["estimate"] is None for v in list(p["B2"].values()) + list(p["B3"].values()))
+        assert all(v["reading"] == families.ENVIRONMENT_BLOCKED for v in p["B2"].values())
+    p = families.waveb_predictions(_report(readings, {k: 0.1 for k in pairs}, verdicts, passed=True))
+    assert p["B1"]["qwen3.5-9b-plain"]["holds"] is True and p["B3"][pairs[4]]["holds"] is True
+    # an explicit argument overrides the report
+    assert families.waveb_predictions(_report(readings, {k: 0.1 for k in pairs}, verdicts, passed=True),
+                                      False)["B1"]["qwen3.5-9b-plain"]["holds"] is None
+
+
+COMPETENCE_CHECKS = ("auc_neutral", "yes_share_neutral_failures", "yes_share_neutral_successes", "median_yes_no_mass_neutral")
+
+
+def _b3_blocks(failed=("median_yes_no_mass_neutral",), auc2=0.8, inst_ok=True):
+    checks = {k: {"pass": k not in failed} for k in COMPETENCE_CHECKS}
+    inst, base = families.WAVE_B_PLANNED[4]
+    return {inst: {"competence": {"interpretable": inst_ok, "checks": {k: {"pass": True} for k in COMPETENCE_CHECKS}},
+                   "auc": {"absent": {"auc": 0.9}}},
+            base: {"competence": {"interpretable": not failed, "checks": checks}, "auc": {"absent": {"auc": auc2}}}}
+
+
+def _b3_scores(shift_inst=1.0, shift_base=0.0, n=40):
+    primary = [{"id": f"f{i}", "game_id": f"g{i % 8}"} for i in range(n)]
+    successes = [{"id": f"s{i}", "game_id": f"g{i % 8}"} for i in range(8)]
+
+    def scores(shift, model):
+        out = []
+        for k, t in enumerate(primary):
+            noise = 0.1 * ((k * 7919) % 11 - 5)
+            for c, v in (("aligned", shift + noise), ("swapped", 0.0), ("absent", -1.0)):
+                out.append({"transition_id": t["id"], "condition": c, "L": v, "model": model})
+        out += [{"transition_id": t["id"], "condition": "absent", "L": 2.0, "model": model} for t in successes]
+        return out
+    inst, base = families.WAVE_B_PLANNED[4]
+    return {inst: scores(shift_inst, inst), base: scores(shift_base, base)}, primary, successes
+
+
+def test_b3_falls_back_to_the_two_candidate_share_only_when_the_base_fails_only_coverage():
+    scores, primary, successes = _b3_scores()
+    fb = families.b3_fallback(_b3_blocks(), scores, primary, successes)
+    assert fb["applies"] is True and fb["comparison"]["differs"] and fb["comparison"]["estimate"] > 0.3
+    for blocks in (_b3_blocks(failed=()), _b3_blocks(failed=("auc_neutral", "median_yes_no_mass_neutral")),
+                   _b3_blocks(auc2=0.69), _b3_blocks(inst_ok=False)):
+        assert families.b3_fallback(blocks, scores, primary, successes)["applies"] is False
+    assert families.b3_fallback({}, scores, primary, successes)["applies"] is None
+    # read into B3: holds on a positive difference, not on none
+    inst, base = families.WAVE_B_PLANNED[4]
+    key = f"{inst} vs {base}"
+    rep = _report({key: "not interpretable"}, {}, {}, passed=True)
+    rep["b3_fallback"] = fb
+    b3 = families.waveb_predictions(rep)["B3"][key]
+    assert b3["holds"] is True and b3["basis"] == "two-candidate fallback"
+    same, _, _ = _b3_scores(shift_inst=0.0)
+    rep["b3_fallback"] = families.b3_fallback(_b3_blocks(), same, primary, successes)
+    assert families.waveb_predictions(rep)["B3"][key]["holds"] is False
+    neg, _, _ = _b3_scores(shift_inst=-1.0)  # the instruct model moves fewer failures: a clear negative difference
+    rep["b3_fallback"] = families.b3_fallback(_b3_blocks(), neg, primary, successes)
+    assert rep["b3_fallback"]["comparison"]["differs"] and families.waveb_predictions(rep)["B3"][key]["holds"] is False
+    rep["environment_check"]["pass"] = False
+    assert families.waveb_predictions(rep)["B3"][key]["holds"] is None
+    rep["b3_fallback"] = {"applies": False}
+    rep["environment_check"]["pass"] = True
+    assert families.waveb_predictions(rep)["B3"][key]["holds"] is None  # not interpretable, no fallback
 
 
 # ---------------- tools ----------------
@@ -760,7 +878,18 @@ def _cfg(run_id, model, **kw):
     return {"run_id": run_id, "model": model, "sources": ["rq12_transitions_smoke"], "n_shards": 1, **kw}
 
 
-def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root):
+def _envcheck_runs(monkeypatch, n, gpus=None):
+    """Both environment-check runs, each on the GPU its job records (review 1, S4): the pinned type by default."""
+    import wf.provenance as prov
+
+    for tag in families.ENVCHECK_MODELS:
+        gpu = (gpus or families.ENVCHECK_GPU)[tag]
+        monkeypatch.setattr(prov, "gpu_names", lambda gpu=gpu: [gpu] if gpu else None)
+        assert families.run_family_envcheck(_cfg(f"family_envcheck_{tag}", tag, n_items=n)) == 0
+    monkeypatch.setattr(prov, "gpu_names", lambda: None)
+
+
+def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root, monkeypatch):
     for tag in B:
         assert families.run_family_score(_cfg(f"family_score_{tag}", tag)) == 0
         d = mock_root / f"family_score_{tag}" / "shard_00_of_01"
@@ -768,14 +897,15 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root):
         assert saved["model_spec"]["revision"] == C.REVISIONS[B[tag].hf_id] and saved["model_spec"]["wave"] == "B"
         gate = json.loads((d / "tokenization_checks.json").read_text())
         assert gate["skipped"] == "mock" and gate["environment"]["checked"] == "mock"
+        assert gate["environment"]["resources"] == {"checked": "mock"}  # review 1, S6: checked at every job start
         assert {x["model"] for x in map(json.loads, (d / "scoring.jsonl").read_text().splitlines())} == {tag}
     for tag in ("gemma2-9b-it", "mistral-7b-v0.3"):
         assert families.run_family_score(_cfg(f"family_score_{tag}", tag)) == 0
     for tag in ("qwen3-8b", "qwen3-32b"):
         assert sizes.run_size_score(_cfg(f"size_score_{tag}", tag)) == 0
     assert families.run_family_placement(_cfg("family_placement_gemma4-e4b-it", "gemma4-e4b-it", n_items=5)) == 0
-    for tag in families.ENVCHECK_MODELS:
-        assert families.run_family_envcheck(_cfg(f"family_envcheck_{tag}", tag, n_items=5)) == 0
+    assert families.run_family_nopreserve(_cfg("family_nopreserve_qwen3.8-27b", "qwen3.8-27b", n_items=5)) == 0
+    _envcheck_runs(monkeypatch, 5)
     (mock_root / "envcheck_tokens").mkdir()
     for tag in families.ENVCHECK_MODELS:
         (mock_root / "envcheck_tokens" / f"compare_{tag}.json").write_text(json.dumps({"ok": True, "n_compared": 9}))
@@ -797,6 +927,13 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root):
     assert set(rep["comparisons"]) >= {f"{a} vs {b}" for a, b in families.WAVE_B_PLANNED}
     assert "qwen3.5-9b vs qwen3.5-9b-plain" in rep["comparisons"] and "gemma4-e4b-it" in rep["placement"]
     assert not any(v["verdict"] == families.ENVIRONMENT_BLOCKED for v in fam["tests"].values())
+    # review 1: the preserve_thinking check and the placement check are read by the one-fifth rule; B3's fallback
+    tc = rep["template_checks"]["qwen3.8-27b"]
+    assert tc["n_items"] == 5 and set(tc["one_fifth_rule"]) == {"yes_no", "two_candidate"}
+    assert set(rep["placement"]["gemma4-e4b-it"]["one_fifth_rule"]) == {"yes_no", "two_candidate"}
+    assert rep["b3_fallback"]["applies"] in (True, False) and rep["amendments"]["pair_caveat"] == families.PAIR_CAVEAT
+    status = (mock_root / "families_waveb_analysis" / "STATUS.md").read_text()
+    assert "share toward Yes" in status and "preserve_thinking=False minus native" in status
 
     # the same analysis with a failed environment check reads no test
     m = json.loads((mock_root / "families_envcheck" / "metrics.json").read_text())
@@ -805,6 +942,23 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root):
     rep = json.loads((mock_root / "families_waveb_analysis_blocked" / "metrics.json").read_text())
     assert rep["environment_check"]["pass"] is False and rep["primary_family"]["environment_check_passed"] is False
     assert not any(v["verdict"] in ("supported", "not supported") for v in rep["primary_family"]["tests"].values())
+    # review 1 (S5): nothing read from a wave B score is written anywhere: no estimate, block, comparison or check
+    assert all(v["verdict"] in (families.ENVIRONMENT_BLOCKED, "waiting") and v["estimate"] is None and v["p"] is None
+               for v in rep["primary_family"]["tests"].values())
+    assert all(set(m) == {"withheld", "spec", "tokenization_gate", "records_outside_population"}
+               for m in rep["models"].values())
+    assert all(c == {"withheld": families.ENVIRONMENT_BLOCKED} for c in rep["comparisons"].values())
+    assert rep["placement"]["gemma4-e4b-it"]["withheld"] == families.ENVIRONMENT_BLOCKED
+    assert rep["template_checks"]["qwen3.8-27b"]["withheld"] == families.ENVIRONMENT_BLOCKED
+    assert rep["b3_fallback"]["withheld"] == families.ENVIRONMENT_BLOCKED
+    assert all(v["holds"] is None and v["both_formats_positive"] is None for v in rep["predictions_b"]["B1"].values())
+    assert all(p == {"withheld": families.ENVIRONMENT_BLOCKED} for p in rep["prediction_check"].values())
+    assert "qwen3-8b" in rep["reference"] and "primary_metrics" in rep["reference"]["qwen3-8b"]  # earlier models stay
+    status = (mock_root / "families_waveb_analysis_blocked" / "STATUS.md").read_text()
+    for tag in B:
+        assert f"{tag}: {families.ENVIRONMENT_BLOCKED}; scores complete, nothing read" in status
+    assert "share toward Yes" not in status.split("(reference)")[0] and "Holm p" not in status
+    assert "item share" not in status and "placement" not in status and "B1 " not in status
     # the mock models may fail the competence gate; whatever would have been read is now blocked
     unblocked = json.loads((mock_root / "families_waveb_analysis" / "metrics.json").read_text())["primary_family"]
     for k, v in unblocked["tests"].items():
@@ -813,9 +967,8 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root):
     assert unblocked["environment_check_passed"] is True
 
 
-def test_envcheck_fails_without_the_token_comparison(mock_root):
-    for tag in families.ENVCHECK_MODELS:
-        assert families.run_family_envcheck(_cfg(f"family_envcheck_{tag}", tag, n_items=4)) == 0
+def test_envcheck_fails_without_the_token_comparison(mock_root, monkeypatch):
+    _envcheck_runs(monkeypatch, 4)
     assert families.run_family_score(_cfg("family_score_mistral-7b-v0.3", "mistral-7b-v0.3")) == 0
     assert sizes.run_size_score(_cfg("size_score_qwen3-8b", "qwen3-8b")) == 0
     from wf.runs import load_config

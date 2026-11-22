@@ -1,0 +1,15 @@
+run_id: family_nopreserve_qwen3.8-27b
+# Wave B template check (review 1, S8; logged 2026-11-22 before any wave B score): Qwen3.8 27B with
+# preserve_thinking=False, so its template writes no empty think block into the few-shot replies (as Qwen3.5's and
+# Qwen3's do not), on the 300 seeded primary items under the aligned and swapped tasks in both formats (about 1,800
+# passes, about 0.3 A100-hours); saved under qwen3.8-27b-nopreserve and read against the model's own run by the
+# one-fifth rule (families_waveb_analysis, template_checks). Job: pace/family_score_serve2.sbatch, after
+# family_score_qwen3.8-27b and before family_score_gemma4-31b-it.
+model: qwen3.8-27b
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_shards: 1
+n_items: 300
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

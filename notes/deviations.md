@@ -10,6 +10,17 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided or found 2026-11-22
+
+- **Model families, wave B: review 1 and its fixes, before any wave B score** (branch `families-waveb`; [families_waveb_review1.md](families_waveb_review1.md); design note section 18). No wave B weight had been downloaded and no wave B model scored.
+  - *A crash found before any run.* In transformers 5, `apply_chat_template(tokenize=True)` returns a BatchEncoding, which the scorer passed to `torch.cat` and to the model; every chat-format score would have stopped the job. The scorer now takes the ids out of it (transformers 4 unchanged), and a serve2-only test scores end to end through tiny random-weight models of the three wave B classes with the pinned tokenizers.
+  - *B1's basis corrected.* Qwen3-4B is competent but its share toward Yes is 0.49 with a yes/no effect of 2.27 nats, so "every interpretable model shows it" holds for the log-odds effect, not the share. A share that is not supported now reads "effect carried by a minority of items (as Qwen3-4B)" when the yes/no effect's CI is above zero, and "no detectable effect" only when both are null. The prediction is unchanged.
+  - *Route A (node-local weights) chosen,* with a committed manifest of every file's size and hash per model (from Hub metadata, no token), a disk-space check, a hash check of every downloaded file, a refusal of any folder on `/storage`, and the hashes saved in each shard.
+  - *Gates added or tightened:* the environment check's GPU type pinned (A40 for Mistral 7B, L40S for Qwen3-8B); no wave B number written anywhere unless the environment check passed; GPU and job memory checked before loading; an eager-against-SDPA agreement check at the start of each Gemma 4 job; the CPU gate tool runs the check variants and exits 1 on any failure.
+  - *Pre-registered additions:* a 300-item check of Qwen3.8 27B with `preserve_thinking=False` (its template otherwise writes empty think blocks into the examples), read by the one-fifth rule; B3's readout on the two-candidate item share if the base model fails only the yes/no coverage criterion; the run order (environment check, the four small models, Qwen3.8 with its check, Gemma 4 31B last).
+  - *Wording:* generation pairs carry the Qwen3 size spread of the share (0.49 / 0.89 / 0.70 / 0.71 at 4B / 8B / 14B / 32B), and a "differs" is not read as a generation effect; B2 can fail only on a clear negative difference; the outcome table says "goal-congruent shift" and does not read the share as separating wishful prediction from task relevance.
+  - *Gemma pair kept as designed.* Gemma-4-12B-it exists and fits the GPU tier, but uses the 31B template (an empty thought channel ends its generation prompt) and another architecture, so Gemma 4 E4B stays, with its size confound stated.
+
 ## Decided or found 2026-11-21
 
 - **TextCraft follow-ups (exploratory).** These are the cross-environment comparison (`xenv-compare`) and the Llama diagnostics (`textcraft-llama-dx`); summary in `textcraft_results.md`, "Follow-up analyses". Every diagnostic GPU run had a dated plan committed before its data. The runs used new checkouts on the cluster and left the confirmatory runs untouched.

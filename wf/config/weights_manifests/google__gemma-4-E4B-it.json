@@ -1,0 +1,68 @@
+{
+ "hf_id": "google/gemma-4-E4B-it",
+ "revision": "4ecc2ba63bcac23ba4a767fc87025b1450f84c9c",
+ "allow_patterns": [
+  "*.json",
+  "*.safetensors",
+  "*.model",
+  "*.model.v3",
+  "*.jinja",
+  "merges.txt"
+ ],
+ "ignore_patterns": [
+  "original/*",
+  "consolidated*",
+  "*.pth",
+  "*.bin",
+  "*.gguf",
+  "*.msgpack",
+  "*.h5"
+ ],
+ "files": [
+  {
+   "name": "chat_template.jinja",
+   "size": 18569,
+   "git_sha1": "fbe3b59b625cd1b8850ea592d4203df6ec04684b"
+  },
+  {
+   "name": "config.json",
+   "size": 5145,
+   "git_sha1": "d68960fdcce766f2bfe41436325a8a483a74d125"
+  },
+  {
+   "name": "generation_config.json",
+   "size": 208,
+   "git_sha1": "e605bb4523b1462ea9d9a3810b9e3ecf7ab7b1f6"
+  },
+  {
+   "name": "model.safetensors",
+   "size": 15992595884,
+   "sha256": "cfbd3d2f1cd71bd471c37fe2bf8546d5028d41e5736f64e1ca6c6b8893125503"
+  },
+  {
+   "name": "processor_config.json",
+   "size": 1689,
+   "git_sha1": "5465974d23e1eca2c46c2809b26c997946ce0d90"
+  },
+  {
+   "name": "tokenizer.json",
+   "size": 32156428,
+   "sha256": "91d9cf86906f78e197021fda88214d448e5c120665d0243a8e776e046986c6bc"
+  },
+  {
+   "name": "tokenizer_config.json",
+   "size": 3082,
+   "git_sha1": "6068e357379d36f823c377e30efb101fa2c67fe4"
+  }
+ ],
+ "n_files": 7,
+ "total_bytes": 16024781005,
+ "source": "HfApi.model_info(files_metadata=True), no token",
+ "dry_run_cross_check": {
+  "available": true,
+  "same_files_and_sizes": true,
+  "only_in_dry_run": [],
+  "only_in_metadata": [],
+  "size_differs": []
+ }
+}

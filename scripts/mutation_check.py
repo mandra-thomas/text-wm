@@ -478,6 +478,71 @@ MUTANTS = [
     ('families wave B serve2 job may download while scoring', 'pace/family_score_serve2.sbatch', 'export HF_HUB_OFFLINE=1\n', ''),
     ('families wave B prefetch skips the chat template', 'wf/tools/prefetch_models.py', '"*.model.v3", "*.jinja", "merges.txt"]', '"*.model.v3", "merges.txt"]'),
     ('families wave B prefetch asks transformers 5 for TRANSFORMERS_CACHE', 'wf/tools/prefetch_models.py', '        if hasattr(hub, "TRANSFORMERS_CACHE"):', '        if True:'),
+    # Families wave B, review 1 (2026-11-22, before any wave B score). "R1".."R8": the review's findings as mutants
+    # (two named by the reviewer as survivors: R1 and R2); the rest test each fix.
+    ('families wave B review1 R1 node-local cache not exported to scoring', 'pace/family_score_serve2.sbatch', '  export HF_HUB_CACHE="${LOCAL_CACHE}"\n', ''),
+    ('families wave B review1 R2 plain gate allows a shared first token', 'wf/families.py', '            ids[name] = alone\n        if not ids["o_plus"] or not ids["o_minus"] or ids["o_plus"][0] == ids["o_minus"][0]:', '            ids[name] = alone\n        if not ids["o_plus"] or not ids["o_minus"]:'),
+    ('families wave B review1 R3 BatchEncoding passed to torch.cat and the model', 'wf/scoring/logodds.py', '        return template_input_ids(self._tok.apply_chat_template(', '        return (lambda x: x)(self._tok.apply_chat_template('),
+    ('families wave B review1 R4 B1 holds although the environment check failed', 'wf/families.py', '        if not environment_passed:\n            b1[tag] = {"both_formats_positive": None, "share_verdict": share, "reading": None, "holds": None}\n            continue\n', ''),
+    ('families wave B review1 R5 status lines print wave B numbers when blocked', 'wf/families.py', '    if blocked:\n        lines = [f"{tag}: {ENVIRONMENT_BLOCKED}', '    if False:\n        lines = [f"{tag}: {ENVIRONMENT_BLOCKED}'),
+    ('families wave B review1 R6 CPU gate tool exits 0 when a gate fails', 'wf/tools/family_gate_cpu.py', '    return 0 if all(r["ok"] for r in results["models"].values()) else 1', '    return 0'),
+    ('families wave B review1 R7 Gemma first-turn note says not the last', 'wf/families.py', '"Placement check: the system text opens the first user turn instead of the template\'s own system turn."', '"Placement check: the system text opens the first user turn, not the last."'),
+    ('families wave B review1 R8 envcheck GPU type not enforced', 'wf/families.py', '        block["checks"]["gpu_type"] = block["gpu"]["ok"]', '        block["checks"]["gpu_type"] = True'),
+    ('families wave B review1 M1 template ids not unwrapped', 'wf/scoring/logodds.py', '    if isinstance(out, Mapping):\n        return out["input_ids"]\n    return out', '    return out'),
+    ('families wave B review1 M3 extra file not reported', 'wf/tools/weights_manifest.py', '    problems += [f"extra: {n}" for n in sorted(set(have) - set(want))]\n', ''),
+    ('families wave B review1 M3 missing file not reported', 'wf/tools/weights_manifest.py', '    problems = [f"missing: {n}" for n in sorted(set(want) - set(have))]', '    problems = []'),
+    ('families wave B review1 M3 hash not compared', 'wf/tools/weights_manifest.py', '            if rec[kind] != entry[kind]:', '            if False:'),
+    ('families wave B review1 M3 size not compared', 'wf/tools/weights_manifest.py', '        if size != entry["size"]:', '        if False:'),
+    ('families wave B review1 M3 Git blob hash without its header', 'wf/tools/weights_manifest.py', 'hashlib.sha1(b"blob %d\\0" % size)', 'hashlib.sha1()'),
+    ('families wave B review1 M3 manifest revision not checked', 'wf/tools/weights_manifest.py', '    if m.get("hf_id") != hf_id or m.get("revision") != revision:', '    if m.get("hf_id") != hf_id:'),
+    ('families wave B review1 M3 hash failure does not fail the download', 'wf/tools/prefetch_models.py', '            out["status"] = "ERROR files differ from the manifest"', '            pass'),
+    ('families wave B review1 M3 scoring accepts a failed hash check', 'wf/families.py', '            if entry.get("status") != "OK" or not verify.get("ok"):', '            if entry.get("status") != "OK":'),
+    ('families wave B review1 M3 scoring accepts another revision', 'wf/families.py', 'entry.get("hf_id") == spec.hf_id and entry.get("revision") == spec.revision:', 'entry.get("hf_id") == spec.hf_id:'),
+    ('families wave B review1 M3 weights check skipped for node-local weights', 'wf/families.py', '    if environ.get("WF_WEIGHTS", "shared") != "local":\n        return None', '    if True:\n        return None'),
+    ('families wave B review1 M3 hashes not saved in the shard', 'wf/families.py', '                write_json(d / "weights_check.json", weights)\n', ''),
+    ('families wave B review1 S1 shared storage below /storage accepted', 'wf/tools/weights_manifest.py', '    if real == SHARED_STORAGE or real.startswith(SHARED_STORAGE + "/"):', '    if real == SHARED_STORAGE:'),
+    ('families wave B review1 S1 links not resolved', 'wf/tools/weights_manifest.py', '    real = os.path.realpath(os.fspath(path))', '    real = os.fspath(path)'),
+    ('families wave B review1 S1 node-local folder not checked', 'wf/tools/prefetch_models.py', '        wm.refuse_shared_storage(args.cache)\n', ''),
+    ('families wave B review1 S1 prefetch ignores --cache', 'wf/tools/prefetch_models.py', '    cache = args.cache or transformers_cache()', '    cache = transformers_cache()'),
+    ('families wave B review1 S1 job prefetch without --node-local', 'pace/family_score_serve2.sbatch', '--cache "${LOCAL_CACHE}" --node-local --out', '--cache "${LOCAL_CACHE}" --out'),
+    ('families wave B review1 S2 no disk margin', 'wf/tools/weights_manifest.py', '    need = math.ceil(manifest["total_bytes"] * (1 + DISK_MARGIN))', '    need = manifest["total_bytes"]'),
+    ('families wave B review1 S2 download despite too little space', 'wf/tools/prefetch_models.py', '        if not out["disk"]["ok"]:', '        if False:'),
+    ('families wave B review1 S3 xet cache on shared storage', 'pace/family_score_serve2.sbatch', '  export HF_XET_CACHE="${LOCAL_CACHE}/xet"', '  :'),
+    ('families wave B review1 S4 any GPU type accepted', 'wf/families.py', '    ok = bool(folders) and all(g == [want] for g in seen.values())', '    ok = bool(folders) and all(isinstance(g, list) for g in seen.values())'),
+    ('families wave B review1 S4 Qwen3-8B pinned to the wrong GPU', 'wf/families.py', '"qwen3-8b": "NVIDIA L40S"}', '"qwen3-8b": "NVIDIA A100-SXM4-80GB"}'),
+    ('families wave B review1 S4 job does not stop on the wrong GPU', 'pace/family_score_serve2.sbatch', 'if have != [want]:', 'if False:'),
+    ('families wave B review1 S5 competence verdict read when blocked', 'wf/families.py', '        if t["verdict"] != "waiting":\n            t["verdict"] = ENVIRONMENT_BLOCKED', '        if t["verdict"] in ("supported", "not supported"):\n            t["verdict"] = ENVIRONMENT_BLOCKED'),
+    ('families wave B review1 S5 estimates kept when blocked', 'wf/families.py', '        for k in ("estimate", "ci", "p", "p_holm"):', '        for k in ():'),
+    ('families wave B review1 S5 wave B blocks written when blocked', 'wf/families.py', '        if blocked:  # review 1, S5', '        if False:  # review 1, S5'),
+    ('families wave B review1 S5 comparisons kept when blocked', 'wf/families.py', '        if a in tags or b in tags:', '        if False:'),
+    ('families wave B review1 S5 B2 estimate shown when blocked', 'wf/families.py', '"reading": ENVIRONMENT_BLOCKED if r not in (None, "waiting") else r, "estimate": None,', '"reading": ENVIRONMENT_BLOCKED if r not in (None, "waiting") else r, "estimate": est,'),
+    ('families wave B review1 M2 minority effect read as no effect', 'wf/families.py', '    if lo > 0:\n        return B1_READINGS["minority"]', '    if lo > 0:\n        return B1_READINGS["null"]'),
+    ('families wave B review1 M2 CI touching zero read as above it', 'wf/families.py', '    if lo > 0:\n        return B1_READINGS["minority"]', '    if lo >= 0:\n        return B1_READINGS["minority"]'),
+    ('families wave B review1 M2 reversed effect read as none', 'wf/families.py', '    if hi < 0:\n        return B1_READINGS["reversed"]\n', ''),
+    ('families wave B review1 pair readings without the size caveat', 'wf/families.py', 'pair(a, b, False, PAIR_CAVEAT)', 'pair(a, b, False)'),
+    ('families wave B review1 B3 fallback for any competence failure', 'wf/families.py', '    if failed != ["median_yes_no_mass_neutral"]:', '    if "median_yes_no_mass_neutral" not in failed:'),
+    ('families wave B review1 B3 fallback ignores the base two-candidate AUC', 'wf/families.py', '    if not (auc2 >= B3_FALLBACK["base_two_candidate_auc_min"] and out["instruct_interpretable"]):', '    if not out["instruct_interpretable"]:'),
+    ('families wave B review1 B3 fallback on the yes/no rows', 'wf/families.py', '    two = ("aligned", "swapped", "absent")', '    two = ("yn_aligned", "yn_swapped", "yn_absent")'),
+    ('families wave B review1 B3 fallback holds on a negative difference', 'wf/families.py', '"holds": bool(differs and est > 0), "basis"', '"holds": bool(differs), "basis"'),
+    ('families wave B review1 S6 GPU memory not enforced', 'wf/families.py', '        if have < spec.gpu_min_gb:', '        if False:'),
+    ('families wave B review1 S6 job memory compared in GB not MB', 'wf/families.py', 'int(mem) < spec.host_mem_min_gb * 1024', 'int(mem) < spec.host_mem_min_gb'),
+    ('families wave B review1 S6 resources not checked at job start', 'wf/families.py', '    env["resources"] = require_resources(spec)\n    cfg = {**cfg, "model_spec": spec.record()}', '    cfg = {**cfg, "model_spec": spec.record()}'),
+    ('families wave B review1 S6 Qwen3.8 job memory not required', 'wf/families.py', '        host_mem=128),', '        host_mem=0),'),
+    ('families wave B review1 S7 variants gated on every item', 'wf/tools/family_gate_cpu.py', '    if tag.endswith((families.FIRST_TURN, families.NO_PRESERVE)):', '    if False:'),
+    ('families wave B review1 S7 first-turn variant not resolved', 'wf/families.py', '    if tag.endswith(FIRST_TURN):\n        return first_turn_spec', '    if False:\n        return first_turn_spec'),
+    ('families wave B review1 S8 variant keeps the think blocks', 'wf/families.py', 'template_kwargs={**spec.template_kwargs, "preserve_thinking": False},', 'template_kwargs=dict(spec.template_kwargs),'),
+    ('families wave B review1 S8 think blocks before the ending not checked', 'wf/families.py', '                    if bad in body:', '                    if False:'),
+    ('families wave B review1 S8 one-fifth rule ignores the CI', 'wf/families.py', '"above_one_fifth": large, "format_dependent": excludes and large}', '"above_one_fifth": large, "format_dependent": large}'),
+    ('families wave B review1 S8 one-fifth rule at one half', 'wf/families.py', 'abs(est) > abs(native) / 5', 'abs(est) > abs(native) / 2'),
+    ('families wave B review1 S8 template check reads the first-turn tag', 'wf/families.py', 'if x["model"] == tag + NO_PRESERVE]', 'if x["model"] == tag + FIRST_TURN]'),
+    ('families wave B review1 S9 failed switch to eager not reported', 'wf/families.py', '    if set(switched) != {"eager"}:', '    if False:'),
+    ('families wave B review1 S9 no switch back to SDPA', 'wf/families.py', '    _set_text_attn(model, "sdpa")\n', ''),
+    ('families wave B review1 S9 yes/no tolerance loosened', 'wf/families.py', '"yes_no_mean_abs_max": 0.10,', '"yes_no_mean_abs_max": 0.30,'),
+    ('families wave B review1 S9 scores read from the cache', 'wf/families.py', '        scorer._cache.clear()\n        out = {}', '        out = {}'),
+    ('families wave B review1 S9 whole-model attention switch', 'wf/families.py', '    model.set_attn_implementation(impl if key is None else {key: impl})', '    model.set_attn_implementation(impl)'),
+    ('families wave B review1 S9 gate skips the attention check', 'wf/families.py', '            if rec["ok"] and spec.attn_agreement_check:', '            if False:'),
+    ('families wave B review1 S9 disagreement does not stop the job', 'wf/families.py', '                rec["ok"] = rec["attention_agreement"]["ok"]', '                pass'),
+    ('families wave B review1 S9 Gemma 4 31B without the attention check', 'wf/families.py', 'host_mem_min_gb=128, attn_agreement_check=True),', 'host_mem_min_gb=128),'),
 ]
 
 
@@ -502,10 +567,16 @@ def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900, 
                                  *targets], cwd=work, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return "timeout"
-    if result.returncode != 0:
-        first = re.search(r"^(?:FAILED|ERROR) (\S+)", result.stdout, flags=re.MULTILINE)
-        KILLERS[name] = first.group(1) if first else f"pytest exit {result.returncode} (no failing test named)"
+    # Strict rule (2026-11-22, families wave B review 1): a mutant is killed only when pytest exits 1 (tests ran and
+    # failed) and names a failing test. Any other non-zero exit (collection error, usage error, interrupted run) is
+    # "broken": the mutant made the suite unrunnable, which says nothing about whether a test would catch the bug.
+    first = re.search(r"^(?:FAILED|ERROR) (\S+::\S+)", result.stdout, flags=re.MULTILINE)
+    if result.returncode == 1 and first:
+        KILLERS[name] = first.group(1)
         return "killed"
+    if result.returncode != 0:
+        KILLERS[name] = f"pytest exit {result.returncode} (no failing test named)"
+        return "broken"
     return "survived"
 
 
@@ -523,10 +594,11 @@ def main() -> int:
     survivors: list[str] = []
     broken: list[str] = []
     timeouts: list[str] = []
+    unrunnable: list[str] = []  # strict rule: the suite did not run to a named failure
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp) / "repo"
         def skip(folder: str, names: list[str]) -> list[str]:
-            top = {".git", ".venv", "runs", "runs_mock", "docs"} if Path(folder) == ROOT else set()
+            top = {".git", ".venv", ".envs", "runs", "runs_mock", "docs"} if Path(folder) == ROOT else set()
             return [n for n in names if n in top or n in ("__pycache__", ".pytest_cache") or n.endswith(".pdf")]
 
         shutil.copytree(ROOT, work, ignore=skip)
@@ -550,17 +622,19 @@ def main() -> int:
             if outcome == "survived":
                 outcome = _run_tests(python, work, ["tests"], timeout, name)
             path.write_text(source, encoding="utf-8")
-            label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]
-            by = f"  [by {KILLERS[name]}]" if outcome == "killed" else ""
+            label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT ", "broken": "BROKEN  "}[outcome]
+            by = f"  [by {KILLERS[name]}]" if outcome in ("killed", "broken") else ""
             print(f"{label}  {name}{by}", flush=True)
             if outcome == "survived":
                 survivors.append(name)
+            elif outcome == "broken":
+                unrunnable.append(name)
             elif outcome == "timeout":
                 timeouts.append(name)
-    killed = len(chosen) - len(survivors) - len(broken) - len(timeouts)
+    killed = len(chosen) - len(survivors) - len(broken) - len(timeouts) - len(unrunnable)
     print(f"\n{killed}/{len(chosen)} killed; survivors={survivors}; inconclusive (timeout)={timeouts}; "
-          f"not applied={broken}")
-    return 1 if survivors or broken or timeouts else 0
+          f"not applied={broken}; suite unrunnable (not counted as killed)={unrunnable}")
+    return 1 if survivors or broken or timeouts or unrunnable else 0
 
 
 if __name__ == "__main__":

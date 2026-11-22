@@ -1439,6 +1439,8 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
        for tag in ("ministral3-8b-it", "qwen3.5-9b", "qwen3.5-9b-plain", "qwen3.5-9b-base-plain", "gemma4-e4b-it",
                    "qwen3.8-27b", "gemma4-31b-it")},
     "family_placement_gemma4-e4b-it": lambda cfg: _lazy("families", "run_family_placement")(cfg),
+    # review 1 (S8), before any wave B score: Qwen3.8 27B with preserve_thinking=False on 300 items
+    "family_nopreserve_qwen3.8-27b": lambda cfg: _lazy("families", "run_family_nopreserve")(cfg),
     **{f"family_envcheck_{tag}": (lambda cfg: _lazy("families", "run_family_envcheck")(cfg))
        for tag in ("mistral-7b-v0.3", "qwen3-8b")},
     "families_envcheck": lambda cfg: _lazy("families", "run_families_envcheck")(cfg),

@@ -1,0 +1,103 @@
+{
+ "hf_id": "mistralai/Ministral-3-8B-Instruct-2512-BF16",
+ "revision": "f6fae9795746f63c9be8344932f01275f3c63734",
+ "allow_patterns": [
+  "*.json",
+  "*.safetensors",
+  "*.model",
+  "*.model.v3",
+  "*.jinja",
+  "merges.txt"
+ ],
+ "ignore_patterns": [
+  "original/*",
+  "consolidated*",
+  "*.pth",
+  "*.bin",
+  "*.gguf",
+  "*.msgpack",
+  "*.h5"
+ ],
+ "files": [
+  {
+   "name": "chat_template.jinja",
+   "size": 11912,
+   "git_sha1": "53d9d80c00c32bcf67ff5f66f85203cfd4f7a696"
+  },
+  {
+   "name": "config.json",
+   "size": 1579,
+   "git_sha1": "d726bfccbcc8aaf8180e201d90fc608aa74dfbfa"
+  },
+  {
+   "name": "generation_config.json",
+   "size": 131,
+   "git_sha1": "add11cbc06647495098ee6dd5c9cbc96841a445a"
+  },
+  {
+   "name": "model-00001-of-00004.safetensors",
+   "size": 4984292952,
+   "sha256": "95f4da19c81e6a06d4f0c61cac3dfdd85ef463a7955473dc4c07e570fd2342f9"
+  },
+  {
+   "name": "model-00002-of-00004.safetensors",
+   "size": 4999804256,
+   "sha256": "18275e4c8413d0ed4b0cb8380fe1fd4faeee34189960fdd92ef5b0d3f4ed1b98"
+  },
+  {
+   "name": "model-00003-of-00004.safetensors",
+   "size": 4915917680,
+   "sha256": "980d1d3635ae29a6e629e2f7ad589c882eba270c3f66da74da4f8ccb11845687"
+  },
+  {
+   "name": "model-00004-of-00004.safetensors",
+   "size": 2936108304,
+   "sha256": "fa80e52af465c5644b18b623eeeebb1d50e47dafbee73816bf26f2473f88d369"
+  },
+  {
+   "name": "model.safetensors.index.json",
+   "size": 52675,
+   "git_sha1": "c2b0eca7d7b6eaf9f94917e48f678c947db5f4e1"
+  },
+  {
+   "name": "params.json",
+   "size": 1098,
+   "git_sha1": "63b743825c2462f27806a66b972c4a71e7ced7c5"
+  },
+  {
+   "name": "processor_config.json",
+   "size": 976,
+   "git_sha1": "a37d728b12fd27ac60a437894bd51de83449bf30"
+  },
+  {
+   "name": "special_tokens_map.json",
+   "size": 147094,
+   "git_sha1": "c5ac9bbb2b7c801eec23cb07fee0d07805aebc42"
+  },
+  {
+   "name": "tekken.json",
+   "size": 16753784,
+   "sha256": "600bb27946565481ecf51ba8aee252e49b9a68507866080ac9c30185bb312843"
+  },
+  {
+   "name": "tokenizer.json",
+   "size": 17078128,
+   "sha256": "d5f6046775b112f0e2d456ee9dba450684ab964fe5c4e231599bdc6773028135"
+  },
+  {
+   "name": "tokenizer_config.json",
+   "size": 198094,
+   "git_sha1": "7f9f2f4f941ab1dffda12e9feeff2fd1d18d3e03"
+  }
+ ],
+ "n_files": 14,
+ "total_bytes": 17870368663,
+ "source": "HfApi.model_info(files_metadata=True), no token",
+ "dry_run_cross_check": {
+  "available": true,
+  "same_files_and_sizes": true,
+  "only_in_dry_run": [],
+  "only_in_metadata": [],
+  "size_differs": []
+ }
+}

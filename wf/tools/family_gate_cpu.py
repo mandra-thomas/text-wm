@@ -2,6 +2,9 @@
 
     python -m wf.tools.family_gate_cpu TAG [TAG ...] --out FILE [--golden FILE] [--cache DIR]
 
+A tag may also name a check's variant (review 1, S7): `gemma4-e4b-it-firstturn` (the placement check) or
+`qwen3.8-27b-nopreserve` (preserve_thinking=False); these are gated on the 300 placement items their shards score.
+
 For each tag (wave A or wave B, wf/families.py) it loads the pinned tokenizer offline, with the spec's tokenizer
 settings, and runs `families.tokenization_checks` exactly as a scoring shard does before its first score, on all
 primary items and determined successes of RQ2's collection (the families population), and, for Ministral 3, the
@@ -74,6 +77,17 @@ def gate_all_items(spec: Any, scorer: Any, primary: list[dict], successes: list[
     return rec
 
 
+def shard_items(tag: str, primary: list[dict], successes: list[dict]) -> tuple[list[dict], list[dict]]:
+    """The items the tag's scoring shard gates: every item for a model's own run; for a check's variant
+    (`<tag>-firstturn`, the placement check, or `<tag>-nopreserve`, review 1), the 300 seeded placement items and
+    no successes, exactly as family_placement_<tag> and family_nopreserve_<tag> select them."""
+    from wf import families
+
+    if tag.endswith((families.FIRST_TURN, families.NO_PRESERVE)):
+        return families.placement_items(primary), []
+    return primary, successes
+
+
 def main(argv: list[str] | None = None) -> int:
     from wf import families, rq1x
     from wf.rq2 import SOURCES, load_items
@@ -94,10 +108,10 @@ def main(argv: list[str] | None = None) -> int:
     results: dict[str, Any] = {"environment": families.environment_record(), "cache": cache, "models": {}}
     golden: dict[str, Any] = {}
     for tag in args.tags:
-        spec = families.spec_for(tag)
+        spec = families.variant_spec(tag)
         tok = load_tokenizer(spec, cache)
         scorer = scorer_for(spec, tok)
-        rec = gate_all_items(spec, scorer, primary, successes, cache)
+        rec = gate_all_items(spec, scorer, *shard_items(tag, primary, successes), cache)
         results["models"][tag] = {"hf_id": spec.hf_id, "revision": REVISIONS[spec.hf_id], **rec}
         if args.golden:
             golden[tag] = golden_renders(spec, scorer)

@@ -36,3 +36,6 @@ descriptive_comparisons:
   - [qwen3.8-27b, qwen3.5-9b]
 placement:
   gemma4-e4b-it: family_placement_gemma4-e4b-it
+# Review 1 (S8): Qwen3.8 27B with preserve_thinking=False on the 300 placement items, read by the one-fifth rule.
+template_checks:
+  qwen3.8-27b: family_nopreserve_qwen3.8-27b

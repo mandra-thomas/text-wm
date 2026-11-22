@@ -97,6 +97,20 @@ def transformers_major(transformers: Any) -> int:
         return 4
 
 
+def template_input_ids(out: Any) -> Any:
+    """The ids tensor from apply_chat_template(tokenize=True, return_tensors="pt"), whatever the version returns.
+
+    transformers 4 returns the tensor itself. transformers 5 defaults to return_dict=True and returns a BatchEncoding
+    (a mapping holding input_ids and attention_mask), which torch.cat and a model's input_ids refuse (wave B review 1,
+    M1; the gate did not see it because it unwraps through families._ids). A mapping is unwrapped to its input_ids;
+    anything else is returned unchanged, so transformers 4 behaves exactly as before."""
+    from collections.abc import Mapping
+
+    if isinstance(out, Mapping):
+        return out["input_ids"]
+    return out
+
+
 def check_loading(info: dict[str, Any], device_map: dict[str, Any] | None, unexpected_allowed: str = "") -> dict[str, Any]:
     """The loading check (wave B, notes/families_waveb_design.md section 4), from from_pretrained's loading info.
 
@@ -255,13 +269,13 @@ class LogoddsScorer:
             if not add_generation_prompt:
                 raise ValueError("the plain format has no template to render a reply with")
             return self._tok(plain_text_prompt(messages), return_tensors="pt", add_special_tokens=True).input_ids
-        return self._tok.apply_chat_template(
+        return template_input_ids(self._tok.apply_chat_template(
             messages,
             tokenize=True,
             add_generation_prompt=add_generation_prompt,
             return_tensors="pt",
             **self.template_settings(),
-        )
+        ))
 
     def candidate_text(self, text: str) -> str:
         """The text a candidate is scored as: itself, or in the plain format after one space, as the examples write

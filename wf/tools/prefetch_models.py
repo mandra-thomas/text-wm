@@ -13,6 +13,13 @@ Only the files transformers loads are fetched: no `original/` folder (Llama's Me
 --check then loads each downloaded tokenizer offline and runs the families tokenization gate (wf/families.py) on the
 golden item (tests/golden/default_prompt.json), so a template or tokenizer problem shows up here, on a CPU, before
 a GPU job starts.
+
+--cache DIR downloads into DIR instead of the folder the installed library reads. --node-local (wave B route A,
+review 1, 2026-11-22): DIR must be given and must not resolve to the shared file system (/storage); each model's
+committed manifest (wf/tools/weights_manifest.py) must exist; the free space must exceed the manifest's total plus
+10% before the download starts; and afterwards every file is hashed and compared with the manifest (a mismatch, a
+missing file or an extra file fails that model). The record (--out) holds every file's hash, and the scoring job
+copies it into the shard (wf/families.py, weights_check).
 """
 from __future__ import annotations
 
@@ -63,17 +70,32 @@ def _snapshot_download(**kw: Any) -> str:
     return snapshot_download(**kw)
 
 
-def prefetch(hf_id: str, revision: str, cache_dir: str | None, download=None) -> dict[str, Any]:
+def prefetch(hf_id: str, revision: str, cache_dir: str | None, download=None, manifest: dict[str, Any] | None = None,
+             usage=None, digest=None) -> dict[str, Any]:
+    """Download one pinned snapshot. With a `manifest` (node-local weights), the free space is checked first and
+    every downloaded file is hashed against the manifest afterwards; status "OK" only if both pass."""
+    from wf.tools import weights_manifest as wm
+
     download = download or _snapshot_download
+    out: dict[str, Any] = {}
+    if manifest is not None:
+        out["disk"] = wm.check_disk(cache_dir, manifest, **({"usage": usage} if usage else {}))
+        if not out["disk"]["ok"]:
+            return {**out, "status": "ERROR not enough disk space"}
     try:
         path = download(repo_id=hf_id, revision=revision, cache_dir=cache_dir, allow_patterns=ALLOW,
                         ignore_patterns=IGNORE)
     except Exception as e:  # noqa: BLE001 - every failure is reported, then the next model is tried
-        return {"status": _status(e), "error": str(e).splitlines()[0][:300] if str(e) else type(e).__name__}
+        return {**out, "status": _status(e), "error": str(e).splitlines()[0][:300] if str(e) else type(e).__name__}
     if Path(path).name != revision:
-        return {"status": "ERROR wrong revision", "path": str(path)}
+        return {**out, "status": "ERROR wrong revision", "path": str(path)}
     files = sorted(p.name for p in Path(path).iterdir())
-    return {"status": "OK", "path": str(path), "files": files}
+    out.update({"status": "OK", "path": str(path), "files": files})
+    if manifest is not None:
+        out["verify"] = wm.verify_snapshot(path, manifest, **({"digest": digest} if digest else {}))
+        if not out["verify"]["ok"]:
+            out["status"] = "ERROR files differ from the manifest"
+    return out
 
 
 def check_tokenizer(spec: Any, cache_dir: str | None) -> dict[str, Any]:
@@ -101,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
                                             f"{sorted(families.WAVE_B)}")
     ap.add_argument("--check", action="store_true", help="run the tokenization gate on the golden item afterwards")
     ap.add_argument("--out", default=None, help="also write the results as JSON here")
+    ap.add_argument("--cache", default=None, help="download into this folder (default: the one the library reads)")
+    ap.add_argument("--node-local", action="store_true",
+                    help="node-local weights: --cache required, never under /storage; manifest, disk and hash checks")
     args = ap.parse_args(argv)
     tags = args.tags or list(families.MODELS)
     known = {**families.MODELS, **families.WAVE_B}
@@ -108,13 +133,28 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         print(f"unknown tags {unknown}; known: {sorted(known)}", file=sys.stderr)
         return 2
-    cache = transformers_cache()
-    print(f"cache: {cache}; token from HF_TOKEN: {'set' if os.environ.get('HF_TOKEN') else 'not set'}", flush=True)
+    manifests: dict[str, Any] = {}
+    if args.node_local:
+        from wf.tools import weights_manifest as wm
+
+        if not args.cache:
+            print("--node-local needs --cache (the node-local folder)", file=sys.stderr)
+            return 2
+        wm.refuse_shared_storage(args.cache)
+        os.makedirs(args.cache, exist_ok=True)
+        try:
+            manifests = {t: wm.load_manifest(known[t].hf_id, REVISIONS[known[t].hf_id]) for t in tags}
+        except (FileNotFoundError, ValueError) as e:
+            print(f"no usable manifest: {e}", file=sys.stderr)
+            return 2
+    cache = args.cache or transformers_cache()
+    print(f"cache: {cache}; node-local: {args.node_local}; token from HF_TOKEN: "
+          f"{'set' if os.environ.get('HF_TOKEN') else 'not set'}", flush=True)
     results: dict[str, Any] = {}
     for tag in tags:
         spec = known[tag]
         rev = REVISIONS[spec.hf_id]
-        r = prefetch(spec.hf_id, rev, cache)
+        r = prefetch(spec.hf_id, rev, cache, manifest=manifests.get(tag))
         if r["status"] == "OK" and args.check:
             try:
                 r["tokenizer_check"] = check_tokenizer(spec, cache)

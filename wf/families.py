@@ -92,6 +92,10 @@ class ModelSpec:
     unexpected_keys_allowed: str = ""  # checkpoint tensors the class may leave unused (a regular expression)
     gpu_min_gb: int = 0  # GPU memory the bf16 weights need, with margin (0: any card the job asks for)
     hub_created: str = ""  # the Hub repository's creation date (wave B's release field is a month)
+    # Review 1 (2026-11-22, before any wave B score; notes/families_waveb_review1.md):
+    host_mem_min_gb: int = 0  # job memory (SLURM_MEM_PER_NODE) loading needs; 0: whatever the job script asks for
+    attn_agreement_check: bool = False  # S9: a few items scored under eager and SDPA attention must agree first
+    forbidden_before_ending: tuple[str, ...] = ()  # text no prompt may hold before its thinking-off ending (S8)
 
     @property
     def revision(self) -> str | None:
@@ -156,14 +160,15 @@ _WAVE_B = dict(wave="B", env="serve2", model_class="image_text_to_text", tokeniz
 
 
 def _qwen_b(tag: str, hf_id: str, generation: str, release: str, params: float, notes: str, *, plain: bool = False,
-            markers: tuple[str, ...] = (), gpu: int = 24, created: str = "") -> ModelSpec:
+            markers: tuple[str, ...] = (), gpu: int = 24, created: str = "", host_mem: int = 0) -> ModelSpec:
     if plain:
         return ModelSpec(tag, hf_id, "qwen", generation, release, params, "native", None, {}, notes, **_WAVE_B,
-                         prompt_format="plain", unexpected_keys_allowed=r"^mtp\.", gpu_min_gb=gpu, hub_created=created)
+                         prompt_format="plain", unexpected_keys_allowed=r"^mtp\.", gpu_min_gb=gpu, hub_created=created,
+                         host_mem_min_gb=host_mem)
     return ModelSpec(tag, hf_id, "qwen", generation, release, params, "native", None, {}, notes, **_WAVE_B,
                      thinking_switch=True, thinking_on_markers=markers, thinking_on_ending=_QWEN_ON,
                      thinking_off_ending=_QWEN_OFF, unexpected_keys_allowed=r"^mtp\.", gpu_min_gb=gpu,
-                     hub_created=created)
+                     hub_created=created, host_mem_min_gb=host_mem)
 
 
 # Every wave B model is loaded in serve2 (transformers 5) with its checkpoint's vision-language class, the fast
@@ -197,19 +202,21 @@ WAVE_B: dict[str, ModelSpec] = {
         "No attention soft-capping (query-key norms), final logits tanh-capped at 30. The last 18 layers share "
         "keys and values with earlier ones, so their own k/v projections and k norms in the checkpoint are unused.",
         **_WAVE_B, thinking_switch=True, thinking_on_markers=("<|think|>",), thinking_off_ending="<|turn>model\n",
-        unexpected_keys_allowed=_GEMMA4_E4B_SHARED_KV, gpu_min_gb=24, hub_created="2026-03-02"),
+        unexpected_keys_allowed=_GEMMA4_E4B_SHARED_KV, gpu_min_gb=24, hub_created="2026-03-02",
+        attn_agreement_check=True),
     "qwen3.8-27b": _qwen_b(
         "qwen3.8-27b", "Qwen/Qwen3.8-27B", "Qwen3.8", "2026-08", 27.36,
         "As Qwen3.5, plus: with thinking on the template writes a reasoning-effort instruction into the system "
         "message (none with thinking off), and by default it writes an empty think block into every earlier "
-        "assistant turn (the few-shot replies).", markers=("Reasoning effort",), gpu=80, created="2026-08-05"),
+        "assistant turn (the few-shot replies).", markers=("Reasoning effort",), gpu=80, created="2026-08-05",
+        host_mem=128),
     "gemma4-31b-it": ModelSpec(
         "gemma4-31b-it", "google/gemma-4-31B-it", "gemma", "Gemma 4", "2026-03", 31.27, "native", None, {},
         "As Gemma 4 E4B, plus: with thinking off the generation prompt ends with an empty thought channel "
         "('<|channel>thought\\n<channel|>') that a rendered reply does not contain; the score is read after it.",
         **_WAVE_B, generation_suffix="<|channel>thought\n<channel|>", thinking_switch=True,
         thinking_on_markers=("<|think|>",), thinking_off_ending="<|turn>model\n<|channel>thought\n<channel|>",
-        gpu_min_gb=80, hub_created="2026-03-11"),
+        gpu_min_gb=80, hub_created="2026-03-11", host_mem_min_gb=128, attn_agreement_check=True),
 }
 WAVE_B_SHARE_TESTS = ("ministral3-8b-it", "qwen3.5-9b", "gemma4-e4b-it", "qwen3.8-27b", "gemma4-31b-it",
                       "qwen3.5-9b-base-plain")
@@ -223,7 +230,45 @@ PREDICTION_B = (
     "formats (95% game-clustered CI above zero) for every wave B run, and the item share is supported for every "
     "wave B model that passes the competence gate. B2: no generation pair reads 'differs' with the newer model "
     "lower. B3: in the plain format, instruct minus base reads 'differs' (or 'differs, within the margin') with a "
-    "positive difference; untestable if the base model fails the competence gate.")
+    "positive difference; untestable if the base model fails the competence gate. "
+    "Amended after review 1, before any wave B score (notes/families_waveb_review1.md): B1's basis holds for the "
+    "log-odds effect (every interpretable model scored so far has it), not for the item share: Qwen3-4B is competent "
+    "yet its share is 0.49 with a yes/no effect of 2.27 nats, so a share that is not supported while the yes/no "
+    "effect's CI is above zero reads 'effect carried by a minority of items (as Qwen3-4B)', and 'no detectable "
+    "effect' only when both are null. B2 can fail only on a clear negative difference ('inconclusive' and 'matches' "
+    "count as holding). B3: if the base model fails only the yes/no coverage criterion, B3 is read on the "
+    "two-candidate item share (B3_FALLBACK).")
+# M2 (review 1): the Qwen3 size series' item share and yes/no effect (size_score_qwen3-<size>, 4,666 failures each;
+# recomputed 2026-11-22 from the archived scores). A competent model can carry a large mean effect on a minority of
+# items (4B); the share moves non-monotonically with size within one line, so a generation pair, which also changes
+# size, cannot isolate the generation.
+QWEN3_SIZE_SERIES = {"qwen3-4b": {"share": 0.491, "yes_no_delta_L": 2.27},
+                     "qwen3-8b": {"share": 0.887, "yes_no_delta_L": 2.80},
+                     "qwen3-14b": {"share": 0.701, "yes_no_delta_L": 3.18},
+                     "qwen3-32b": {"share": 0.715, "yes_no_delta_L": 1.55}}
+B1_READINGS = {
+    "supported": "effect present (share supported)",
+    "minority": "effect carried by a minority of items (as Qwen3-4B)",
+    "null": "no detectable effect",
+    "reversed": "yes/no effect reversed (aligned below swapped)",
+}
+PAIR_CAVEAT = ("Generation pairs also change size, and within the Qwen3 line the item share runs 0.49 / 0.89 / 0.70 / "
+               "0.71 across 4B / 8B / 14B / 32B, so a 'differs' here is not a generation effect: it describes two "
+               "whole models.")
+# B3's readout if the base model fails only the yes/no coverage criterion (median P(Yes) + P(No) under the neutral
+# task below 0.5), fixed after review 1 and before any score: the paired difference in the two-candidate item share
+# (failures with two-candidate L(aligned) > L(swapped)), instruct minus base, game-clustered, read by its 95% CI;
+# the base model must reach the competence AUC (0.70) on the two-candidate score under the neutral task.
+B3_FALLBACK = {"applies_when": "base model fails only the median yes/no mass criterion",
+               "metric": "two-candidate item share, instruct minus base (paired, game-clustered 95% CI)",
+               "base_two_candidate_auc_min": 0.70}
+# Run order, pre-registered after review 1: the environment check first, then the four small models (Ministral 3,
+# Qwen3.5 9B in both formats, Qwen3.5 9B base, Gemma 4 E4B with its placement check), then Qwen3.8 27B with its
+# preserve_thinking check, then Gemma 4 31B last.
+RUN_ORDER_B = ("family_envcheck_mistral-7b-v0.3", "family_envcheck_qwen3-8b", "families_envcheck",
+               "family_score_ministral3-8b-it", "family_score_qwen3.5-9b", "family_score_qwen3.5-9b-plain",
+               "family_score_qwen3.5-9b-base-plain", "family_score_gemma4-e4b-it", "family_placement_gemma4-e4b-it",
+               "family_score_qwen3.8-27b", "family_nopreserve_qwen3.8-27b", "family_score_gemma4-31b-it")
 
 
 def spec_for(tag: str) -> ModelSpec:
@@ -268,6 +313,41 @@ def require_environment(spec: ModelSpec, env: dict[str, Any] | None = None, *, e
     if (spec.env == "serve2" or envcheck) and env.get("kernels_importable"):
         raise SystemExit("the kernels package is importable: transformers could fetch unpinned kernels from the Hub")
     return {**env, "checked": True}
+
+
+def gpu_total_gb() -> float:
+    """The memory of every GPU this process can see, summed, in GB (10^9 bytes); 0 without CUDA."""
+    import torch
+
+    if not torch.cuda.is_available():
+        return 0.0
+    return sum(torch.cuda.get_device_properties(i).total_memory for i in range(torch.cuda.device_count())) / 1e9
+
+
+def require_resources(spec: ModelSpec, environ: dict[str, str] | None = None,
+                      gpu_gb: Callable[[], float] = gpu_total_gb) -> dict[str, Any]:
+    """Refuse to load a model the job cannot hold (review 1, S6), before anything is loaded.
+
+    The visible GPUs together must have at least `gpu_min_gb` GB (an A100-80GB reports about 85 GB, two L40S about
+    95 GB, one L40S or A40 about 48 GB), and a model with `host_mem_min_gb` (the 27B and 31B models, which load
+    through CPU memory) needs a Slurm job with at least that much memory (SLURM_MEM_PER_NODE, in MB). Mock runs load
+    nothing and are not checked."""
+    environ = dict(os.environ if environ is None else environ)
+    if environ.get("WF_MOCK_SCORE", "0") == "1":
+        return {"checked": "mock"}
+    rec: dict[str, Any] = {"checked": True, "gpu_min_gb": spec.gpu_min_gb, "host_mem_min_gb": spec.host_mem_min_gb}
+    if spec.gpu_min_gb:
+        have = gpu_gb()
+        rec["gpu_total_gb"] = round(have, 1)
+        if have < spec.gpu_min_gb:
+            raise SystemExit(f"{spec.tag} needs {spec.gpu_min_gb} GB of GPU memory; this job sees {have:.1f} GB")
+    if spec.host_mem_min_gb:
+        mem = environ.get("SLURM_MEM_PER_NODE", "")
+        rec["slurm_mem_per_node_mb"] = mem
+        if not mem.isdigit() or int(mem) < spec.host_mem_min_gb * 1024:
+            raise SystemExit(f"{spec.tag} needs a job with --mem={spec.host_mem_min_gb}G or more; "
+                             f"SLURM_MEM_PER_NODE is {mem or 'unset'} (MB)")
+    return rec
 
 
 def open_scorer(spec: ModelSpec, tag: str | None = None) -> LogoddsScorer:
@@ -507,6 +587,13 @@ def waveb_prompt_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[di
             for bad in spec.forbidden_in_prompt:
                 if bad in off:
                     problems.append(f"{first['id']} {arm}: the prompt contains {bad!r}")
+            if spec.forbidden_before_ending:
+                if not off.endswith(spec.thinking_off_ending):
+                    problems.append(f"{first['id']} {arm}: the prompt does not end with {spec.thinking_off_ending!r}")
+                body = off[:len(off) - len(spec.thinking_off_ending)]
+                for bad in spec.forbidden_before_ending:
+                    if bad in body:
+                        problems.append(f"{first['id']} {arm}: {bad!r} before the thinking-off ending")
             if not spec.thinking_switch:
                 continue
             on = _render(scorer, msgs, enable_thinking=True)
@@ -539,6 +626,7 @@ def waveb_prompt_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[di
         problems.append("no prompt checked for the thinking-off ending")
     return {"ok": not problems, "problems": problems[:50], "n_problems": len(problems),
             "n_first_item_renders": n_text, "n_prompts_checked_ending": n_ending,
+            "forbidden_before_ending": list(spec.forbidden_before_ending),
             "thinking_off_ending": spec.thinking_off_ending, "thinking_off_ending_ids": ending,
             "n_prompts_checked_mistral_common": n_reference, "generation_suffix": spec.generation_suffix}
 
@@ -627,11 +715,144 @@ def _gate(spec: ModelSpec, env: dict[str, Any] | None = None) -> Callable[[Path,
             rec["loading"] = scorer.load_info
             rec["device_map"] = {k: str(v) for k, v in (getattr(scorer._model, "hf_device_map", None) or {}).items()}
             rec["model_class_loaded"] = type(scorer._model).__name__
+            # review 1, M3: node-local weights were hashed against the committed manifest before loading
+            weights = weights_check(spec)
+            if weights is not None:
+                write_json(d / "weights_check.json", weights)
+                rec["weights_check"] = {k: weights.get(k) for k in ("ok", "hf_id", "revision", "n_files", "total_bytes",
+                                                                    "manifest", "record")}
+            # review 1, S9: a few items under eager and SDPA attention, once the encoding has passed
+            if rec["ok"] and spec.attn_agreement_check:
+                rec["attention_agreement"] = attention_agreement(scorer, spec, primary)
+                rec["ok"] = rec["attention_agreement"]["ok"]
+                if not rec["ok"]:
+                    rec["problems"] = rec["problems"] + rec["attention_agreement"]["problems"]
+                    rec["n_problems"] += len(rec["attention_agreement"]["problems"])
         write_json(d / "tokenization_checks.json", rec)
         if not rec["ok"]:
             raise TokenizationMismatch(f"{spec.tag}: tokenization gate failed ({rec['n_problems']} problems, first: "
                                        f"{rec['problems'][:3]}); see {d / 'tokenization_checks.json'}. Nothing scored.")
     return gate
+
+
+# ---------------- wave B: node-local weights against the manifest (review 1, M3) ----------------
+
+WEIGHTS_RECORD_ENV = "WF_WEIGHTS_RECORD"  # the prefetch tool's verification record (pace/family_score_serve2.sbatch)
+
+
+class WeightsCheckFailed(RuntimeError):
+    pass
+
+
+def weights_check(spec: ModelSpec, environ: dict[str, str] | None = None) -> dict[str, Any] | None:
+    """With node-local weights (WF_WEIGHTS=local), the prefetch tool's record of this model's files hashed against the
+    committed manifest (wf/tools/prefetch_models.py, verify_snapshot): it must exist, be for this model's id and
+    pinned revision, and have passed; otherwise nothing is scored. None with the shared cache (route B, not used)."""
+    environ = os.environ if environ is None else environ
+    if environ.get("WF_WEIGHTS", "shared") != "local":
+        return None
+    path = environ.get(WEIGHTS_RECORD_ENV, "")
+    if not path or not Path(path).is_file():
+        raise WeightsCheckFailed(f"{spec.tag}: node-local weights but no verification record ({WEIGHTS_RECORD_ENV}={path!r})")
+    rec = json.loads(Path(path).read_text(encoding="utf-8"))  # the prefetch tool's --out: {tag: result}
+    for entry in rec.values():
+        if isinstance(entry, dict) and entry.get("hf_id") == spec.hf_id and entry.get("revision") == spec.revision:
+            verify = entry.get("verify") or {}
+            if entry.get("status") != "OK" or not verify.get("ok"):
+                raise WeightsCheckFailed(f"{spec.tag}: the downloaded files do not match the manifest: "
+                                         f"{(verify.get('problems') or [entry.get('status')])[:5]}")
+            return {**verify, "hf_id": spec.hf_id, "revision": spec.revision, "record": str(path)}
+    raise WeightsCheckFailed(f"{spec.tag}: {path} holds no verified download of {spec.hf_id}@{spec.revision}")
+
+
+# ---------------- wave B: eager against SDPA attention on a few items (review 1, S9) ----------------
+
+# Fixed after review 1, before any wave B score. A real attention bug (a dropped soft-cap, a wrong sliding-window mask)
+# moves scores by nats; bf16 rounding between the two kernels moves them by hundredths to tenths (the environment
+# check's thresholds per score are 0.07 nats yes/no and 0.35 two-candidate).
+ATTN_AGREEMENT = {"n_items": 5, "arms": ("aligned", "yn_aligned"), "yes_no_mean_abs_max": 0.10,
+                  "two_candidate_mean_abs_max": 0.50, "any_abs_max": 1.0}
+
+
+def _text_config_key(model: Any) -> str | None:
+    """The name of the model's text sub-config (None if the config is the text config itself)."""
+    cfg = model.config
+    text = cfg.get_text_config() if hasattr(cfg, "get_text_config") else cfg
+    if text is cfg:
+        return None
+    return next((k for k in getattr(cfg, "sub_configs", {}) or {} if getattr(cfg, k, None) is text), "text_config")
+
+
+def _attn_loaded(model: Any) -> list[str | None]:
+    """The attention implementation the text model runs with (its text sub-config's, or the config's own)."""
+    key = _text_config_key(model)
+    cfg = model.config if key is None else getattr(model.config, key)
+    return [getattr(cfg, "_attn_implementation", None)]
+
+
+def _set_text_attn(model: Any, impl: str) -> None:
+    """Switch the text model's attention only: Gemma 4 E4B's audio encoder has no SDPA, so a switch of the whole model
+    back to SDPA would raise (found on the real class in serve2, review 1)."""
+    key = _text_config_key(model)
+    model.set_attn_implementation(impl if key is None else {key: impl})
+
+
+def attention_agreement(scorer: LogoddsScorer, spec: ModelSpec, primary: list[dict]) -> dict[str, Any]:
+    """Score the shard's first ATTN_AGREEMENT["n_items"] items (aligned task, both formats) with the loaded attention
+    (SDPA, transformers' default), again with eager attention, then switch back; the two must agree within
+    ATTN_AGREEMENT. Each switch is confirmed on the config (a model that cannot switch would compare SDPA with
+    itself). The scorer's cache is cleared around each pass, so every score is computed afresh."""
+    model = scorer._model
+    items = primary[:ATTN_AGREEMENT["n_items"]]
+    loaded = _attn_loaded(model)
+    problems: list[str] = []
+
+    def score_all() -> dict[tuple[str, str], float]:
+        scorer._cache.clear()
+        out = {}
+        for t in items:
+            for arm in ATTN_AGREEMENT["arms"]:
+                msgs = family_messages(spec, t, arm)
+                if arm in sizes.YN_ARMS:
+                    r = scorer.score_one_token_pair(t["id"], arm, msgs, "Yes", "No")
+                else:
+                    r = scorer.score_pair(t["id"], arm, msgs, t["candidates"]["o_plus"], t["candidates"]["o_minus"])
+                out[(t["id"], arm)] = r.L
+        scorer._cache.clear()
+        return out
+
+    if set(loaded) != {"sdpa"}:
+        problems.append(f"loaded attention is {loaded}, not sdpa")
+        return {"ok": False, "problems": problems, "loaded": loaded, "rule": ATTN_AGREEMENT}
+    sdpa = score_all()
+    _set_text_attn(model, "eager")
+    switched = _attn_loaded(model)
+    eager = score_all() if set(switched) == {"eager"} else {}
+    _set_text_attn(model, "sdpa")
+    restored = _attn_loaded(model)
+    if set(switched) != {"eager"}:
+        problems.append(f"could not switch to eager attention (config says {switched})")
+    if set(restored) != {"sdpa"}:
+        problems.append(f"could not switch back to sdpa (config says {restored})")
+    diffs = {k: eager[k] - sdpa[k] for k in sdpa if k in eager}
+    by_fmt = {"yes_no": [abs(v) for (i, a), v in diffs.items() if a in sizes.YN_ARMS],
+              "two_candidate": [abs(v) for (i, a), v in diffs.items() if a not in sizes.YN_ARMS]}
+    out: dict[str, Any] = {"n_items": len(items), "arms": list(ATTN_AGREEMENT["arms"]), "rule": ATTN_AGREEMENT,
+                           "loaded": loaded, "switched": switched, "restored": restored,
+                           "scores": [{"transition_id": i, "condition": a, "L_sdpa": sdpa[(i, a)], "L_eager": eager.get((i, a))}
+                                      for i, a in sdpa]}
+    for fmt, v in by_fmt.items():
+        mean = sum(v) / len(v) if v else float("nan")
+        out[f"{fmt}_mean_abs_diff"] = mean
+        if not mean <= ATTN_AGREEMENT[f"{fmt}_mean_abs_max"]:  # NaN (nothing compared) fails too
+            problems.append(f"eager and sdpa differ by {mean:.3f} nats on average ({fmt})")
+    worst = max((abs(v) for v in diffs.values()), default=float("nan"))
+    out["max_abs_diff"] = worst
+    if not worst <= ATTN_AGREEMENT["any_abs_max"]:
+        problems.append(f"eager and sdpa differ by {worst:.3f} nats on one score")
+    if len(diffs) != len(items) * len(ATTN_AGREEMENT["arms"]) or not items:
+        problems.append(f"{len(diffs)} scores compared, {len(items) * len(ATTN_AGREEMENT['arms'])} expected")
+    return {**out, "ok": not problems, "problems": problems}
 
 
 # ---------------- scoring ----------------
@@ -643,6 +864,7 @@ def run_family_score(cfg: dict) -> int:
         raise SystemExit(f"unknown model {tag!r}; known: {sorted(MODELS) + sorted(WAVE_B)}")
     spec = spec_for(tag)
     env = require_environment(spec)
+    env["resources"] = require_resources(spec)
     cfg = {**cfg, "model_spec": spec.record()}
     return sizes.score_shard(cfg, tag, lambda: open_scorer(spec), lambda t, arm: family_messages(spec, t, arm),
                              gate=_gate(spec, env if spec.wave != "A" else None))
@@ -666,8 +888,68 @@ def first_turn_spec(spec: ModelSpec) -> ModelSpec:
     """`spec` with the system text folded into the first user turn (Gemma's handling), under its own tag."""
     if spec.system != "native":
         raise ValueError(f"{spec.tag} already folds its system text")
-    return replace(spec, tag=spec.tag + FIRST_TURN, system="fold",
-                   template_notes="Placement check: the system text opens the first user turn, not the last.")
+    # Wave A's note (Mistral 7B, whose template puts the system text in the last user turn) is kept word for word, as
+    # its placement run saved it; review 1 (S10): "not the last" is wrong for a template with a system turn (Gemma 4).
+    note = ("Placement check: the system text opens the first user turn, not the last." if spec.wave == "A" else
+            "Placement check: the system text opens the first user turn instead of the template's own system turn.")
+    return replace(spec, tag=spec.tag + FIRST_TURN, system="fold", template_notes=note)
+
+
+# ---------------- wave B: Qwen3.8's empty think blocks in the examples (review 1, S8; before any wave B score) ------
+
+NO_PRESERVE = "-nopreserve"  # suffix of the model tag the preserve_thinking=False scores are saved under
+NO_PRESERVE_MODELS = ("qwen3.8-27b",)
+
+
+def nopreserve_spec(spec: ModelSpec) -> ModelSpec:
+    """`spec` with preserve_thinking=False, so its template writes no empty think block into the few-shot replies (as
+    Qwen3.5's and Qwen3's templates write none), under its own tag. The gate then requires that no prompt holds
+    '<think>' before its thinking-off ending."""
+    if spec.tag not in NO_PRESERVE_MODELS:
+        raise ValueError(f"the preserve_thinking check is for {NO_PRESERVE_MODELS}, not {spec.tag}")
+    return replace(spec, tag=spec.tag + NO_PRESERVE, template_kwargs={**spec.template_kwargs, "preserve_thinking": False},
+                   forbidden_before_ending=("<think>",),
+                   template_notes="preserve_thinking=False: no empty think block in the few-shot replies (review 1, S8).")
+
+
+def run_family_nopreserve(cfg: dict) -> int:
+    """`family_nopreserve_<tag>` (review 1, S8): Qwen3.8 27B with preserve_thinking=False on PLACEMENT_ITEMS seeded
+    primary items under the aligned and swapped tasks in both formats (about 1,800 passes), saved under
+    `<tag>-nopreserve`; read against the model's own run by the one-fifth rule (`one_fifth_rule`)."""
+    tag = cfg["model"]
+    if tag not in NO_PRESERVE_MODELS:
+        raise SystemExit(f"the preserve_thinking check is for {NO_PRESERVE_MODELS}, not {tag!r}")
+    spec = nopreserve_spec(spec_for(tag))
+    env = require_environment(spec)
+    env["resources"] = require_resources(spec)
+    k = int(cfg.get("n_items", PLACEMENT_ITEMS))
+    cfg = {**cfg, "model_spec": spec.record(), "n_items": k, "arms": list(PLACEMENT_ARMS)}
+    return sizes.score_shard(cfg, spec.tag, lambda: open_scorer(spec), lambda t, arm: family_messages(spec, t, arm),
+                             gate=_gate(spec, env), select=lambda p, s: (placement_items(p, k), []), arms=PLACEMENT_ARMS)
+
+
+def variant_spec(tag: str) -> ModelSpec:
+    """A scored model's spec, or one of its checks' variants: `<tag>-firstturn` (placement) or `<tag>-nopreserve`."""
+    if tag.endswith(FIRST_TURN):
+        return first_turn_spec(spec_for(tag[:-len(FIRST_TURN)]))
+    if tag.endswith(NO_PRESERVE):
+        return nopreserve_spec(spec_for(tag[:-len(NO_PRESERVE)]))
+    return spec_for(tag)
+
+
+def one_fifth_rule(block: dict[str, Any], fmt: str) -> dict[str, Any]:
+    """Wave A's reading of a format check (placement_block's result, one format): the check moves the effect when the
+    95% CI of the per-item difference (variant minus native) excludes zero and the difference is larger than a fifth
+    of the native goal effect; then the comparisons that use the model are reported as format-dependent, with both
+    numbers."""
+    diff = block[fmt]["first_turn_minus_native"]
+    lo, hi = diff["ci"]
+    native = block[fmt]["native"]["delta_L_nats"]
+    est = diff["delta_L_nats"]
+    excludes = bool(lo == lo and hi == hi and (lo > 0 or hi < 0))
+    large = bool(est == est and native == native and abs(est) > abs(native) / 5)
+    return {"difference_nats": est, "ci": [lo, hi], "native_nats": native, "ci_excludes_zero": excludes,
+            "above_one_fifth": large, "format_dependent": excludes and large}
 
 
 def run_family_placement(cfg: dict) -> int:
@@ -679,6 +961,7 @@ def run_family_placement(cfg: dict) -> int:
         raise SystemExit(f"unknown model {tag!r}; known: {sorted(MODELS) + sorted(WAVE_B)}")
     spec = first_turn_spec(spec_for(tag))
     env = require_environment(spec)
+    env["resources"] = require_resources(spec)
     k = int(cfg.get("n_items", PLACEMENT_ITEMS))
     cfg = {**cfg, "model_spec": spec.record(), "n_items": k, "arms": list(PLACEMENT_ARMS)}
     return sizes.score_shard(cfg, spec.tag, lambda: open_scorer(spec), lambda t, arm: family_messages(spec, t, arm),
@@ -695,6 +978,21 @@ ENVCHECK_ARMS = sizes.PRED_ARMS + sizes.YN_ARMS
 # runs per score, and a third of the 0.3-nat noise floor for effects.
 ENVCHECK_RULE = {"yes_no_mean_abs_max": 0.07, "yes_no_goal_effect_diff_max": 0.10, "yes_no_share_diff_max": 0.02,
                  "two_candidate_mean_abs_max": 0.35, "two_candidate_goal_effect_diff_max": 0.10}
+# Review 1 (S4): each rescoring runs on the GPU type of the model's earlier run, so only the software differs; the
+# shard's recorded GPU (its jobs.jsonl, wf/provenance.py) must be exactly this. Qwen3-8B's size_score shards ran on
+# L40S (jobs 7174094-7174099, per their logs); Mistral 7B's wave A run on an A40 (families design note).
+ENVCHECK_GPU = {"mistral-7b-v0.3": "NVIDIA A40", "qwen3-8b": "NVIDIA L40S"}
+
+
+def envcheck_gpu_check(tag: str, folders: list[Path]) -> dict[str, Any]:
+    """Every job of every shard of `tag`'s rescoring ran on ENVCHECK_GPU[tag] alone (a shard with no recorded GPU,
+    another type, or two types fails)."""
+    from wf.provenance import run_record
+
+    want = ENVCHECK_GPU[tag]
+    seen = {p.name: run_record(p)["gpu"] for p in folders}
+    ok = bool(folders) and all(g == [want] for g in seen.values())
+    return {"expected": want, "recorded": seen, "ok": ok}
 
 
 def envcheck_spec(tag: str) -> ModelSpec:
@@ -716,6 +1014,7 @@ def run_family_envcheck(cfg: dict) -> int:
         raise SystemExit(f"the environment check rescores {ENVCHECK_MODELS}, not {tag!r}")
     spec = envcheck_spec(tag)
     env = require_environment(spec, envcheck=True)
+    env["resources"] = require_resources(spec)
     k = int(cfg.get("n_items", PLACEMENT_ITEMS))
     cfg = {**cfg, "model_spec": spec.record(), "n_items": k, "arms": list(ENVCHECK_ARMS)}
     return sizes.score_shard(cfg, spec.tag, lambda: open_scorer(spec), lambda t, arm: family_messages(spec, t, arm),
@@ -778,7 +1077,8 @@ def run_families_envcheck(cfg: dict) -> int:
     sources = tuple(str(_resolve(s)) for s in cfg.get("sources", SOURCES))
     sets = rq1x.rq1x_sets(load_items(sources))
     items = placement_items(sets["primary"], int(cfg.get("n_items", PLACEMENT_ITEMS)))
-    report: dict[str, Any] = {"rule": ENVCHECK_RULE, "n_items": len(items), "models": {}, "tokens": {}, "waiting": {}}
+    report: dict[str, Any] = {"rule": ENVCHECK_RULE, "gpu_required": ENVCHECK_GPU, "n_items": len(items), "models": {},
+                              "tokens": {}, "waiting": {}}
     read: dict[str, list[Path]] = {}
     for tag, mc in cfg["models"].items():
         folders, problems = complete_shards(mc["new_run"])
@@ -792,7 +1092,11 @@ def run_families_envcheck(cfg: dict) -> int:
             report["waiting"][f"{tag} (earlier)"] = info["problems"]
             continue
         read.update({f"{tag}:{run}": f for run, f in got.items()})
-        report["models"][tag] = {**envcheck_block(old, new, items), "gate": _gate_records(folders)}
+        block = {**envcheck_block(old, new, items), "gate": _gate_records(folders)}
+        block["gpu"] = envcheck_gpu_check(tag, folders)
+        block["checks"]["gpu_type"] = block["gpu"]["ok"]
+        block["pass"] = all(block["checks"].values())
+        report["models"][tag] = block
     for tag, path in (cfg.get("tokens") or {}).items():
         f = _resolve(path)
         if not f.exists():
@@ -891,20 +1195,23 @@ PLANNED_COMPARISONS = (("gemma2-9b-it", "llama3.1-8b"), ("gemma2-9b-it", "qwen3-
                        ("llama3.2-1b", "llama3.1-8b"), ("llama3.2-3b", "llama3.1-8b"))
 
 
-def _yes_no_rows(s: list[dict], primary: list[dict], successes: list[dict]) -> tuple[list[tuple], list[str], list[str]]:
+def _yes_no_rows(s: list[dict], primary: list[dict], successes: list[dict],
+                 arms: tuple[str, str, str] = ("yn_aligned", "yn_swapped", "yn_absent")) -> tuple[list[tuple], list[str], list[str]]:
     """Per item, on the yes/no format: ("f", L aligned - L swapped, L neutral) for a failure with all three tasks
-    scored, ("s", nan, L neutral) for a success scored under the neutral task; each item's game; each item's id."""
+    scored, ("s", nan, L neutral) for a success scored under the neutral task; each item's game; each item's id.
+    `arms` (aligned, swapped, neutral) = ("aligned", "swapped", "absent") gives the same rows on the two-candidate
+    format (B3's fallback readout, review 1)."""
     by = {(x["transition_id"], x["condition"]): x["L"] for x in s if x["L"] == x["L"]}
     rows, games, ids = [], [], []
     for t in primary:
-        k = [(t["id"], a) for a in ("yn_aligned", "yn_swapped", "yn_absent")]
+        k = [(t["id"], a) for a in arms]
         if all(x in by for x in k):
             rows.append(("f", by[k[0]] - by[k[1]], by[k[2]]))
             games.append(t["game_id"])
             ids.append(t["id"])
     for t in successes:
-        if (t["id"], "yn_absent") in by:
-            rows.append(("s", float("nan"), by[(t["id"], "yn_absent")]))
+        if (t["id"], arms[2]) in by:
+            rows.append(("s", float("nan"), by[(t["id"], arms[2])]))
             games.append(t["game_id"])
             ids.append(t["id"])
     return rows, games, ids
@@ -1209,7 +1516,7 @@ def family_block(s: list[dict], primary: list[dict], successes: list[dict], spec
 def prediction_check(block: dict[str, Any]) -> dict[str, Any]:
     two, yn = block["goal_effect"]["delta_L_ci"], block["yes_no"]["goal_effect"]["delta_L_ci"]
     out = {"two_candidate_ci_above_0": two[0] > 0, "yes_no_ci_above_0": yn[0] > 0}
-    return {**out, "holds": all(out.values())}
+    return {**out, "holds": all(out.values()), "yes_no_ci": list(yn), "two_candidate_ci": list(two)}
 
 
 def same_population(s: list[dict], primary: list[dict], successes: list[dict]) -> tuple[list[dict], int]:
@@ -1302,48 +1609,143 @@ ENVIRONMENT_BLOCKED = "not interpretable (environment check)"
 
 
 def apply_environment_gate(family: dict[str, Any], passed: bool | None) -> dict[str, Any]:
-    """Wave B: unless the environment check passed, no test in the family is read (section 8). Every verdict that
-    would be read ("supported", "not supported") and every comparison reading becomes ENVIRONMENT_BLOCKED; the p
-    values stay in the record."""
+    """Wave B: unless the environment check passed, no test in the family is read (section 8). Every test of the family
+    involves a wave B model, so every verdict but "waiting" (a competence verdict too: it is a reading of wave B
+    scores) and every comparison reading becomes ENVIRONMENT_BLOCKED, and the estimates, intervals and p values are
+    removed (review 1, S5)."""
     family["environment_check_passed"] = passed
     if passed:
         return family
     for t in family["tests"].values():
-        if t["verdict"] in ("supported", "not supported"):
+        if t["verdict"] != "waiting":
             t["verdict"] = ENVIRONMENT_BLOCKED
-    family["comparison_readings"] = {k: (ENVIRONMENT_BLOCKED if v not in ("waiting", "not interpretable") else v)
+        for k in ("estimate", "ci", "p", "p_holm"):
+            if k in t:
+                t[k] = None
+    family["comparison_readings"] = {k: (v if v == "waiting" else ENVIRONMENT_BLOCKED)
                                      for k, v in family["comparison_readings"].items()}
     return family
 
 
-def waveb_predictions(report: dict[str, Any]) -> dict[str, Any]:
-    """The wave B predictions read off the report (section 10). None: not yet decidable."""
+def b1_reading(share_verdict: str | None, yes_no_ci: list[float] | None) -> str | None:
+    """What a wave B model's share test says, with its yes/no effect (review 1, M2). A share that is not supported is
+    "no detectable effect" only when the yes/no effect's 95% CI also covers zero; with that CI above zero the effect
+    is carried by a minority of items, as in Qwen3-4B (share 0.49, yes/no effect 2.27 nats). None: nothing to read
+    (no share test, waiting, not interpretable, not computable, or blocked by the environment check)."""
+    if share_verdict == "supported":
+        return B1_READINGS["supported"]
+    if share_verdict != "not supported" or not yes_no_ci:
+        return None
+    lo, hi = yes_no_ci
+    if lo > 0:
+        return B1_READINGS["minority"]
+    if hi < 0:
+        return B1_READINGS["reversed"]
+    return B1_READINGS["null"]
+
+
+def waveb_predictions(report: dict[str, Any], environment_passed: bool | None = None) -> dict[str, Any]:
+    """The wave B predictions read off the report (section 10). None: not yet decidable. Nothing is read unless the
+    environment check passed (`environment_passed`, default: report["environment_check"]["pass"]); B1's per-model
+    effect and reading are then left out as well (review 1, S5)."""
+    if environment_passed is None:
+        environment_passed = (report.get("environment_check") or {}).get("pass")
     fam = report["primary_family"]
     tests, readings = fam["tests"], fam["comparison_readings"]
     b1 = {}
     for tag in report["models"]:
-        both = bool(report["prediction_check"][tag]["holds"])
         share = tests.get(f"{tag}:item_share_toward_yes", {}).get("verdict") if tag in WAVE_B_SHARE_TESTS else None
+        if not environment_passed:
+            b1[tag] = {"both_formats_positive": None, "share_verdict": share, "reading": None, "holds": None}
+            continue
+        check = report["prediction_check"][tag]
+        both = bool(check["holds"])
         if share in ("waiting", ENVIRONMENT_BLOCKED):
             holds = None
         elif share in (None, "supported", "not interpretable"):  # no share test, or one that is read
             holds = both
         else:  # "not supported" or "not computable"
             holds = False
-        b1[tag] = {"both_formats_positive": both, "share_verdict": share, "holds": holds}
+        b1[tag] = {"both_formats_positive": both, "share_verdict": share,
+                   "reading": b1_reading(share, check.get("yes_no_ci")), "holds": holds}
 
-    def pair(a: str, b: str, want_positive: bool) -> dict[str, Any]:
+    def pair(a: str, b: str, want_positive: bool, caveat: str = "") -> dict[str, Any]:
         r = readings.get(f"{a} vs {b}")
         est = tests.get(f"{a} vs {b}:share_differs", {}).get("estimate", float("nan"))
+        extra = {"caveat": caveat} if caveat else {}
+        if not environment_passed:
+            return {"reading": ENVIRONMENT_BLOCKED if r not in (None, "waiting") else r, "estimate": None,
+                    "holds": None, **extra}
         if r in (None, "waiting", ENVIRONMENT_BLOCKED, "not interpretable", "not computable"):
-            return {"reading": r, "estimate": est, "holds": None}
+            return {"reading": r, "estimate": est, "holds": None, **extra}
         differs = r in ("differs", "differs, within the margin")
+        # B2 fails only on a clear negative difference; "matches" and "inconclusive" count as holding (review 1)
         holds = (differs and est > 0) if want_positive else not (differs and est < 0)
-        return {"reading": r, "estimate": est, "holds": bool(holds)}
+        return {"reading": r, "estimate": est, "holds": bool(holds), **extra}
 
-    b2 = {f"{a} vs {b}": pair(a, b, False) for a, b in WAVE_B_PLANNED[:4]}
+    b2 = {f"{a} vs {b}": pair(a, b, False, PAIR_CAVEAT) for a, b in WAVE_B_PLANNED[:4]}
     a, b = WAVE_B_PLANNED[4]
-    return {"text": PREDICTION_B, "B1": b1, "B2": b2, "B3": {f"{a} vs {b}": pair(a, b, True)}}
+    b3 = pair(a, b, True)
+    fallback = report.get("b3_fallback") or {}
+    if environment_passed and fallback.get("applies"):
+        # the base model fails only the yes/no coverage criterion: B3 is read on the two-candidate share instead
+        c = fallback.get("comparison") or {}
+        est = c.get("estimate", float("nan"))
+        differs = bool(c.get("differs"))
+        b3 = {"reading": "differs" if differs else "no difference detected", "estimate": est,
+              "ci95": c.get("ci95"), "holds": bool(differs and est > 0), "basis": "two-candidate fallback"}
+    return {"text": PREDICTION_B, "B1": b1, "B2": b2, "B3": {f"{a} vs {b}": b3}}
+
+
+def b3_fallback(blocks: dict[str, dict[str, Any]], scores: dict[str, list[dict]], primary: list[dict],
+                successes: list[dict]) -> dict[str, Any]:
+    """B3's pre-registered fallback (review 1): when the base model (plain format) fails only the yes/no coverage
+    criterion and reaches the competence AUC on the two-candidate score under the neutral task, and the instruct model
+    (plain format) is interpretable, B3 is read on the two-candidate item share, instruct minus base, paired by item
+    with a game-clustered bootstrap (B3_FALLBACK)."""
+    inst, base = WAVE_B_PLANNED[4]
+    if inst not in blocks or base not in blocks:
+        return {"applies": None, "why": "waiting", "rule": B3_FALLBACK}
+    failed = sorted(k for k, c in blocks[base]["competence"]["checks"].items() if not c["pass"])
+    auc2 = blocks[base]["auc"]["absent"]["auc"]
+    out: dict[str, Any] = {"rule": B3_FALLBACK, "base_failed_checks": failed, "base_two_candidate_auc_neutral": auc2,
+                           "instruct_interpretable": blocks[inst]["competence"]["interpretable"]}
+    if failed != ["median_yes_no_mass_neutral"]:
+        return {**out, "applies": False, "why": "the base model does not fail exactly the coverage criterion"}
+    if not (auc2 >= B3_FALLBACK["base_two_candidate_auc_min"] and out["instruct_interpretable"]):
+        return {**out, "applies": False, "why": "base two-candidate AUC below 0.70 or instruct model not interpretable"}
+    two = ("aligned", "swapped", "absent")
+    ra, ga, ia = _yes_no_rows(scores[inst], primary, successes, two)
+    rb, _, ib = _yes_no_rows(scores[base], primary, successes, two)
+    keyed = dict(zip(ib, rb))
+    common = [(r, g, i) for r, g, i in zip(ra, ga, ia) if i in keyed]
+    return {**out, "applies": True, "why": "base model fails only the yes/no coverage criterion",
+            "comparison": _compare_share([(r, keyed[i]) for r, _, i in common], [g for _, g, _ in common])}
+
+
+def withhold_waveb_readings(report: dict[str, Any], tags: list[str]) -> dict[str, Any]:
+    """Review 1 (S5): unless the environment check passed, the wave B analysis writes no reading of a wave B score.
+    Each wave B model's block keeps only its gate records; its effect checks, every comparison involving it, the
+    placement and template checks, and B3's fallback are replaced by ENVIRONMENT_BLOCKED (the family itself is
+    blocked by apply_environment_gate and the predictions by waveb_predictions)."""
+    tags = set(tags)
+    for tag in list(report["models"]):
+        if tag in tags:
+            m = report["models"][tag]
+            report["models"][tag] = {"withheld": ENVIRONMENT_BLOCKED, "spec": m.get("spec"),
+                                     "tokenization_gate": m.get("tokenization_gate"),
+                                     "records_outside_population": m.get("records_outside_population")}
+            report["prediction_check"][tag] = {"withheld": ENVIRONMENT_BLOCKED}
+    for k in list(report.get("comparisons") or {}):
+        a, b = k.split(" vs ")
+        if a in tags or b in tags:
+            report["comparisons"][k] = {"withheld": ENVIRONMENT_BLOCKED}
+    for key in ("placement", "template_checks"):
+        report[key] = {t: {"withheld": ENVIRONMENT_BLOCKED, "run": v.get("run")} for t, v in (report.get(key) or {}).items()}
+    if report.get("b3_fallback"):
+        report["b3_fallback"] = {"withheld": ENVIRONMENT_BLOCKED, "rule": B3_FALLBACK}
+    report["withheld"] = ENVIRONMENT_BLOCKED
+    return report
 
 
 def run_families_analysis(cfg: dict) -> int:
@@ -1423,13 +1825,38 @@ def run_families_analysis(cfg: dict) -> int:
         alt = [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag + FIRST_TURN]
         report["placement"][tag] = {**placement_block(scores[tag], alt, primary), "run": run,
                                     "tokenization_gate": _gate_records(folders)}
+        if wave != "A":
+            report["placement"][tag]["one_fifth_rule"] = {fmt: one_fifth_rule(report["placement"][tag], fmt)
+                                                          for fmt in ("yes_no", "two_candidate")}
+    if wave != "A":
+        # review 1, S8: Qwen3.8 27B with preserve_thinking=False, read against its own run by the one-fifth rule
+        report["template_checks"] = {}
+        for tag, run in (cfg.get("template_checks") or {}).items():
+            folders, problems = complete_shards(run)
+            if problems or tag not in scores:
+                report["waiting"][f"template check {tag}"] = problems or [f"family_score_{tag} not read"]
+                continue
+            read[run] = folders
+            alt = [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag + NO_PRESERVE]
+            block = placement_block(scores[tag], alt, primary)
+            report["template_checks"][tag] = {**block, "run": run, "variant": "preserve_thinking=False",
+                                              "tokenization_gate": _gate_records(folders),
+                                              "one_fifth_rule": {fmt: one_fifth_rule(block, fmt)
+                                                                 for fmt in ("yes_no", "two_candidate")}}
+        report["b3_fallback"] = b3_fallback(report["models"], scores, primary, successes)
     from wf.provenance import provenance, shard_inputs
 
     report["provenance"] = provenance(
         runs={**{s: Path(s) for s in sources}, **{k: (v[0].parent if v else Path(k)) for k, v in read.items()}},
         inputs=[Path(s) / "transitions.jsonl" for s in sources] + shard_inputs([p for fs in read.values() for p in fs]))
+    blocked = wave != "A" and not report["environment_check"]["pass"]
     if wave != "A":
-        report["predictions_b"] = waveb_predictions(report)
+        report["amendments"] = {"review": "notes/families_waveb_review1.md", "pair_caveat": PAIR_CAVEAT,
+                                "qwen3_size_series": QWEN3_SIZE_SERIES, "b1_readings": B1_READINGS,
+                                "b3_fallback": B3_FALLBACK, "run_order": list(RUN_ORDER_B)}
+        report["predictions_b"] = waveb_predictions(report, bool(report["environment_check"]["pass"]))
+        if blocked:  # review 1, S5: no wave B score is read, in the metrics, the report or the status lines
+            withhold_waveb_readings(report, list(scores))
     write_json(d / "metrics.json", report)
     write_run_report(run_id, f"Model families, wave {wave} (exploratory)", report)
     def head(m: dict) -> str:
@@ -1439,13 +1866,26 @@ def run_families_analysis(cfg: dict) -> int:
                 f"(secondary); "
                 f"yn dL {m['yes_no']['goal_effect']['delta_L_nats']:.2f}, two-candidate dL {m['goal_effect']['delta_L_nats']:.2f}")
 
-    lines = [f"{tag}: {head(m)}; prediction holds: {report['prediction_check'][tag]['holds']}" for tag, m in report["models"].items()]
-    lines += [f"{tag} (reference): {head(m)}" for tag, m in report["reference"].items()]
-    lines += [f"primary family {k}: {v['verdict']} (Holm p {v['p_holm']:.4f})" for k, v in report["primary_family"]["tests"].items()]
-    lines += [f"{k}: item share {v}" for k, v in report["primary_family"]["comparison_readings"].items()]
-    lines += [f"{tag} placement, first turn minus native: yn {p['yes_no']['first_turn_minus_native']['delta_L_nats']:.2f}, "
-              f"two-candidate {p['two_candidate']['first_turn_minus_native']['delta_L_nats']:.2f} ({p['n_items']} items)"
-              for tag, p in report["placement"].items()]
+    if blocked:
+        lines = [f"{tag}: {ENVIRONMENT_BLOCKED}; scores complete, nothing read" for tag in report["models"]]
+        lines += [f"{tag} (reference): {head(m)}" for tag, m in report["reference"].items()]
+        lines += [f"primary family: every test {ENVIRONMENT_BLOCKED} (environment check "
+                  f"{'not found' if report['environment_check']['pass'] is None else 'not passed'})"]
+    else:
+        lines = [f"{tag}: {head(m)}; prediction holds: {report['prediction_check'][tag]['holds']}" for tag, m in report["models"].items()]
+        lines += [f"{tag} (reference): {head(m)}" for tag, m in report["reference"].items()]
+        lines += [f"primary family {k}: {v['verdict']} (Holm p {v['p_holm']:.4f})" for k, v in report["primary_family"]["tests"].items()]
+        lines += [f"{k}: item share {v}" for k, v in report["primary_family"]["comparison_readings"].items()]
+        lines += [f"{tag} placement, first turn minus native: yn {p['yes_no']['first_turn_minus_native']['delta_L_nats']:.2f}, "
+                  f"two-candidate {p['two_candidate']['first_turn_minus_native']['delta_L_nats']:.2f} ({p['n_items']} items)"
+                  for tag, p in report["placement"].items()]
+        if wave != "A":
+            lines += [f"{tag} preserve_thinking=False minus native: yn {p['yes_no']['first_turn_minus_native']['delta_L_nats']:.2f}, "
+                      f"two-candidate {p['two_candidate']['first_turn_minus_native']['delta_L_nats']:.2f}; format-dependent "
+                      f"{ {f: r['format_dependent'] for f, r in p['one_fifth_rule'].items()} }"
+                      for tag, p in report["template_checks"].items()]
+            lines += [f"B1 {tag}: {v['reading']}" for tag, v in report["predictions_b"]["B1"].items() if v["reading"]]
+            lines += [f"(generation pairs) {PAIR_CAVEAT}"]
     ok = not report["waiting"]
     write_status(run_id, "\n".join(lines) + (f"\nwaiting: {sorted(report['waiting'])}" if not ok else ""), ok=False,
                  reported="families report" if ok else "partial families report")
