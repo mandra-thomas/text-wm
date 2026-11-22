@@ -1442,6 +1442,10 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "families_analysis": lambda cfg: _lazy("families", "run_families_analysis")(cfg),
     # 2026-11-20, logged before any wave A score was read: Mistral's system text in the first user turn.
     "family_placement_mistral-7b-v0.3": lambda cfg: _lazy("families", "run_family_placement")(cfg),
+    # 2026-11-20, Option A decision simulation (wf/decisionsim.py, notes/decisionsim_design.md).
+    **{f"decisionsim_score_{tag}": (lambda cfg: _lazy("decisionsim", "run_decisionsim_score")(cfg))
+       for tag in ("qwen3-8b", "llama3.1-8b", "mistral-7b-v0.3", "gemma2-9b-it", "llama3.2-3b")},
+    "decisionsim_analysis": lambda cfg: _lazy("decisionsim", "run_decisionsim_analysis")(cfg),
 }
 
 

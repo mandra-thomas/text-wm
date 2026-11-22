@@ -1,0 +1,19 @@
+run_id: decisionsim_score_qwen3-8b
+# Option A decision simulation (notes/decisionsim_design.md; wf/decisionsim.py). Yes/no feasibility scores of every
+# candidate at all 761 eligible states (9,930 candidates in 134 games), under the aligned, neutral and swapped task
+# (the swapped one at the 709 states where it is defined) and with no task (the task-blind verifier: the first
+# observation's task sentence removed) and, for the primary models only, with no task line anywhere (yn_blind_all: the
+# examples' task lines stripped too): 48,916 single-token passes, at the pinned revision in wf.constants.REVISIONS.
+# Census and swapped arm adopted after review 1, task-blind arm in Stage 1a, yn_blind_all after review 2, all before
+# any score. Primary model: score it first (the Option C verdict needs only the primary models). Every condition of a
+# state is scored in the same job. WF_N_SHARDS / WF_SHARD split it by game.
+model: qwen3-8b
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_states: all
+seed: 20260924
+arms: [yn_aligned, yn_absent, yn_swapped, yn_blind, yn_blind_all]
+n_shards: 1
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]
