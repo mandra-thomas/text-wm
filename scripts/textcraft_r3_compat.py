@@ -83,7 +83,8 @@ SPECS: dict[str, dict[str, Any]] = {
                         kind="instruct", switch=False, off_ending="<|im_start|>assistant\n",
                         forbidden=("function-calling",), window=4096),
     "granite4.2-8b": dict(hf="ibm-granite/granite-4.2-8b", rev="a7042144125ce5ae64f89610e8289647fc000b9a",
-                          kind="instruct", off_ending=None, markers=(), window=None),
+                          kind="instruct", off_ending="<|im_start|>assistant\n<think></think>", on_ending="<think>\n",
+                          markers=(), window=None),
     # Reasoning-oriented: no thinking-off mode (or, for Qwen3.5, the mode switched on).
     "qwen3.5-9b-think": dict(hf="Qwen/Qwen3.5-9B", rev="c202236235762e1c871ad0ccb60c8ee5ba337b9a", kind="reasoning",
                              template={"enable_thinking": True}, close=("</think>\n\n",)),
@@ -198,6 +199,7 @@ def check_instruct(root: Path, tag: str, spec: dict, records: list[dict], shots,
         try:
             mc, _ = load_tok(root, spec, mistral_format=True)
             ref = lambda msgs: _ids(mc.apply_chat_template(msgs, tokenize=True, add_generation_prompt=True))  # noqa: E731
+            ref_alone = lambda text: _ids(mc(text, add_special_tokens=False).input_ids)  # noqa: E731
             info["mistral_common_backend"] = type(mc).__name__ == "MistralCommonBackend"
         except Exception as e:  # noqa: BLE001
             problems.append(f"mistral-common reference could not load: {e!r}")
@@ -225,6 +227,7 @@ def check_instruct(root: Path, tag: str, spec: dict, records: list[dict], shots,
         switch["on_equals_off"] = enc.text(msgs) == enc.text(msgs, enable_thinking=True)
         switch["off_ending_rendered"] = enc.text(msgs)[-60:]
     n_arms = n_cand = n_yn = n_pairs = 0
+    checked_alone: set[str] = set()
     t0 = time.time()
     for k, rec in enumerate(records[:limit] if limit else records):
         ids_by_arm: dict[str, list[int]] = {}
@@ -274,6 +277,11 @@ def check_instruct(root: Path, tag: str, spec: dict, records: list[dict], shots,
                     continue
                 if r != a:
                     problems.append(f"{rec['id']} {arm} {name}: alone {a[:6]} vs template {r[:6]}")
+                if ref is not None and cand not in checked_alone:
+                    checked_alone.add(cand)
+                    info["mistral_common_candidates_checked"] += 1
+                    if ref_alone(cand) != a:
+                        problems.append(f"{rec['id']} {arm} {name}: candidate ids differ from mistral-common's")
                 info["joined_plain_text_differs"] += ids + a != enc.alone(text + cand)
             if not alone["o_plus"] or not alone["o_minus"] or alone["o_plus"][0] == alone["o_minus"][0]:
                 problems.append(f"{rec['id']} {arm}: candidates share their first token")
