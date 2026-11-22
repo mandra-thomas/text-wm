@@ -1,0 +1,10 @@
+run_id: textcraft_dx_zeroshot
+# Exploratory, post hoc (notes/textcraft_llama_dx.md): the verified prompt without its in-context examples, both
+# models, aligned, swapped and neutral lines, two-candidate scores, on 150 seeded main couples and 100 seeded success
+# couples. Read only against the verified prompt's scores on the same items.
+manifest: wf/textcraft/data/manifest.json
+mode: zeroshot
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+blocks:
+  - {population: main, couples: 150}
+  - {population: success, couples: 100}

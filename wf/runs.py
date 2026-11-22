@@ -1418,6 +1418,11 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "textcraft_score_examples_on_goal": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
     "textcraft_score_empty_start": lambda cfg: _lazy("textcraft.score", "run_textcraft_score")(cfg),
     "textcraft_analysis": lambda cfg: _lazy("textcraft.analysis", "run_textcraft_analysis")(cfg),
+    # Exploratory diagnostics of the Llama result (notes/textcraft_llama_dx.md)
+    "textcraft_dx_zeroshot": lambda cfg: _lazy("textcraft.dx", "run_textcraft_dx")(cfg),
+    "textcraft_dx_generate": lambda cfg: _lazy("textcraft.dx", "run_textcraft_dx")(cfg),
+    "textcraft_dx_objectgoal": lambda cfg: _lazy("textcraft.dx", "run_textcraft_dx")(cfg),
+    "textcraft_dx_prompts": lambda cfg: _lazy("textcraft.dx", "run_textcraft_dx")(cfg),
     # τ-bench retail replication (notes/tau_design.md)
     "tau_build": lambda cfg: _lazy("tau.pipeline", "run_tau_build")(cfg),
     "tau_verify": lambda cfg: _lazy("tau.pipeline", "run_tau_verify")(cfg),

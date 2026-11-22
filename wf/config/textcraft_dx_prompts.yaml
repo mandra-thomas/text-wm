@@ -1,0 +1,11 @@
+run_id: textcraft_dx_prompts
+# Exploratory, post hoc (notes/textcraft_llama_dx.md, run 4): a world-model-only system text, an explicit inventory
+# step before the action, and both, under the aligned, swapped and neutral lines, both models, two-candidate scores,
+# on 150 seeded main couples and 100 seeded success couples. Competence is read first, then ΔL, against the verified
+# prompt on the same items.
+manifest: wf/textcraft/data/manifest.json
+mode: prompts
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot]
+blocks:
+  - {population: main, couples: 150}
+  - {population: success, couples: 100}
