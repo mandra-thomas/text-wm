@@ -1434,6 +1434,15 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "families_analysis": lambda cfg: _lazy("families", "run_families_analysis")(cfg),
     # 2026-11-20, logged before any wave A score was read: Mistral's system text in the first user turn.
     "family_placement_mistral-7b-v0.3": lambda cfg: _lazy("families", "run_family_placement")(cfg),
+    # 2026-11-22, model families wave B (notes/families_waveb_design.md; serve2, transformers 5), before any score.
+    **{f"family_score_{tag}": (lambda cfg: _lazy("families", "run_family_score")(cfg))
+       for tag in ("ministral3-8b-it", "qwen3.5-9b", "qwen3.5-9b-plain", "qwen3.5-9b-base-plain", "gemma4-e4b-it",
+                   "qwen3.8-27b", "gemma4-31b-it")},
+    "family_placement_gemma4-e4b-it": lambda cfg: _lazy("families", "run_family_placement")(cfg),
+    **{f"family_envcheck_{tag}": (lambda cfg: _lazy("families", "run_family_envcheck")(cfg))
+       for tag in ("mistral-7b-v0.3", "qwen3-8b")},
+    "families_envcheck": lambda cfg: _lazy("families", "run_families_envcheck")(cfg),
+    "families_waveb_analysis": lambda cfg: _lazy("families", "run_families_analysis")(cfg),
 }
 
 

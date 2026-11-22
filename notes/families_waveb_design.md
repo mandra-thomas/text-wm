@@ -216,7 +216,18 @@ The tokenizer and configuration files of all six repositories (about 0.2 GB) are
 3. GPU: the five chat-format models, the two plain-format runs and the placement check, by the storage route chosen.
 4. CPU: `families_waveb_analysis`.
 
-## 15. Caveats
+## 15. Build (code written after this note's first commit)
+
+- `wf/constants.py`: the six pinned revisions.
+- `wf/families.py`: `ModelSpec`'s wave B fields (recorded only where they differ from wave A's defaults, so wave A's saved configs are unchanged); `WAVE_B`, `WAVE_B_SHARE_TESTS`, `WAVE_B_PLANNED`, `PREDICTION_B`; `spec_for`, `environment_record`, `require_environment`, `open_scorer`; the gate's generation suffix, `waveb_prompt_checks`, `plain_checks` and `mistral_common_encoder`; `run_family_envcheck`, `envcheck_block`, `run_families_envcheck` (`ENVCHECK_RULE`); `apply_environment_gate`, `waveb_predictions`, and `run_families_analysis` with `wave: B`.
+- `wf/scoring/logodds.py`: `model_class`, `tokenizer_kwargs`, `prompt_format`, `strict_load` and `check_loading`; `dtype` under transformers 5. Every default leaves earlier runs' loading and prompts unchanged.
+- `wf/scoring/prompts.py`: `plain_text_prompt`.
+- `wf/tools/family_gate_cpu.py` (the gate on every item, tokenizers only), `wf/tools/envcheck_tokens.py` (part 1 of the environment check), `wf/tools/prefetch_models.py` (wave B tags; the cache folder transformers 5 reads).
+- Runs and configs: `family_score_<tag>` for the seven wave B runs, `family_placement_gemma4-e4b-it`, `family_envcheck_mistral-7b-v0.3`, `family_envcheck_qwen3-8b`, `families_envcheck`, `families_waveb_analysis`.
+- Jobs: `pace/family_score_serve2.sbatch` (GPU; `WF_WEIGHTS=local` for node-local weights), `pace/families_waveb_gate.sbatch` and `pace/families_envcheck_tokens.sbatch` (CPU).
+- Tests: `tests/test_families_waveb.py`; mutants "families wave B …" in `scripts/mutation_check.py`, which now also names the test that killed each mutant.
+
+## 16. Caveats
 
 - **Descriptive comparisons.** Every comparison changes developer or release, data, tokenizer, template and training at once; the base-against-instruct pair is one pair in one format.
 - **Formats differ within pairs.** Ministral 3 puts the system text first where Mistral 7B put it last; Gemma 4 has a system turn where Gemma 2 had the text folded into the first user turn (placement check); Qwen3.8 writes empty think blocks into the example replies where Qwen3.5 does not.

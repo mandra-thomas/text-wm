@@ -1,0 +1,38 @@
+run_id: families_waveb_analysis
+# Model families, wave B (wf/families.py; notes/families_waveb_design.md). CPU only. The primary family is fixed in
+# code (WAVE_B_SHARE_TESTS and WAVE_B_PLANNED, 16 tests); no test is read unless families_envcheck passed.
+wave: B
+envcheck: families_envcheck
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+models: [ministral3-8b-it, qwen3.5-9b, qwen3.5-9b-plain, qwen3.5-9b-base-plain, gemma4-e4b-it, qwen3.8-27b, gemma4-31b-it]
+reference:
+  qwen3-8b:
+    model: qwen3-8b
+    runs:
+      size_score_qwen3-8b: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+  llama3.1-8b:
+    model: llama3.1-8b-fewshot
+    runs:
+      rq1_score: [aligned, swapped, absent]
+      rq1x_score: [aligned, swapped, absent]
+      rq1v_score: [yn_aligned, yn_swapped, yn_absent]
+  qwen3-32b:
+    model: qwen3-32b
+    runs:
+      size_score_qwen3-32b: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+  gemma2-9b-it:
+    model: gemma2-9b-it
+    runs:
+      family_score_gemma2-9b-it: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+  mistral-7b-v0.3:
+    model: mistral-7b-v0.3
+    runs:
+      family_score_mistral-7b-v0.3: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+# Descriptive comparisons (outside the primary family), fixed before data: the format effect for one instruct model,
+# and size within the Gemma 4 and Qwen lines.
+descriptive_comparisons:
+  - [qwen3.5-9b, qwen3.5-9b-plain]
+  - [gemma4-31b-it, gemma4-e4b-it]
+  - [qwen3.8-27b, qwen3.5-9b]
+placement:
+  gemma4-e4b-it: family_placement_gemma4-e4b-it

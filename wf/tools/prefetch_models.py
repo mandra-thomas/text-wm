@@ -32,11 +32,19 @@ GOLDEN = Path(__file__).resolve().parents[2] / "tests" / "golden" / "default_pro
 
 def transformers_cache() -> str | None:
     """The folder from_pretrained reads when given no cache_dir: TRANSFORMERS_CACHE if set (as pace/_common.sh
-    sets it), else the hub cache. Prefetching anywhere else would leave the scoring job to download again."""
+    sets it), else the hub cache. Prefetching anywhere else would leave the scoring job to download again.
+
+    transformers 5 (wave B's serve2, 2026-11-22) no longer reads TRANSFORMERS_CACHE: it reads huggingface_hub's
+    HF_HUB_CACHE, so that is the folder for it (pace/family_score_serve2.sbatch points HF_HUB_CACHE at the folder
+    transformers 4 reads, so both environments share one cache)."""
     try:
         from transformers.utils import hub
 
-        return str(hub.TRANSFORMERS_CACHE)
+        if hasattr(hub, "TRANSFORMERS_CACHE"):
+            return str(hub.TRANSFORMERS_CACHE)
+        from huggingface_hub import constants
+
+        return str(constants.HF_HUB_CACHE)
     except Exception:  # transformers missing: same rule from the environment
         return os.environ.get("TRANSFORMERS_CACHE") or os.environ.get("HF_HUB_CACHE")
 
@@ -74,9 +82,11 @@ def check_tokenizer(spec: Any, cache_dir: str | None) -> dict[str, Any]:
 
     item = json.loads(GOLDEN.read_text(encoding="utf-8"))["item"]
     tok = AutoTokenizer.from_pretrained(spec.hf_id, revision=REVISIONS[spec.hf_id], cache_dir=cache_dir,
-                                        local_files_only=True)
-    scorer = LogoddsScorer.for_tokenizer(spec.hf_id, tok, model_tag=spec.tag, template_kwargs=spec.template_kwargs)
-    rec = families.tokenization_checks(scorer, spec, [item], [])
+                                        local_files_only=True, **spec.tokenizer_kwargs)
+    scorer = LogoddsScorer.for_tokenizer(spec.hf_id, tok, model_tag=spec.tag, template_kwargs=spec.template_kwargs,
+                                         prompt_format=spec.prompt_format)
+    ref = families.mistral_common_encoder(spec, cache_dir=cache_dir) if spec.mistral_common_check else None
+    rec = families.tokenization_checks(scorer, spec, [item], [], ref)
     return {k: rec[k] for k in ("ok", "n_problems", "problems", "first_token_pairs", "max_prompt_tokens")} | {
         "yes_no_tokens": {w: v["alone"] for w, v in rec["yes_no"].items()}, "tokenizer_class": type(tok).__name__}
 
@@ -85,20 +95,22 @@ def main(argv: list[str] | None = None) -> int:
     from wf import families
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("tags", nargs="*", help=f"default: {sorted(families.MODELS)}")
+    ap.add_argument("tags", nargs="*", help=f"default: {sorted(families.MODELS)} (wave A); wave B tags: "
+                                            f"{sorted(families.WAVE_B)}")
     ap.add_argument("--check", action="store_true", help="run the tokenization gate on the golden item afterwards")
     ap.add_argument("--out", default=None, help="also write the results as JSON here")
     args = ap.parse_args(argv)
     tags = args.tags or list(families.MODELS)
-    unknown = [t for t in tags if t not in families.MODELS]
+    known = {**families.MODELS, **families.WAVE_B}
+    unknown = [t for t in tags if t not in known]
     if unknown:
-        print(f"unknown tags {unknown}; known: {sorted(families.MODELS)}", file=sys.stderr)
+        print(f"unknown tags {unknown}; known: {sorted(known)}", file=sys.stderr)
         return 2
     cache = transformers_cache()
     print(f"cache: {cache}; token from HF_TOKEN: {'set' if os.environ.get('HF_TOKEN') else 'not set'}", flush=True)
     results: dict[str, Any] = {}
     for tag in tags:
-        spec = families.MODELS[tag]
+        spec = known[tag]
         rev = REVISIONS[spec.hf_id]
         r = prefetch(spec.hf_id, rev, cache)
         if r["status"] == "OK" and args.check:

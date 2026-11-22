@@ -43,10 +43,11 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import random
 import statistics
 from collections import Counter
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -57,6 +58,7 @@ from wf.analysis.stats import cluster_bootstrap, holm, pair_permutation, paired_
 from wf.rq2 import SOURCES, complete_shards, load_items
 from wf.runs import _effect, _init_run
 from wf.scoring.logodds import LogoddsScorer
+from wf.scoring.prompts import plain_text_prompt
 from wf.util import read_jsonl, require_filed, runs_root, write_json, write_status
 
 
@@ -72,13 +74,40 @@ class ModelSpec:
     attn_implementation: str | None = None  # None: transformers' default
     template_kwargs: dict[str, Any] = field(default_factory=dict)
     template_notes: str = ""
+    # Wave B (2026-11-22, notes/families_waveb_design.md). The defaults are wave A's settings, and a spec that keeps
+    # them records exactly as before (record()), so wave A's saved run configs are unchanged.
+    wave: str = "A"
+    env: str = "serve"  # "serve2": transformers 5 (envs/serve2); wave A and the references run in "serve"
+    model_class: str | None = None  # "image_text_to_text": the checkpoint's vision-language class
+    tokenizer_kwargs: dict[str, Any] = field(default_factory=dict)
+    prompt_format: str = "chat"  # "plain": no template (base against instruct)
+    generation_suffix: str = ""  # text the generation prompt ends with that a rendered reply does not contain
+    thinking_switch: bool = False  # the template reads enable_thinking
+    thinking_on_markers: tuple[str, ...] = ()  # written with thinking on, never with it off
+    thinking_on_ending: str = ""  # the thinking-on generation prompt ends with this
+    thinking_off_ending: str = ""  # every scored prompt (thinking off) ends with these tokens
+    forbidden_in_prompt: tuple[str, ...] = ()  # text no scored prompt may contain (a template's default system prompt)
+    mistral_common_check: bool = False  # every prompt's ids must equal mistral-common's encoding
+    strict_load: bool = False  # the loading check (LogoddsScorer.check_loading)
+    unexpected_keys_allowed: str = ""  # checkpoint tensors the class may leave unused (a regular expression)
+    gpu_min_gb: int = 0  # GPU memory the bf16 weights need, with margin (0: any card the job asks for)
+    hub_created: str = ""  # the Hub repository's creation date (wave B's release field is a month)
 
     @property
     def revision(self) -> str | None:
         return C.REVISIONS.get(self.hf_id)
 
     def record(self) -> dict[str, Any]:
-        return {**asdict(self), "revision": self.revision}
+        """The spec as saved in a run's config: the wave B fields only where they differ from wave A's defaults."""
+        rec = asdict(self)
+        for f in fields(self)[WAVE_A_FIELDS:]:
+            default = f.default_factory() if f.default_factory is not MISSING else f.default  # type: ignore[misc]
+            if rec[f.name] == default:
+                del rec[f.name]
+        return {**rec, "revision": self.revision}
+
+
+WAVE_A_FIELDS = 10  # ModelSpec's fields up to template_notes; the rest were added for wave B
 
 
 # Wave A: transformers 4.51.3 loads all four, so they run in the study's environment.
@@ -112,7 +141,141 @@ REFERENCE: dict[str, ModelSpec] = {
                           {"enable_thinking": False}, "Thinking off; the template writes an empty think block."),
     "llama3.1-8b": ModelSpec("llama3.1-8b", "meta-llama/Llama-3.1-8B-Instruct", "llama", "Llama 3.1", "2024-07-23",
                              8.03, "native", None, {}, "Fixed date 26 Jul 2024 in the system header."),
+    # Wave B's large Qwen pair (2026-11-22): scored in the size series (size_score_qwen3-32b), same prompts.
+    "qwen3-32b": ModelSpec("qwen3-32b", "Qwen/Qwen3-32B", "qwen", "Qwen3", "2025-04-29", 32.76, "native", None,
+                           {"enable_thinking": False}, "Thinking off; the template writes an empty think block."),
 }
+
+# ---------------- wave B (2026-11-22, notes/families_waveb_design.md; before any wave B score) ----------------
+
+_QWEN_OFF = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+_QWEN_ON = "<|im_start|>assistant\n<think>\n"
+_GEMMA4_E4B_SHARED_KV = r"language_model\.layers\.(2[4-9]|3[0-9]|4[01])\.self_attn\.(k_proj|v_proj|k_norm)\."
+_WAVE_B = dict(wave="B", env="serve2", model_class="image_text_to_text", tokenizer_kwargs={"mistral_format": False},
+               strict_load=True)
+
+
+def _qwen_b(tag: str, hf_id: str, generation: str, release: str, params: float, notes: str, *, plain: bool = False,
+            markers: tuple[str, ...] = (), gpu: int = 24, created: str = "") -> ModelSpec:
+    if plain:
+        return ModelSpec(tag, hf_id, "qwen", generation, release, params, "native", None, {}, notes, **_WAVE_B,
+                         prompt_format="plain", unexpected_keys_allowed=r"^mtp\.", gpu_min_gb=gpu, hub_created=created)
+    return ModelSpec(tag, hf_id, "qwen", generation, release, params, "native", None, {}, notes, **_WAVE_B,
+                     thinking_switch=True, thinking_on_markers=markers, thinking_on_ending=_QWEN_ON,
+                     thinking_off_ending=_QWEN_OFF, unexpected_keys_allowed=r"^mtp\.", gpu_min_gb=gpu,
+                     hub_created=created)
+
+
+# Every wave B model is loaded in serve2 (transformers 5) with its checkpoint's vision-language class, the fast
+# tokenizer and the pinned chat template (mistral_format=False), the loading check, and thinking off. Parameters:
+# every tensor of the architecture (vision and audio encoders included), counted on the meta device.
+WAVE_B: dict[str, ModelSpec] = {
+    "ministral3-8b-it": ModelSpec(
+        "ministral3-8b-it", "mistralai/Ministral-3-8B-Instruct-2512-BF16", "mistral", "Ministral 3", "2025-12", 8.92,
+        "native", None, {},
+        "System text first ('[SYSTEM_PROMPT]...[/SYSTEM_PROMPT]'); without a system message the template inserts "
+        "Mistral's default prompt with today's date, so the gate checks that it never appears. A reply follows "
+        "'[/INST]' with no space. No thinking mode. The bf16 release; the default repository's language model is FP8.",
+        **_WAVE_B, thinking_off_ending="[/INST]", forbidden_in_prompt=("Le Chat", "The current date"),
+        mistral_common_check=True, gpu_min_gb=24, hub_created="2025-10-31"),
+    "qwen3.5-9b": _qwen_b(
+        "qwen3.5-9b", "Qwen/Qwen3.5-9B", "Qwen3.5", "2026-02", 9.41,
+        "ChatML. Thinking is on by default (the generation prompt ends '<think>\\n'); enable_thinking=False writes "
+        "an empty think block, as for Qwen3-8B. Linear-attention layers run in PyTorch (no kernels package).",
+        created="2026-02-27"),
+    "qwen3.5-9b-plain": _qwen_b(
+        "qwen3.5-9b-plain", "Qwen/Qwen3.5-9B", "Qwen3.5", "2026-02", 9.41,
+        "The instruct model in the plain-text format (no template), the instruct side of base against instruct.",
+        plain=True, created="2026-02-27"),
+    "qwen3.5-9b-base-plain": _qwen_b(
+        "qwen3.5-9b-base-plain", "Qwen/Qwen3.5-9B-Base", "Qwen3.5 base", "2026-02", 9.41,
+        "The base model in the plain-text format (no template), the base side of base against instruct.",
+        plain=True, created="2026-02-26"),
+    "gemma4-e4b-it": ModelSpec(
+        "gemma4-e4b-it", "google/gemma-4-E4B-it", "gemma", "Gemma 4", "2026-03", 7.94, "native", None, {},
+        "System turn supported (Gemma 2 had none). Thinking off by default; on, the template writes '<|think|>'. "
+        "No attention soft-capping (query-key norms), final logits tanh-capped at 30. The last 18 layers share "
+        "keys and values with earlier ones, so their own k/v projections and k norms in the checkpoint are unused.",
+        **_WAVE_B, thinking_switch=True, thinking_on_markers=("<|think|>",), thinking_off_ending="<|turn>model\n",
+        unexpected_keys_allowed=_GEMMA4_E4B_SHARED_KV, gpu_min_gb=24, hub_created="2026-03-02"),
+    "qwen3.8-27b": _qwen_b(
+        "qwen3.8-27b", "Qwen/Qwen3.8-27B", "Qwen3.8", "2026-08", 27.36,
+        "As Qwen3.5, plus: with thinking on the template writes a reasoning-effort instruction into the system "
+        "message (none with thinking off), and by default it writes an empty think block into every earlier "
+        "assistant turn (the few-shot replies).", markers=("Reasoning effort",), gpu=80, created="2026-08-05"),
+    "gemma4-31b-it": ModelSpec(
+        "gemma4-31b-it", "google/gemma-4-31B-it", "gemma", "Gemma 4", "2026-03", 31.27, "native", None, {},
+        "As Gemma 4 E4B, plus: with thinking off the generation prompt ends with an empty thought channel "
+        "('<|channel>thought\\n<channel|>') that a rendered reply does not contain; the score is read after it.",
+        **_WAVE_B, generation_suffix="<|channel>thought\n<channel|>", thinking_switch=True,
+        thinking_on_markers=("<|think|>",), thinking_off_ending="<|turn>model\n<|channel>thought\n<channel|>",
+        gpu_min_gb=80, hub_created="2026-03-11"),
+}
+WAVE_B_SHARE_TESTS = ("ministral3-8b-it", "qwen3.5-9b", "gemma4-e4b-it", "qwen3.8-27b", "gemma4-31b-it",
+                      "qwen3.5-9b-base-plain")
+# The planned comparisons of item share (first minus second), two tests each in wave B's primary family.
+WAVE_B_PLANNED = (("gemma4-e4b-it", "gemma2-9b-it"), ("ministral3-8b-it", "mistral-7b-v0.3"),
+                  ("qwen3.5-9b", "qwen3-8b"), ("qwen3.8-27b", "qwen3-32b"),
+                  ("qwen3.5-9b-plain", "qwen3.5-9b-base-plain"))
+WAVE_B_FAMILY_SIZE = len(WAVE_B_SHARE_TESTS) + 2 * len(WAVE_B_PLANNED)  # 16, fixed before data
+PREDICTION_B = (
+    "Logged before any wave B score (2026-11-22). B1: the goal effect (aligned minus swapped) is positive in both "
+    "formats (95% game-clustered CI above zero) for every wave B run, and the item share is supported for every "
+    "wave B model that passes the competence gate. B2: no generation pair reads 'differs' with the newer model "
+    "lower. B3: in the plain format, instruct minus base reads 'differs' (or 'differs, within the margin') with a "
+    "positive difference; untestable if the base model fails the competence gate.")
+
+
+def spec_for(tag: str) -> ModelSpec:
+    """A scored model's spec: wave A, wave B, or an already-scored reference model."""
+    for registry in (MODELS, WAVE_B, REFERENCE):
+        if tag in registry:
+            return registry[tag]
+    raise KeyError(f"unknown model {tag!r}; known: {sorted(MODELS) + sorted(WAVE_B) + sorted(REFERENCE)}")
+
+
+def environment_record() -> dict[str, Any]:
+    """The software a shard runs in: versions, and whether packages that fetch or swap in kernels are importable."""
+    import importlib.util
+    import platform
+
+    rec: dict[str, Any] = {"python": platform.python_version()}
+    for name in ("transformers", "torch", "tokenizers", "huggingface_hub", "accelerate", "jinja2", "mistral_common"):
+        try:
+            rec[name] = getattr(__import__(name), "__version__", "unknown")
+        except Exception:  # noqa: BLE001 - absent or broken: recorded, not fatal here
+            rec[name] = None
+    for name in ("kernels", "fla", "causal_conv1d", "flash_attn"):
+        rec[f"{name}_importable"] = importlib.util.find_spec(name) is not None
+    return rec
+
+
+def require_environment(spec: ModelSpec, env: dict[str, Any] | None = None, *, envcheck: bool = False) -> dict[str, Any]:
+    """Refuse to score a model in the wrong environment (wave B, section 4).
+
+    A serve2 model needs transformers 5 or later and no `kernels` package (it would fetch unpinned compiled kernels
+    from the Hub at run time). A wave A or reference model is scored with transformers 4 only, except by the
+    environment check, which rescores it in serve2 on purpose. Mock runs load nothing and are not checked.
+    """
+    env = environment_record() if env is None else env
+    if os.environ.get("WF_MOCK_SCORE", "0") == "1":
+        return {**env, "checked": "mock"}
+    major = int(str(env.get("transformers") or "0").split(".")[0])
+    if (spec.env == "serve2" or envcheck) and major < 5:
+        raise SystemExit(f"{spec.tag} runs in serve2 (transformers >= 5); this Python has transformers {env.get('transformers')}")
+    if spec.env == "serve" and not envcheck and major >= 5:
+        raise SystemExit(f"{spec.tag} was scored with transformers 4; in serve2 it is rescored only by family_envcheck")
+    if (spec.env == "serve2" or envcheck) and env.get("kernels_importable"):
+        raise SystemExit("the kernels package is importable: transformers could fetch unpinned kernels from the Hub")
+    return {**env, "checked": True}
+
+
+def open_scorer(spec: ModelSpec, tag: str | None = None) -> LogoddsScorer:
+    """The scorer with every setting of the spec (the families runs, the placement check, the environment check)."""
+    return LogoddsScorer(spec.hf_id, model_tag=tag or spec.tag, attn_implementation=spec.attn_implementation,
+                         template_kwargs=spec.template_kwargs, model_class=spec.model_class,
+                         tokenizer_kwargs=spec.tokenizer_kwargs, prompt_format=spec.prompt_format,
+                         strict_load=spec.strict_load, unexpected_keys_allowed=spec.unexpected_keys_allowed)
 
 FOLD_SEPARATOR = "\n\n"
 PREDICTION = ("Logged before any family score (2026-11-20): the goal effect (aligned minus swapped) is positive under "
@@ -177,7 +340,7 @@ def _special_ids(tok: Any) -> set[int]:
     return ids
 
 
-def template_reply(scorer: LogoddsScorer, messages: list[dict], reply: str) -> list[int]:
+def template_reply(scorer: LogoddsScorer, messages: list[dict], reply: str, suffix: str = "") -> list[int]:
     """The ids the chat template gives `reply` as the assistant's turn after `messages`, up to its end-of-turn token.
 
     Rendered by the scorer's own encoding (`_encode`, with its template settings), so the gate sees the prompt
@@ -186,9 +349,18 @@ def template_reply(scorer: LogoddsScorer, messages: list[dict], reply: str) -> l
     the template writes it. A system message is left out of this check: Mistral's template writes it into the last
     user turn, which is no longer last once a reply follows, so the two renders would differ for that reason alone.
     Where the prompt ends and the reply begins does not depend on the system message.
+
+    `suffix` (wave B): text the generation prompt ends with that a rendered reply does not contain (Gemma 4 31B's
+    empty thought channel with thinking off). The prompt must end with exactly its tokens; they are stripped before
+    the comparison, and the reply is read after the rest.
     """
     convo = [m for m in messages if m["role"] != "system"]
     prompt = _ids(scorer._encode(convo))
+    if suffix:
+        tail_ids = _ids(scorer._tok(suffix, add_special_tokens=False))
+        if not tail_ids or prompt[-len(tail_ids):] != tail_ids:
+            raise TokenizationMismatch(f"the generation prompt does not end with the declared suffix {suffix!r}")
+        prompt = prompt[:-len(tail_ids)]
     full = _ids(scorer._encode(convo + [{"role": "assistant", "content": reply}], add_generation_prompt=False))
     if full[:len(prompt)] != prompt:
         raise TokenizationMismatch("the conversation with the reply does not begin with the prompt before it")
@@ -198,7 +370,7 @@ def template_reply(scorer: LogoddsScorer, messages: list[dict], reply: str) -> l
     return tail[:end]
 
 
-def check_candidate(scorer: LogoddsScorer, messages: list[dict], text: str) -> dict[str, Any]:
+def check_candidate(scorer: LogoddsScorer, messages: list[dict], text: str, suffix: str = "") -> dict[str, Any]:
     """Does `text`, tokenized alone as the scorer tokenizes a candidate, equal the template's tokens for it as the
     reply?
 
@@ -206,7 +378,7 @@ def check_candidate(scorer: LogoddsScorer, messages: list[dict], text: str) -> d
     That one is informative only: a template that puts a space before a reply (Mistral) fails it by design.
     """
     tok = scorer._tok
-    reply = template_reply(scorer, messages, text)
+    reply = template_reply(scorer, messages, text, suffix)
     alone = _ids(scorer._encode_candidate(text))
     prompt = _ids(scorer._encode(messages))
     prompt_text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, **scorer.template_settings())
@@ -218,15 +390,22 @@ def check_candidate(scorer: LogoddsScorer, messages: list[dict], text: str) -> d
 YES_NO = ("Yes", "No")
 
 
-def tokenization_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[dict], successes: list[dict]) -> dict[str, Any]:
+def tokenization_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[dict], successes: list[dict],
+                        reference_encoder: Callable[[list[dict]], list[int]] | None = None) -> dict[str, Any]:
     """The gate, on every item of a shard, through the scorer's own encoding. Returns the record; its "ok" says
     whether scoring may start.
+
+    Wave B (notes/families_waveb_design.md section 7): a plain-format spec gets plain_checks instead of the
+    template checks; a spec with thinking or prompt settings also gets waveb_prompt_checks (`reference_encoder`:
+    mistral-common's encoding, for the agreement check).
 
     Candidates: both texts of every item (primary items and successes), as the reply after the aligned prompt.
     Yes/No: the scored token of each word (tokenized alone, as score_one_token_pair does) must be one token and
     equal the template's rendering of that word as a real reply, after every yes/no prompt the shard scores
     (sizes.size_jobs: three per primary item, two per success).
     """
+    if spec.prompt_format == "plain":
+        return plain_checks(scorer, spec, primary, successes)
     tok = scorer._tok
     problems: list[str] = []
     first_pairs: Counter = Counter()
@@ -238,7 +417,7 @@ def tokenization_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[di
         ids = {}
         for name in ("o_plus", "o_minus"):
             try:
-                r = check_candidate(scorer, msgs, t["candidates"][name])
+                r = check_candidate(scorer, msgs, t["candidates"][name], spec.generation_suffix)
             except TokenizationMismatch as e:  # recorded with the rest, so the record says what failed
                 problems.append(f"{t['id']} {name}: {e}")
                 ids[name] = []
@@ -268,7 +447,7 @@ def tokenization_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[di
         for word in YES_NO:
             rec = yes_no[word]
             try:
-                reply = template_reply(scorer, msgs, word)
+                reply = template_reply(scorer, msgs, word, spec.generation_suffix)
             except TokenizationMismatch as e:
                 problems.append(f"{t['id']} {arm} {word!r}: {e}")
                 continue
@@ -283,21 +462,171 @@ def tokenization_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[di
         problems.append("no yes/no prompt checked")
     if scored["Yes"] == scored["No"]:
         problems.append("'Yes' and 'No' are the same token")
+    rec = {"ok": not problems and n > 0, "n_candidates_checked": n, "problems": problems[:50],
+           "n_problems": len(problems), "yes_no": yes_no, "n_yes_no_prompts_checked": n_yes_no,
+           "first_token_pairs": {f"{a!r} vs {b!r}": c for (a, b), c in first_pairs.most_common(10)},
+           "joined_plain_text_mismatches": joined_mismatch, "max_prompt_tokens": max_prompt,
+           "template_kwargs": scorer.template_settings(), "system_handling": spec.system}
+    if spec.wave != "A":
+        extra = waveb_prompt_checks(scorer, spec, primary, successes, reference_encoder)
+        rec["waveb_prompt_checks"] = extra
+        rec["problems"] = (rec["problems"] + extra["problems"])[:50]
+        rec["n_problems"] += extra["n_problems"]
+        rec["ok"] = rec["ok"] and extra["ok"]
+    return rec
+
+
+def _render(scorer: LogoddsScorer, messages: list[dict], **overrides: Any) -> str:
+    """The prompt as text, with the scorer's template settings (and any overridden, e.g. thinking on)."""
+    return scorer._tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True,
+                                           **{**scorer.template_settings(), **overrides})
+
+
+def waveb_prompt_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[dict], successes: list[dict],
+                        reference_encoder: Callable[[list[dict]], list[int]] | None = None) -> dict[str, Any]:
+    """Wave B's additions to the gate for a chat-format model (notes/families_waveb_design.md sections 5 and 7).
+
+    On the first item, every arm, as text: thinking off renders differently from thinking on (the template reads
+    the switch), the thinking-on render has the model's markers and ending, the thinking-off render has none of
+    the markers, and no prompt holds forbidden text (a template's default system prompt). On every scored prompt of
+    the shard (sizes.size_jobs), as token ids: it ends with the model's thinking-off ending, and, for Ministral 3,
+    it equals mistral-common's encoding of the same messages.
+    """
+    tok = scorer._tok
+    problems: list[str] = []
+    jobs = sizes.size_jobs(primary, successes)
+    first = primary[0] if primary else (successes[0] if successes else None)
+    n_text = 0
+    if first is not None:
+        for arm in sizes.PRED_ARMS + sizes.YN_ARMS:
+            msgs = family_messages(spec, first, arm)
+            if msgs is None:
+                continue
+            n_text += 1
+            off = _render(scorer, msgs)
+            for bad in spec.forbidden_in_prompt:
+                if bad in off:
+                    problems.append(f"{first['id']} {arm}: the prompt contains {bad!r}")
+            if not spec.thinking_switch:
+                continue
+            on = _render(scorer, msgs, enable_thinking=True)
+            if on == off:
+                problems.append(f"{first['id']} {arm}: thinking on renders like thinking off (switch not read)")
+            if spec.thinking_on_ending and not on.endswith(spec.thinking_on_ending):
+                problems.append(f"{first['id']} {arm}: thinking on does not end with {spec.thinking_on_ending!r}")
+            for marker in spec.thinking_on_markers:
+                if marker not in on:
+                    problems.append(f"{first['id']} {arm}: thinking on lacks {marker!r}")
+                if marker in off:
+                    problems.append(f"{first['id']} {arm}: thinking off contains {marker!r}")
+    ending = _ids(tok(spec.thinking_off_ending, add_special_tokens=False)) if spec.thinking_off_ending else []
+    n_ending = n_reference = 0
+    for t, arm in jobs:
+        msgs = family_messages(spec, t, arm)
+        ids = _ids(scorer._encode(msgs))
+        if ending:
+            n_ending += 1
+            if ids[-len(ending):] != ending:
+                problems.append(f"{t['id']} {arm}: the prompt does not end with {spec.thinking_off_ending!r}")
+        if spec.mistral_common_check:
+            if reference_encoder is None:
+                problems.append("mistral-common agreement required but no reference encoder given")
+                break
+            n_reference += 1
+            if list(reference_encoder(msgs)) != ids:
+                problems.append(f"{t['id']} {arm}: the template's ids differ from mistral-common's")
+    if spec.thinking_off_ending and not n_ending:
+        problems.append("no prompt checked for the thinking-off ending")
+    return {"ok": not problems, "problems": problems[:50], "n_problems": len(problems),
+            "n_first_item_renders": n_text, "n_prompts_checked_ending": n_ending,
+            "thinking_off_ending": spec.thinking_off_ending, "thinking_off_ending_ids": ending,
+            "n_prompts_checked_mistral_common": n_reference, "generation_suffix": spec.generation_suffix}
+
+
+def plain_checks(scorer: LogoddsScorer, spec: ModelSpec, primary: list[dict], successes: list[dict]) -> dict[str, Any]:
+    """The gate for the plain format (wave B, section 6): no template, so instead of the template's reply, every
+    candidate (after its aligned prompt) and ' Yes' and ' No' (after every yes/no prompt) must tokenize together
+    with the prompt exactly as the prompt's tokens followed by the candidate's (no merge across the boundary);
+    ' Yes' and ' No' are one token each and differ; the two candidates' first tokens differ."""
+    tok = scorer._tok
+    problems: list[str] = []
+    first_pairs: Counter = Counter()
+    max_prompt = n = 0
+
+    def joint(msgs: list[dict], text: str) -> tuple[bool, list[int], int]:
+        prompt = _ids(scorer._encode(msgs))
+        alone = _ids(scorer._encode_candidate(text))
+        together = _ids(tok(plain_text_prompt(msgs) + scorer.candidate_text(text), add_special_tokens=True))
+        return together == prompt + alone, alone, len(prompt)
+
+    for t in primary + successes:
+        msgs = family_messages(spec, t, "aligned")
+        ids = {}
+        for name in ("o_plus", "o_minus"):
+            ok, alone, n_prompt = joint(msgs, t["candidates"][name])
+            n += 1
+            max_prompt = max(max_prompt, n_prompt + len(alone))
+            if not ok:
+                problems.append(f"{t['id']} {name}: prompt and candidate merge across the boundary")
+            ids[name] = alone
+        if not ids["o_plus"] or not ids["o_minus"] or ids["o_plus"][0] == ids["o_minus"][0]:
+            problems.append(f"{t['id']}: the candidates share their first token")
+        else:
+            first_pairs[(tok.decode(ids["o_plus"][:1]), tok.decode(ids["o_minus"][:1]))] += 1
+    scored = {word: _ids(scorer._encode_candidate(word)) for word in YES_NO}
+    yes_no: dict[str, Any] = {word: {"alone": scored[word], "decoded": tok.decode(scored[word]), "n_checked": 0,
+                                     "n_mismatched": 0} for word in YES_NO}
+    for word in YES_NO:
+        if len(scored[word]) != 1:
+            problems.append(f"{scorer.candidate_text(word)!r} is not one token: {scored[word]}")
+    if scored["Yes"] == scored["No"]:
+        problems.append("' Yes' and ' No' are the same token")
+    n_yes_no = 0
+    for t, arm in sizes.size_jobs(primary, successes):
+        if arm not in sizes.YN_ARMS:
+            continue
+        msgs = family_messages(spec, t, arm)
+        n_yes_no += 1
+        for word in YES_NO:
+            ok, _, n_prompt = joint(msgs, word)
+            max_prompt = max(max_prompt, n_prompt + 1)
+            yes_no[word]["n_checked"] += 1
+            if not ok:
+                yes_no[word]["n_mismatched"] += 1
+                problems.append(f"{t['id']} {arm}: prompt and {scorer.candidate_text(word)!r} merge across the boundary")
+    if n_yes_no == 0:
+        problems.append("no yes/no prompt checked")
     return {"ok": not problems and n > 0, "n_candidates_checked": n, "problems": problems[:50],
             "n_problems": len(problems), "yes_no": yes_no, "n_yes_no_prompts_checked": n_yes_no,
             "first_token_pairs": {f"{a!r} vs {b!r}": c for (a, b), c in first_pairs.most_common(10)},
-            "joined_plain_text_mismatches": joined_mismatch, "max_prompt_tokens": max_prompt,
-            "template_kwargs": scorer.template_settings(), "system_handling": spec.system}
+            "joined_plain_text_mismatches": 0, "max_prompt_tokens": max_prompt, "prompt_format": "plain",
+            "candidate_prefix": scorer.candidate_text(""), "template_kwargs": {}, "system_handling": spec.system}
 
 
-def _gate(spec: ModelSpec) -> Callable[[Path, LogoddsScorer, list[dict], list[dict]], None]:
+def mistral_common_encoder(spec: ModelSpec, **load: Any) -> Callable[[list[dict]], list[int]]:
+    """mistral-common's own encoding of a request (transformers 5's MistralCommonBackend at the pinned revision), for
+    the agreement check on Ministral 3 (wave B, section 7). `load`: cache_dir, local_files_only."""
+    from transformers import AutoTokenizer
+
+    ref = AutoTokenizer.from_pretrained(spec.hf_id, revision=C.REVISIONS[spec.hf_id], mistral_format=True, **load)
+    return lambda msgs: _ids(ref.apply_chat_template(msgs, tokenize=True, add_generation_prompt=True))
+
+
+def _gate(spec: ModelSpec, env: dict[str, Any] | None = None) -> Callable[[Path, LogoddsScorer, list[dict], list[dict]], None]:
     def gate(d: Path, scorer: LogoddsScorer, primary: list[dict], successes: list[dict]) -> None:
         if scorer.mock:
-            write_json(d / "tokenization_checks.json", {"ok": None, "skipped": "mock"})
+            write_json(d / "tokenization_checks.json", {"ok": None, "skipped": "mock",
+                                                         **({"environment": env} if env else {})})
             return
-        rec = tokenization_checks(scorer, spec, primary, successes)
+        ref = mistral_common_encoder(spec) if spec.mistral_common_check else None
+        rec = tokenization_checks(scorer, spec, primary, successes, ref)
         rec["attn_implementation_loaded"] = getattr(scorer._model.config, "_attn_implementation", None)
         rec["dtype_loaded"] = str(getattr(scorer._model, "dtype", ""))
+        if spec.wave != "A":
+            rec["environment"] = env
+            rec["loading"] = scorer.load_info
+            rec["device_map"] = {k: str(v) for k, v in (getattr(scorer._model, "hf_device_map", None) or {}).items()}
+            rec["model_class_loaded"] = type(scorer._model).__name__
         write_json(d / "tokenization_checks.json", rec)
         if not rec["ok"]:
             raise TokenizationMismatch(f"{spec.tag}: tokenization gate failed ({rec['n_problems']} problems, first: "
@@ -310,16 +639,13 @@ def _gate(spec: ModelSpec) -> Callable[[Path, LogoddsScorer, list[dict], list[di
 
 def run_family_score(cfg: dict) -> int:
     tag = cfg["model"]
-    if tag not in MODELS:
-        raise SystemExit(f"unknown model {tag!r}; known: {sorted(MODELS)}")
-    spec = MODELS[tag]
+    if tag not in MODELS and tag not in WAVE_B:
+        raise SystemExit(f"unknown model {tag!r}; known: {sorted(MODELS) + sorted(WAVE_B)}")
+    spec = spec_for(tag)
+    env = require_environment(spec)
     cfg = {**cfg, "model_spec": spec.record()}
-
-    def open_scorer() -> LogoddsScorer:
-        return LogoddsScorer(spec.hf_id, model_tag=tag, attn_implementation=spec.attn_implementation,
-                             template_kwargs=spec.template_kwargs)
-
-    return sizes.score_shard(cfg, tag, open_scorer, lambda t, arm: family_messages(spec, t, arm), gate=_gate(spec))
+    return sizes.score_shard(cfg, tag, lambda: open_scorer(spec), lambda t, arm: family_messages(spec, t, arm),
+                             gate=_gate(spec, env if spec.wave != "A" else None))
 
 
 # ---------------- Mistral's system-text placement (exploratory check, logged 2026-11-20 before any score was read) ----
@@ -349,18 +675,149 @@ def run_family_placement(cfg: dict) -> int:
     PLACEMENT_ITEMS seeded primary items under the aligned and swapped tasks in both formats. Scores are saved
     under the tag `<tag>-firstturn`, so they never mix with the model's own run."""
     tag = cfg["model"]
-    if tag not in MODELS:
-        raise SystemExit(f"unknown model {tag!r}; known: {sorted(MODELS)}")
-    spec = first_turn_spec(MODELS[tag])
+    if tag not in MODELS and tag not in WAVE_B:
+        raise SystemExit(f"unknown model {tag!r}; known: {sorted(MODELS) + sorted(WAVE_B)}")
+    spec = first_turn_spec(spec_for(tag))
+    env = require_environment(spec)
     k = int(cfg.get("n_items", PLACEMENT_ITEMS))
     cfg = {**cfg, "model_spec": spec.record(), "n_items": k, "arms": list(PLACEMENT_ARMS)}
-
-    def open_scorer() -> LogoddsScorer:
-        return LogoddsScorer(spec.hf_id, model_tag=spec.tag, attn_implementation=spec.attn_implementation,
-                             template_kwargs=spec.template_kwargs)
-
-    return sizes.score_shard(cfg, spec.tag, open_scorer, lambda t, arm: family_messages(spec, t, arm), gate=_gate(spec),
+    return sizes.score_shard(cfg, spec.tag, lambda: open_scorer(spec), lambda t, arm: family_messages(spec, t, arm),
+                             gate=_gate(spec, env if spec.wave != "A" else None),
                              select=lambda p, s: (placement_items(p, k), []), arms=PLACEMENT_ARMS)
+
+
+# ---------------- wave B: environment-equivalence check (notes/families_waveb_design.md section 8) ----------------
+
+ENVCHECK_MODELS = ("mistral-7b-v0.3", "qwen3-8b")
+ENVCHECK_SUFFIX = "-serve2"  # the tag the serve2 rescores are saved under, so they never mix with the earlier ones
+ENVCHECK_ARMS = sizes.PRED_ARMS + sizes.YN_ARMS
+# Pass rule, fixed 2026-11-22 before any wave B score: about twice the cross-GPU differences of the archived Qwen3-8B
+# runs per score, and a third of the 0.3-nat noise floor for effects.
+ENVCHECK_RULE = {"yes_no_mean_abs_max": 0.07, "yes_no_goal_effect_diff_max": 0.10, "yes_no_share_diff_max": 0.02,
+                 "two_candidate_mean_abs_max": 0.35, "two_candidate_goal_effect_diff_max": 0.10}
+
+
+def envcheck_spec(tag: str) -> ModelSpec:
+    """An earlier model as serve2 loads it: wave B's tokenizer settings and loading check, its own template and
+    class, scores saved under `<tag>-serve2`."""
+    spec = spec_for(tag)
+    if spec.env != "serve":
+        raise ValueError(f"{tag} is not an earlier model")
+    return replace(spec, tag=tag + ENVCHECK_SUFFIX, wave="envcheck", env="serve2",
+                   tokenizer_kwargs={"mistral_format": False}, strict_load=True,
+                   template_notes=f"Environment check: {tag} rescored in serve2.")
+
+
+def run_family_envcheck(cfg: dict) -> int:
+    """`family_envcheck_<tag>`: an earlier model rescored in serve2 on the placement check's 300 seeded primary items,
+    under all three tasks in both formats, after the same gate."""
+    tag = cfg["model"]
+    if tag not in ENVCHECK_MODELS:
+        raise SystemExit(f"the environment check rescores {ENVCHECK_MODELS}, not {tag!r}")
+    spec = envcheck_spec(tag)
+    env = require_environment(spec, envcheck=True)
+    k = int(cfg.get("n_items", PLACEMENT_ITEMS))
+    cfg = {**cfg, "model_spec": spec.record(), "n_items": k, "arms": list(ENVCHECK_ARMS)}
+    return sizes.score_shard(cfg, spec.tag, lambda: open_scorer(spec), lambda t, arm: family_messages(spec, t, arm),
+                             gate=_gate(spec, env), select=lambda p, s: (placement_items(p, k), []), arms=ENVCHECK_ARMS)
+
+
+def _pairs_by_key(old: list[dict], new: list[dict]) -> dict[tuple[str, str], tuple[float, float]]:
+    a = {(x["transition_id"], x["condition"]): x["L"] for x in old}
+    b = {(x["transition_id"], x["condition"]): x["L"] for x in new}
+    return {k: (a[k], b[k]) for k in sorted(set(a) & set(b))}
+
+
+def envcheck_block(old: list[dict], new: list[dict], items: list[dict]) -> dict[str, Any]:
+    """One model's earlier scores against its serve2 rescores on the same (item, condition) pairs, with the verdict
+    of the pass rule (ENVCHECK_RULE)."""
+    ids = {t["id"] for t in items}
+    old = [x for x in old if x["transition_id"] in ids and x["condition"] in ENVCHECK_ARMS]
+    new = [x for x in new if x["transition_id"] in ids and x["condition"] in ENVCHECK_ARMS]
+    expected = {(t["id"], a) for t in items for a in ENVCHECK_ARMS if sizes.arm_messages(t, a) is not None}
+    pairs = _pairs_by_key(old, new)
+    out: dict[str, Any] = {"n_expected": len(expected), "n_paired": len(pairs),
+                           "missing": sorted(f"{i}/{c}" for i, c in expected - set(pairs))[:20]}
+    checks: dict[str, bool] = {"complete": expected <= set(pairs)}
+    for fmt, arms, (al, sw) in (("yes_no", sizes.YN_ARMS, ("yn_aligned", "yn_swapped")),
+                                ("two_candidate", sizes.PRED_ARMS, ("aligned", "swapped"))):
+        d = [b - a for (i, c), (a, b) in pairs.items() if c in arms]
+        by_cond = {c: [b - a for (i, cc), (a, b) in pairs.items() if cc == c] for c in arms}
+        goal = {}
+        for which, idx in (("old", 0), ("new", 1)):
+            g = [pairs[(t["id"], al)][idx] - pairs[(t["id"], sw)][idx] for t in items
+                 if (t["id"], al) in pairs and (t["id"], sw) in pairs]
+            goal[which] = sum(g) / len(g) if g else float("nan")
+            if fmt == "yes_no":
+                goal[f"share_{which}"] = sum(x > 0 for x in g) / len(g) if g else float("nan")
+        rec = {"n": len(d), "mean_abs_diff": sum(abs(x) for x in d) / len(d) if d else float("nan"),
+               "max_abs_diff": max((abs(x) for x in d), default=float("nan")),
+               "share_identical": sum(x == 0 for x in d) / len(d) if d else float("nan"),
+               "mean_diff_by_condition": {c: (sum(v) / len(v) if v else float("nan")) for c, v in by_cond.items()},
+               "goal_effect_old": goal["old"], "goal_effect_new": goal["new"],
+               "goal_effect_diff": goal["new"] - goal["old"]}
+        checks[f"{fmt}_mean_abs"] = rec["mean_abs_diff"] <= ENVCHECK_RULE[f"{fmt}_mean_abs_max"]
+        checks[f"{fmt}_goal_effect"] = abs(rec["goal_effect_diff"]) <= ENVCHECK_RULE[f"{fmt}_goal_effect_diff_max"]
+        if fmt == "yes_no":
+            rec["share_old"], rec["share_new"] = goal["share_old"], goal["share_new"]
+            rec["share_diff"] = goal["share_new"] - goal["share_old"]
+            checks["yes_no_share"] = abs(rec["share_diff"]) <= ENVCHECK_RULE["yes_no_share_diff_max"]
+        out[fmt] = rec
+    out["checks"] = checks
+    out["pass"] = all(checks.values())  # a NaN fails every comparison, so missing scores fail the check
+    return out
+
+
+def run_families_envcheck(cfg: dict) -> int:
+    """`families_envcheck` (CPU): each environment-check model's serve2 rescores against its earlier scores, plus
+    part 1's token comparison (`tokens`: {model: path of the compare JSON from wf.tools.envcheck_tokens}); the
+    overall verdict "pass" is what families_waveb_analysis reads."""
+    run_id = cfg["run_id"]
+    require_filed(run_id)
+    d = _init_run(run_id, {**cfg, "resume": False}, inputs=())
+    sources = tuple(str(_resolve(s)) for s in cfg.get("sources", SOURCES))
+    sets = rq1x.rq1x_sets(load_items(sources))
+    items = placement_items(sets["primary"], int(cfg.get("n_items", PLACEMENT_ITEMS)))
+    report: dict[str, Any] = {"rule": ENVCHECK_RULE, "n_items": len(items), "models": {}, "tokens": {}, "waiting": {}}
+    read: dict[str, list[Path]] = {}
+    for tag, mc in cfg["models"].items():
+        folders, problems = complete_shards(mc["new_run"])
+        if problems:
+            report["waiting"][tag] = problems
+            continue
+        read[mc["new_run"]] = folders
+        new = [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag + ENVCHECK_SUFFIX]
+        old, got, info = reference_scores(mc["old"])
+        if info["problems"]:
+            report["waiting"][f"{tag} (earlier)"] = info["problems"]
+            continue
+        read.update({f"{tag}:{run}": f for run, f in got.items()})
+        report["models"][tag] = {**envcheck_block(old, new, items), "gate": _gate_records(folders)}
+    for tag, path in (cfg.get("tokens") or {}).items():
+        f = _resolve(path)
+        if not f.exists():
+            report["waiting"][f"{tag} tokens"] = [f"{f} missing"]
+            continue
+        rec = json.loads(f.read_text(encoding="utf-8"))
+        report["tokens"][tag] = {k: rec.get(k) for k in ("ok", "n_compared", "n_different", "n_only_one_side", "examples",
+                                                          "left", "right")}
+    want = set(cfg["models"])
+    report["pass"] = bool(not report["waiting"] and set(report["models"]) == want and set(report["tokens"]) >= want
+                          and all(m["pass"] for m in report["models"].values())
+                          and all(t.get("ok") for t in report["tokens"].values()))
+    from wf.provenance import provenance, shard_inputs
+
+    report["provenance"] = provenance(
+        runs={**{s: Path(s) for s in sources}, **{k: (v[0].parent if v else Path(k)) for k, v in read.items()}},
+        inputs=[Path(s) / "transitions.jsonl" for s in sources] + shard_inputs([p for fs in read.values() for p in fs]))
+    write_json(d / "metrics.json", report)
+    write_run_report(run_id, "Model families, wave B: environment-equivalence check", report)
+    lines = [f"{tag}: {'PASS' if m['pass'] else 'FAIL'} {m['checks']}" for tag, m in report["models"].items()]
+    lines += [f"{tag} tokens: {'identical' if t.get('ok') else 'DIFFER'}" for tag, t in report["tokens"].items()]
+    write_status(run_id, "\n".join(lines) + f"\noverall: {'PASS' if report['pass'] else 'NOT PASSED'}"
+                 + (f"\nwaiting: {sorted(report['waiting'])}" if report["waiting"] else ""), ok=False,
+                 reported="environment check passed" if report["pass"] else "environment check not passed")
+    return 0
 
 
 # ---------------- analysis ----------------
@@ -841,15 +1298,65 @@ def _gate_records(folders: list[Path]) -> dict[str, Any]:
     return out
 
 
+ENVIRONMENT_BLOCKED = "not interpretable (environment check)"
+
+
+def apply_environment_gate(family: dict[str, Any], passed: bool | None) -> dict[str, Any]:
+    """Wave B: unless the environment check passed, no test in the family is read (section 8). Every verdict that
+    would be read ("supported", "not supported") and every comparison reading becomes ENVIRONMENT_BLOCKED; the p
+    values stay in the record."""
+    family["environment_check_passed"] = passed
+    if passed:
+        return family
+    for t in family["tests"].values():
+        if t["verdict"] in ("supported", "not supported"):
+            t["verdict"] = ENVIRONMENT_BLOCKED
+    family["comparison_readings"] = {k: (ENVIRONMENT_BLOCKED if v not in ("waiting", "not interpretable") else v)
+                                     for k, v in family["comparison_readings"].items()}
+    return family
+
+
+def waveb_predictions(report: dict[str, Any]) -> dict[str, Any]:
+    """The wave B predictions read off the report (section 10). None: not yet decidable."""
+    fam = report["primary_family"]
+    tests, readings = fam["tests"], fam["comparison_readings"]
+    b1 = {}
+    for tag in report["models"]:
+        both = bool(report["prediction_check"][tag]["holds"])
+        share = tests.get(f"{tag}:item_share_toward_yes", {}).get("verdict") if tag in WAVE_B_SHARE_TESTS else None
+        if share in ("waiting", ENVIRONMENT_BLOCKED):
+            holds = None
+        elif share in (None, "supported", "not interpretable"):  # no share test, or one that is read
+            holds = both
+        else:  # "not supported" or "not computable"
+            holds = False
+        b1[tag] = {"both_formats_positive": both, "share_verdict": share, "holds": holds}
+
+    def pair(a: str, b: str, want_positive: bool) -> dict[str, Any]:
+        r = readings.get(f"{a} vs {b}")
+        est = tests.get(f"{a} vs {b}:share_differs", {}).get("estimate", float("nan"))
+        if r in (None, "waiting", ENVIRONMENT_BLOCKED, "not interpretable", "not computable"):
+            return {"reading": r, "estimate": est, "holds": None}
+        differs = r in ("differs", "differs, within the margin")
+        holds = (differs and est > 0) if want_positive else not (differs and est < 0)
+        return {"reading": r, "estimate": est, "holds": bool(holds)}
+
+    b2 = {f"{a} vs {b}": pair(a, b, False) for a, b in WAVE_B_PLANNED[:4]}
+    a, b = WAVE_B_PLANNED[4]
+    return {"text": PREDICTION_B, "B1": b1, "B2": b2, "B3": {f"{a} vs {b}": pair(a, b, True)}}
+
+
 def run_families_analysis(cfg: dict) -> int:
     run_id = cfg["run_id"]
     require_filed(run_id)
     d = _init_run(run_id, {**cfg, "resume": False}, inputs=())
+    wave = cfg.get("wave", "A")
     sources = tuple(str(_resolve(s)) for s in cfg.get("sources", SOURCES))
     sets = rq1x.rq1x_sets(load_items(sources))
     primary, successes = sets["primary"], sets["successes"]
-    report: dict[str, Any] = {"items": {"n_primary": len(primary), "n_successes": len(successes)},
-                              "prediction": PREDICTION, "formats": FORMATS, "models": {}, "reference": {},
+    report: dict[str, Any] = {"items": {"n_primary": len(primary), "n_successes": len(successes)}, "wave": wave,
+                              "prediction": PREDICTION if wave == "A" else PREDICTION_B, "formats": FORMATS,
+                              "models": {}, "reference": {},
                               "prediction_check": {}, "placement": {}, "waiting": {},
                               "rules": {"competence": COMPETENCE, "equivalence_factor_R": EQUIVALENCE_FACTOR,
                                         "share_margin": SHARE_MARGIN, "R_ratio_max_share_dropped": DROPPED_DRAWS_MAX,
@@ -868,7 +1375,7 @@ def run_families_analysis(cfg: dict) -> int:
         s, dropped = same_population([x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x["model"] == tag],
                                      primary, successes)
         scores[tag] = s
-        block = family_block(s, primary, successes, MODELS[tag])
+        block = family_block(s, primary, successes, spec_for(tag))
         block["tokenization_gate"] = _gate_records(folders)
         block["records_outside_population"] = dropped
         report["models"][tag] = block
@@ -881,16 +1388,32 @@ def run_families_analysis(cfg: dict) -> int:
         s, info["records_outside_population"] = same_population(s, primary, successes)
         read.update({f"{tag}:{run}": f for run, f in got.items()})
         ref_scores[tag] = s
-        report["reference"][tag] = {**family_block(s, primary, successes, REFERENCE[tag]), "read": info}
-    # every wave A model against each reference model, and the planned comparisons among wave A models, paired on
-    # the same items; the planned ones' item-share tests are in the primary family, the rest is descriptive
-    planned = planned_comparisons(list(cfg["models"]), list(cfg.get("reference") or {}))
+        report["reference"][tag] = {**family_block(s, primary, successes, spec_for(tag)), "read": info}
+    # every family model against each reference model, and the planned comparisons, paired on the same items; the
+    # planned ones' item-share tests are in the primary family, the rest is descriptive. Wave B's family is fixed
+    # (WAVE_B_SHARE_TESTS and WAVE_B_PLANNED, 16 tests) whatever the configuration holds.
+    if wave == "A":
+        planned, expected = planned_comparisons(list(cfg["models"]), list(cfg.get("reference") or {})), list(cfg["models"])
+        primary_refs = list(ref_scores)
+    else:
+        planned, expected = list(WAVE_B_PLANNED), list(WAVE_B_SHARE_TESTS)
+        primary_refs = [r for r in ref_scores if r in REFERENCE_TAGS]
     both = {**scores, **ref_scores}
-    pairs = [(tag, ref) for tag in scores for ref in ref_scores]
+    pairs = [(tag, ref) for tag in scores for ref in primary_refs]
     pairs += [(a, b) for a, b in planned if (a, b) not in pairs and a in both and b in both]
+    pairs += [(a, b) for a, b in (cfg.get("descriptive_comparisons") or []) if (a, b) not in pairs and a in both and b in both]
     report["comparisons"] = {f"{a} vs {b}": compare_models(both[a], both[b], primary, successes) for a, b in pairs}
-    report["primary_family"] = primary_family({**report["models"], **report["reference"]}, list(cfg["models"]),
+    report["primary_family"] = primary_family({**report["models"], **report["reference"]}, expected,
                                               report["comparisons"], planned)
+    if wave != "A":
+        env_run = cfg.get("envcheck", "families_envcheck")
+        f = _resolve(env_run) / "metrics.json"
+        env = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+        report["environment_check"] = {"run": env_run, "found": env is not None,
+                                       "pass": None if env is None else bool(env.get("pass"))}
+        if env is None:
+            report["waiting"]["environment check"] = [f"{f} missing"]
+        apply_environment_gate(report["primary_family"], report["environment_check"]["pass"])
     for tag, run in (cfg.get("placement") or {}).items():
         folders, problems = complete_shards(run)
         if problems or tag not in scores:
@@ -905,8 +1428,10 @@ def run_families_analysis(cfg: dict) -> int:
     report["provenance"] = provenance(
         runs={**{s: Path(s) for s in sources}, **{k: (v[0].parent if v else Path(k)) for k, v in read.items()}},
         inputs=[Path(s) / "transitions.jsonl" for s in sources] + shard_inputs([p for fs in read.values() for p in fs]))
+    if wave != "A":
+        report["predictions_b"] = waveb_predictions(report)
     write_json(d / "metrics.json", report)
-    write_run_report(run_id, "Model families, wave A (exploratory)", report)
+    write_run_report(run_id, f"Model families, wave {wave} (exploratory)", report)
     def head(m: dict) -> str:
         pm = m["primary_metrics"]
         return (f"{'interpretable' if m['competence']['interpretable'] else 'NOT INTERPRETABLE'}; share toward Yes "

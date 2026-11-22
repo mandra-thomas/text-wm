@@ -18,7 +18,9 @@ from wf.scoring.prompts import (
     WM_FEWSHOT_SETS,
     _replace_task_line,
     condition_task_line,
+    PLAIN_REPLY_SEPARATOR,
     hidden_block,
+    plain_text_prompt,
     world_model_ft_messages,
     world_model_prompt,
 )
@@ -82,6 +84,44 @@ class ScoreResult:
         }
 
 
+# Which transformers Auto class loads a model (wave B, 2026-11-22): None keeps every earlier run's class.
+MODEL_CLASSES = {None: "AutoModelForCausalLM", "image_text_to_text": "AutoModelForImageTextToText"}
+PROMPT_FORMATS = ("chat", "plain")
+
+
+def transformers_major(transformers: Any) -> int:
+    """The installed transformers' major version (4 when it cannot be read, as in tests that stub the library)."""
+    try:
+        return int(str(getattr(transformers, "__version__", "4")).split(".")[0])
+    except ValueError:
+        return 4
+
+
+def check_loading(info: dict[str, Any], device_map: dict[str, Any] | None, unexpected_allowed: str = "") -> dict[str, Any]:
+    """The loading check (wave B, notes/families_waveb_design.md section 4), from from_pretrained's loading info.
+
+    Fails on any missing parameter (a layer left at its random initialization), any mismatched shape or loading
+    error, any unexpected checkpoint tensor that does not match `unexpected_allowed` (a regular expression searched
+    in the name; empty allows none), and any module placed on the CPU or disk rather than a GPU.
+    """
+    import re
+
+    missing = sorted(info.get("missing_keys") or [])
+    mismatched = [str(x) for x in (info.get("mismatched_keys") or [])]
+    errors = [str(x) for x in (info.get("error_msgs") or [])]
+    unexpected = sorted(info.get("unexpected_keys") or [])
+    pattern = re.compile(unexpected_allowed) if unexpected_allowed else None
+    not_allowed = [k for k in unexpected if pattern is None or not pattern.search(k)]
+    off_gpu = sorted(k for k, v in (device_map or {}).items() if str(v) in ("cpu", "disk"))
+    problems = ([f"missing: {k}" for k in missing] + [f"mismatched: {k}" for k in mismatched]
+                + [f"error: {e[:200]}" for e in errors] + [f"unexpected: {k}" for k in not_allowed]
+                + [f"off the GPU: {k}" for k in off_gpu])
+    return {"ok": not problems, "problems": problems[:50], "n_missing": len(missing), "n_mismatched": len(mismatched),
+            "n_unexpected": len(unexpected), "n_unexpected_allowed": len(unexpected) - len(not_allowed),
+            "unexpected_examples": unexpected[:5], "unexpected_pattern": unexpected_allowed,
+            "devices": sorted({str(v) for v in (device_map or {}).values()})}
+
+
 class LogoddsScorer:
     """HF transformers teacher-forced scorer; mock mode when WF_MOCK_SCORE=1."""
 
@@ -94,10 +134,23 @@ class LogoddsScorer:
         attn_implementation: str | None = None,
         template_kwargs: dict[str, Any] | None = None,
         load: bool = True,
+        model_class: str | None = None,
+        tokenizer_kwargs: dict[str, Any] | None = None,
+        prompt_format: str = "chat",
+        strict_load: bool = False,
+        unexpected_keys_allowed: str = "",
     ):
         """`attn_implementation` is passed to from_pretrained when set (Gemma 2 needs "eager"; wf/families.py);
         `template_kwargs` go to every apply_chat_template call (Llama 3.2's fixed date_string). The defaults leave
-        every earlier run's loading and prompts unchanged. `load=False` loads nothing (for_tokenizer)."""
+        every earlier run's loading and prompts unchanged. `load=False` loads nothing (for_tokenizer).
+
+        Added for wave B (2026-11-22, notes/families_waveb_design.md, transformers 5): `model_class`
+        "image_text_to_text" loads the checkpoint's vision-language class (AutoModelForImageTextToText) instead of
+        AutoModelForCausalLM; `tokenizer_kwargs` go to AutoTokenizer.from_pretrained (mistral_format=False);
+        `prompt_format` "plain" joins the messages as plain text (plain_text_prompt) and scores each candidate
+        after one space, with no chat template; `strict_load` refuses a model with a missing or mismatched
+        parameter, an unexpected checkpoint tensor outside the `unexpected_keys_allowed` pattern, or a module
+        placed off the GPU (check_loading)."""
         self.model_name = model_name
         self.model_tag = model_tag or model_name.split("/")[-1].lower()
         self.mock = os.environ.get("WF_MOCK_SCORE", "0") == "1"
@@ -110,6 +163,16 @@ class LogoddsScorer:
         self.dtype = dtype
         self.attn_implementation = attn_implementation
         self.template_kwargs = dict(template_kwargs or {})
+        if model_class not in MODEL_CLASSES:
+            raise ValueError(f"unknown model_class {model_class!r}; known: {sorted(map(str, MODEL_CLASSES))}")
+        if prompt_format not in PROMPT_FORMATS:
+            raise ValueError(f"unknown prompt_format {prompt_format!r}; known: {PROMPT_FORMATS}")
+        self.model_class = model_class
+        self.tokenizer_kwargs = dict(tokenizer_kwargs or {})
+        self.prompt_format = prompt_format
+        self.strict_load = strict_load
+        self.unexpected_keys_allowed = unexpected_keys_allowed
+        self.load_info: dict[str, Any] | None = None
         if not self.mock and load:
             self._load()
 
@@ -124,21 +187,34 @@ class LogoddsScorer:
 
     def _load(self) -> None:
         import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        import transformers
 
         # trust_remote_code stays as in every reported run; the pinned revision fixes which code and chat
         # template that is, so a later push to the Hub cannot change them.
-        self._tok = AutoTokenizer.from_pretrained(self.model_name, revision=self.revision, trust_remote_code=True)
+        self._tok = transformers.AutoTokenizer.from_pretrained(self.model_name, revision=self.revision,
+                                                               trust_remote_code=True, **self.tokenizer_kwargs)
         torch_dtype = getattr(torch, self.dtype, torch.bfloat16)
         extra = {"attn_implementation": self.attn_implementation} if self.attn_implementation else {}
-        self._model = AutoModelForCausalLM.from_pretrained(
+        # transformers 5 renamed torch_dtype to dtype (wave B's environment); 4.x keeps the name every earlier run used
+        dtype_arg = "dtype" if transformers_major(transformers) >= 5 else "torch_dtype"
+        if self.strict_load:
+            extra["output_loading_info"] = True
+        loaded = getattr(transformers, MODEL_CLASSES[self.model_class]).from_pretrained(
             self.model_name,
             revision=self.revision,
-            torch_dtype=torch_dtype,
             device_map="auto",
             trust_remote_code=True,
+            **{dtype_arg: torch_dtype},
             **extra,
         )
+        if self.strict_load:
+            self._model, info = loaded
+            self.load_info = check_loading(info, getattr(self._model, "hf_device_map", None),
+                                           self.unexpected_keys_allowed)
+            if not self.load_info["ok"]:
+                raise RuntimeError(f"{self.model_name}: loading check failed: {self.load_info['problems'][:5]}")
+        else:
+            self._model = loaded
         self._model.eval()
         loaded = getattr(self._model.config, "_attn_implementation", None)
         if self.attn_implementation and loaded != self.attn_implementation:
@@ -170,7 +246,15 @@ class LogoddsScorer:
     def _encode(self, messages: list[dict[str, str]], add_generation_prompt: bool = True) -> Any:
         """The ids (1 x n) of `messages` as the chat template renders them. With the generation prompt, the default,
         this is the prompt every score is read after. Without it, the tokenization gate renders a conversation
-        that ends in the assistant's reply (wf/families.py)."""
+        that ends in the assistant's reply (wf/families.py).
+
+        In the plain format (wave B's base-against-instruct comparison) the messages are joined as plain text
+        (plain_text_prompt) and tokenized with whatever special tokens the tokenizer adds by itself; there is no
+        template, so no rendered reply either."""
+        if self.prompt_format == "plain":
+            if not add_generation_prompt:
+                raise ValueError("the plain format has no template to render a reply with")
+            return self._tok(plain_text_prompt(messages), return_tensors="pt", add_special_tokens=True).input_ids
         return self._tok.apply_chat_template(
             messages,
             tokenize=True,
@@ -179,9 +263,14 @@ class LogoddsScorer:
             **self.template_settings(),
         )
 
+    def candidate_text(self, text: str) -> str:
+        """The text a candidate is scored as: itself, or in the plain format after one space, as the examples write
+        a reply after 'Next observation:' or 'Answer:'."""
+        return (PLAIN_REPLY_SEPARATOR + text) if self.prompt_format == "plain" else text
+
     def _encode_candidate(self, text: str) -> Any:
         """A candidate's ids (1 x n), tokenized alone with no special tokens: the tokens a score is read for."""
-        return self._tok(text, return_tensors="pt", add_special_tokens=False).input_ids
+        return self._tok(self.candidate_text(text), return_tensors="pt", add_special_tokens=False).input_ids
 
     def _teacher_force_logprob(self, messages: list[dict[str, str]], candidate: str) -> tuple[float, int, float, str]:
         """(log p of the whole candidate, its token count, log p of its first token, that token decoded)."""

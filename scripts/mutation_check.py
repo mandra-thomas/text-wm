@@ -7,6 +7,7 @@ the repo, so the working tree is never touched.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -403,6 +404,79 @@ MUTANTS = [
      "pairs += [(a, b) for a, b in planned if (a, b) not in pairs and a in both and b in both]", "pairs += []"),
     ("families comparison readings ignore the equivalence test", "wf/families.py",
      'readings[f"{a} vs {b}"] = "matches" if ev == "supported" else', 'readings[f"{a} vs {b}"] = "inconclusive" if ev == "supported" else'),
+    # Model families, wave B (2026-11-22, notes/families_waveb_design.md): wf/families.py, the scorer, the plain format,
+    # the tools and the serve2 job script.
+    ('families wave B record keeps wave B defaults', 'wf/families.py', '            if rec[f.name] == default:', '            if False:'),
+    ('families wave B Ministral FP8 repository', 'wf/families.py', '"mistralai/Ministral-3-8B-Instruct-2512-BF16", "mistral", "Ministral 3"', '"mistralai/Ministral-3-8B-Instruct-2512", "mistral", "Ministral 3"'),
+    ('families wave B Qwen thinking-off ending is the thinking-on one', 'wf/families.py', 'thinking_off_ending=_QWEN_OFF,', 'thinking_off_ending=_QWEN_ON,'),
+    ('families wave B Gemma 4 31B suffix undeclared', 'wf/families.py', '**_WAVE_B, generation_suffix="<|channel>thought\\n<channel|>", thinking_switch=True,', '**_WAVE_B, thinking_switch=True,'),
+    ('families wave B Mistral tokenizer through mistral-common', 'wf/families.py', 'tokenizer_kwargs={"mistral_format": False},\n               strict_load=True)', 'tokenizer_kwargs={"mistral_format": True},\n               strict_load=True)'),
+    ('families wave B causal-LM class', 'wf/families.py', '_WAVE_B = dict(wave="B", env="serve2", model_class="image_text_to_text",', '_WAVE_B = dict(wave="B", env="serve2", model_class=None,'),
+    ('families wave B no loading check', 'wf/families.py', '               strict_load=True)\n\n\ndef _qwen_b', '               strict_load=False)\n\n\ndef _qwen_b'),
+    ('families wave B Gemma E4B pattern allows any attention tensor', 'wf/families.py', 'self_attn\\.(k_proj|v_proj|k_norm)\\."', 'self_attn\\."'),
+    ('families wave B Gemma E4B pattern from layer 23', 'wf/families.py', 'layers\\.(2[4-9]|3[0-9]|4[01])', 'layers\\.(2[3-9]|3[0-9]|4[01])'),
+    ('families wave B Qwen mtp tensors not allowed', 'wf/families.py', 'prompt_format="plain", unexpected_keys_allowed=r"^mtp\\.", gpu_min_gb=gpu', 'prompt_format="plain", unexpected_keys_allowed="", gpu_min_gb=gpu'),
+    ('families wave B Qwen chat mtp tensors not allowed', 'wf/families.py', 'thinking_off_ending=_QWEN_OFF, unexpected_keys_allowed=r"^mtp\\.", gpu_min_gb=gpu,', 'thinking_off_ending=_QWEN_OFF, unexpected_keys_allowed="", gpu_min_gb=gpu,'),
+    ('families wave B Ministral default prompt not checked', 'wf/families.py', 'forbidden_in_prompt=("Le Chat", "The current date"),', 'forbidden_in_prompt=(),'),
+    ('families wave B Qwen3.8 reasoning marker dropped', 'wf/families.py', 'markers=("Reasoning effort",), gpu=80', 'markers=(), gpu=80'),
+    ('families wave B Gemma 31B ending without the channel', 'wf/families.py', 'thinking_off_ending="<|turn>model\\n<|channel>thought\\n<channel|>",', 'thinking_off_ending="<|turn>model\\n",'),
+    ('families wave B suffix not stripped', 'wf/families.py', '        prompt = prompt[:-len(tail_ids)]\n', '        prompt = prompt\n'),
+    ('families wave B suffix not verified', 'wf/families.py', '        if not tail_ids or prompt[-len(tail_ids):] != tail_ids:', '        if False:'),
+    ('families wave B candidates checked without the suffix', 'wf/families.py', 'r = check_candidate(scorer, msgs, t["candidates"][name], spec.generation_suffix)', 'r = check_candidate(scorer, msgs, t["candidates"][name])'),
+    ('families wave B Yes/No checked without the suffix', 'wf/families.py', 'reply = template_reply(scorer, msgs, word, spec.generation_suffix)', 'reply = template_reply(scorer, msgs, word)'),
+    ('families wave B wave B checks skipped', 'wf/families.py', '    if spec.wave != "A":\n        extra = waveb_prompt_checks', '    if False:\n        extra = waveb_prompt_checks'),
+    ('families wave B wave B checks do not fail the gate', 'wf/families.py', 'rec["ok"] = rec["ok"] and extra["ok"]', 'rec["ok"] = rec["ok"]'),
+    ('families wave B thinking switch not checked', 'wf/families.py', '            if on == off:', '            if False:'),
+    ('families wave B thinking marker allowed when off', 'wf/families.py', '                if marker in off:', '                if False:'),
+    ('families wave B thinking-on ending not checked', 'wf/families.py', '            if spec.thinking_on_ending and not on.endswith(spec.thinking_on_ending):', '            if False:'),
+    ('families wave B thinking-off ending not checked', 'wf/families.py', '            if ids[-len(ending):] != ending:', '            if False:'),
+    ('families wave B thinking-off ending checked on two-candidate prompts only', 'wf/families.py', '    for t, arm in jobs:\n        msgs = family_messages(spec, t, arm)\n        ids = _ids(scorer._encode(msgs))', '    for t, arm in [j for j in jobs if j[1] not in sizes.YN_ARMS]:\n        msgs = family_messages(spec, t, arm)\n        ids = _ids(scorer._encode(msgs))'),
+    ('families wave B forbidden text not checked', 'wf/families.py', '                if bad in off:', '                if False:'),
+    ('families wave B mistral-common disagreement accepted', 'wf/families.py', '            if list(reference_encoder(msgs)) != ids:', '            if False:'),
+    ('families wave B missing mistral-common encoder accepted', 'wf/families.py', '                problems.append("mistral-common agreement required but no reference encoder given")\n', ''),
+    ('families wave B plain format gets the template checks', 'wf/families.py', '    if spec.prompt_format == "plain":\n        return plain_checks(', '    if False:\n        return plain_checks('),
+    ('families wave B plain boundary merge accepted', 'wf/families.py', '        return together == prompt + alone, alone, len(prompt)', '        return True, alone, len(prompt)'),
+    ('families wave B plain multi-token answer accepted', 'wf/families.py', '            problems.append(f"{scorer.candidate_text(word)!r} is not one token: {scored[word]}")', '            pass'),
+    ('families wave B plain candidate without its space', 'wf/scoring/logodds.py', '        return (PLAIN_REPLY_SEPARATOR + text) if self.prompt_format == "plain" else text', '        return text'),
+    ('families wave B plain examples without the space', 'wf/scoring/prompts.py', '        parts.append(rest[k]["content"] + PLAIN_REPLY_SEPARATOR + rest[k + 1]["content"])', '        parts.append(rest[k]["content"] + "\\n" + rest[k + 1]["content"])'),
+    ('families wave B plain roles not checked', 'wf/scoring/prompts.py', '    if not rest or roles != ["user", "assistant"] * (len(rest) // 2) + ["user"]:', '    if not rest:'),
+    ('families wave B plain prompt through the template', 'wf/scoring/logodds.py', '        if self.prompt_format == "plain":\n            if not add_generation_prompt:', '        if False:\n            if not add_generation_prompt:'),
+    ('families wave B transformers 5 loads with torch_dtype', 'wf/scoring/logodds.py', 'dtype_arg = "dtype" if transformers_major(transformers) >= 5 else "torch_dtype"', 'dtype_arg = "torch_dtype"'),
+    ('families wave B every model through the causal-LM class', 'wf/scoring/logodds.py', 'loaded = getattr(transformers, MODEL_CLASSES[self.model_class]).from_pretrained(', 'loaded = transformers.AutoModelForCausalLM.from_pretrained('),
+    ('families wave B tokenizer settings not passed', 'wf/scoring/logodds.py', 'trust_remote_code=True, **self.tokenizer_kwargs)', 'trust_remote_code=True)'),
+    ('families wave B failed loading check not raised', 'wf/scoring/logodds.py', '            if not self.load_info["ok"]:\n                raise RuntimeError', '            if False:\n                raise RuntimeError'),
+    ('families wave B missing parameters ignored', 'wf/scoring/logodds.py', '    problems = ([f"missing: {k}" for k in missing]', '    problems = ([]'),
+    ('families wave B CPU placement accepted', 'wf/scoring/logodds.py', 'if str(v) in ("cpu", "disk"))', 'if str(v) in ("disk",))'),
+    ('families wave B no pattern allows every unexpected tensor', 'wf/scoring/logodds.py', 'not_allowed = [k for k in unexpected if pattern is None or not pattern.search(k)]', 'not_allowed = [k for k in unexpected if pattern is not None and not pattern.search(k)]'),
+    ('families wave B serve2 model accepted with transformers 4', 'wf/families.py', '    if (spec.env == "serve2" or envcheck) and major < 5:', '    if False:'),
+    ('families wave B wave A model scored in serve2', 'wf/families.py', '    if spec.env == "serve" and not envcheck and major >= 5:', '    if False:'),
+    ('families wave B kernels package accepted', 'wf/families.py', '    if (spec.env == "serve2" or envcheck) and env.get("kernels_importable"):', '    if False:'),
+    ('families wave B open_scorer drops the format', 'wf/families.py', 'tokenizer_kwargs=spec.tokenizer_kwargs, prompt_format=spec.prompt_format,', 'tokenizer_kwargs=spec.tokenizer_kwargs,'),
+    ('families wave B open_scorer drops the loading check', 'wf/families.py', 'strict_load=spec.strict_load, unexpected_keys_allowed', 'strict_load=False, unexpected_keys_allowed'),
+    ('families wave B placement only for wave A', 'wf/families.py', '    spec = first_turn_spec(spec_for(tag))', '    spec = first_turn_spec(MODELS[tag])'),
+    ('families wave B environment check scores under the old tag', 'wf/families.py', 'ENVCHECK_SUFFIX = "-serve2"', 'ENVCHECK_SUFFIX = ""'),
+    ('families wave B environment check with wave A tokenizer settings', 'wf/families.py', '                   tokenizer_kwargs={"mistral_format": False}, strict_load=True,\n                   template_notes', '                   tokenizer_kwargs={}, strict_load=True,\n                   template_notes'),
+    ('families wave B environment check on yes/no only', 'wf/families.py', 'ENVCHECK_ARMS = sizes.PRED_ARMS + sizes.YN_ARMS', 'ENVCHECK_ARMS = sizes.YN_ARMS'),
+    ('families wave B envcheck yes/no per-score threshold 0.1', 'wf/families.py', '"yes_no_mean_abs_max": 0.07', '"yes_no_mean_abs_max": 0.1'),
+    ('families wave B envcheck yes/no effect threshold 0.2', 'wf/families.py', '"yes_no_goal_effect_diff_max": 0.10', '"yes_no_goal_effect_diff_max": 0.2'),
+    ('families wave B envcheck share threshold 0.05', 'wf/families.py', '"yes_no_share_diff_max": 0.02', '"yes_no_share_diff_max": 0.05'),
+    ('families wave B envcheck two-candidate per-score threshold 0.4', 'wf/families.py', '"two_candidate_mean_abs_max": 0.35', '"two_candidate_mean_abs_max": 0.4'),
+    ('families wave B envcheck two-candidate effect threshold 0.2', 'wf/families.py', '"two_candidate_goal_effect_diff_max": 0.10', '"two_candidate_goal_effect_diff_max": 0.2'),
+    ('families wave B envcheck completeness ignored', 'wf/families.py', 'checks: dict[str, bool] = {"complete": expected <= set(pairs)}', 'checks: dict[str, bool] = {"complete": True}'),
+    ('families wave B envcheck effect change one-sided', 'wf/families.py', 'abs(rec["goal_effect_diff"]) <= ENVCHECK_RULE', 'rec["goal_effect_diff"] <= ENVCHECK_RULE'),
+    ('families wave B envcheck share change one-sided', 'wf/families.py', 'checks["yes_no_share"] = abs(rec["share_diff"]) <=', 'checks["yes_no_share"] = rec["share_diff"] <='),
+    ('families wave B envcheck passes without the token comparison', 'wf/families.py', '                          and all(t.get("ok") for t in report["tokens"].values()))', ')'),
+    ("families wave B token dump skips the successes' candidates", 'wf/tools/envcheck_tokens.py', '    for t in primary + successes:\n        for name in', '    for t in primary:\n        for name in'),
+    ('families wave B token compare ignores the revision', 'wf/tools/envcheck_tokens.py', '\n            and left["revision"] == right["revision"],', ','),
+    ('families wave B wave B family loses the base comparison', 'wf/families.py', 'planned, expected = list(WAVE_B_PLANNED), list(WAVE_B_SHARE_TESTS)', 'planned, expected = list(WAVE_B_PLANNED)[:4], list(WAVE_B_SHARE_TESTS)'),
+    ("families wave B wave B analysis uses wave A's family", 'wf/families.py', '    if wave == "A":\n        planned, expected', '    if True:\n        planned, expected'),
+    ('families wave B environment gate not applied', 'wf/families.py', '        apply_environment_gate(report["primary_family"], report["environment_check"]["pass"])', '        pass'),
+    ('families wave B environment gate passes a missing check', 'wf/families.py', '    if passed:\n        return family', '    if passed is not False:\n        return family'),
+    ('families wave B B2 direction flipped', 'wf/families.py', 'else not (differs and est < 0)', 'else not (differs and est > 0)'),
+    ('families wave B B1 holds when the share is not supported', 'wf/families.py', '        else:  # "not supported" or "not computable"\n            holds = False', '        else:  # "not supported" or "not computable"\n            holds = both'),
+    ('families wave B serve2 job reads the hub/ cache', 'pace/family_score_serve2.sbatch', 'export HF_HUB_CACHE="${TRANSFORMERS_CACHE}"\nactivate_serve', 'activate_serve'),
+    ('families wave B serve2 job may download while scoring', 'pace/family_score_serve2.sbatch', 'export HF_HUB_OFFLINE=1\n', ''),
+    ('families wave B prefetch asks transformers 5 for TRANSFORMERS_CACHE', 'wf/tools/prefetch_models.py', '        if hasattr(hub, "TRANSFORMERS_CACHE"):', '        if True:'),
 ]
 
 
@@ -418,13 +492,20 @@ def _covering_tests(work: Path, rel: str) -> list[str]:
     return found or ["tests"]
 
 
-def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900) -> str:
+KILLERS: dict[str, str] = {}  # mutant name -> the first test that failed on it (-x stops there)
+
+
+def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900, name: str = "") -> str:
     try:
-        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", *targets],
-                                cwd=work, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-rfE", "-p", "no:cacheprovider", "--tb=no",
+                                 *targets], cwd=work, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return "timeout"
-    return "killed" if result.returncode != 0 else "survived"
+    if result.returncode != 0:
+        first = re.search(r"^(?:FAILED|ERROR) (\S+)", result.stdout, flags=re.MULTILINE)
+        KILLERS[name] = first.group(1) if first else f"pytest exit {result.returncode} (no failing test named)"
+        return "killed"
+    return "survived"
 
 
 def main() -> int:
@@ -458,12 +539,13 @@ def main() -> int:
             path.write_text(source.replace(good, bad), encoding="utf-8")
             # Fast path: the test files that name the mutated module. A mutant that survives them is run
             # against the whole suite before it counts as a survivor; a timeout is never counted as a kill.
-            outcome = _run_tests(python, work, _covering_tests(work, rel), timeout)
+            outcome = _run_tests(python, work, _covering_tests(work, rel), timeout, name)
             if outcome == "survived":
-                outcome = _run_tests(python, work, ["tests"], timeout)
+                outcome = _run_tests(python, work, ["tests"], timeout, name)
             path.write_text(source, encoding="utf-8")
             label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]
-            print(f"{label}  {name}", flush=True)
+            by = f"  [by {KILLERS[name]}]" if outcome == "killed" else ""
+            print(f"{label}  {name}{by}", flush=True)
             if outcome == "survived":
                 survivors.append(name)
             elif outcome == "timeout":
