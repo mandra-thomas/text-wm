@@ -477,7 +477,7 @@ It is computed on CPU from stage 0's residuals on the ablation's failure items, 
 
 **Pre-registered rule (one, chosen now): a profile layer whose direct-path share has a 95% upper bound at or above 0.3 is treated as a caveat layer: its removal is reported, but it is excluded from the onset, which is read on the remaining profile layers, per stratum (`analysis.direct_path_kept`, `DIRECT_PATH_MAX`).**
 
-Why this rule rather than reading the onset on removal minus $\lambda$ with a paired bootstrap: the subtraction would make the 0.6 band unreachable wherever $\lambda$ exceeds 0.4, and it would also subtract the part H3 itself predicts. Under H3 the goal's signal is written in readout form at the answer position, so a large $\lambda$ is part of the hypothesis, not a nuisance to subtract. The question the onset can answer cleanly is whether one direction carries the effect *before* the effect is in readout form, and that is only answerable at layers where the direct path is small. The threshold 0.3 is the band below which a removal of at least 0.6 cannot be explained by the direct path alone. The cost: if every layer from the true onset on has a large direct-path share, the row is "not assessable". `test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it` reproduces the simulation's pattern (with readout-form share 0, 0.3 and about 0.6, the removal tracks it, and the rule removes the layer where the naive onset would have been found).
+Why this rule rather than reading the onset on removal minus $\lambda$ with a paired bootstrap: the subtraction would make the 0.6 band unreachable wherever $\lambda$ exceeds 0.4, and it would also subtract the part H3 itself predicts. Under H3 the goal's signal is written in readout form at the answer position, so a large $\lambda$ is part of the hypothesis, not a nuisance to subtract. The question the onset can answer cleanly is whether one direction carries the effect *before* the effect is in readout form, and that is only answerable at layers where the direct path is small. The threshold 0.3 is the band below which a removal of at least 0.6 cannot be explained by the direct path alone. The cost: if every layer from the true onset on has a large direct-path share, the row is "not assessable". (Review 4, D1:) because an excluded layer can push the onset later, an onset after the arrival is read as "after arrival" only if no profile layer between the arrival and the onset was excluded; otherwise the row is "not assessable". `test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it` reproduces the simulation's pattern (with readout-form share 0, 0.3 and about 0.6, the removal tracks it, and the rule removes the layer where the naive onset would have been found).
 
 ### C3. The H4 rows, restated again
 
@@ -486,6 +486,8 @@ Why this rule rather than reading the onset on removal minus $\lambda$ with a pa
 - *Mention is not a null for H4.* A mention of the object is itself an object match, so "the projected cosine exceeds the mention direction's" is dropped from the H4 criterion. The mention direction's projected cosine with the success direction, and the task-minus-mention difference, are reported apart, as a goal-role row (`goal_role`).
 - *Reliability and intervals.* Between-fold cosines are now reported for the projected task, success and mention directions. Each projected cosine is also reported disattenuated: divided by the square root of the two directions' between-fold cosines, what it would be between noise-free directions, to first order (`analysis.disattenuated`; undefined if a reliability is not positive). Every projected task-success cosine gets a game-bootstrap interval in which both directions are re-estimated in every resample (`analysis.projected_cosine_boot`, `pilot.h4_cosine_report`).
 - *A layer-specific answer direction.* The final readout direction is only the last layer's notion of "the answer"; at a middle layer the answer may be carried along another direction. At every H4 layer a ridge regression of the final readout on that layer's neutral-prompt residual, fit after centring both within each (outcome, verb) cell so that it does not learn the success or verb contrast, gives a layer-specific answer direction (`analysis.answer_direction`). The H4 cosine is reported with the readout direction projected out, and with both the readout and the answer direction projected out.
+
+(Review 4, D3, D4:) the steering ratio is read only at layers where the task steering's share of the goal effect has a 95% lower bound of at least 0.3, and the H4 row is the median over those layers or "not assessable"; the H4 layers are cut at the earlier of the two defined arrival layers (the final group's at 0.5 and the answer position's under the onset rule).
 
 H4 predictions, restated (medians over the H4 layers of B2). H4: the projected cosine is at least 0.3 under both projections (its bootstrap lower bound above 0); steering along $s_\perp$ gains at least half of what steering along $u$ gains; where assessable, ablating the task direction without its success component removes less than half of what the task direction removes. H3: projected cosine below 0.1 under both projections; steering along $s_\perp$ below 20% of the gain along $u$; where assessable, the success-free direction removes at least 80% of what the task direction removes. The disattenuated cosine is reported and read only together with the raw one: a disattenuated value cannot rescue a raw cosine whose interval includes 0.
 
@@ -504,7 +506,7 @@ The calibration rule of B3 is completed as follows (dated 2026-11-21, before any
 - *Margin fixed.* The full pilot's n per stratum and measure is the pilot's n times $(1.96\,\mathrm{SE}/0.075)^2$, times 1.2 (`SAMPLE_SIZE_MARGIN`), the allowance for games as clusters.
 - *B fixed.* Every bootstrap uses 2,000 game resamples, for percentile intervals and for the SEs behind normal intervals; the pilot does not set it.
 - *Bonferroni form struck.* It was already fixed by B5 (normal intervals from the bootstrap SE); the pilot does not set it either. What the pilot's SEs set is the full pilot's sample sizes, nothing else.
-- *More measures.* The sample sizes are now computed also for the object-mention share, the neutral-gap ratio (with a paired bootstrap SE), the answer-position arrival (the SE of the `last` curve at the arrival layer), the H4 cosine, the steering ratio and the perp-over-task ratio (`pilot.sample_sizes`).
+- *More measures.* The sample sizes are now computed also for the object-mention share, the neutral-gap ratio (with a paired bootstrap SE), the answer-position arrival (the SE of the `last` curve at the arrival layer), the steering ratio and the perp-over-task ratio (`pilot.sample_sizes`). (Review 4, D5:) the H4 cosine and the direct-path share are stage-0 quantities, computed on every item of the fold, so for them only the SE is reported; a sample size does not apply.
 - *Folds in the full pilot.* Its verdicts use fold 1's items only (the fold no intervention has touched). Fold 0's 100 patched items and 125 edited items are reported separately and never pooled into a verdict.
 
 *Minimums for small draws.* The stratum minimums are set for 100 patching items and 75 ablation failures; when fewer are drawn they are scaled by n over that reference and rounded half up (`pilot.scaled_minimum`). The 10-item timing run of patching therefore draws at least 3 step-0 items and 3 with an object mention, instead of minimums larger than the run.
@@ -517,4 +519,57 @@ The calibration rule of B3 is completed as follows (dated 2026-11-21, before any
 
 - *An answer the model never gives.* On RQ2's failures, Qwen3-8B's mean probability of "Yes" is about 0.2% even under the aligned task (`exploratory_results.md`, section 4): its answer is at the floor in both conditions. The yes/no pilot therefore localizes a shift of 2.8 nats in log-odds inside an answer that stays "No", not a change of answer. That is a legitimate object for localization, but its findings should not be described as the mechanism by which the model "predicts success".
 - *Not the headline effect.* The confirmatory effect is 6.12 nats in the two-candidate format, where the success text is often preferred. The yes/no effect is a different readout of the same manipulation. The minimal pilot does not explain the headline; at most its localization carries over. The first-token readout is now gated in stage 0 (B6), and a residual map of the full two-candidate reply (teacher-forcing the success text, by the coarse groups, 50 items; A9) is planned for the full pilot.
-- *Transfer.* The first transfer target for any direction or localization found here is TextCraft's yes/no format (branch `textcraft`, once scored and showing a goal effect), before τ-bench.
+- *Transfer.* The first transfer target for any direction or localization found here is TextCraft's yes/no format (branch `textcraft`, once scored and showing a goal effect), before τ-bench. TextCraft's current yes/no question ("Will this action succeed? Answer Yes or No.") is not anchored to the environment's reply and is partly read as task relevance (about two-thirds of Qwen's TextCraft yes/no effect); transfer there requires a reply-anchored TextCraft question, validated before any direction is applied.
+
+## Amendments after review 4, before any run (2026-11-21)
+
+Status: a fourth outside review read amendment 3, its code and tests, simulated the direct-path exclusion, the steering ratio and the answer direction, and put 32 bugs into the code (22 survived the tests). Its verdicts: "pass with fixes" for both the engineering and the science, not yet ready to freeze. Everything below was decided after that review and before any activation, patching, probe or lens result existed; no interpretability job has run. Where this amendment contradicts anything earlier, it holds. `deviations.md` records it ("Interpretability pilot: amendments after review 4").
+
+### D1. An exclusion between arrival and onset
+
+The direct-path rule (C2) removes layers from the onset's profile, and removing a layer can only move the onset later. Review 4's simulation: with the removal's lower bound at or above 0.6 from layer 12 on and the arrival at 12, excluding only layer 12 (a direct-path upper bound of 0.32) moved the onset to 16 and turned "at or before arrival" into "after arrival" by construction. `onset_versus_arrival` now receives the whole profile; when the onset lies after the arrival and some profile layer from the arrival up to (not including) the onset was excluded, the row is "not assessable (a layer between arrival and onset excluded by the direct-path rule)". Exclusions after the onset change nothing.
+
+### D2. Tests for the exclusion
+
+Tests now cover an excluded layer that is not the deepest (layer 8 passes, layer 4 fails, 8 is excluded: no onset, and the deepest upper bound comes from layer 4), review 4's four exclusion cases, an arrival exactly at the deepest kept layer, and an upper bound of exactly 0.3.
+
+### D3. The steering ratio is gated
+
+Review 4's simulation: when steering along the task direction barely moves the readout (a gain of 0.02 to 0.15 nats), the ratio of the gain along the readout-free success direction to it ran from −2 to 54 with intervals spanning ±80. The ratio (`steer_perp_over_task`) is now read only at layers where the task steering's share of the goal effect has a 95% lower bound of at least 0.3 (`STEER_TASK_MIN_GAIN`, `analysis.gate_on_lower_bound`); the H4 row is the median over those layers, which are listed, or "not assessable".
+
+### D4. H4 layers before either arrival
+
+The H4 rows are read at layers strictly before the earlier of the two defined arrival layers: the final group's (point fraction 0.5) and the answer position's (C1). Either arrival marks where the effect already sits at the answer, and the H4 cosine must be read before both.
+
+### D5. Sample sizes of stage-0 quantities
+
+The H4 cosine and the direct-path share are computed on every item of the fold from stage 0, so only their SE is reported; their sample size is "not applicable (stage 0 uses every item of the fold)".
+
+### D6. What section M says the minimal pilot "can conclude"
+
+Section M lists what the minimal pilot "can conclude". Read with amendments 2 to 4, those are calibration readings, not conclusions. The minimal pilot reports the localization quantities (shares, arrival, onset, direction readouts) against provisional bands, without hypothesis labels. The mention comparison is a goal-role row, not a test of H4. The minimal pilot's variances set only the full pilot's sample sizes (B3, C6, D10). Section M's "cannot conclude" list stands.
+
+### D7. When the second projection can be read
+
+Review 4's simulation: when the success feature varies within cells, the layer-specific answer direction picks it up (cosine with the true success direction up to 0.96), and projecting the answer direction out removes the very feature H4 is about (the H4 cosine fell from 0.82 to 0.35). The cosine of the answer direction with the readout-free success direction is now reported per layer and fold (`answer_success_perp_readout_cos`). The "under both projections" condition of C3 is read only at layers where its absolute value is below 0.5 in both folds (`ANSWER_SUCCESS_MAX_COS`); elsewhere it is "not assessable", and the layers used are listed.
+
+### D8. Direct-path share on the whole fold; NaN bounds; low reliabilities
+
+- The direct-path share is now computed per stratum on every failure of the edited (calibration) fold, from stage 0 on CPU, rather than on the 75 sampled ablation failures. It is then the population's share and needs no weights. Its SE is reported with the sample sizes (D5).
+- A profile layer whose direct-path share has no finite upper bound is excluded from the onset (before, a NaN bound kept the layer). A layer with no estimate at all is kept.
+- A disattenuated cosine is undefined when either between-fold reliability is below 0.2 (`MIN_RELIABILITY`): dividing by a small, noisy reliability inflates it arbitrarily.
+
+### D9. Limits that remain, and a free linearity check
+
+- *Identity path only.* The direct-path share counts what is already along the readout direction at the final norm's scale, the residual stream's identity path to the readout. Readout-form information that later layers would amplify or rotate is not counted.
+- *Different item sets.* The answer-position arrival is measured on patching items with an effect of at least 1 nat; the onset is measured on ablation items drawn without that filter. The comparison assumes the localization does not depend on the size of the effect.
+- *"At or before arrival" is not H3 on its own.* Under H2 a changed state in the action or final tokens can also reach the answer position as one direction by the arrival layer. The row is not to be read for H3 without the probe and history rows of the full pilot.
+- *Linearity diagnostic.* At each profile layer the task steering's share of the goal effect is reported next to the task direction's removed share (`linearity_steer_task_vs_removal`). If the rest of the network were close to linear along the task direction, adding its mean projection and ablating to the midpoint would move the readout by about the same amount; their ratio is reported, not read.
+
+### D10. How the per-measure sample sizes combine
+
+Pre-registered now. Per stratum, the full pilot's patching items are the largest number any patching measure needs (history share, action share, object-mention share, answer-position arrival). Its ablation failures are the largest number any ablation measure needs (removal at each profile layer, gap ratio, steering ratio, perp-over-task ratio). Each is capped at 400 per stratum (`PATCH_CAP_PER_STRATUM`, `ABLATE_CAP_PER_STRATUM`); 400 patching items cost about 11 A100-hours and 400 ablation failures about 2. If a cap binds, the full pilot runs at the cap, the analysis reports the half-width each measure reaches there, and the bands stay as they are (`analysis.plan_sizes`, reported as `sample_size.<stratum>.plan`). The stratum's availability also bounds it: fold 1 has 268 step-0 failures.
+
+### D11. Tests, mutants and a comment
+
+Tests now kill review 4's 22 surviving mutants. N2 is killed by giving the end-to-end model a non-unit final-norm weight, so that the readout direction differs from the plain unembedding difference, and the direct-path test's vacuous last-layer check is replaced by an exact one (the share is 1 at the last layer). Review 4's 32 mutants (N2, N3, N4 and N31 adapted to changed lines; N18 left out as equivalent) and 15 mutants of this round's code (one more was equivalent) are in `scripts/mutation_check.py`. A mutant counts as killed only when a named test fails (pytest exit code 1). The job script's comment now says 55 edits per prompt.
