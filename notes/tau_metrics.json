@@ -1,0 +1,4981 @@
+{
+  "items": {
+    "main": 1385,
+    "main_users": 295,
+    "matched_arm": 500,
+    "natural": 28,
+    "primary": 856,
+    "primary_users": 175,
+    "rules_only_arm": 500,
+    "unachievable": 0
+  },
+  "matched_arm_verdicts": {
+    "llama3.1-8b-fewshot": {
+      "holm_p": 0.001998001998001998,
+      "main_verdict": "small effect, direction positive",
+      "reading": "effect under both prompts: stating that the backend does not see the task does not remove it",
+      "verdict": "replicates (ALFWorld direction)"
+    },
+    "qwen3-8b-fewshot": {
+      "holm_p": 0.001998001998001998,
+      "main_verdict": "replicates (ALFWorld direction)",
+      "reading": "effect under both prompts: stating that the backend does not see the task does not remove it",
+      "verdict": "replicates (ALFWorld direction)"
+    }
+  },
+  "missing_scores": 0,
+  "models": {
+    "llama3.1-8b-fewshot": {
+      "first_vs_full_agreement": {
+        "max_gap": 0.0,
+        "n": 4155,
+        "ok": true,
+        "share_within_0.05": 1.0
+      },
+      "format": {
+        "first_mass_below_0.5_share": 0.0,
+        "first_mass_median": 0.9968815307718832,
+        "seconds_mean_by_readout": {
+          "first": 1.3245801879603833,
+          "full": 2.7755961807614837,
+          "target": 1.3483468938587162,
+          "yn": 1.3265377316114548
+        },
+        "seconds_median_by_readout": {
+          "first": 1.1550500000000001,
+          "full": 2.4123,
+          "target": 1.1746,
+          "yn": 1.1565
+        },
+        "seconds_total": 66959.3430000002,
+        "target_mass_below_0.5_share": 0.0,
+        "target_mass_median": 0.9996813638203356,
+        "yn_mass_below_0.5_share": 0.0,
+        "yn_mass_median": 0.9789025065359869
+      },
+      "main_pool": {
+        "by_class": {
+          "status": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.1261295177805495,
+                1.3256240789238336
+              ],
+              "cluster": "user",
+              "estimate": 1.2249623560483416,
+              "n_clusters": 294,
+              "n_items": 664,
+              "n_users": 294,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8177710843373494
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.8757473816385184,
+                1.0638706100640318
+              ],
+              "cluster": "user",
+              "estimate": 0.9673380993113079,
+              "n_clusters": 294,
+              "n_items": 664,
+              "n_users": 294,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7921686746987951
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.1505641907907376,
+                0.3633874761486873
+              ],
+              "cluster": "user",
+              "estimate": 0.2576242567370337,
+              "n_clusters": 294,
+              "n_items": 664,
+              "n_users": 294,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.588855421686747
+            }
+          },
+          "unavailable": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.17873134067309882,
+                0.30585880889970773
+              ],
+              "cluster": "user",
+              "estimate": 0.24138591021861294,
+              "n_clusters": 292,
+              "n_items": 653,
+              "n_users": 292,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6584992343032159
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.32586596454409544,
+                -0.23349772064843424
+              ],
+              "cluster": "user",
+              "estimate": -0.2787136319813648,
+              "n_clusters": 292,
+              "n_items": 653,
+              "n_users": 292,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.31852986217457885
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.4661330038288605,
+                0.5720172718143912
+              ],
+              "cluster": "user",
+              "estimate": 0.5200995421999778,
+              "n_clusters": 292,
+              "n_items": 653,
+              "n_users": 292,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7840735068912711
+            }
+          }
+        },
+        "by_class_descriptive": {
+          "gc_balance": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.5535714173955577,
+              "n_clusters": 4,
+              "n_items": 7,
+              "n_users": 4,
+              "share_positive": 0.2857142857142857
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.6785714086145163,
+              "n_clusters": 4,
+              "n_items": 7,
+              "n_users": 4,
+              "share_positive": 0.8571428571428571
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -1.232142826010074,
+              "n_clusters": 4,
+              "n_items": 7,
+              "n_users": 4,
+              "share_positive": 0.14285714285714285
+            }
+          },
+          "wrong_return_pm": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 1.709016410950724,
+              "n_clusters": 44,
+              "n_items": 61,
+              "n_users": 44,
+              "share_positive": 0.9344262295081968
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.7909836123285235,
+              "n_clusters": 44,
+              "n_items": 61,
+              "n_users": 44,
+              "share_positive": 0.7540983606557377
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": 0.9180327986222004,
+              "n_clusters": 44,
+              "n_items": 61,
+              "n_users": 44,
+              "share_positive": 0.8032786885245902
+            }
+          }
+        },
+        "by_status_matched": {
+          "False": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.44593346749549445,
+                0.6356678980753406
+              ],
+              "cluster": "user",
+              "estimate": 0.5387523631575836,
+              "n_clusters": 196,
+              "n_items": 529,
+              "n_users": 196,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6786389413988658
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.13002872651521388,
+                0.282335900025115
+              ],
+              "cluster": "user",
+              "estimate": 0.20486766420259,
+              "n_clusters": 196,
+              "n_items": 529,
+              "n_users": 196,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.5311909262759924
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.2509671319942612,
+                0.41746642781580634
+              ],
+              "cluster": "user",
+              "estimate": 0.33388469895499356,
+              "n_clusters": 196,
+              "n_items": 529,
+              "n_users": 196,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6465028355387523
+            }
+          },
+          "True": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.8456307972492477,
+                0.9860311159092884
+              ],
+              "cluster": "user",
+              "estimate": 0.9186623888139213,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7862149532710281
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.40632813070260454,
+                0.5391824072982276
+              ],
+              "cluster": "user",
+              "estimate": 0.4730578295654774,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.5899532710280374
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.3637354736497929,
+                0.5257985241727158
+              ],
+              "cluster": "user",
+              "estimate": 0.4456045592484439,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7137850467289719
+            }
+          }
+        },
+        "by_swapped_achievable": {
+          "False": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.6221909992621814,
+                0.9682539620352958
+              ],
+              "cluster": "user",
+              "estimate": 0.7958776500209809,
+              "n_clusters": 93,
+              "n_items": 188,
+              "n_users": 93,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7127659574468085
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.09986771298473869,
+                0.37823832784224437
+              ],
+              "cluster": "user",
+              "estimate": 0.2446808341935158,
+              "n_clusters": 93,
+              "n_items": 188,
+              "n_users": 93,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.5531914893617021
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.42137100181407144,
+                0.6881868143458493
+              ],
+              "cluster": "user",
+              "estimate": 0.5511968158274652,
+              "n_clusters": 93,
+              "n_items": 188,
+              "n_users": 93,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7074468085106383
+            }
+          },
+          "True": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.7061479051527547,
+                0.8275826500974064
+              ],
+              "cluster": "user",
+              "estimate": 0.7700501309366198,
+              "n_clusters": 231,
+              "n_items": 1197,
+              "n_users": 231,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7502088554720133
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.33227095281658575,
+                0.44671352387591345
+              ],
+              "cluster": "user",
+              "estimate": 0.39040309076260465,
+              "n_clusters": 231,
+              "n_items": 1197,
+              "n_users": 231,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.5697577276524645
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.315090949921916,
+                0.4408927132594545
+              ],
+              "cluster": "user",
+              "estimate": 0.3796470401740151,
+              "n_clusters": 231,
+              "n_items": 1197,
+              "n_users": 231,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6850459482038429
+            }
+          }
+        },
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.7158675002057574,
+              0.8296974007136769
+            ],
+            "cluster": "user",
+            "estimate": 0.7735559602419338,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7451263537906138
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.31843726747203954,
+              0.42400465823156785
+            ],
+            "cluster": "user",
+            "estimate": 0.370622741134454,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5675090252707581
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.3460503520546707,
+              0.46031966626696447
+            ],
+            "cluster": "user",
+            "estimate": 0.4029332191074798,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.688086642599278
+          }
+        },
+        "first_flips": {
+          "either": 0.03104693140794224,
+          "n": 1385,
+          "toward_failure": 0.01588447653429603,
+          "toward_success": 0.01516245487364621
+        },
+        "first_probability_shift": {
+          "ci": [
+            0.008606610711449072,
+            0.018679134066089866
+          ],
+          "cluster": "user",
+          "estimate": 0.013729601322128061,
+          "n_clusters": 295,
+          "n_items": 1385,
+          "n_users": 295,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.5675090252707581
+        },
+        "first_product_clustered": {
+          "ci": [
+            0.30882352550274866,
+            0.42888498340636866
+          ],
+          "cluster": "product",
+          "estimate": 0.370622741134454,
+          "n_clusters": 57,
+          "n_items": 1385,
+          "n_users": 295,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.5675090252707581
+        },
+        "first_without_fewshot_tool_classes": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.6770114914410644,
+              0.7997848215578153
+            ],
+            "cluster": "user",
+            "estimate": 0.7372817037121132,
+            "n_clusters": 295,
+            "n_items": 1317,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.738800303720577
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.29583974952166625,
+              0.40499254298152126
+            ],
+            "cluster": "user",
+            "estimate": 0.34951594248965623,
+            "n_clusters": 295,
+            "n_items": 1317,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5573272589217919
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.32952802057432673,
+              0.44788447557246797
+            ],
+            "cluster": "user",
+            "estimate": 0.387765761222457,
+            "n_clusters": 295,
+            "n_items": 1317,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6856492027334852
+          }
+        },
+        "full": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.6048617194005734,
+              0.8978247004317181
+            ],
+            "cluster": "user",
+            "estimate": 0.7588463115375418,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5935018050541516
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              1.9403363007009824,
+              2.277582553791763
+            ],
+            "cluster": "user",
+            "estimate": 2.1079476162300903,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7472924187725631
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -1.483197258369401,
+              -1.210828576410168
+            ],
+            "cluster": "user",
+            "estimate": -1.3491013046925484,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.28664259927797836
+          }
+        },
+        "full_norm": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.03595888838074656,
+              0.045519475409063336
+            ],
+            "cluster": "user",
+            "estimate": 0.040793883024566234,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6447653429602888
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              -0.00038572081496680204,
+              0.010040104476565117
+            ],
+            "cluster": "user",
+            "estimate": 0.004779215491645697,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.08291708291708291,
+            "share_positive": 0.5465703971119134
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.029968593439998074,
+              0.04205500539545493
+            ],
+            "cluster": "user",
+            "estimate": 0.036014667532920666,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6274368231046932
+          }
+        },
+        "n_items": 1385,
+        "n_users": 295,
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              -0.1541360297925113,
+              -0.11597374290836544
+            ],
+            "cluster": "user",
+            "estimate": -0.13510830446217034,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.30324909747292417
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              -0.04564083642402633,
+              -0.011570829344288998
+            ],
+            "cluster": "user",
+            "estimate": -0.027978340996301563,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.001998001998001998,
+            "share_positive": 0.3935018050541516
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -0.1284306810763753,
+              -0.08437711500090446
+            ],
+            "cluster": "user",
+            "estimate": -0.10712996346586878,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.33935018050541516
+          }
+        }
+      },
+      "main_pool_controls": {
+        "discrimination": {
+          "first": {
+            "ci": [
+              1.0050798330134314,
+              1.1476190566725166
+            ],
+            "cluster": "user",
+            "estimate": 1.0754160930482664,
+            "n_clusters": 292,
+            "n_items": 721,
+            "n_users": 292,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9736477115117892
+          },
+          "yn": {
+            "ci": [
+              0.27951635816697545,
+              0.3156337052749724
+            ],
+            "cluster": "user",
+            "estimate": 0.2978502079617134,
+            "n_clusters": 292,
+            "n_items": 721,
+            "n_users": 292,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8862690707350902
+          }
+        },
+        "discrimination_all_witnesses": {
+          "first": {
+            "ci": [
+              1.3445255524871436,
+              1.5655510364482303
+            ],
+            "cluster": "user",
+            "estimate": 1.4521660694756648,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8866425992779784
+          },
+          "yn": {
+            "ci": [
+              0.3790058261604311,
+              0.42788461450930243
+            ],
+            "cluster": "user",
+            "estimate": 0.4031588441117361,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8404332129963898
+          }
+        },
+        "discrimination_by_class": {
+          "status": {
+            "evidence": false,
+            "holds": null,
+            "n_items": 0,
+            "note": "no witness of this class is determined by its history (checker UNKNOWN), so there is no discrimination evidence: a null or a reversal in this class is not read as use of the record"
+          },
+          "unavailable": {
+            "evidence": true,
+            "first": {
+              "ci": [
+                0.9519508696945836,
+                1.0809394446756946
+              ],
+              "cluster": "user",
+              "estimate": 1.0143568186413148,
+              "n_clusters": 292,
+              "n_items": 653,
+              "n_users": 292,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9770290964777948
+            },
+            "holds": true,
+            "n_items": 653
+          }
+        },
+        "fail_minus_witness_effect": {
+          "first": {
+            "ci": [
+              -0.13672155290528726,
+              -0.046052637362453935
+            ],
+            "estimate": -0.09065884822863575,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999
+          },
+          "yn": {
+            "ci": [
+              -0.07040441439980093,
+              -0.035651409935573454
+            ],
+            "estimate": -0.05315884659436636,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999
+          }
+        },
+        "manipulation": {
+          "ci": [
+            4.381867099896964,
+            4.545249269261943
+          ],
+          "cluster": "user",
+          "estimate": 4.4620938589201735,
+          "n_clusters": 295,
+          "n_items": 1385,
+          "n_users": 295,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 1.0
+        },
+        "mention": {
+          "first": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                1.312736565226204,
+                1.4066374949458953
+              ],
+              "cluster": "user",
+              "estimate": 1.3602888115787617,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8967509025270758
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                -0.11817308090457047,
+                -0.02582863634309373
+              ],
+              "cluster": "user",
+              "estimate": -0.0722472949291408,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.002997002997002997,
+              "share_positive": 0.4043321299638989
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -0.6225754285076347,
+                -0.5533636363144456
+              ],
+              "cluster": "user",
+              "estimate": -0.5867328513368278,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.15812274368231047
+            }
+          },
+          "yn": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                0.15877161229764694,
+                0.19300144015775098
+              ],
+              "cluster": "user",
+              "estimate": 0.17590252579280616,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6187725631768953
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                -0.12555391429765272,
+                -0.08908155557654071
+              ],
+              "cluster": "user",
+              "estimate": -0.10658844770453467,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.28014440433212995
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -0.3293882006859354,
+                -0.293002138046967
+              ],
+              "cluster": "user",
+              "estimate": -0.3110108302549765,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.10324909747292418
+            }
+          }
+        },
+        "witness": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.7146307807226117,
+                0.8481153031981138
+              ],
+              "cluster": "user",
+              "estimate": 0.7829422399206658,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7595667870036101
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.40622769293468713,
+                0.5148086811585806
+              ],
+              "cluster": "user",
+              "estimate": 0.4612815893630897,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6657039711191336
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.25686813108085726,
+                0.38673791216339487
+              ],
+              "cluster": "user",
+              "estimate": 0.32166065055757614,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6685920577617328
+            }
+          },
+          "full": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.004539795694863,
+                1.3083509594618599
+              ],
+              "cluster": "user",
+              "estimate": 1.1542709472923138,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6418772563176895
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                2.802812889651539,
+                3.171861194013667
+              ],
+              "cluster": "user",
+              "estimate": 2.9875733029512856,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8072202166064982
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -1.9863808380617924,
+                -1.6713262012352939
+              ],
+              "cluster": "user",
+              "estimate": -1.8333023556589731,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.21660649819494585
+            }
+          },
+          "full_norm": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.10038602831220665,
+                0.1175501598602538
+              ],
+              "cluster": "user",
+              "estimate": 0.10905970896994446,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6750902527075813
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.11981776943670547,
+                0.13909727210334702
+              ],
+              "cluster": "user",
+              "estimate": 0.12979914958409333,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7321299638989169
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.03115065315877881,
+                -0.009908647916910464
+              ],
+              "cluster": "user",
+              "estimate": -0.020739440614148844,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.4368231046931408
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.14874828385063976,
+                -0.1081677707264404
+              ],
+              "cluster": "user",
+              "estimate": -0.12851985524062215,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.2772563176895307
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.008281573817761213,
+                0.0421543524225175
+              ],
+              "cluster": "user",
+              "estimate": 0.025180505598064794,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.00999000999000999,
+              "share_positive": 0.4433212996389892
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.1759126700604909,
+                -0.13214772007471853
+              ],
+              "cluster": "user",
+              "estimate": -0.15370036083868693,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.27509025270758125
+            }
+          }
+        },
+        "write_minus_mention_effect": {
+          "first": {
+            "ci": [
+              0.40352074238341207,
+              0.48219298835786617
+            ],
+            "estimate": 0.44287003606359476,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999
+          },
+          "yn": {
+            "ci": [
+              0.062163718422727346,
+              0.09486016511173746
+            ],
+            "estimate": 0.07861010670823311,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999
+          }
+        }
+      },
+      "matched_arm": {
+        "first": {
+          "main_minus_matched": {
+            "ci": [
+              -0.40959597165752765,
+              -0.28993775566056357
+            ],
+            "estimate": -0.34825000434694814,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.000999000999000999
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.8222163956042011,
+                1.0225409999099506
+              ],
+              "cluster": "user",
+              "estimate": 0.9215000077013392,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.79
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.38146972043296046,
+                0.5763197191332308
+              ],
+              "cluster": "user",
+              "estimate": 0.4751250054012053,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.566
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.33647451538978734,
+                0.5488520379943241
+              ],
+              "cluster": "user",
+              "estimate": 0.44637500230013394,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.71
+            }
+          },
+          "matched": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.9640928868241568,
+                1.1666666772155643
+              ],
+              "cluster": "user",
+              "estimate": 1.0632500136478338,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.82
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.7014331388012397,
+                0.9460565556313784
+              ],
+              "cluster": "user",
+              "estimate": 0.8233750097481534,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.656
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.12014678444790082,
+                0.36307732307985163
+              ],
+              "cluster": "user",
+              "estimate": 0.23987500389968044,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.622
+            }
+          }
+        },
+        "witness_first": {
+          "descriptive": true,
+          "fail_minus_witness_main_same_items": {
+            "ci": [
+              0.03887795011272771,
+              0.1870183113389083
+            ],
+            "estimate": 0.11287500511482358,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.008991008991008992
+          },
+          "fail_minus_witness_matched": {
+            "ci": [
+              -0.2870370330386738,
+              -0.06765462886446069
+            ],
+            "estimate": -0.17812498786812647,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.000999000999000999
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.6903176256937364,
+                0.9106786481398502
+              ],
+              "cluster": "user",
+              "estimate": 0.799500001554843,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.78
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.28131212918786797,
+                0.4476256993227661
+              ],
+              "cluster": "user",
+              "estimate": 0.3622500002863817,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.606
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.3323529445452104,
+                0.5514240561454471
+              ],
+              "cluster": "user",
+              "estimate": 0.43725000126846136,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.732
+            }
+          },
+          "matched": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.897330592774635,
+                1.1322211191522893
+              ],
+              "cluster": "user",
+              "estimate": 1.011500003567431,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.816
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.884393062172027,
+                1.1315922944430588
+              ],
+              "cluster": "user",
+              "estimate": 1.00149999761628,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.76
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.14334380848282477,
+                0.16409363052102763
+              ],
+              "cluster": "user",
+              "estimate": 0.010000005951151253,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.8981018981018981,
+              "share_positive": 0.552
+            }
+          }
+        },
+        "yn": {
+          "main_minus_matched": {
+            "ci": [
+              -0.034308506104540316,
+              0.0048568532602187315
+            ],
+            "estimate": -0.014500000238418579,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.16283716283716285
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.13769157564845577,
+                -0.07431102673134465
+              ],
+              "cluster": "user",
+              "estimate": -0.10550000122189522,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.336
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.05376059651943082,
+                -0.000736743621601337
+              ],
+              "cluster": "user",
+              "estimate": -0.02750000138580799,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.04695304695304695,
+              "share_positive": 0.386
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.11425781142315827,
+                -0.041996049595326775
+              ],
+              "cluster": "user",
+              "estimate": -0.07799999983608723,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.378
+            }
+          },
+          "matched": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.13421052760199498,
+                -0.06397637977140157
+              ],
+              "cluster": "user",
+              "estimate": -0.09850000023841858,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.358
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.04410282152915193,
+                0.01814516256713579
+              ],
+              "cluster": "user",
+              "estimate": -0.013000001147389412,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.4195804195804196,
+              "share_positive": 0.394
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.12526371191699798,
+                -0.047077921078060615
+              ],
+              "cluster": "user",
+              "estimate": -0.08549999909102916,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.384
+            }
+          }
+        }
+      },
+      "natural": {
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.16826924681663513,
+              0.7767857415601611
+            ],
+            "cluster": "user",
+            "estimate": 0.46875001955777407,
+            "n_clusters": 23,
+            "n_items": 28,
+            "n_users": 23,
+            "perm_p": 0.006993006993006993,
+            "share_positive": 0.6428571428571429
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              -0.5833333046692941,
+              0.4166666946063439
+            ],
+            "cluster": "user",
+            "estimate": -0.10526314137601539,
+            "n_clusters": 17,
+            "n_items": 19,
+            "n_users": 17,
+            "perm_p": 0.7362637362637363,
+            "share_positive": 0.42105263157894735
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.15789473772441087,
+              0.9513888911654552
+            ],
+            "cluster": "user",
+            "estimate": 0.5394736857300526,
+            "n_clusters": 17,
+            "n_items": 19,
+            "n_users": 17,
+            "perm_p": 0.016983016983016984,
+            "share_positive": 0.7894736842105263
+          }
+        },
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              -0.1346153892003573,
+              0.08984374068677425
+            ],
+            "cluster": "user",
+            "estimate": -0.022321428571428572,
+            "n_clusters": 23,
+            "n_items": 28,
+            "n_users": 23,
+            "perm_p": 0.7252747252747253,
+            "share_positive": 0.35714285714285715
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              -0.17647058472913854,
+              0.12500000701231115
+            ],
+            "cluster": "user",
+            "estimate": -0.026315786336597643,
+            "n_clusters": 17,
+            "n_items": 19,
+            "n_users": 17,
+            "perm_p": 0.8111888111888111,
+            "share_positive": 0.42105263157894735
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -0.14583333830038706,
+              0.2499999917215771
+            ],
+            "cluster": "user",
+            "estimate": 0.052631571104652004,
+            "n_clusters": 17,
+            "n_items": 19,
+            "n_users": 17,
+            "perm_p": 0.6553446553446554,
+            "share_positive": 0.5263157894736842
+          }
+        }
+      },
+      "natural_by_class": {
+        "gc_balance": {
+          "aligned_minus_neutral": {
+            "cluster": "user",
+            "estimate": 0.3750000596046448,
+            "n_clusters": 1,
+            "n_items": 1,
+            "n_users": 1,
+            "share_positive": 1.0
+          },
+          "aligned_minus_swapped": {
+            "cluster": "user",
+            "estimate": NaN,
+            "n_clusters": 0,
+            "n_items": 0,
+            "n_users": 0,
+            "share_positive": NaN
+          },
+          "swapped_minus_neutral": {
+            "cluster": "user",
+            "estimate": NaN,
+            "n_clusters": 0,
+            "n_items": 0,
+            "n_users": 0,
+            "share_positive": NaN
+          }
+        },
+        "status": {
+          "aligned_minus_neutral": {
+            "cluster": "user",
+            "estimate": 0.3409091113981875,
+            "n_clusters": 18,
+            "n_items": 22,
+            "n_users": 18,
+            "share_positive": 0.5454545454545454
+          },
+          "aligned_minus_swapped": {
+            "cluster": "user",
+            "estimate": -0.2794117475585902,
+            "n_clusters": 15,
+            "n_items": 17,
+            "n_users": 15,
+            "share_positive": 0.4117647058823529
+          },
+          "swapped_minus_neutral": {
+            "cluster": "user",
+            "estimate": 0.5073529411216869,
+            "n_clusters": 15,
+            "n_items": 17,
+            "n_users": 15,
+            "share_positive": 0.7647058823529411
+          }
+        },
+        "unavailable": {
+          "aligned_minus_neutral": {
+            "cluster": "user",
+            "estimate": 7.450580596923828e-09,
+            "n_clusters": 1,
+            "n_items": 1,
+            "n_users": 1,
+            "share_positive": 1.0
+          },
+          "aligned_minus_swapped": {
+            "cluster": "user",
+            "estimate": NaN,
+            "n_clusters": 0,
+            "n_items": 0,
+            "n_users": 0,
+            "share_positive": NaN
+          },
+          "swapped_minus_neutral": {
+            "cluster": "user",
+            "estimate": NaN,
+            "n_clusters": 0,
+            "n_items": 0,
+            "n_users": 0,
+            "share_positive": NaN
+          }
+        },
+        "wrong_return_pm": {
+          "aligned_minus_neutral": {
+            "cluster": "user",
+            "estimate": 1.3125000074505806,
+            "n_clusters": 3,
+            "n_items": 4,
+            "n_users": 3,
+            "share_positive": 1.0
+          },
+          "aligned_minus_swapped": {
+            "cluster": "user",
+            "estimate": 1.375000011175871,
+            "n_clusters": 2,
+            "n_items": 2,
+            "n_users": 2,
+            "share_positive": 0.5
+          },
+          "swapped_minus_neutral": {
+            "cluster": "user",
+            "estimate": 0.8125000149011612,
+            "n_clusters": 2,
+            "n_items": 2,
+            "n_users": 2,
+            "share_positive": 1.0
+          }
+        }
+      },
+      "primary": {
+        "by_class": {
+          "status": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.389722885378458,
+                1.6523809621709267
+              ],
+              "cluster": "user",
+              "estimate": 1.516198052011412,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8850855745721271
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                1.1073170882337386,
+                1.335093891823625
+              ],
+              "cluster": "user",
+              "estimate": 1.2257029360574658,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8704156479217604
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.1290277918539424,
+                0.4606311469028964
+              ],
+              "cluster": "user",
+              "estimate": 0.29049511595394617,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6014669926650367
+            }
+          },
+          "unavailable": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.17258883178645396,
+                0.34277108242533294
+              ],
+              "cluster": "user",
+              "estimate": 0.2598765453381211,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6790123456790124
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.3885802433262637,
+                -0.26781542205565095
+              ],
+              "cluster": "user",
+              "estimate": -0.32716049139192444,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.28888888888888886
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.5172839431759017,
+                0.6558679722859764
+              ],
+              "cluster": "user",
+              "estimate": 0.5870370367300455,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8296296296296296
+            }
+          }
+        },
+        "by_class_descriptive": {
+          "gc_balance": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.45833332153658074,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.3333333333333333
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.7083332963908712,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.8333333333333334
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -1.1666666179274519,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.16666666666666666
+            }
+          },
+          "wrong_return_pm": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 1.770833350536931,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.9444444444444444
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.8854166804424798,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.75
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": 0.8854166700944511,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.7777777777777778
+            }
+          }
+        },
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.8456307972492477,
+              0.9860311159092884
+            ],
+            "cluster": "user",
+            "estimate": 0.9186623888139213,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7862149532710281
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.40632813070260454,
+              0.5391824072982276
+            ],
+            "cluster": "user",
+            "estimate": 0.4730578295654774,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5899532710280374
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.3637354736497929,
+              0.5257985241727158
+            ],
+            "cluster": "user",
+            "estimate": 0.4456045592484439,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7137850467289719
+          }
+        },
+        "first_flips": {
+          "either": 0.02686915887850467,
+          "n": 856,
+          "toward_failure": 0.016355140186915886,
+          "toward_success": 0.010514018691588784
+        },
+        "first_probability_shift": {
+          "ci": [
+            0.0007946451948418874,
+            0.011982006867155268
+          ],
+          "cluster": "user",
+          "estimate": 0.00650226880037135,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.030969030969030968,
+          "share_positive": 0.5899532710280374
+        },
+        "first_product_clustered": {
+          "ci": [
+            0.3925083835833253,
+            0.5585443129272295
+          ],
+          "cluster": "product",
+          "estimate": 0.4730578295654774,
+          "n_clusters": 56,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.5899532710280374
+        },
+        "first_without_fewshot_tool_classes": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.8219987267463577,
+              0.9645140802212622
+            ],
+            "cluster": "user",
+            "estimate": 0.8911240837034479,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7825552825552825
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.3826768027798206,
+              0.5237145436367342
+            ],
+            "cluster": "user",
+            "estimate": 0.4530866115894031,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.581081081081081
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.3605953903894731,
+              0.5199814087049424
+            ],
+            "cluster": "user",
+            "estimate": 0.43803747211404476,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.714987714987715
+          }
+        },
+        "full": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.5401471976599437,
+              0.9345635410588411
+            ],
+            "cluster": "user",
+            "estimate": 0.7397144188839591,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5887850467289719
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              2.0397446554457144,
+              2.4869126948263425
+            ],
+            "cluster": "user",
+            "estimate": 2.264848736322718,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.772196261682243
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -1.6956092852392037,
+              -1.3502733660508426
+            ],
+            "cluster": "user",
+            "estimate": -1.525134317438761,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.2488317757009346
+          }
+        },
+        "full_norm": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.025233744657453577,
+              0.03833094649141526
+            ],
+            "cluster": "user",
+            "estimate": 0.03182792738310254,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6285046728971962
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.00896779950349763,
+              0.020272675092779142
+            ],
+            "cluster": "user",
+            "estimate": 0.014725245756078292,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6063084112149533
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.010599339577885464,
+              0.023432857963804482
+            ],
+            "cluster": "user",
+            "estimate": 0.017102681627024243,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5549065420560748
+          }
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              -0.12571674530659246,
+              -0.07592378915061714
+            ],
+            "cluster": "user",
+            "estimate": -0.10017523564241618,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.3411214953271028
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              -0.042896680790486516,
+              -0.001836159555925488
+            ],
+            "cluster": "user",
+            "estimate": -0.021904207731240265,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.03296703296703297,
+            "share_positive": 0.38434579439252337
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -0.1079288940397396,
+              -0.0489329274198631
+            ],
+            "cluster": "user",
+            "estimate": -0.07827102791117592,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.37383177570093457
+          }
+        }
+      },
+      "primary_controls": {
+        "discrimination": {
+          "first": {
+            "ci": [
+              0.9921511666740962,
+              1.205813957915403
+            ],
+            "cluster": "user",
+            "estimate": 1.0989932930649111,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9776286353467561
+          },
+          "yn": {
+            "ci": [
+              0.27731092217840064,
+              0.32726269197253466
+            ],
+            "cluster": "user",
+            "estimate": 0.3014541384357734,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8881431767337807
+          }
+        },
+        "discrimination_all_witnesses": {
+          "first": {
+            "ci": [
+              1.6679322521960325,
+              2.006453429028004
+            ],
+            "cluster": "user",
+            "estimate": 1.831775706004086,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9614485981308412
+          },
+          "yn": {
+            "ci": [
+              0.4574353441210656,
+              0.5309941518202163
+            ],
+            "cluster": "user",
+            "estimate": 0.4922605132396881,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9123831775700935
+          }
+        },
+        "discrimination_by_class": {
+          "status": {
+            "evidence": false,
+            "holds": null,
+            "n_items": 0,
+            "note": "no witness of this class is determined by its history (checker UNKNOWN), so there is no discrimination evidence: a null or a reversal in this class is not read as use of the record"
+          },
+          "unavailable": {
+            "evidence": true,
+            "first": {
+              "ci": [
+                0.9335038422325821,
+                1.1065375361248815
+              ],
+              "cluster": "user",
+              "estimate": 1.0197530917443887,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.980246913580247
+            },
+            "holds": true,
+            "n_items": 405
+          }
+        },
+        "fail_minus_witness_effect": {
+          "first": {
+            "ci": [
+              0.03558238399246792,
+              0.13810364974213454
+            ],
+            "estimate": 0.08929614660019494,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.003996003996003996
+          },
+          "yn": {
+            "ci": [
+              0.002518888009285146,
+              0.043915196457295164
+            ],
+            "estimate": 0.023364483961992175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.029970029970029972
+          }
+        },
+        "manipulation": {
+          "ci": [
+            4.264134280551731,
+            4.482654805543453
+          ],
+          "cluster": "user",
+          "estimate": 4.369889015565052,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 1.0
+        },
+        "mention": {
+          "first": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                1.405953795117794,
+                1.5190377835821527
+              ],
+              "cluster": "user",
+              "estimate": 1.462762854206452,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9147196261682243
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                -0.07456006496032537,
+                0.023773922817642314
+              ],
+              "cluster": "user",
+              "estimate": -0.025043808855388365,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.3356643356643357,
+              "share_positive": 0.4053738317757009
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -0.5849514508487665,
+                -0.5019625638759805
+              ],
+              "cluster": "user",
+              "estimate": -0.5441004653925307,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.16355140186915887
+            }
+          },
+          "yn": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                0.197328006002036,
+                0.24118683533578866
+              ],
+              "cluster": "user",
+              "estimate": 0.21874999849421678,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6518691588785047
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                -0.1361740207181926,
+                -0.09567901541454892
+              ],
+              "cluster": "user",
+              "estimate": -0.11623831987206902,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.25934579439252337
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -0.341833726797288,
+                -0.29581850830770473
+              ],
+              "cluster": "user",
+              "estimate": -0.31892523413663293,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.09345794392523364
+            }
+          }
+        },
+        "witness": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.696718932338206,
+                0.889648442406594
+              ],
+              "cluster": "user",
+              "estimate": 0.798481308070673,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7838785046728972
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.32064573364114385,
+                0.44605869378345847
+              ],
+              "cluster": "user",
+              "estimate": 0.38376168296528246,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6226635514018691
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.3175714248323015,
+                0.5034168562497827
+              ],
+              "cluster": "user",
+              "estimate": 0.4147196251053905,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7114485981308412
+            }
+          },
+          "full": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.8787052689594,
+                1.2913372281001587
+              ],
+              "cluster": "user",
+              "estimate": 1.0889757080683375,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6191588785046729
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                3.052215362590369,
+                3.5145603661201674
+              ],
+              "cluster": "user",
+              "estimate": 3.2698825541136505,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8271028037383178
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.393999470762422,
+                -1.9693021184042314
+              ],
+              "cluster": "user",
+              "estimate": -2.180906846045311,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.17873831775700935
+            }
+          },
+          "full_norm": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.09373584794039132,
+                0.12106530553549785
+              ],
+              "cluster": "user",
+              "estimate": 0.1079678106687692,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6518691588785047
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.15314533255718552,
+                0.17551799170311203
+              ],
+              "cluster": "user",
+              "estimate": 0.16378561074657463,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8212616822429907
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.06835072269760858,
+                -0.04397316953512166
+              ],
+              "cluster": "user",
+              "estimate": -0.055817800077805194,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.3364485981308411
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.14259259244542064,
+                -0.08964646404439752
+              ],
+              "cluster": "user",
+              "estimate": -0.11550817737860658,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.27453271028037385
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.062047101089343935,
+                -0.028158522334229535
+              ],
+              "cluster": "user",
+              "estimate": -0.045268691693232437,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.3317757009345794
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.0988649939550721,
+                -0.04262013907290705
+              ],
+              "cluster": "user",
+              "estimate": -0.07023948568537414,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.3469626168224299
+            }
+          }
+        },
+        "write_minus_mention_effect": {
+          "first": {
+            "ci": [
+              0.45495034685705477,
+              0.541336351560375
+            ],
+            "estimate": 0.49810163842086574,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          },
+          "yn": {
+            "ci": [
+              0.07313341382922858,
+              0.11454489503656073
+            ],
+            "estimate": 0.09433411214082876,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          }
+        }
+      },
+      "rules_only_arm": {
+        "first": {
+          "main_minus_rules_only": {
+            "ci": [
+              0.03741867222304005,
+              0.16233941564003376
+            ],
+            "estimate": 0.09712500949529931,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.002997002997002997
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.8222163956042011,
+                1.0225409999099506
+              ],
+              "cluster": "user",
+              "estimate": 0.9215000077013392,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.79
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.38146972043296046,
+                0.5763197191332308
+              ],
+              "cluster": "user",
+              "estimate": 0.4751250054012053,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.566
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.33647451538978734,
+                0.5488520379943241
+              ],
+              "cluster": "user",
+              "estimate": 0.44637500230013394,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.71
+            }
+          },
+          "rules_only": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.9802371543089458,
+                1.1853092758510666
+              ],
+              "cluster": "user",
+              "estimate": 1.083499996329425,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.752
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.271524900496605,
+                0.4898858906259698
+              ],
+              "cluster": "user",
+              "estimate": 0.37799999590590594,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.582
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.6179673213286904,
+                0.7946230663000059
+              ],
+              "cluster": "user",
+              "estimate": 0.7055000004235189,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.766
+            }
+          }
+        },
+        "yn": {
+          "main_minus_rules_only": {
+            "ci": [
+              -0.07440476301751095,
+              -0.009287149521959833
+            ],
+            "estimate": -0.042500000417232515,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.014985014985014986
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.13769157564845577,
+                -0.07431102673134465
+              ],
+              "cluster": "user",
+              "estimate": -0.10550000122189522,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.336
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.05376059651943082,
+                -0.000736743621601337
+              ],
+              "cluster": "user",
+              "estimate": -0.02750000138580799,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.04695304695304695,
+              "share_positive": 0.386
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.11425781142315827,
+                -0.041996049595326775
+              ],
+              "cluster": "user",
+              "estimate": -0.07799999983608723,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.378
+            }
+          },
+          "rules_only": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.01932030000500173,
+                0.05738993485768636
+              ],
+              "cluster": "user",
+              "estimate": 0.017999997720122337,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.37662337662337664,
+              "share_positive": 0.454
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.02091346331513845,
+                0.05142566167167151
+              ],
+              "cluster": "user",
+              "estimate": 0.014999999031424523,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.4085914085914086,
+              "share_positive": 0.436
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.03568052803298251,
+                0.042701861287002485
+              ],
+              "cluster": "user",
+              "estimate": 0.0029999986886978147,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.8941058941058941,
+              "share_positive": 0.468
+            }
+          }
+        }
+      },
+      "unachievable": null
+    },
+    "qwen3-8b-fewshot": {
+      "first_vs_full_agreement": {
+        "max_gap": 0.0,
+        "n": 4155,
+        "ok": true,
+        "share_within_0.05": 1.0
+      },
+      "format": {
+        "first_mass_below_0.5_share": 0.0,
+        "first_mass_median": 0.9999651964107891,
+        "seconds_mean_by_readout": {
+          "first": 1.632144881889757,
+          "full": 3.4233662080417537,
+          "target": 1.6556336173233959,
+          "yn": 1.6310083660864687
+        },
+        "seconds_median_by_readout": {
+          "first": 1.4291,
+          "full": 3.0028,
+          "target": 1.4388,
+          "yn": 1.43
+        },
+        "seconds_total": 82467.94519999993,
+        "target_mass_below_0.5_share": 0.0,
+        "target_mass_median": 0.9999996205144766,
+        "yn_mass_below_0.5_share": 0.0,
+        "yn_mass_median": 0.9999988795079701
+      },
+      "main_pool": {
+        "by_class": {
+          "status": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -1.2551698533082776,
+                -0.6415524960103488
+              ],
+              "cluster": "user",
+              "estimate": -0.9484186667085547,
+              "n_clusters": 294,
+              "n_items": 664,
+              "n_users": 294,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.40210843373493976
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.10937501915366976,
+                0.7806201304717162
+              ],
+              "cluster": "user",
+              "estimate": 0.33019577464004735,
+              "n_clusters": 294,
+              "n_items": 664,
+              "n_users": 294,
+              "perm_p": 0.15384615384615385,
+              "share_positive": 0.5301204819277109
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -1.6757870830103008,
+                -0.8587461122992373
+              ],
+              "cluster": "user",
+              "estimate": -1.278614441348602,
+              "n_clusters": 294,
+              "n_items": 664,
+              "n_users": 294,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.3147590361445783
+            }
+          },
+          "unavailable": {
+            "aligned_minus_neutral": {
+              "ci": [
+                2.641357005711227,
+                3.23567117535446
+              ],
+              "cluster": "user",
+              "estimate": 2.947166896143778,
+              "n_clusters": 292,
+              "n_items": 653,
+              "n_users": 292,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7840735068912711
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                4.536532377982773,
+                5.329511270706317
+              ],
+              "cluster": "user",
+              "estimate": 4.948124027755112,
+              "n_clusters": 292,
+              "n_items": 653,
+              "n_users": 292,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8667687595712098
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.244680863842121,
+                -1.7397445901133557
+              ],
+              "cluster": "user",
+              "estimate": -2.0009571316113353,
+              "n_clusters": 292,
+              "n_items": 653,
+              "n_users": 292,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.22052067381316998
+            }
+          }
+        },
+        "by_class_descriptive": {
+          "gc_balance": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.5000000757032207,
+              "n_clusters": 4,
+              "n_items": 7,
+              "n_users": 4,
+              "share_positive": 0.2857142857142857
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": -0.14285720252831066,
+              "n_clusters": 4,
+              "n_items": 7,
+              "n_users": 4,
+              "share_positive": 0.42857142857142855
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.35714287317491006,
+              "n_clusters": 4,
+              "n_items": 7,
+              "n_users": 4,
+              "share_positive": 0.42857142857142855
+            }
+          },
+          "wrong_return_pm": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 4.772541023317775,
+              "n_clusters": 44,
+              "n_items": 61,
+              "n_users": 44,
+              "share_positive": 0.8688524590163934
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 10.11270488419963,
+              "n_clusters": 44,
+              "n_items": 61,
+              "n_users": 44,
+              "share_positive": 0.9836065573770492
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -5.340163860881854,
+              "n_clusters": 44,
+              "n_items": 61,
+              "n_users": 44,
+              "share_positive": 0.08196721311475409
+            }
+          }
+        },
+        "by_status_matched": {
+          "False": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.359253875542286,
+                1.017257484348774
+              ],
+              "cluster": "user",
+              "estimate": 0.6906899829679728,
+              "n_clusters": 196,
+              "n_items": 529,
+              "n_users": 196,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.5463137996219282
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.7666832663429705,
+                1.7096851021637105
+              ],
+              "cluster": "user",
+              "estimate": 1.242202256204637,
+              "n_clusters": 196,
+              "n_items": 529,
+              "n_users": 196,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.5954631379962193
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -1.0408653691634429,
+                -0.06835203715588324
+              ],
+              "cluster": "user",
+              "estimate": -0.5515122732366643,
+              "n_clusters": 196,
+              "n_items": 529,
+              "n_users": 196,
+              "perm_p": 0.025974025974025976,
+              "share_positive": 0.3553875236294896
+            }
+          },
+          "True": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.0994285535419188,
+                1.7395833262212377
+              ],
+              "cluster": "user",
+              "estimate": 1.4217289595675362,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6366822429906542
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                3.607482155974199,
+                4.347222217042251
+              ],
+              "cluster": "user",
+              "estimate": 3.982622650083302,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7780373831775701
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.8155120383238788,
+                -2.2837957399683693
+              ],
+              "cluster": "user",
+              "estimate": -2.560893690515766,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.20210280373831777
+            }
+          }
+        },
+        "by_swapped_achievable": {
+          "False": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.6875000422647856,
+                1.9160052944133037
+              ],
+              "cluster": "user",
+              "estimate": 1.3105053395176585,
+              "n_clusters": 93,
+              "n_items": 188,
+              "n_users": 93,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.5957446808510638
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.40384616143413,
+                2.2293814465823734
+              ],
+              "cluster": "user",
+              "estimate": 1.321143613906718,
+              "n_clusters": 93,
+              "n_items": 188,
+              "n_users": 93,
+              "perm_p": 0.004995004995004995,
+              "share_positive": 0.5904255319148937
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.8373655720976837,
+                0.8394737170505278
+              ],
+              "cluster": "user",
+              "estimate": -0.010638274389059782,
+              "n_clusters": 93,
+              "n_items": 188,
+              "n_users": 93,
+              "perm_p": 0.981018981018981,
+              "share_positive": 0.42021276595744683
+            }
+          },
+          "True": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.8621742561721761,
+                1.368557756256432
+              ],
+              "cluster": "user",
+              "estimate": 1.116123631203466,
+              "n_clusters": 231,
+              "n_items": 1197,
+              "n_users": 231,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6031746031746031
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                2.8612469303853256,
+                3.521966523038837
+              ],
+              "cluster": "user",
+              "estimate": 3.1895363263066794,
+              "n_clusters": 231,
+              "n_items": 1197,
+              "n_users": 231,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7268170426065163
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.324093594904929,
+                -1.7970317792145676
+              ],
+              "cluster": "user",
+              "estimate": -2.0734126951032144,
+              "n_clusters": 231,
+              "n_items": 1197,
+              "n_users": 231,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.23558897243107768
+            }
+          }
+        },
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.9227239333731468,
+              1.3710545167360693
+            ],
+            "cluster": "user",
+            "estimate": 1.1425090183248148,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6021660649819495
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              2.5952422158917763,
+              3.259811031472542
+            ],
+            "cluster": "user",
+            "estimate": 2.9359205646235087,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7083032490974729
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -2.0690049135985977,
+              -1.5082674302592145
+            ],
+            "cluster": "user",
+            "estimate": -1.793411546298694,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.2606498194945848
+          }
+        },
+        "first_flips": {
+          "either": 0.24404332129963902,
+          "n": 1385,
+          "toward_failure": 0.0555956678700361,
+          "toward_success": 0.1884476534296029
+        },
+        "first_probability_shift": {
+          "ci": [
+            0.11249513562403968,
+            0.15707123205318105
+          ],
+          "cluster": "user",
+          "estimate": 0.13505333410008039,
+          "n_clusters": 295,
+          "n_items": 1385,
+          "n_users": 295,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.7083032490974729
+        },
+        "first_product_clustered": {
+          "ci": [
+            2.597851548129545,
+            3.2765682599696677
+          ],
+          "cluster": "product",
+          "estimate": 2.9359205646235087,
+          "n_clusters": 57,
+          "n_items": 1385,
+          "n_users": 295,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.7083032490974729
+        },
+        "first_without_fewshot_tool_classes": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.7470332219180313,
+              1.2239467865716105
+            ],
+            "cluster": "user",
+            "estimate": 0.9831055341590031,
+            "n_clusters": 295,
+            "n_items": 1317,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5914958238420653
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              2.2681818097669018,
+              2.9713445780926113
+            ],
+            "cluster": "user",
+            "estimate": 2.6198747034814582,
+            "n_clusters": 295,
+            "n_items": 1317,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6970387243735763
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -1.8979323316975993,
+              -1.3499999957350506
+            ],
+            "cluster": "user",
+            "estimate": -1.6367691693224555,
+            "n_clusters": 295,
+            "n_items": 1317,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.2680334092634776
+          }
+        },
+        "full": {
+          "aligned_minus_neutral": {
+            "ci": [
+              -1.5982256421672074,
+              -0.5447517850176142
+            ],
+            "cluster": "user",
+            "estimate": -1.0941078433235525,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.4924187725631769
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.2547385634018425,
+              1.3111711799224581
+            ],
+            "cluster": "user",
+            "estimate": 0.777904514130604,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.005994005994005994,
+            "share_positive": 0.5234657039711191
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -2.342890992291325,
+              -1.368893462448445
+            ],
+            "cluster": "user",
+            "estimate": -1.8720123574541536,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.4642599277978339
+          }
+        },
+        "full_norm": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.028094184676080186,
+              0.07016453506633163
+            ],
+            "cluster": "user",
+            "estimate": 0.04874673563419483,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6057761732851985
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              -0.13822982004352294,
+              -0.09037821541845152
+            ],
+            "cluster": "user",
+            "estimate": -0.11397409780767834,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.3768953068592058
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.1427268142594146,
+              0.18395237844016235
+            ],
+            "cluster": "user",
+            "estimate": 0.1627208334418732,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6953068592057762
+          }
+        },
+        "n_items": 1385,
+        "n_users": 295,
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              4.414586303106633,
+              4.884163692687098
+            ],
+            "cluster": "user",
+            "estimate": 4.655776170662078,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9133574007220217
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              5.911685803328443,
+              6.6458333061539365
+            ],
+            "cluster": "user",
+            "estimate": 6.293321276307736,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8541516245487365
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -1.9508768529670142,
+              -1.3365674302398622
+            ],
+            "cluster": "user",
+            "estimate": -1.6375451056456614,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.4252707581227437
+          }
+        }
+      },
+      "main_pool_controls": {
+        "discrimination": {
+          "first": {
+            "ci": [
+              7.307471254883725,
+              8.089632460116302
+            ],
+            "cluster": "user",
+            "estimate": 7.697122040028317,
+            "n_clusters": 292,
+            "n_items": 721,
+            "n_users": 292,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9500693481276006
+          },
+          "yn": {
+            "ci": [
+              4.481944440152071,
+              4.9757281371729665
+            ],
+            "cluster": "user",
+            "estimate": 4.733356441297518,
+            "n_clusters": 292,
+            "n_items": 721,
+            "n_users": 292,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9431345353675451
+          }
+        },
+        "discrimination_all_witnesses": {
+          "first": {
+            "ci": [
+              6.320492661806825,
+              6.906110666494203
+            ],
+            "cluster": "user",
+            "estimate": 6.606949445657698,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.927797833935018
+          },
+          "yn": {
+            "ci": [
+              6.447077679290429,
+              6.89061364488738
+            ],
+            "cluster": "user",
+            "estimate": 6.6669674967671515,
+            "n_clusters": 295,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9682310469314079
+          }
+        },
+        "discrimination_by_class": {
+          "status": {
+            "evidence": false,
+            "holds": null,
+            "n_items": 0,
+            "note": "no witness of this class is determined by its history (checker UNKNOWN), so there is no discrimination evidence: a null or a reversal in this class is not read as use of the record"
+          },
+          "unavailable": {
+            "evidence": true,
+            "first": {
+              "ci": [
+                7.600850067906607,
+                8.430576627645314
+              ],
+              "cluster": "user",
+              "estimate": 8.014739654084932,
+              "n_clusters": 292,
+              "n_items": 653,
+              "n_users": 292,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9632465543644717
+            },
+            "holds": true,
+            "n_items": 653
+          }
+        },
+        "fail_minus_witness_effect": {
+          "first": {
+            "ci": [
+              -5.675935688472892,
+              -5.008040902413991
+            ],
+            "estimate": -5.337996348288051,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999
+          },
+          "yn": {
+            "ci": [
+              -4.948342708343024,
+              -4.461468193634808
+            ],
+            "estimate": -4.694043288877784,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999
+          }
+        },
+        "manipulation": {
+          "ci": [
+            15.76580874632651,
+            16.837349318827258
+          ],
+          "cluster": "user",
+          "estimate": 16.30487356799609,
+          "n_clusters": 295,
+          "n_items": 1385,
+          "n_users": 295,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.9877256317689531
+        },
+        "mention": {
+          "first": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                1.2711203597967902,
+                1.6208304160469014
+              ],
+              "cluster": "user",
+              "estimate": 1.4376353611822423,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6252707581227437
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                1.1550925915191772,
+                1.5406114377402464
+              ],
+              "cluster": "user",
+              "estimate": 1.3471119150112918,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6592057761732852
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -0.4315564560957019,
+                -0.14308590780065375
+              ],
+              "cluster": "user",
+              "estimate": -0.2951263428574272,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.43104693140794226
+            }
+          },
+          "yn": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                2.706440801542249,
+                3.0463881112508777
+              ],
+              "cluster": "user",
+              "estimate": 2.872743675645918,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8483754512635379
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                2.3347875508957157,
+                2.787033767479544
+              ],
+              "cluster": "user",
+              "estimate": 2.5585739960009706,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7061371841155235
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                1.6336917597012297,
+                1.9385007395504081
+              ],
+              "cluster": "user",
+              "estimate": 1.7830324950161573,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.76028880866426
+            }
+          }
+        },
+        "witness": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                5.523962749312603,
+                6.076393745361363
+              ],
+              "cluster": "user",
+              "estimate": 5.801263479258074,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9010830324909748
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                7.831537321562938,
+                8.707255188836015
+              ],
+              "cluster": "user",
+              "estimate": 8.273916912911561,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9068592057761733
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.805800544925039,
+                -2.1213583424054914
+              ],
+              "cluster": "user",
+              "estimate": -2.472653433653489,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.3111913357400722
+            }
+          },
+          "full": {
+            "aligned_minus_neutral": {
+              "ci": [
+                3.143123291082418,
+                4.1380626251119965
+              ],
+              "cluster": "user",
+              "estimate": 3.6343565805715037,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6779783393501805
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                6.454896258410879,
+                7.616851887449703
+              ],
+              "cluster": "user",
+              "estimate": 7.036198916008695,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7458483754512636
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -3.907606147951617,
+                -2.8389763011771296
+              ],
+              "cluster": "user",
+              "estimate": -3.4018423354371925,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.37545126353790614
+            }
+          },
+          "full_norm": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.4566622990989658,
+                0.5024436877944312
+              ],
+              "cluster": "user",
+              "estimate": 0.47944755999799854,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8967509025270758
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.5875211007835969,
+                0.6437628857591196
+              ],
+              "cluster": "user",
+              "estimate": 0.6158062580592536,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8144404332129964
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.1596457195817349,
+                -0.11335973201415842
+              ],
+              "cluster": "user",
+              "estimate": -0.13635869806125697,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.46859205776173285
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                5.76338941535419,
+                6.160181790401863
+              ],
+              "cluster": "user",
+              "estimate": 5.9606497937299485,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9552346570397112
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                10.510925884422074,
+                11.438820051722992
+              ],
+              "cluster": "user",
+              "estimate": 10.987364565185512,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9783393501805054
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -5.398453950431538,
+                -4.65320230659377
+              ],
+              "cluster": "user",
+              "estimate": -5.0267147714555795,
+              "n_clusters": 295,
+              "n_items": 1385,
+              "n_users": 295,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.17978339350180506
+            }
+          }
+        },
+        "write_minus_mention_effect": {
+          "first": {
+            "ci": [
+              1.3484513123840582,
+              1.8171863866723976
+            ],
+            "estimate": 1.588808649612217,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999
+          },
+          "yn": {
+            "ci": [
+              3.4914407885713166,
+              3.9847321203602664
+            ],
+            "estimate": 3.7347472803067676,
+            "n_items": 1385,
+            "n_users": 295,
+            "perm_p": 0.000999000999000999
+          }
+        }
+      },
+      "matched_arm": {
+        "first": {
+          "main_minus_matched": {
+            "ci": [
+              -0.6054603647041714,
+              -0.2927974631564287
+            ],
+            "estimate": -0.44699997592858404,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.000999000999000999
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.070184404690454,
+                1.841355571131422
+              ],
+              "cluster": "user",
+              "estimate": 1.4539999772815895,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.634
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                3.573412685218239,
+                4.474190271535483
+              ],
+              "cluster": "user",
+              "estimate": 4.008499979780935,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.782
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.9068136203543804,
+                -2.2232313467033586
+              ],
+              "cluster": "user",
+              "estimate": -2.554500002499346,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.188
+            }
+          },
+          "matched": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.033548697200193,
+                1.7131443177255004
+              ],
+              "cluster": "user",
+              "estimate": 1.36599998787679,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.636
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                4.02529757267445,
+                4.923355851246639
+              ],
+              "cluster": "user",
+              "estimate": 4.455499955709519,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.816
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -3.4322429710174536,
+                -2.7613636131583514
+              ],
+              "cluster": "user",
+              "estimate": -3.0894999678327295,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.15
+            }
+          }
+        },
+        "witness_first": {
+          "descriptive": true,
+          "fail_minus_witness_main_same_items": {
+            "ci": [
+              -5.987147150798045,
+              -4.987426015905254
+            ],
+            "estimate": -5.489749975519042,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.000999000999000999
+          },
+          "fail_minus_witness_matched": {
+            "ci": [
+              -7.075095949784903,
+              -6.011174619624511
+            ],
+            "estimate": -6.545749981820703,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.000999000999000999
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                6.031800337498272,
+                6.958333261150487
+              ],
+              "cluster": "user",
+              "estimate": 6.478499938377307,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.926
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                8.923870283938397,
+                10.092942280493254
+              ],
+              "cluster": "user",
+              "estimate": 9.498249955299976,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.958
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -3.5061728441250013,
+                -2.593172498167067
+              ],
+              "cluster": "user",
+              "estimate": -3.0197500169226714,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.238
+            }
+          },
+          "matched": {
+            "aligned_minus_neutral": {
+              "ci": [
+                5.905430608423193,
+                6.834773109833859
+              ],
+              "cluster": "user",
+              "estimate": 6.362499922207755,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.92
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                10.414915907677605,
+                11.639373655745045
+              ],
+              "cluster": "user",
+              "estimate": 11.00124993753022,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.982
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -5.160435307458192,
+                -4.181576428112139
+              ],
+              "cluster": "user",
+              "estimate": -4.638750015322469,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.126
+            }
+          }
+        },
+        "yn": {
+          "main_minus_matched": {
+            "ci": [
+              -0.9189860430671575,
+              -0.6020507585043442
+            ],
+            "estimate": -0.7562499679076006,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.000999000999000999
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                4.8894134989845215,
+                5.724042320672899
+              ],
+              "cluster": "user",
+              "estimate": 5.30524998700457,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.922
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                7.205434743949408,
+                8.352339126799386
+              ],
+              "cluster": "user",
+              "estimate": 7.7764999606112815,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.932
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.8988933429922183,
+                -2.02687136495922
+              ],
+              "cluster": "user",
+              "estimate": -2.4712499736067177,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.392
+            }
+          },
+          "matched": {
+            "aligned_minus_neutral": {
+              "ci": [
+                4.539473669340914,
+                5.245535698301592
+              ],
+              "cluster": "user",
+              "estimate": 4.886749975810845,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.942
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                7.986702067767962,
+                9.077631500945126
+              ],
+              "cluster": "user",
+              "estimate": 8.532749928518879,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.968
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -4.07281304981779,
+                -3.2043172191260023
+              ],
+              "cluster": "user",
+              "estimate": -3.6459999527080416,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.282
+            }
+          }
+        }
+      },
+      "natural": {
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              -2.6298075191448147,
+              0.11693557432075034
+            ],
+            "cluster": "user",
+            "estimate": -1.2633927807015246,
+            "n_clusters": 23,
+            "n_items": 28,
+            "n_users": 23,
+            "perm_p": 0.11388611388611389,
+            "share_positive": 0.42857142857142855
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              -0.4791668361358844,
+              4.210526214847055
+            ],
+            "cluster": "user",
+            "estimate": 1.7763156397125899,
+            "n_clusters": 17,
+            "n_items": 19,
+            "n_users": 17,
+            "perm_p": 0.20279720279720279,
+            "share_positive": 0.5263157894736842
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -3.470237961521652,
+              0.4411766685955841
+            ],
+            "cluster": "user",
+            "estimate": -1.4671050648805117,
+            "n_clusters": 17,
+            "n_items": 19,
+            "n_users": 17,
+            "perm_p": 0.1798201798201798,
+            "share_positive": 0.5263157894736842
+          }
+        },
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              1.3362069495592281,
+              4.555555566008711
+            ],
+            "cluster": "user",
+            "estimate": 2.7410714158432645,
+            "n_clusters": 23,
+            "n_items": 28,
+            "n_users": 23,
+            "perm_p": 0.001998001998001998,
+            "share_positive": 0.7142857142857143
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              3.9027778010238623,
+              8.222222118842069
+            ],
+            "cluster": "user",
+            "estimate": 5.881578964840512,
+            "n_clusters": 17,
+            "n_items": 19,
+            "n_users": 17,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 1.0
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -4.605263099629921,
+              1.0294116480753615
+            ],
+            "cluster": "user",
+            "estimate": -1.8289474288158254,
+            "n_clusters": 17,
+            "n_items": 19,
+            "n_users": 17,
+            "perm_p": 0.24275724275724275,
+            "share_positive": 0.3157894736842105
+          }
+        }
+      },
+      "natural_by_class": {
+        "gc_balance": {
+          "aligned_minus_neutral": {
+            "cluster": "user",
+            "estimate": -2.999999977648258,
+            "n_clusters": 1,
+            "n_items": 1,
+            "n_users": 1,
+            "share_positive": 0.0
+          },
+          "aligned_minus_swapped": {
+            "cluster": "user",
+            "estimate": NaN,
+            "n_clusters": 0,
+            "n_items": 0,
+            "n_users": 0,
+            "share_positive": NaN
+          },
+          "swapped_minus_neutral": {
+            "cluster": "user",
+            "estimate": NaN,
+            "n_clusters": 0,
+            "n_items": 0,
+            "n_users": 0,
+            "share_positive": NaN
+          }
+        },
+        "status": {
+          "aligned_minus_neutral": {
+            "cluster": "user",
+            "estimate": -1.0738635518879198,
+            "n_clusters": 18,
+            "n_items": 22,
+            "n_users": 18,
+            "share_positive": 0.45454545454545453
+          },
+          "aligned_minus_swapped": {
+            "cluster": "user",
+            "estimate": 0.6911763346399227,
+            "n_clusters": 15,
+            "n_items": 17,
+            "n_users": 15,
+            "share_positive": 0.47058823529411764
+          },
+          "swapped_minus_neutral": {
+            "cluster": "user",
+            "estimate": -0.8014704014290426,
+            "n_clusters": 15,
+            "n_items": 17,
+            "n_users": 15,
+            "share_positive": 0.5294117647058824
+          }
+        },
+        "unavailable": {
+          "aligned_minus_neutral": {
+            "cluster": "user",
+            "estimate": -5.00000005972106,
+            "n_clusters": 1,
+            "n_items": 1,
+            "n_users": 1,
+            "share_positive": 0.0
+          },
+          "aligned_minus_swapped": {
+            "cluster": "user",
+            "estimate": NaN,
+            "n_clusters": 0,
+            "n_items": 0,
+            "n_users": 0,
+            "share_positive": NaN
+          },
+          "swapped_minus_neutral": {
+            "cluster": "user",
+            "estimate": NaN,
+            "n_clusters": 0,
+            "n_items": 0,
+            "n_users": 0,
+            "share_positive": NaN
+          }
+        },
+        "wrong_return_pm": {
+          "aligned_minus_neutral": {
+            "cluster": "user",
+            "estimate": -0.9374999201847842,
+            "n_clusters": 3,
+            "n_items": 4,
+            "n_users": 3,
+            "share_positive": 0.5
+          },
+          "aligned_minus_swapped": {
+            "cluster": "user",
+            "estimate": 10.999999732830261,
+            "n_clusters": 2,
+            "n_items": 2,
+            "n_users": 2,
+            "share_positive": 1.0
+          },
+          "swapped_minus_neutral": {
+            "cluster": "user",
+            "estimate": -7.124999704217998,
+            "n_clusters": 2,
+            "n_items": 2,
+            "n_users": 2,
+            "share_positive": 0.5
+          }
+        }
+      },
+      "primary": {
+        "by_class": {
+          "status": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.9962686454551043,
+                -0.19027093905249678
+              ],
+              "cluster": "user",
+              "estimate": -0.5831295820140809,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.004995004995004995,
+              "share_positive": 0.4572127139364303
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                1.6999999875675196,
+                2.525903587912949
+              ],
+              "cluster": "user",
+              "estimate": 2.1179706509213636,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6601466992665037
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -3.0858823042205863,
+                -2.332107811128175
+              ],
+              "cluster": "user",
+              "estimate": -2.701100232935444,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.21026894865525672
+            }
+          },
+          "unavailable": {
+            "aligned_minus_neutral": {
+              "ci": [
+                2.8551682540595964,
+                3.6562499748638815
+              ],
+              "cluster": "user",
+              "estimate": 3.2370370091545952,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                4.852666649037881,
+                5.858231667521158
+              ],
+              "cluster": "user",
+              "estimate": 5.3373456654103695,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8814814814814815
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.3993589753997875,
+                -1.792085453451217
+              ],
+              "cluster": "user",
+              "estimate": -2.100308656255775,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.20987654320987653
+            }
+          }
+        },
+        "by_class_descriptive": {
+          "gc_balance": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.4166667351188759,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.3333333333333333
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.08333327861813207,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.5
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.500000013737008,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.3333333333333333
+            }
+          },
+          "wrong_return_pm": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 4.083333337129787,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.8888888888888888
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 10.576388835598898,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 1.0
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -6.493055498469112,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.0
+            }
+          }
+        },
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              1.0994285535419188,
+              1.7395833262212377
+            ],
+            "cluster": "user",
+            "estimate": 1.4217289595675362,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6366822429906542
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              3.607482155974199,
+              4.347222217042251
+            ],
+            "cluster": "user",
+            "estimate": 3.982622650083302,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7780373831775701
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -2.8155120383238788,
+              -2.2837957399683693
+            ],
+            "cluster": "user",
+            "estimate": -2.560893690515766,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.20210280373831777
+          }
+        },
+        "first_flips": {
+          "either": 0.2266355140186916,
+          "n": 856,
+          "toward_failure": 0.017523364485981307,
+          "toward_success": 0.2091121495327103
+        },
+        "first_probability_shift": {
+          "ci": [
+            0.17147535301112884,
+            0.22121652440120662
+          ],
+          "cluster": "user",
+          "estimate": 0.19632550630693762,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.7780373831775701
+        },
+        "first_product_clustered": {
+          "ci": [
+            3.587289012841334,
+            4.388871750627017
+          ],
+          "cluster": "product",
+          "estimate": 3.982622650083302,
+          "n_clusters": 56,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.7780373831775701
+        },
+        "first_without_fewshot_tool_classes": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.9585889470905316,
+              1.6660493791412807
+            ],
+            "cluster": "user",
+            "estimate": 1.3175675548695969,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6277641277641277
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              3.3401773715870418,
+              4.1127666096714455
+            ],
+            "cluster": "user",
+            "estimate": 3.7197481458452546,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7702702702702703
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -2.6856249961772063,
+              -2.1499364712888447
+            ],
+            "cluster": "user",
+            "estimate": -2.402180590975658,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.21007371007371006
+          }
+        },
+        "full": {
+          "aligned_minus_neutral": {
+            "ci": [
+              -1.3568851376657431,
+              -0.007623089638028584
+            ],
+            "cluster": "user",
+            "estimate": -0.690077896490056,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.04995004995004995,
+            "share_positive": 0.5128504672897196
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              1.2076051045490848,
+              2.595213938967342
+            ],
+            "cluster": "user",
+            "estimate": 1.8782576973837717,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5712616822429907
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -3.1310262092740624,
+              -2.0029129145748685
+            ],
+            "cluster": "user",
+            "estimate": -2.5683355938738277,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.4135514018691589
+          }
+        },
+        "full_norm": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.04530111134880848,
+              0.09839412695454304
+            ],
+            "cluster": "user",
+            "estimate": 0.07169747799287256,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6191588785046729
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              -0.0870993357774199,
+              -0.031632899565701936
+            ],
+            "cluster": "user",
+            "estimate": -0.059333243046370554,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.42289719626168226
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.11202159161990391,
+              0.1509130627814308
+            ],
+            "cluster": "user",
+            "estimate": 0.13103072103924318,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.669392523364486
+          }
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              4.845410627783443,
+              5.566483178866961
+            ],
+            "cluster": "user",
+            "estimate": 5.220064247622243,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9205607476635514
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              7.210322160559636,
+              8.099117612999606
+            ],
+            "cluster": "user",
+            "estimate": 7.678154175085566,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9264018691588785
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -2.754512610052751,
+              -2.151259183891866
+            ],
+            "cluster": "user",
+            "estimate": -2.458089927463324,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.39602803738317754
+          }
+        }
+      },
+      "primary_controls": {
+        "discrimination": {
+          "first": {
+            "ci": [
+              7.086315775922291,
+              8.135150823513925
+            ],
+            "cluster": "user",
+            "estimate": 7.600671129077435,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9530201342281879
+          },
+          "yn": {
+            "ci": [
+              4.430997869161461,
+              5.118801640966843
+            ],
+            "cluster": "user",
+            "estimate": 4.760067101308552,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9507829977628636
+          }
+        },
+        "discrimination_all_witnesses": {
+          "first": {
+            "ci": [
+              6.115106763397239,
+              6.953995156925949
+            ],
+            "cluster": "user",
+            "estimate": 6.531542041815993,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9252336448598131
+          },
+          "yn": {
+            "ci": [
+              6.308832330298976,
+              6.919642837357639
+            ],
+            "cluster": "user",
+            "estimate": 6.612879657600236,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9742990654205608
+          }
+        },
+        "discrimination_by_class": {
+          "status": {
+            "evidence": false,
+            "holds": null,
+            "n_items": 0,
+            "note": "no witness of this class is determined by its history (checker UNKNOWN), so there is no discrimination evidence: a null or a reversal in this class is not read as use of the record"
+          },
+          "unavailable": {
+            "evidence": true,
+            "first": {
+              "ci": [
+                7.361793610288169,
+                8.421874985306166
+              ],
+              "cluster": "user",
+              "estimate": 7.904938266501921,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9629629629629629
+            },
+            "holds": true,
+            "n_items": 405
+          }
+        },
+        "fail_minus_witness_effect": {
+          "first": {
+            "ci": [
+              -5.877205779117177,
+              -5.054228956500992
+            ],
+            "estimate": -5.466121445779516,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          },
+          "yn": {
+            "ci": [
+              -5.3020348308118175,
+              -4.651551265875937
+            ],
+            "estimate": -4.968165848122606,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          }
+        },
+        "manipulation": {
+          "ci": [
+            18.395161188372324,
+            19.47644113528677
+          ],
+          "cluster": "user",
+          "estimate": 18.96699756136956,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 1.0
+        },
+        "mention": {
+          "first": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                1.3594879386183343,
+                1.8321349371975526
+              ],
+              "cluster": "user",
+              "estimate": 1.594042038689347,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6635514018691588
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                1.5889929601180768,
+                2.0212014094166033
+              ],
+              "cluster": "user",
+              "estimate": 1.8081191551085098,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6845794392523364
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -0.35293246523577765,
+                0.013517635414057884
+              ],
+              "cluster": "user",
+              "estimate": -0.17231307912181043,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.07492507492507493,
+              "share_positive": 0.4392523364485981
+            }
+          },
+          "yn": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                2.891383493741081,
+                3.3580729126445523
+              ],
+              "cluster": "user",
+              "estimate": 3.140332941786143,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8679906542056075
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                2.7270231104346903,
+                3.266435982390281
+              ],
+              "cluster": "user",
+              "estimate": 2.992406528281305,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.772196261682243
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                1.8797337349282603,
+                2.288182341531214
+              ],
+              "cluster": "user",
+              "estimate": 2.079731305836103,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8049065420560748
+            }
+          }
+        },
+        "witness": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                5.926593881239364,
+                6.608682876774517
+              ],
+              "cluster": "user",
+              "estimate": 6.273510449566393,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9228971962616822
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                8.962662312983449,
+                9.928993179955242
+              ],
+              "cluster": "user",
+              "estimate": 9.448744095862818,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9591121495327103
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -3.5627847458683544,
+                -2.7855941588213953
+              ],
+              "cluster": "user",
+              "estimate": -3.1752336462964226,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.2441588785046729
+            }
+          },
+          "full": {
+            "aligned_minus_neutral": {
+              "ci": [
+                3.250312425444306,
+                4.580802036433602
+              ],
+              "cluster": "user",
+              "estimate": 3.9506246136482885,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6985981308411215
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                7.439096904885288,
+                9.014182820202187
+              ],
+              "cluster": "user",
+              "estimate": 8.252868347436719,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7815420560747663
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -4.998111353208735,
+                -3.59799066524488
+              ],
+              "cluster": "user",
+              "estimate": -4.302243733788432,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.3341121495327103
+            }
+          },
+          "full_norm": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.46807011348692257,
+                0.5242463749374374
+              ],
+              "cluster": "user",
+              "estimate": 0.4969302568712475,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9182242990654206
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.6472986553159635,
+                0.7133185075407087
+              ],
+              "cluster": "user",
+              "estimate": 0.6815009405182263,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8492990654205608
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.21571047080714104,
+                -0.1511480698396643
+              ],
+              "cluster": "user",
+              "estimate": -0.18457068364697904,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.4205607476635514
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                6.169976602792496,
+                6.713284724657127
+              ],
+              "cluster": "user",
+              "estimate": 6.454439221363778,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.977803738317757
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                12.035756787980777,
+                13.240603588578624
+              ],
+              "cluster": "user",
+              "estimate": 12.646320023208174,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9929906542056075
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -6.666169401487483,
+                -5.716121455956615
+              ],
+              "cluster": "user",
+              "estimate": -6.191880801844392,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.10163551401869159
+            }
+          }
+        },
+        "write_minus_mention_effect": {
+          "first": {
+            "ci": [
+              1.9150413368292682,
+              2.4488304052053946
+            ],
+            "estimate": 2.174503494974792,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          },
+          "yn": {
+            "ci": [
+              4.406686027482261,
+              4.937799729361834
+            ],
+            "estimate": 4.685747646804264,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          }
+        }
+      },
+      "rules_only_arm": {
+        "first": {
+          "main_minus_rules_only": {
+            "ci": [
+              -0.862525464115614,
+              -0.4435483693737697
+            ],
+            "estimate": -0.6542499926651983,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.000999000999000999
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.070184404690454,
+                1.841355571131422
+              ],
+              "cluster": "user",
+              "estimate": 1.4539999772815895,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.634
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                3.573412685218239,
+                4.474190271535483
+              ],
+              "cluster": "user",
+              "estimate": 4.008499979780935,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.782
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.9068136203543804,
+                -2.2232313467033586
+              ],
+              "cluster": "user",
+              "estimate": -2.554500002499346,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.188
+            }
+          },
+          "rules_only": {
+            "aligned_minus_neutral": {
+              "ci": [
+                2.3058252208719496,
+                3.206740429054298
+              ],
+              "cluster": "user",
+              "estimate": 2.7572499786456195,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.736
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                4.158634497002471,
+                5.178425312864608
+              ],
+              "cluster": "user",
+              "estimate": 4.662749972446133,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.814
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.271298162918916,
+                -1.5600413955715122
+              ],
+              "cluster": "user",
+              "estimate": -1.9054999938005135,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.278
+            }
+          }
+        },
+        "yn": {
+          "main_minus_rules_only": {
+            "ci": [
+              -0.6276493489267535,
+              -0.21989793803883428
+            ],
+            "estimate": -0.4147500023341076,
+            "n_items": 500,
+            "n_users": 170,
+            "perm_p": 0.000999000999000999
+          },
+          "main_same_items": {
+            "aligned_minus_neutral": {
+              "ci": [
+                4.8894134989845215,
+                5.724042320672899
+              ],
+              "cluster": "user",
+              "estimate": 5.30524998700457,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.922
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                7.205434743949408,
+                8.352339126799386
+              ],
+              "cluster": "user",
+              "estimate": 7.7764999606112815,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.932
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.8988933429922183,
+                -2.02687136495922
+              ],
+              "cluster": "user",
+              "estimate": -2.4712499736067177,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.392
+            }
+          },
+          "rules_only": {
+            "aligned_minus_neutral": {
+              "ci": [
+                4.936515732923751,
+                5.740041940869252
+              ],
+              "cluster": "user",
+              "estimate": 5.327499995946629,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.886
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                7.506202265541052,
+                8.876682657654147
+              ],
+              "cluster": "user",
+              "estimate": 8.191249962945388,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.916
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -3.3291751102070917,
+                -2.391348056877886
+              ],
+              "cluster": "user",
+              "estimate": -2.8637499669987654,
+              "n_clusters": 170,
+              "n_items": 500,
+              "n_users": 170,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.354
+            }
+          }
+        }
+      },
+      "unachievable": null
+    }
+  },
+  "sensitivity_without_fewshot_tool_classes": {
+    "llama3.1-8b-fewshot": {
+      "primary_ungated_verdict": "small effect, direction positive",
+      "same_category": true,
+      "verdict": "small effect, direction positive"
+    },
+    "qwen3-8b-fewshot": {
+      "primary_ungated_verdict": "replicates (ALFWorld direction)",
+      "same_category": true,
+      "verdict": "replicates (ALFWorld direction)"
+    }
+  },
+  "stale_scores": 0,
+  "token_checks": {
+    "llama3.1-8b-fewshot": {
+      "failure_first": [
+        1480,
+        25,
+        1561
+      ],
+      "first_token_ok": true,
+      "generation_prompt_tail": "|>assistant<|end_header_id|>\n\n",
+      "ids": {
+        " Error": [
+          4703
+        ],
+        " {\"": [
+          5324
+        ],
+        "Error": [
+          1480
+        ],
+        "No": [
+          2822
+        ],
+        "Yes": [
+          9642
+        ],
+        "{\"": [
+          5018
+        ]
+      },
+      "twin_first": [
+        5018,
+        1382,
+        851
+      ],
+      "witness_first": [
+        5018,
+        1382,
+        851
+      ]
+    },
+    "qwen3-8b-fewshot": {
+      "failure_first": [
+        1454,
+        25,
+        1532
+      ],
+      "first_token_ok": true,
+      "generation_prompt_tail": ">assistant\n<think>\n\n</think>\n\n",
+      "ids": {
+        " Error": [
+          4600
+        ],
+        " {\"": [
+          5212
+        ],
+        "Error": [
+          1454
+        ],
+        "No": [
+          2753
+        ],
+        "Yes": [
+          9454
+        ],
+        "{\"": [
+          4913
+        ]
+      },
+      "twin_first": [
+        4913,
+        1358,
+        842
+      ],
+      "witness_first": [
+        4913,
+        1358,
+        842
+      ]
+    }
+  },
+  "verdicts": {
+    "overall": "ALFWorld direction in both models, size met by one (not a replication)",
+    "per_model": {
+      "llama3.1-8b-fewshot": {
+        "discrimination_holds": true,
+        "holm_p": 0.001998001998001998,
+        "manipulation_check_passed": true,
+        "outcome_table": {
+          "discrimination_holds": true,
+          "mention": "the request to act adds to naming the order (write minus mention above 0; an authorization reading predicts this too)",
+          "reading": "The task overrides a visible fact about the named object, more for failing calls than for working ones: the ALFWorld effect in its stronger form (below the 0.5-nat size)",
+          "specificity": "specific to failing calls (fail minus witness above 0)",
+          "witness": "the task shifts predictions for the working call toward success (witness aligned minus swapped, CI above 0)"
+        },
+        "reading": "The task overrides a visible fact about the named object, more for failing calls than for working ones: the ALFWorld effect in its stronger form (below the 0.5-nat size)",
+        "verdict": "small effect, direction positive"
+      },
+      "qwen3-8b-fewshot": {
+        "discrimination_holds": true,
+        "holm_p": 0.001998001998001998,
+        "manipulation_check_passed": true,
+        "outcome_table": {
+          "discrimination_holds": true,
+          "mention": "the request to act adds to naming the order (write minus mention above 0; an authorization reading predicts this too)",
+          "reading": "A general task-consistency bias, or a belief that the backend checks calls against the request: naming the order raises the success belief of calls on it whether they fail or not; reported as goal leakage, not as an override specific to failures",
+          "specificity": "not specific to failing calls (fail minus witness about 0, negative or uncertain)",
+          "witness": "the task shifts predictions for the working call toward success (witness aligned minus swapped, CI above 0)"
+        },
+        "reading": "A general task-consistency bias, or a belief that the backend checks calls against the request: naming the order raises the success belief of calls on it whether they fail or not; reported as goal leakage, not as an override specific to failures",
+        "verdict": "replicates (ALFWorld direction)"
+      }
+    }
+  }
+}
