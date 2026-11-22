@@ -227,7 +227,25 @@ The tokenizer and configuration files of all six repositories (about 0.2 GB) are
 - Jobs: `pace/family_score_serve2.sbatch` (GPU; `WF_WEIGHTS=local` for node-local weights), `pace/families_waveb_gate.sbatch` and `pace/families_envcheck_tokens.sbatch` (CPU).
 - Tests: `tests/test_families_waveb.py`; mutants "families wave B …" in `scripts/mutation_check.py`, which now also names the test that killed each mutant.
 
-## 16. Caveats
+## 16. CPU checks run before the freeze (2026-11-22; no model loaded, no score made)
+
+All on ICE in the checkout `text-wm-fix34`, with tokenizer and configuration files only.
+
+**The gate on every item, every wave B run** (`pace/families_waveb_gate.sbatch`, job 7240542, commit cbad070; the gate code is unchanged since). For each of the seven runs: 9,916 candidates (both candidates of the 4,666 primary items and 292 determined successes) and "Yes"/"No" after all 14,582 yes/no prompts, with 0 problems. Every prompt ends with its model's thinking-off ending; the thinking switch, markers and endings hold on the first item's six prompts; for Ministral 3, all 29,164 scored prompts' ids equal mistral-common's encoding and its default system prompt never appears; Gemma 4 31B passes with its declared suffix. First-token pairs, identical for every run up to the plain format's leading space: `You` against `Nothing` for 4,902 items, `There` 27, `The` 25, `This` 4, as in wave A. Every one of the 29,164 scored prompts per chat run was checked for its thinking-off ending. The environment recorded by the job: transformers 5.23.0, torch 2.14.1+cu126, tokenizers 0.23.3, with `kernels`, `fla`, `causal_conv1d` and `flash_attn` all absent. Answer tokens: Ministral 3 `Yes` 16860 / `No` 4753; Qwen chat `Yes` 9175 / `No` 2665; Qwen plain ` Yes` 7179 / ` No` 2233; Gemma 4 `Yes` 10784 / `No` 3771. Longest input: 1,092 (Gemma 4 E4B) to 1,149 tokens (Qwen3.8). The full per-model records are in that job's `logs/gateB_7240542.json` on ICE.
+
+**Golden renders** (`tests/golden/families_waveb_rendered.json`): the golden item's aligned, swapped and yes/no prompts rendered by each pinned template (or the plain format) in serve2. Each equals the hand-built format of section 5 (`test_golden_render_is_the_documented_format`).
+
+**Environment check, part 1: tokens** (`pace/families_envcheck_tokens.sbatch`, job 7240543). Every prompt, candidate and answer token list (39,082 per model) is identical between the study's tokenizer stack (transformers 4.51.3, tokenizers 0.21.4, torch 2.6.0, rebuilt in the job's node-local folder) and serve2, for Mistral 7B v0.3 (`LlamaTokenizerFast` against `TokenizersBackend`) and Qwen3-8B (`Qwen2TokenizerFast` against `Qwen2Tokenizer`). Part 1 passes; part 2 (scores on a GPU) waits for the freeze.
+
+**Tests in serve2.** `tests/test_families_waveb.py` and `tests/test_families.py` pass in serve2 on ICE with the pinned tokenizers cached (150 passed, none skipped): the wave B golden renders and gates with the real tokenizers, the mocked dry run (every wave B run scored, the placement check, both environment-check runs, `families_envcheck` and `families_waveb_analysis` with the 16-test family, and the same analysis blocked by a failed environment check), and wave A's own template and gate tests under transformers 5.
+
+**Mutation check.** 72 wave B mutants, all killed, each by a named test in `tests/test_families_waveb.py` (40 different tests); the list with each killing test is `notes/families_waveb_mutants.txt`. Full local suite: 858 passed, 66 skipped (the skips need transformers or cached tokenizers).
+
+**Not yet checked, because it needs the weights:** the loading check (missing or unexpected tensors, device placement) and the speed of each wave B model. Both are checked at the start of each scoring job, before its first score; a failure stops the job.
+
+**Open before any scoring:** an independent review of this design and its code (and fixes until a round finds no must-fix issue), the annotated freeze tag, and the storage decision (section 13). Then the environment check's part 2.
+
+## 17. Caveats
 
 - **Descriptive comparisons.** Every comparison changes developer or release, data, tokenizer, template and training at once; the base-against-instruct pair is one pair in one format.
 - **Formats differ within pairs.** Ministral 3 puts the system text first where Mistral 7B put it last; Gemma 4 has a system turn where Gemma 2 had the text folded into the first user turn (placement check); Qwen3.8 writes empty think blocks into the example replies where Qwen3.5 does not.

@@ -803,8 +803,14 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root):
     (mock_root / "families_envcheck" / "metrics.json").write_text(json.dumps({**m, "pass": False}))
     assert families.run_families_analysis({**cfg, "run_id": "families_waveb_analysis_blocked"}) == 0
     rep = json.loads((mock_root / "families_waveb_analysis_blocked" / "metrics.json").read_text())
-    assert rep["environment_check"]["pass"] is False
+    assert rep["environment_check"]["pass"] is False and rep["primary_family"]["environment_check_passed"] is False
     assert not any(v["verdict"] in ("supported", "not supported") for v in rep["primary_family"]["tests"].values())
+    # the mock models may fail the competence gate; whatever would have been read is now blocked
+    unblocked = json.loads((mock_root / "families_waveb_analysis" / "metrics.json").read_text())["primary_family"]
+    for k, v in unblocked["tests"].items():
+        if v["verdict"] in ("supported", "not supported"):
+            assert rep["primary_family"]["tests"][k]["verdict"] == families.ENVIRONMENT_BLOCKED
+    assert unblocked["environment_check_passed"] is True
 
 
 def test_envcheck_fails_without_the_token_comparison(mock_root):
