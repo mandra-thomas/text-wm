@@ -755,4 +755,7 @@ The answers are mutually exclusive:
 
 ### 15.T Checks after review 2
 
-*(Filled in by the run below.)*
+- **Records and prompts.** Unchanged (sha256 `e6da991f…`). The verification and the ICE tokenization check of 14.C stand.
+- **Tests.** `tests/test_textcraft_r2.py` holds 132 tests. The full suite was run once at the end, at 53665c5: 994 passed, 7 skipped.
+- **Mutants.** The official run at ef73d40 (four shards; log `notes/textcraft_r2_mutation_log.txt`) killed 136 of 137 round-2 mutants. The one survivor had become equivalent once the role-gap readout read the shared row set, and it was removed together with the redundant guard it targeted. All 136 remaining mutants are killed, each by a named test (`notes/testing.md`). A screen run first found two of review 2's mutants (N11, N13) unkilled; tests for both were added before the official run.
+- **What has not been run.** No model has scored any round-2 record.
