@@ -531,3 +531,10 @@ No design rule changed. What was built and checked:
   gave a mean difference of exactly 0; the test now has users that differ in that number and the mutant is killed.
   Six older mutants in the same file (targeting rewritten code in `wf/runs.py`) were already inapplicable at the
   base commit; they are untouched and outside this extension.
+- **Tests.** `tests/test_tau_families.py`: 60 tests (57 run everywhere; the 3 rendered-prompt tests need the pinned
+  tokenizers and skip elsewhere, and their check passed on ICE through the golden script). Full suite at 137dd01:
+  957 passed, 10 skipped.
+- **Status.** Steps 1 (design), 7 (prompt integrity and tokenization per model) and 8 (mutation testing) are done for
+  the extension; steps 2 to 6 are inherited unchanged from the τ-bench build (the items are the same files). Not yet
+  done: the independent engineering and scientific-validity reviews (steps 9 and 9b), the freeze at an annotated tag,
+  the smoke run, scoring and the results check. Nothing has been scored.
