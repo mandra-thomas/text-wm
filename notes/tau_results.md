@@ -17,7 +17,7 @@ Overall verdict, by the joint rule fixed in advance: **ALFWorld direction in bot
 
 ## What each model's effect is, by the pre-registered reading table
 
-- **Qwen3-8B: a general task-consistency bias.** The pre-registered table's label here is "not specific to failing calls (fail minus witness about 0, negative or uncertain)". The value is in fact strongly negative: fail minus witness is −5.47 [−5.88, −5.05] (`tau_dx.md`, branch `tau-dx`). So the working witness call on the same order moves more than twice as much as the failing call. Naming the order raises Qwen's predicted success for calls on it, working calls more than failing ones. By the table this is read as goal leakage, not as an override specific to failures. A smaller part, about 1 nat, is consistent with a belief that the backend refuses writes the user did not request.
+- **Qwen3-8B: a general task-consistency bias.** The pre-registered table's label here is "not specific to failing calls (fail minus witness about 0, negative or uncertain)". The value is in fact strongly negative: fail minus witness is −5.47 [−5.88, −5.05] ([tau_dx.md](tau_dx.md)). So the working witness call on the same order moves more than twice as much as the failing call. Naming the order raises Qwen's predicted success for calls on it, working calls more than failing ones. By the table this is read as goal leakage, not as an override specific to failures. A smaller part, about 1 nat, is consistent with a belief that the backend refuses writes the user did not request.
 - **Llama-3.1-8B: small, and not robustly failure-specific.** By the pre-registered table, the failing call moves more than the witness, which reads as the ALFWorld effect in its stronger form, below the 0.5-nat size. The exploratory analysis (`tau_dx.md`) qualifies this:
   - the failure-specific part is +0.09 [0.04, 0.14] and comes from two cells (exchanges on pending orders, and returns);
   - the pooled +0.47 averages +1.23 on order-status failures with −0.33 on unavailable-variant failures;
@@ -41,7 +41,7 @@ Overall verdict, by the joint rule fixed in advance: **ALFWorld direction in bot
 
 ## Reading and limits
 
-*(Corrected 2026-11-22 from the exploratory analysis in `tau_dx.md`, branch `tau-dx`; the pre-registered verdicts are unchanged.)*
+*(Corrected 2026-11-22 from the exploratory analysis in [tau_dx.md](tau_dx.md); the pre-registered verdicts are unchanged.)*
 
 - τ-bench is the third environment. Qwen3-8B shows a large positive effect here, as in ALFWorld and TextCraft, but in τ-bench it is not specific to failing calls: naming the order raises its predicted success for working calls too. Llama-3.1-8B shows a small effect that is specific to failing calls.
 - Against the neutral line, Qwen's effect is largely the swapped task lowering predicted success (−2.56), the same pattern as in TextCraft.
