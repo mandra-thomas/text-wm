@@ -154,7 +154,10 @@ Fix round 1 (after review 1, before any score) adds tests for: odd-step states l
 
 `tests/test_decisionsim_agent.py` (93 tests) covers `wf/decisionsim_agent.py`. On synthetic data: the candidate lists (rank 1 is the recorded greedy action even when never sampled, its sampled variants merged into it, the rest by count with the seeded hash for ties and independent of reply order, format errors counted and never turned into `look`, the cut at `k_max`, normalisation and its per-list count, the action key shared by both lists), the sampling settings of both lists, the greedy diagnostic and its comparison of normalised actions, a pinned seed value, bookkeeping (identical replies, truncation, greedy agreement and the 90% drift rule at its boundary), the seed check (primary settings, sequences not multisets, the same-seed repeat) and the smoke gate (format errors, replay mismatches, a non-degenerate seed-check state, the required truncation and agreement readouts); the verifier prompts (for each model the aware, blind, swapped and neutral prompts differ only in the query's task line, examples keep theirs, the aware, swapped and neutral prompts equal the earlier `yn_*` prompts), the blind deletion's guards, the blind-only rule at single-candidate states; list views (each list's order over shared labels, runnable candidates only, the sampled-twice and first-occurrence filters); the selection rules; regime, encounter, strict encounter, reachability, step bands (encounters, not reachable ones); the futility rule after review 2 (games with an encounter state that also lists a working candidate, the 6- and 7-game boundary, review 2's 8-game counterexample that is significant with no reachable encounter); harm and help with the identity and the kinds of harm counted on harm states only; the sign-flip floor; leave-one-game-out; the decomposition and the attribution rule; whole-game bootstrap and permutation; Holm; the verdict reading the Holm p; the verdict boundaries (a lower bound of exactly zero; a regime share of exactly one half carries no suffix, below it the "not evidence for the main finding" suffix); a failed gate entering Holm with p = 1; the overall and conditional blocks each reading their own p, decomposition and states; the AUC and the competence thresholds; the model report and every sensitivity, the temperature-1 readouts reading the temperature-1 lists; shards with different settings refused; the run-order check (nothing written, another label run, an analysis with models, an unfinished one, a logged override); progress events; the swap object, which excludes every candidate of both lists. On the simulator, with the mock agent and scorer: everything listed for review 1, plus scoring refusing to start before the model-free analysis of the same labels, the logged override, the model-free analysis reporting the temperature-1 encounters from the temperature-1 lists, the labelling budget counting the next state, and the request settings and normalisation counts recorded by a sampling shard.
 
-`scripts/mutants_decisionsim_agent.py` holds 157 Stage 1b mutants (`MUTANTS_MATCHING="dsa "`): the review-1 list (two adapted to the code changed after review 2), review 2's 42 mutants (adapted where the code had changed; named "review2 ..."), and 13 mutants of the code added after review 2. All 157 are caught, by the per-mutant runs below and by `scripts/mutation_check.py` in six shards (2026-11-21). Review 2's A6, A9 and B4 and two new run-order mutants first survived and were killed by tests added for them. The table gives, for each, the first test in `tests/test_decisionsim_agent.py` that fails with the mutant in place (run with `-x`).
+
+**After review 3 (2026-11-22).** Eight more tests (101 in all) cover the additions: one changed state per path (a abstained, b abstained, a accepted what b rejected, a rejected what b chose) counted by outcome cell and step band, with unchanged states in no path; each decomposition part with its own paths; the hybrid verifiers (their arms, choices, fallbacks and differences against blind); acceptance by rank 1 against alternatives, outcome and step band, the aware-minus-swapped and swapped-minus-blind shifts and the step-0 headline; inert readouts by step band (step 1 counts as later); a "not attributable" toward-failure verdict with mostly non-regime harm getting the suffix; and the run-order check comparing the label hashes the model-free analysis read with those the scorer reads, also end to end (labels edited after the analysis are refused).
+
+`scripts/mutants_decisionsim_agent.py` holds 175 Stage 1b mutants (`MUTANTS_MATCHING="dsa "`): the review-1 list, review 2's 42 (adapted), the mutants of the code added after review 2, and 19 mutants of the code added after review 3 (two earlier mutants re-adapted to the changed `choose` and `inert`). All 175 are caught; the table below is from the per-mutant run on the final code (2026-11-22). Four review-3 mutants first survived: three were killed by sharpened tests (step 1 in the later band; the swapped-minus-blind paths; the swapped-minus-blind shift), and one ("acceptance rank 1 by its greedy flag") is equivalent, because in a usable state the first runnable candidate is always the agent's own rank-1 action, so it was left out. R30 (review 1) is also equivalent. The table gives, for each, the first test in `tests/test_decisionsim_agent.py` that fails with the mutant in place (run with `-x`).
 
 | Mutant | First test that fails |
 |---|---|
@@ -256,7 +259,6 @@ Fix round 1 (after review 1, before any score) adds tests for: odd-step states l
 | smoke gate ignores the seed check | `test_bookkeeping_flags_identical_replies_drift_and_seed_check` |
 | neutral arm never scored | `test_arms_at_a_single_candidate_state_is_blind_only` |
 | neutral arm shows the real task | `test_each_arm_differs_only_in_the_query_task_line[llama3.1-8b]` |
-| inert rank-1 share counts fallbacks only | `test_model_report_parts_add_up_and_readouts` |
 | harm share from all failures | `test_harm_kinds_count_harm_states_only` |
 | review2 S1 seed check uses t1 params | `test_seed_check_uses_the_primary_settings_and_compares_sequences` |
 | review2 S2 seed check compares sorted multiset | `test_seed_check_uses_the_primary_settings_and_compares_sequences` |
@@ -315,3 +317,22 @@ Fix round 1 (after review 1, before any score) adds tests for: odd-step states l
 | precision floor off by one | `test_precision_script_floor_and_holm_threshold` |
 | format error becomes look | `test_format_errors_count_and_add_no_candidate` |
 | seed check reads one seed | `test_seed_check_flags_a_seed_that_changes_nothing` |
+| paths: abstention read from the other side | `test_change_paths_by_path_outcome_and_step_band` |
+| paths: rank order reversed | `test_change_paths_by_path_outcome_and_step_band` |
+| paths: abstention ignored | `test_change_paths_by_path_outcome_and_step_band` |
+| step band includes step 1 | `test_inert_split_by_step_band` |
+| paths: harm and help swapped | `test_change_paths_by_path_outcome_and_step_band` |
+| paths not in the contrast | `test_change_paths_by_path_outcome_and_step_band` |
+| decomposition part paths reversed | `test_decomposition_parts_get_their_own_paths` |
+| decomposition swapped-blind paths from aware | `test_decomposition_parts_get_their_own_paths` |
+| hybrid arms reversed | `test_hybrid_verifiers` |
+| hybrid judges every candidate by its rank-1 arm | `test_hybrid_verifiers` |
+| hybrid difference against aware | `test_hybrid_verifiers` |
+| acceptance ignores the step band | `test_acceptance_by_position_and_step_band_and_every_decomposition_shift` |
+| headline reads later steps | `test_acceptance_by_position_and_step_band_and_every_decomposition_shift` |
+| aware-swapped shift reversed | `test_acceptance_by_position_and_step_band_and_every_decomposition_shift` |
+| swapped-blind shift from aware | `test_acceptance_by_position_and_step_band_and_every_decomposition_shift` |
+| inert bands not split | `test_inert_split_by_step_band` |
+| run order skips the label hashes | `test_run_order_check_compares_the_label_hashes` |
+| scorer passes no label files | `test_scoring_refuses_labels_changed_after_the_model_free_analysis` |
+| inert rank-1 share counts fallbacks only | `test_model_report_parts_add_up_and_readouts` |

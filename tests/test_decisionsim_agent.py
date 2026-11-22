@@ -481,7 +481,7 @@ def test_model_report_parts_add_up_and_readouts():
     assert rep["by_encounter"]["parts_add_up"] and rep["by_encounter"]["encounter_states"] == 1
     assert rep["primary"]["identity_holds"] and rep["conditional"]["n_states"] == 1
     assert rep["conditional"]["difference"]["estimate"] == 1.0  # the harm state is the encounter state
-    assert rep["inert"]["aware"] == {"fallback_rate": 0.0, "rank1_share": 0.25}
+    assert {k: rep["inert"]["aware"][k] for k in ("fallback_rate", "rank1_share")} == {"fallback_rate": 0.0, "rank1_share": 0.25}
     assert rep["inert"]["blind"]["rank1_share"] == 0.75
     assert set(rep["sensitivity"]) == {"game_weighted", "first_12_steps", "k_2", "k_4", "fallback_max_L", "t1_list",
                                        "t1_list_conditional", "sampled_twice", "first_occurrence_of_failures"}
@@ -1402,3 +1402,128 @@ def test_run_order_check_cases(tmp_path, monkeypatch):
     _fake_analysis(tmp_path, "mf", label_source="other")
     r = A.run_order_check({**cfg, "run_order_override": "why not"})
     assert r["ok"] and r["override"] == "why not" and "another label run" in r["would_have_refused"]
+
+
+# ---------------- review 3 ----------------
+
+
+def _path_states():
+    """One changed state per path (aware against blind), at step 0 or later."""
+    ab = _state([_cand(1, False), _cand(2, True)], game="g1", t=0)  # aware abstains (works), blind takes the failure
+    bb = _state([_cand(1, False), _cand(2, True)], game="g2", t=4)  # blind abstains, aware takes the failure
+    acc = _state([_cand(1, True), _cand(2, True, goal=True), _cand(3, False)], game="g3", t=3)  # aware takes rank 2
+    rej = _state([_cand(1, False), _cand(2, True)], game="g4", t=0)  # aware rejects the working rank 1 blind takes
+    same = _state([_cand(1, False), _cand(2, True)], game="g5", t=7)  # both take rank 1
+    states = [ab, bb, acc, rej, same]
+    L = _scores(states, {A.AWARE: [[-1, -1], [-1, 1], [-1, 1, 1], [-1, 1], [1, 1]],
+                         A.BLIND: [[-1, 1], [-1, -1], [-1, -1, 1], [1, 1], [1, 1]],
+                         A.SWAPPED: [[-1, -1], [-1, -1], [-1, -1, 1], [1, 1], [1, 1]]})
+    return states, L
+
+
+def test_change_paths_by_path_outcome_and_step_band():
+    states, L = _path_states()
+    paths = A.change_paths(states, L, "aware", "blind")
+    zero = {"step_0": 0, "later": 0}
+    assert paths["a_abstained"]["help"] == {"step_0": 1, "later": 0}
+    assert paths["b_abstained"]["harm"] == {"step_0": 0, "later": 1}
+    assert paths["a_accepted_what_b_rejected"]["harm"] == {"step_0": 0, "later": 1}
+    assert paths["a_rejected_what_b_chose"]["harm"] == {"step_0": 1, "later": 0}
+    total = sum(v for p in paths.values() for cell in p.values() for v in cell.values())
+    assert total == 4  # the unchanged state is in no path
+    assert paths["a_abstained"]["harm"] == zero and paths["a_rejected_what_b_chose"]["help"] == zero
+    c = A.contrast(states, L, "aware", "blind")
+    assert c["paths"] == paths and c["changed"]["harm"] == 3 and c["changed"]["help"] == 1
+    assert A.change_path("aware", "blind", states[4], L, A.choose("aware", states[4], L), A.choose("blind", states[4], L)) is None
+
+
+def test_decomposition_parts_get_their_own_paths():
+    states, L = _path_states()
+    dec = A.decomposition(states, L)
+    assert set(dec["paths"]) == {"aware_vs_blind", "aware_vs_swapped", "swapped_vs_blind"}
+    assert dec["paths"]["aware_vs_blind"] == A.change_paths(states, L, "aware", "blind")
+    # swapped abstains at the first two states as aware does at the first: aware vs swapped differs only where they do
+    sw = dec["paths"]["aware_vs_swapped"]
+    assert sw["b_abstained"]["harm"] == {"step_0": 0, "later": 1}  # g2: swapped abstains, aware takes the failure
+    assert sw["a_rejected_what_b_chose"]["harm"] == {"step_0": 1, "later": 0}  # g4
+    sb = dec["paths"]["swapped_vs_blind"]
+    assert sb["a_abstained"]["help"] == {"step_0": 1, "later": 0}  # g1: swapped abstains, blind takes the failure
+    assert sum(v for p in sb.values() for cell in p.values() for v in cell.values()) == 1  # only g1 differs
+
+
+def test_hybrid_verifiers():
+    s = _state([_cand(1, False), _cand(2, True)], game="g1", t=0)
+    L = _scores([s], {A.AWARE: [[-1, 1]], A.BLIND: [[1, 1]]})
+    assert A.arm_for("hybrid_aware_rank1", True) == A.AWARE and A.arm_for("hybrid_aware_rank1", False) == A.BLIND
+    assert A.arm_for("hybrid_blind_rank1", True) == A.BLIND and A.arm_for("hybrid_blind_rank1", False) == A.AWARE
+    assert A.choose("hybrid_aware_rank1", s, L)["rank"] == 2  # aware rejects rank 1, blind accepts rank 2
+    assert A.choose("hybrid_blind_rank1", s, L)["rank"] == 1  # blind accepts rank 1
+    L2 = _scores([s], {A.AWARE: [[1, -1]], A.BLIND: [[-1, 1]]})
+    assert A.fell_back("hybrid_blind_rank1", s, L2) and not A.fell_back("hybrid_aware_rank1", s, L2)
+    labs = [_lab(s["candidates"], game="g1", t=0)]
+    rep = A.model_report(labs, L, L)
+    assert rep["hybrid"]["hybrid_aware_rank1"]["minus_blind"]["estimate"] == 1.0
+    assert rep["hybrid"]["hybrid_blind_rank1"]["minus_blind"]["estimate"] == 0.0
+
+
+def test_acceptance_by_position_and_step_band_and_every_decomposition_shift():
+    s0 = _state([_cand(1, False), _cand(2, True)], game="g1", t=0)
+    s1 = _state([_cand(1, False), _cand(2, True)], game="g2", t=5)
+    L = _scores([s0, s1], {A.AWARE: [[-1, 1], [1, -1]], A.BLIND: [[1, -1], [1, -1]], A.SWAPPED: [[1, -1], [1, 1]]})
+    acc = A.acceptance([s0, s1], L, L)
+    g = acc[A.AWARE]["by_group"]
+    assert g["rank1/success/step_0"] == {"n": 1, "yes_rate": 0.0} and g["rank1/success/later"]["yes_rate"] == 1.0
+    assert g["alternative/failure/step_0"]["yes_rate"] == 1.0 and g["alternative/failure/later"]["yes_rate"] == 0.0
+    assert acc["headline_yes_rate_working_rank1_step_0"] == {A.AWARE: 0.0, A.BLIND: 1.0, A.SWAPPED: 1.0}
+    assert acc["aware_minus_swapped"]["alternative/failure/step_0"]["yes_rate_shift"] == 1.0
+    assert acc["aware_minus_swapped"]["rank1/success/step_0"]["yes_rate_shift"] == -1.0
+    assert acc["swapped_minus_blind"]["rank1/success/step_0"]["yes_rate_shift"] == 0.0
+    assert acc["swapped_minus_blind"]["alternative/failure/later"]["yes_rate_shift"] == 1.0
+    assert acc["aware_minus_blind"]["rank1/success/step_0"]["yes_rate_shift"] == -1.0
+
+
+def test_inert_split_by_step_band():
+    s0 = _state([_cand(1, False), _cand(2, True)], game="g1", t=0)
+    s1 = _state([_cand(1, False), _cand(2, True)], game="g2", t=1)  # step 1 is a later step
+    s2 = _state([_cand(1, False), _cand(2, True)], game="g3", t=6)
+    L = _scores([s0, s1, s2], {A.AWARE: [[-1, -1], [-1, 1], [1, 1]], A.BLIND: [[1, 1]] * 3})
+    out = A.inert([s0, s1, s2], L)["aware"]
+    assert out["step_0"] == {"n_states": 1, "fallback_rate": 1.0, "rank1_share": 1.0}
+    assert out["later"] == {"n_states": 2, "fallback_rate": 0.0, "rank1_share": 0.5}
+    assert out["fallback_rate"] == pytest.approx(1 / 3)
+
+
+def test_a_not_attributable_verdict_from_non_regime_harm_gets_the_suffix_too():
+    m = _model(0.01, [0.001, 0.02], regime_share=0.2)
+    m["decomposition"] = {"n_states": 50, "aware_minus_blind": {"estimate": 0.02}, "aware_minus_swapped": {"estimate": 0.001}}
+    models = {"llama3.1-8b": m, "mistral-7b-v0.3": _model(0.5, [-0.01, 0.02])}
+    v = A.primary_block(models, list(A.PRIORITY), set(), "primary", "decomposition")["per_model"]["llama3.1-8b"]["verdict"]
+    assert v == ("toward failure, not attributable to the real task (not evidence for the main finding: harm mostly "
+                 "from non-regime actions)")
+
+
+def test_run_order_check_compares_the_label_hashes(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNS_DIR", str(tmp_path))
+    lab = tmp_path / "lab.jsonl"
+    lab.write_text("one\n")
+    _fake_analysis(tmp_path, "mf")
+    from wf.util import file_sha
+
+    (tmp_path / "mf" / "inputs.json").write_text(json.dumps({"inputs": {"/elsewhere/labels.jsonl": file_sha(lab)}}))
+    cfg = {"label_source": "dsa_label", "model_free_analysis": "mf"}
+    assert A.run_order_check(cfg, [lab])["ok"]  # same contents, wherever they were read from
+    lab.write_text("two\n")
+    r = A.run_order_check(cfg, [lab])
+    assert not r["ok"] and "labels changed" in r["why"]
+    assert A.run_order_check(cfg)["ok"]  # without label files only the run is checked
+
+
+def test_scoring_refuses_labels_changed_after_the_model_free_analysis(mock_runs):
+    root, _, _ = mock_runs
+    assert _sample(0, n=1) == 0 and _label(0, n=1) == 0 and _model_free() == 0
+    p = root / "dsa_label" / "shard_00_of_01" / "labels.jsonl"
+    rows = read_jsonl(p)
+    rows[0]["note"] = "edited after the analysis"
+    _rewrite(p, rows)
+    assert _score("qwen3-8b", model_free=False) == 1
+    assert "labels changed" in (root / "dsa_score_qwen3-8b" / "shard_00_of_01" / "STATUS.md").read_text()

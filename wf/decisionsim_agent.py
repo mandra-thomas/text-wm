@@ -51,7 +51,7 @@ from wf.env.replay import history_text_from_state, replay, step_counterfactual
 from wf.env.scene import Scene, scan_scene
 from wf.runs import _client, _init_run
 from wf.scoring.prompts import agent_react_messages, parse_react_action
-from wf.util import append_jsonl, read_jsonl, repair_jsonl, require_filed, runs_root, write_json, write_status
+from wf.util import append_jsonl, file_sha, read_jsonl, repair_jsonl, require_filed, runs_root, write_json, write_status
 
 NOTHING = "Nothing happens."
 SEED = C.RNG_SEED
@@ -685,10 +685,11 @@ SCORE_OUTPUTS = ("scoring.jsonl",)
 MODEL_FREE_RUN = "decisionsim_agent_encounter"
 
 
-def run_order_check(cfg: dict) -> dict[str, Any]:
+def run_order_check(cfg: dict, label_files: list[Path] | None = None) -> dict[str, Any]:
     """Verifiers are scored only after the model-free analysis of the same labels has been written (its encounter
-    readouts and the futility rule are read first). An explicit, logged override is allowed: `run_order_override`
-    with the reason."""
+    readouts and the futility rule are read first): same label run, and (review 3) the label files it read have the
+    hashes of the files the scorer reads. An explicit, logged override is allowed: `run_order_override` with the
+    reason."""
     name = cfg.get("model_free_analysis", MODEL_FREE_RUN)
     d = resolve_run(name)
     why = None
@@ -703,6 +704,10 @@ def run_order_check(cfg: dict) -> dict[str, Any]:
             why = f"{name} is not a model-free analysis (it lists models)"
         elif "REPORTED" not in status:
             why = f"{name} did not finish: {status or 'no status'}"
+        elif label_files is not None:
+            read = json.loads((d / "inputs.json").read_text(encoding="utf-8"))["inputs"] if (d / "inputs.json").exists() else {}
+            if sorted(read.values()) != sorted(file_sha(p) for p in label_files):
+                why = f"the labels changed since {name} read them"
     if why and cfg.get("run_order_override"):
         return {"ok": True, "model_free_analysis": name, "override": str(cfg["run_order_override"]), "would_have_refused": why}
     if why:
@@ -729,7 +734,7 @@ def run_decisionsim_agent_score(cfg: dict) -> int:
     if problems:
         write_status(run_id, "scoring waits for every labelling shard:\n" + "\n".join(problems), ok=False)
         return 1
-    order = run_order_check(cfg)
+    order = run_order_check(cfg, [p / "labels.jsonl" for p in folders])
     if not order["ok"]:
         write_status(run_id, "scoring waits for the model-free analysis (design note, futility rule): "
                      + order["why"], ok=False)
@@ -840,20 +845,30 @@ def choose(config: str, state: dict, L: dict[str, dict[str, float]] | None = Non
         return cands[0]
     if config == "oracle":
         return next((c for c in cands if not c["failed"]), cands[0])
-    arm = CONFIG_ARM[config]
-    sc = L[arm]
     ids = [cand_id(state, c) for c in cands]
-    for c, cid in zip(cands, ids):
-        if accepts(sc, cid):
+    arms = [arm_for(config, i == 0) for i in range(len(cands))]
+    for c, cid, arm in zip(cands, ids, arms):
+        if accepts(L[arm], cid):
             return c
     if fallback == "max_L":
-        return max(zip(cands, ids), key=lambda ci: (sc[ci[1]], -ci[0]["rank"]))[0]
+        return max(zip(cands, ids, arms), key=lambda x: (L[x[2]][x[1]], -x[0]["rank"]))[0]
     return cands[0]
 
 
+# Hybrid verifiers (review 3, descriptive): one arm judges the agent's rank-1 action, the other the alternatives.
+HYBRIDS = {"hybrid_aware_rank1": (AWARE, BLIND), "hybrid_blind_rank1": (BLIND, AWARE)}
+
+
+def arm_for(config: str, first: bool) -> str:
+    """The arm that judges a candidate under a verifier configuration (for a hybrid, by whether it is rank 1)."""
+    if config in HYBRIDS:
+        return HYBRIDS[config][0] if first else HYBRIDS[config][1]
+    return CONFIG_ARM[config]
+
+
 def fell_back(config: str, state: dict, L: dict[str, dict[str, float]]) -> bool:
-    arm = CONFIG_ARM[config]
-    return not any(accepts(L[arm], cand_id(state, c)) for c in scored_candidates(state))
+    """The verifier accepted nothing, so the agent acts on rank 1 (it abstained)."""
+    return not any(accepts(L[arm_for(config, i == 0)], cand_id(state, c)) for i, c in enumerate(scored_candidates(state)))
 
 
 def encounter(state: dict, strict: bool = False) -> bool:
@@ -1034,6 +1049,41 @@ def complete_labs(labs: list[dict], L: dict[str, dict[str, float]]) -> tuple[lis
     return keep, len(labs) - len(keep)
 
 
+PATHS = ("a_abstained", "b_abstained", "a_accepted_what_b_rejected", "a_rejected_what_b_chose")
+OUTCOME_CELLS = ("harm", "help", "both_fail", "both_succeed")
+
+
+def step_band(state: dict) -> str:
+    return "step_0" if int(state["state_idx"]) == 0 else "later"
+
+
+def change_path(a: str, b: str, state: dict, L: dict[str, dict[str, float]], ca: dict, cb: dict) -> str | None:
+    """How two verifier configurations came to choose different actions (review 3): a abstained (accepted nothing and
+    took rank 1); b abstained; a accepted an action ranked above b's choice, which b rejected; or a rejected the
+    action b chose (ranked above a's own choice), which b accepted. None when the choices agree."""
+    if ca["key"] == cb["key"]:
+        return None
+    if fell_back(a, state, L):
+        return "a_abstained"
+    if fell_back(b, state, L):
+        return "b_abstained"
+    return "a_accepted_what_b_rejected" if ca["rank"] < cb["rank"] else "a_rejected_what_b_chose"
+
+
+def change_paths(states: list[dict], L: dict[str, dict[str, float]], a: str, b: str) -> dict[str, Any]:
+    """Changed states by path x outcome cell (harm: a fails, b works) x step band; descriptive only."""
+    out = {p: {cell: {"step_0": 0, "later": 0} for cell in OUTCOME_CELLS} for p in PATHS}
+    for s in states:
+        ca, cb = choose(a, s, L), choose(b, s, L)
+        path = change_path(a, b, s, L, ca, cb)
+        if path is None:
+            continue
+        fa, fb = ca["failed"], cb["failed"]
+        cell = ("harm" if fa and not fb else "help" if fb and not fa else "both_fail" if fa else "both_succeed")
+        out[path][cell][step_band(s)] += 1
+    return out
+
+
 def contrast(states: list[dict], L: dict[str, dict[str, float]], a: str, b: str) -> dict[str, Any]:
     """Configuration a against b: failure rates, the paired difference, change, harm and help."""
     games = [s["game_id"] for s in states]
@@ -1058,6 +1108,7 @@ def contrast(states: list[dict], L: dict[str, dict[str, float]], a: str, b: str)
                         "both_succeed": both_ok},
             "harm_by_kind_of_choice": dict(sorted(kinds.items())),
             "harm_regime_share": kinds.get("regime", 0) / n_harm if n_harm else float("nan"),
+            "paths": change_paths(states, L, a, b),
             "identity_holds": (not n) or abs((sum(harm) - sum(help_)) / n - (sum(fa) - sum(fb)) / n) < 1e-12}
 
 
@@ -1073,6 +1124,8 @@ def acceptance(states: list[dict], L: dict[str, dict[str, float]], Lraw: dict[st
             groups[f"{out}/{goal}/{det}"].append((s, c))
             groups[f"{out}/all"].append((s, c))
             groups["regime" if regime(c) else "not_regime"].append((s, c))
+            pos = "rank1" if c is scored_candidates(s)[0] else "alternative"
+            groups[f"{pos}/{out}/{step_band(s)}"].append((s, c))  # review 3
     rep: dict[str, Any] = {}
     for arm in ARMS:
         if arm not in L:
@@ -1085,13 +1138,21 @@ def acceptance(states: list[dict], L: dict[str, dict[str, float]], Lraw: dict[st
                     "by_group": {k: {"n": len(v), "yes_rate": _mean([float(accepts(sc, cand_id(s, c))) for s, c in v
                                                                      if cand_id(s, c) in sc])}
                                  for k, v in sorted(groups.items())}}
-    both = lambda s, c: cand_id(s, c) in L[AWARE] and cand_id(s, c) in L[BLIND]
-    rep["aware_minus_blind"] = {
-        k: {"n": sum(both(s, c) for s, c in v),
-            "yes_rate_shift": _mean([float(accepts(L[AWARE], cand_id(s, c))) - float(accepts(L[BLIND], cand_id(s, c)))
-                                     for s, c in v if both(s, c)]),
-            "mean_L_shift": _mean([Lraw[AWARE][cand_id(s, c)] - Lraw[BLIND][cand_id(s, c)] for s, c in v if both(s, c)])}
-        for k, v in sorted(groups.items())}
+    def shifts(a: str, b: str) -> dict[str, Any]:
+        both = lambda s, c: cand_id(s, c) in L[a] and cand_id(s, c) in L[b]
+        return {k: {"n": sum(both(s, c) for s, c in v),
+                    "yes_rate_shift": _mean([float(accepts(L[a], cand_id(s, c))) - float(accepts(L[b], cand_id(s, c)))
+                                             for s, c in v if both(s, c)]),
+                    "mean_L_shift": _mean([Lraw[a][cand_id(s, c)] - Lraw[b][cand_id(s, c)] for s, c in v if both(s, c)])}
+                for k, v in sorted(groups.items())}
+
+    rep["aware_minus_blind"] = shifts(AWARE, BLIND)
+    if SWAPPED in L:  # review 3: the two parts of the decomposition, per group
+        rep["aware_minus_swapped"] = shifts(AWARE, SWAPPED)
+        rep["swapped_minus_blind"] = shifts(SWAPPED, BLIND)
+    # Headline (review 3): Yes on the agent's working rank-1 action at step 0, per arm (Stage 1a's blanket No).
+    rep["headline_yes_rate_working_rank1_step_0"] = {arm: rep[arm]["by_group"].get("rank1/success/step_0", {}).get("yes_rate")
+                                                     for arm in ARMS if arm in rep}
     return rep
 
 
@@ -1111,6 +1172,10 @@ def decomposition(states: list[dict], L: dict[str, dict[str, float]]) -> dict[st
     ab, as_, sb = (_paired(f["aware"], f["blind"], games), _paired(f["aware"], f["swapped"], games),
                    _paired(f["swapped"], f["blind"], games))
     return {"n_states": len(sts), "aware_minus_blind": ab, "aware_minus_swapped": as_, "swapped_minus_blind": sb,
+            # how each part's changes came about (review 3; descriptive)
+            "paths": {"aware_vs_blind": change_paths(sts, L, "aware", "blind"),
+                      "aware_vs_swapped": change_paths(sts, L, "aware", "swapped"),
+                      "swapped_vs_blind": change_paths(sts, L, "swapped", "blind")},
             "identity_holds": (not sts) or abs(ab["estimate"] - as_["estimate"] - sb["estimate"]) < 1e-9}
 
 
@@ -1150,8 +1215,10 @@ def inert(states: list[dict], L: dict[str, dict[str, float]]) -> dict[str, Any]:
         if CONFIG_ARM[cfg] not in L:
             continue
         sts = [s for s in multi if cfg != "swapped" or s.get("swap")]
-        out[cfg] = {"fallback_rate": _mean([float(fell_back(cfg, s, L)) for s in sts]),
-                    "rank1_share": _mean([float(choose(cfg, s, L)["rank"] == scored_candidates(s)[0]["rank"]) for s in sts])}
+        rates = lambda ss: {"n_states": len(ss), "fallback_rate": _mean([float(fell_back(cfg, s, L)) for s in ss]),
+                            "rank1_share": _mean([float(choose(cfg, s, L)["key"] == scored_candidates(s)[0]["key"])
+                                                  for s in ss])}
+        out[cfg] = {**rates(sts), **{band: rates([s for s in sts if step_band(s) == band]) for band in ("step_0", "later")}}
     return out
 
 
@@ -1173,6 +1240,10 @@ def model_report(labs: list[dict], L: dict[str, dict[str, float]], Lraw: dict[st
                                 + len(non) * (d_non["estimate"] if non else 0.0))
                                / len(states) - rep["primary"]["difference"]["estimate"]) < 1e-9}
     rep["inert"] = inert(states, L)
+    fb_all = [float(choose("blind", s, L)["failed"]) for s in states]
+    rep["hybrid"] = {h: {"fail_rate": _boot([float(choose(h, s, L)["failed"]) for s in states], games),
+                         "minus_blind": _paired([float(choose(h, s, L)["failed"]) for s in states], fb_all, games)}
+                     for h in HYBRIDS}  # review 3, descriptive
     rep["verifier_value"] = {
         c: {"none_minus_verifier": _paired([float(choose("none", s, L)["failed"]) for s in states],
                                            [float(choose(c, s, L)["failed"]) for s in states], games),
