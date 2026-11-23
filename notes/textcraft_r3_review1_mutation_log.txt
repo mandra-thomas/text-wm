@@ -1,0 +1,29 @@
+killed    rev1 standardized SD with n instead of n-1  [by tests/test_textcraft_r3.py::test_stats_match_the_definitions]
+SURVIVED  rev2 envcheck goal effect over every chosen record
+SURVIVED  rev3 envcheck yes/no share criterion off
+SURVIVED  rev4 thinking unforced subset keeps forced traces
+SURVIVED  rev5 thinking batch seed constant
+SURVIVED  rev6 provenance accepts mixed revisions
+SURVIVED  rev7 B3 family on 2,000 resamples
+killed    rev8 attention agreement on one item  [by tests/test_textcraft_r3.py::test_attention_agreement_rule]
+SURVIVED  rev9 envcheck accepts rescoring shards on mixed GPUs
+killed    rev10 thinking keeps text after the closing marker  [by tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point]
+SURVIVED  rev11 thinking jobs not in record-and-arm order
+
+3/11 killed; survivors=['rev2 envcheck goal effect over every chosen record', 'rev3 envcheck yes/no share criterion off', 'rev4 thinking unforced subset keeps forced traces', 'rev5 thinking batch seed constant', 'rev6 provenance accepts mixed revisions', 'rev7 B3 family on 2,000 resamples', 'rev9 envcheck accepts rescoring shards on mixed GPUs', 'rev11 thinking jobs not in record-and-arm order']; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+SURVIVED  rev5 thinking batch seed constant
+SURVIVED  rev9 envcheck accepts rescoring shards on mixed GPUs
+
+0/2 killed; survivors=['rev5 thinking batch seed constant', 'rev9 envcheck accepts rescoring shards on mixed GPUs']; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+SURVIVED  rev2 envcheck goal effect over every chosen record
+SURVIVED  rev6 provenance accepts mixed revisions
+
+0/2 killed; survivors=['rev2 envcheck goal effect over every chosen record', 'rev6 provenance accepts mixed revisions']; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+SURVIVED  rev3 envcheck yes/no share criterion off
+SURVIVED  rev7 B3 family on 2,000 resamples
+SURVIVED  rev11 thinking jobs not in record-and-arm order
+
+0/3 killed; survivors=['rev3 envcheck yes/no share criterion off', 'rev7 B3 family on 2,000 resamples', 'rev11 thinking jobs not in record-and-arm order']; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+SURVIVED  rev4 thinking unforced subset keeps forced traces
+
+0/1 killed; survivors=['rev4 thinking unforced subset keeps forced traces']; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
