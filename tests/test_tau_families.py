@@ -429,6 +429,8 @@ def test_analysis_end_to_end(scored):
                                      "llama3.2-3b vs qwen3-8b-fewshot", "llama3.2-3b vs llama3.1-8b-fewshot",
                                      "mistral-7b-v0.3 vs llama3.2-3b"}
     assert m["comparisons"]["mistral-7b-v0.3 vs llama3.2-3b"]["first"]["n_items"] == len(prim)
+    # every comparison entry says whether it is read (R1-S6): the analysis marks them
+    assert all("read" in c and "not_read_because" in c for v in m["comparisons"].values() for c in v.values())
     assert m["placement"]["n_items"] == 4 and "reading" in m["placement"]
     assert set(m["sensitivity_without_fewshot_tool_classes"]) == set(T.SCORED)
     assert "REPORTED (τ families verdicts)" in (scored / "tau_family_analysis" / "STATUS.md").read_text()
@@ -847,6 +849,13 @@ def test_qwen_like_profile_says_working_calls_move_more():
     assert d["witness_share_of_failing_effect"] == pytest.approx(9.45 / 3.98) and not d["class_mix"]
 
 
+def test_class_mix_needs_intervals_on_opposite_sides_not_opposite_estimates():
+    straddle = {"status": ((1.0, 0.8, 1.2), (0.3, 0.1, 0.5)), "unavailable": ((-0.1, -0.3, 0.1), (0.0, -0.2, 0.2))}
+    assert not T.describe(_blk((0.5, 0.4, 0.6), (0.2, 0.1, 0.3), (0.3, 0.1, 0.5), straddle))["class_mix"]
+    opposite = {"status": ((1.0, 0.8, 1.2), (0.3, 0.1, 0.5)), "unavailable": ((-0.3, -0.4, -0.2), (0.0, -0.2, 0.2))}
+    assert T.describe(_blk((0.5, 0.4, 0.6), (0.2, 0.1, 0.3), (0.3, 0.1, 0.5), opposite))["class_mix"]
+
+
 @pytest.mark.parametrize("share,want", [((0.55, 0.48, 0.62), True), ((0.45, 0.38, 0.52), True), ((0.56, 0.51, 0.61), False)])
 def test_minority_reading_when_the_item_share_interval_is_not_above_one_half(share, want):
     d = T.describe(_blk((1.0, 0.8, 1.2), (0.3, 0.2, 0.4), (0.7, 0.4, 1.0), share=share))
@@ -979,8 +988,11 @@ def test_task_judgement_share_no_and_line_intercepts():
     assert w["share_no_when_first_token_confident_json"]["aligned"] == {"n_confident_json": 60, "share_no": 0.0}
     sw = tj["fail"]["share_no_when_first_token_confident_json"]["swapped"]
     assert sw["n_confident_json"] == 60 and sw["share_no"] == pytest.approx(54 / 60)
+    assert w["fit"]["intercept_neutral"] == pytest.approx(0.0) and w["fit"]["intercept_aligned"] == pytest.approx(1.0)
     below = _by(items, lambda k, a, r, c: 2.9 if r == "first" else -1.0)
     assert T.task_judgement(below, items)["fail"]["share_no_when_first_token_confident_json"]["neutral"]["n_confident_json"] == 0
+    at = _by(items, lambda k, a, r, c: 3.0 if r == "first" else -1.0)  # exactly +3 counts as confidently JSON
+    assert T.task_judgement(at, items)["fail"]["share_no_when_first_token_confident_json"]["neutral"] == {"n_confident_json": 60, "share_no": 1.0}
 
 
 # ---------------- review 1, S5: the reviewer's surviving mutants ----------------

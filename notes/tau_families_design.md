@@ -658,3 +658,11 @@ arise with an empty population, impossible on the real items.
 - **Dry run without models** (at 68ba60e): every stage ran; 13,696 passes per model in shards of 3,520, 3,360, 3,472
   and 3,344 (the largest about 1.5 h for Mistral at 1.5 s a pass); 600 placement passes; 21 smoke items (336 passes per
   model); the analysis found no missing or stale score and its reference results check matched exactly.
+- **Mutation testing** (after these amendments): 93 tau-fam mutants (the earlier 58, two re-anchored to the amended
+  code, and 35 new, including the reviewer's ten survivors), 93 killed, every kill by a named test in
+  `tests/test_tau_families.py`. Four new mutants first survived the targeted tests and their tests were strengthened
+  (the +3 threshold at exactly +3; the task judgement's intercepts checked in level, not only in difference; class mix
+  on intervals, not estimates; the analysis marking comparisons). Details in `notes/testing.md`.
+- **Tests.** `tests/test_tau_families.py`: 69 test functions (86 test cases with parameters; the 3 rendered-prompt tests
+  run only where the pinned tokenizers are cached). Full suite: 983 passed, 10 skipped.
+- **Status.** Nothing has been scored and no tag has been made. A second review round on these amendments comes next.
