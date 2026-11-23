@@ -854,4 +854,4 @@ An independent audit of fb7e86b (`notes/textcraft_r2_audit.md`, with `scripts/au
 - *Tests.* Tests now kill the audit's surviving mutants: X1 (R3 with both gaps crossing zero), X4 (the role gap equal to Dn + Dc through `contrasts`, with noisy scores, to 1e-12) and X12 (the sign and value of the lift difference). A further test pins the central question's exact tie (X10).
 - *Mutants.* Rerun with the auditor's strict script, all 12 audit mutants are killed by named tests. Two new mutants for the hardening are killed in official mode.
 
-Tests and suite: `tests/test_textcraft_r2.py` holds 146 tests, and the full suite was run once at the end: FULL_SUITE_G.
+Tests and suite: `tests/test_textcraft_r2.py` holds 146 tests, and the full suite was run once at the end: 1,008 passed, 7 skipped.

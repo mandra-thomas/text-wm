@@ -453,3 +453,4 @@ The independent audit (`notes/textcraft_r2_audit.md`) left three of its 12 mutan
 A further test, `test_analysis_requires_the_five_models`, covers the model-set check and the timing gates in the inference map.
 
 Rerun at ae8f005 with the auditor's strict script, all 12 audit mutants are killed by named tests. The two new mutants (the model-set check, the gates entry) are killed in official mode. The 12 audit mutants and the 2 new ones are now also in `scripts/mutation_check.py`, which holds 159 round-2 mutants. The log is appended to `notes/textcraft_r2_mutation_log.txt`.
+Full suite at the pre-freeze audit (run once at 0db1f7c, before the deviations entry): 1,008 passed, 7 skipped.

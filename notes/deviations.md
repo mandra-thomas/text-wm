@@ -493,3 +493,5 @@ At sign-off (2026-11-22), before any round-2 score, the owner's final correction
 - the analysis reports which comparisons are confirmatory.
 
 A statistical audit (section 15.A) found no error in the Holm, TOST, margin, clustering or identity code. Records, prompts, populations, sample sizes and the model set did not change.
+
+On 2026-11-22, an independent pre-freeze audit (design section 15.G) re-derived the round-2 statistics and found them correct, and found that nothing defining the experiment had changed. It asked for wording fixes: R3 and R5 in 15.R now match 15.F, and the central question uses the neutral labels. It also asked for two hardening checks, both added: the analysis refuses any model set other than the five, and the timing gates are listed as gates in the inference map. Tests were added for its surviving mutants. No rule, record, prompt, population, sample size or model changed.
