@@ -17,6 +17,9 @@
 #          ran on: 0-2 A40, 3 L40S), the first 20 also with the block. Reads runs/qwen_audit/items_all.jsonl.
 #   sizes  FU_MODELS (colon-separated Hugging Face ids; sbatch --export splits on commas) on runs/qwen_audit/items_sizes.jsonl, both formats.
 #   dsim   Qwen3-8B, the decision simulation's step-0 states, four arms, both formats.
+# FU_FORMATS (comma list; default block,noblock; "plain" = no chat template) and FU_SUFFIX (appended to the output
+# names) apply to sizes and dsim; the plain-text round used FU_FORMATS=plain,FU_SUFFIX=_plain. With FU_FORMATS
+# set, --export needs the value quoted or a single format, since sbatch splits on commas.
 # Example:
 #   bash pace/submit.sh qwen_followup.sbatch --export=ALL,FU_TASK=rq2,FU_SHARDS=0 --constraint=gpu-a40
 
@@ -43,14 +46,14 @@ case "${TASK}" in
   sizes)
     for M in ${FU_MODELS//:/ }; do
       tag="$(basename "${M}" | tr 'A-Z' 'a-z')"
-      echo "${GPU}" >"${D}/fu_sizes_${tag}_gpu.txt"
-      python "${S}" rq2 --items "${D}/items_sizes.jsonl" --model "${M}" --formats block,noblock \
-        --out "${D}/fu_sizes_${tag}.jsonl"
+      echo "${GPU}" >"${D}/fu_sizes_${tag}${FU_SUFFIX:-}_gpu.txt"
+      python "${S}" rq2 --items "${D}/items_sizes.jsonl" --model "${M}" --formats "${FU_FORMATS:-block,noblock}" \
+        --out "${D}/fu_sizes_${tag}${FU_SUFFIX:-}.jsonl"
     done
     ;;
   dsim)
-    echo "${GPU}" >"${D}/fu_dsim_gpu.txt"
-    python "${S}" dsim --out "${D}/fu_dsim_step0.jsonl"
+    echo "${GPU}" >"${D}/fu_dsim${FU_SUFFIX:-}_gpu.txt"
+    python "${S}" dsim --formats "${FU_FORMATS:-block,noblock}" --out "${D}/fu_dsim_step0${FU_SUFFIX:-}.jsonl"
     ;;
   *) echo "unknown FU_TASK=${TASK}" >&2; exit 2 ;;
 esac

@@ -8,12 +8,19 @@ few-shot answers do). The format is set through the scorer's template_kwargs, an
 carries the format, so the scorer's result cache (keyed by messages, not by template settings) can never return one
 format's score for the other.
 
+A third format, "plain" (added after the first follow-up run), uses no chat template at all: the same messages as
+plain text (`plain_text`), the candidate after one space, read from one forward pass of the scorer's loaded model.
+It exists because the "noblock" render leaves almost no probability on either answer's first token (Qwen3 expects
+`<think>` there), so "noblock" compares two continuations the model treats as near-impossible; plain text keeps
+most of the first-token mass on the two answers. Plain scores record that mass (`first_mass`).
+
 Tasks:
   rq2    items from sample_items.py; --stored-shards keeps the items of those stored rq2_score shards (so the job can
          run on the GPU type those shards ran on); --formats (default noblock); --check-block N also rescores the
          first N items with the block, to compare with the stored values.
   dsim   the decision simulation's step-0 states (rebuilt from the collection at --src), every candidate, the four
-         default arms, yes/no score (score_one_token_pair), both formats.
+         default arms, yes/no score (score_one_token_pair, or " Yes"/" No" in plain text), --formats as given
+         (the first run used block,noblock).
 
 Output is appended per item (rq2) or per state (dsim); a rerun skips what is done.
 
@@ -28,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import time
 from pathlib import Path
 
@@ -55,7 +63,51 @@ def check_render(sc, msgs) -> None:
 def slim(r) -> dict:
     d = r.to_dict()
     return {k: d[k] for k in ("L", "logp_plus", "logp_minus", "L_first", "n_tokens_plus", "n_tokens_minus",
-                              "first_token_plus", "first_token_minus")}
+                              "first_token_plus", "first_token_minus", "first_mass")}
+
+
+def plain_text(msgs: list[dict]) -> str:
+    """No chat template (section 4's plain-text format): the system text, each example as its user text, one space
+    and its answer, then the query's user text, separated by blank lines. The candidate follows after one space."""
+    parts, i = [], 0
+    if msgs and msgs[0]["role"] == "system":
+        parts.append(msgs[0]["content"])
+        i = 1
+    while i < len(msgs):
+        if i + 1 < len(msgs) and msgs[i + 1]["role"] == "assistant":
+            parts.append(f"{msgs[i]['content']} {msgs[i + 1]['content']}")
+            i += 2
+        else:
+            parts.append(msgs[i]["content"])
+            i += 1
+    return "\n\n".join(parts)
+
+
+def plain_pair(sc, msgs: list[dict], plus: str, minus: str) -> dict:
+    """Teacher-forced log-probs of " plus" and " minus" after the plain-text prompt (one sequence per forward pass,
+    candidate read from the joint tokenization), and the first-token mass the two answers' first tokens hold."""
+    import torch
+
+    prompt = plain_text(msgs)
+    ids = lambda s: sc._tok(s, add_special_tokens=False)["input_ids"]
+    p = ids(prompt)
+    out, firsts = {}, {}
+    dev = next(sc._model.parameters()).device
+    for name, cand in (("plus", plus), ("minus", minus)):
+        f = ids(prompt + " " + cand)
+        if f[: len(p)] != p:
+            f = p + ids(" " + cand)
+        c = f[len(p):]
+        with torch.no_grad():
+            logits = sc._model(input_ids=torch.tensor([f], device=dev)).logits[0]
+        lp = torch.log_softmax(logits[len(p) - 1: len(f) - 1].float(), dim=-1)
+        tok = [lp[k, c[k]].item() for k in range(len(c))]
+        out[f"logp_{name}"], out[f"n_tokens_{name}"], firsts[name] = sum(tok), len(c), (lp[0], c[0])
+    out["L"] = out["logp_plus"] - out["logp_minus"]
+    vec = firsts["plus"][0]
+    out["L_first"] = vec[firsts["plus"][1]].item() - vec[firsts["minus"][1]].item()
+    out["first_mass"] = math.exp(vec[firsts["plus"][1]].item()) + math.exp(vec[firsts["minus"][1]].item())
+    return out
 
 
 def run_rq2(args, sc) -> None:
@@ -76,8 +128,12 @@ def run_rq2(args, sc) -> None:
         fmts = formats + (["block"] if k < args.check_block and "block" not in formats else [])
         rec = {"id": it["id"], "shard": it["shard"], "model": sc.model_name, "scores": {}}
         for fmt in fmts:
-            set_format(sc, fmt)
             for cond in ("aligned", "swapped"):
+                if fmt == "plain":
+                    rec["scores"][f"{fmt}/{cond}"] = plain_pair(sc, build_messages(t, cond), t["candidates"]["o_plus"],
+                                                                t["candidates"]["o_minus"])
+                    continue
+                set_format(sc, fmt)
                 r = sc.score_pair(t["id"], f"{fmt}/{cond}", build_messages(t, cond), t["candidates"]["o_plus"],
                                   t["candidates"]["o_minus"])
                 rec["scores"][f"{fmt}/{cond}"] = slim(r)
@@ -112,7 +168,12 @@ def run_dsim(args, sc) -> None:
                 if item is None:
                     continue
                 msgs = build(item, arm)
-                for fmt in FORMATS:
+                for fmt in args.formats.split(","):
+                    if fmt == "plain":
+                        r = plain_pair(sc, msgs, "Yes", "No")
+                        rec["scores"].setdefault(t["id"], {})[f"{fmt}/{arm}"] = r["L"]
+                        rec.setdefault("first_mass", {}).setdefault(t["id"], {})[arm] = r["first_mass"]
+                        continue
                     set_format(sc, fmt)
                     r = sc.score_one_token_pair(t["id"], f"{fmt}/{arm}", msgs, "Yes", "No")
                     rec["scores"].setdefault(t["id"], {})[f"{fmt}/{arm}"] = r.L
