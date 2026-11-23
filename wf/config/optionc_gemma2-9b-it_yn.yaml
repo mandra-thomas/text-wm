@@ -1,11 +1,13 @@
 run_id: optionc_gemma2-9b-it_yn
-# Option C, Tier 3 (optional): Gemma-2-9B-it as the verifier, yes/no readout (wave A's Yes/No gate first), primary
-# rule, task-blind, task-aware and swapped arms, one seed.
+# Option C, Tier 3 (optional): Gemma-2-9B-it as the verifier, yes/no readout (wave A's Yes/No gate first), primary rule,
+# one seed per arm. Starts only after optionc_memsmoke_gemma2-9b-it has shown its longest prompts fit beside vLLM.
+tier: 3
 model: gemma2-9b-it
 readout: yn
 rules: [accepted_only]
 arms: [blind, aware, swapped]
-seeds: [1]
+seeds_by_arm: {blind: [1], aware: [1], swapped: [1]}
+shadow_arms: [blind, swapped]
 split: valid_unseen
 n_games: 134
 step_cap: 30
@@ -13,3 +15,4 @@ n_samples: 20
 k_max: 8
 n_shards: 4
 max_episodes_per_job: 40
+cost_upper_gpu_hours: 30

@@ -2,8 +2,10 @@ run_id: optionc_analysis
 # Option C analysis (CPU), after every shard of every listed run is complete. The primary verdict is read from
 # primary_run (Qwen3-8B, yes/no, primary rule); its no-verifier episodes are the reference for the other runs. Add a
 # Tier 2 or 3 run here only once it is complete. rq3_source: the archived RQ3 episodes (commit ddeabc2) for the drift
-# check, under runs/ or by absolute path.
+# check, under runs/ or by absolute path (a missing archive is recorded, not fatal). The primary run must be Qwen3-8B,
+# accepted-only, yes/no; or the observation readout under the pre-declared reallocation (checked against step0_analysis).
 runs:
   optionc_qwen3-8b_yn: optionc_qwen3-8b_yn
 primary_run: optionc_qwen3-8b_yn
 rq3_source: rq3
+step0_analysis: optionc_step0_analysis

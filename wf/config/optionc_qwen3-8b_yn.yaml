@@ -1,14 +1,19 @@
 run_id: optionc_qwen3-8b_yn
-# Option C, Tier 1 (primary; notes/optionc_design.md). The RQ3 Qwen3-8B ReAct agent (greedy, thinking off) on the 134
-# solvable valid_unseen games, 30-step cap, with a Qwen3-8B yes/no verifier: no verifier, task-blind, task-aware and
-# swapped arms; primary rule (switch only to an accepted agent-sampled alternative); three sampling seeds. Primary
-# outcome: success, aware minus blind. WF_SHARD / WF_N_SHARDS split the games; the job restarts the ALFWorld server
-# after max_episodes_per_job new episodes (memory leak) and resumes.
+# Option C, Tier 1 (primary; notes/optionc_design.md, amended after review 1). The RQ3 Qwen3-8B ReAct agent (greedy,
+# thinking off) on the 134 solvable valid_unseen games, 30-step cap, with a Qwen3-8B yes/no verifier and the primary
+# rule (switch only to an accepted agent-sampled alternative). Aware and blind at three sampling seeds; the swapped arm
+# (a wrong task, descriptive) at one; the no-verifier arm never samples, so one episode per game serves every seed.
+# Every aware step is also scored under the blind and swapped prompts, never acted on (matched-state attribution).
+# Primary outcome: success, aware minus blind. Starts only after a passed smoke, a reported step-0 analysis and the
+# cost rule (the smoke's projection at most 1.5 x cost_upper_gpu_hours), unless order_override is set with a reason.
+# Allocation is config-only: seeds_by_arm (and the arms list) is all the user changes.
+tier: 1
 model: qwen3-8b
 readout: yn
 rules: [accepted_only]
 arms: [none, blind, aware, swapped]
-seeds: [1, 2, 3]
+seeds_by_arm: {blind: [1, 2, 3], aware: [1, 2, 3], swapped: [1]}
+shadow_arms: [blind, swapped]
 split: valid_unseen
 n_games: 134
 step_cap: 30
@@ -16,3 +21,4 @@ n_samples: 20
 k_max: 8
 n_shards: 4
 max_episodes_per_job: 40
+cost_upper_gpu_hours: 58

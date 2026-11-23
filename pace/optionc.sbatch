@@ -20,6 +20,10 @@
 #
 # Smoke first (two train games; read smoke_gate and seconds_per_step in runs/optionc_smoke/shard_00_of_01/metrics.json):
 #   OC_RUN=optionc_smoke bash pace/submit.sh optionc.sbatch
+# Every run but the smoke refuses to start without a passed smoke, a reported step-0 analysis and the cost rule
+# (optionc.py, order_gate_check); Gemma also needs OC_RUN=optionc_memsmoke_gemma2-9b-it first. vLLM keeps
+# --no-enable-prefix-caching (pace/_common.sh, for greedy determinism); the smoke's seconds_sampling shows how much the
+# 20-sample requests queue for it (review 1, S8).
 # Then the step-0 check (pace/optionc_step0.sbatch) and, once the design is frozen, Tier 1:
 #   for i in 0 1 2 3; do bash pace/submit.sh optionc.sbatch --export=ALL,OC_RUN=optionc_qwen3-8b_yn,WF_SHARD=$i,WF_N_SHARDS=4; done
 # Resume a shard that ran out of time with the same command plus WF_RESUME=1. When every shard says "shard complete":
@@ -36,7 +40,7 @@ if [[ ! -f "${RUNS_DIR}/FILED.txt" ]]; then
 fi
 RUN="${OC_RUN:?set OC_RUN, e.g. optionc_smoke or optionc_qwen3-8b_yn}"
 case "${RUN}" in
-  optionc_smoke|optionc_qwen3-8b_yn|optionc_qwen3-8b_yn_argmax|optionc_llama3.1-8b_yn|optionc_qwen3-8b_obs|optionc_gemma2-9b-it_yn) ;;
+  optionc_smoke|optionc_qwen3-8b_yn|optionc_qwen3-8b_yn_argmax|optionc_llama3.1-8b_yn|optionc_qwen3-8b_obs|optionc_gemma2-9b-it_yn|optionc_memsmoke_gemma2-9b-it) ;;
   *) echo "ERROR: OC_RUN must be an Option C episode run, not ${RUN}" >&2; exit 2 ;;
 esac
 echo "=== ${RUN} shard ${WF_SHARD:-config} of ${WF_N_SHARDS:-config} START $(date) host=$(hostname) ==="
@@ -56,7 +60,8 @@ while true; do
   rc=$?
   set -e
   stop_alfworld_server || true
-  status=$(ls "${RUNS_DIR}/${RUN}"/shard_*/STATUS.md 2>/dev/null | grep "shard_$(printf %02d "${WF_SHARD:-0}")_of_" | head -1)
+  # `|| true`: with no STATUS.md yet, grep finds nothing, which must not end the job under pipefail (review 1)
+  status=$(ls "${RUNS_DIR}/${RUN}"/shard_*/STATUS.md 2>/dev/null | grep "shard_$(printf %02d "${WF_SHARD:-0}")_of_" | head -1 || true)
   if [[ -n "${status}" ]] && grep -q "PARTIAL" "${status}"; then
     export WF_RESUME=1
     continue

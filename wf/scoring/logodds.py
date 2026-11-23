@@ -110,6 +110,10 @@ class LogoddsScorer:
         self.dtype = dtype
         self.attn_implementation = attn_implementation
         self.template_kwargs = dict(template_kwargs or {})
+        # Option C (2026-11-22, review 1 S6): next_token_logprobs may keep only the last position's logits, which
+        # saves several GB for a large vocabulary on long prompts. Off unless a run has checked that it changes no
+        # rounded score (wf/optionc.py, last_only_check); every other method always computes every position.
+        self.last_only = False
         if not self.mock and load:
             self._load()
 
@@ -316,14 +320,26 @@ class LogoddsScorer:
             raise ValueError(f"not single tokens: {bad}")
         prompt_ids = self._encode(messages).to(next(self._model.parameters()).device)
         with torch.no_grad():
-            logits = self._model(input_ids=prompt_ids).logits
-        lp = torch.log_softmax(logits[0, -1].float(), dim=-1)
+            last = self.last_logits(prompt_ids, self.last_only)
+        lp = torch.log_softmax(last.float(), dim=-1)
         out = {w: lp[i[0]].item() for w, i in ids.items()}
         if complement is not None:
             mask = torch.ones_like(lp, dtype=torch.bool)
             mask[ids[complement][0]] = False
             out[f"not:{complement}"] = torch.logsumexp(lp[mask], dim=0).item()
         return out
+
+    def last_logits(self, prompt_ids: Any, last_only: bool) -> Any:
+        """The logits at the last position. With `last_only`, the model is asked for that position alone
+        (`logits_to_keep`, or `num_logits_to_keep` in older transformers); a model that takes neither falls back to
+        every position, which gives the same row."""
+        if last_only:
+            for kw in ("logits_to_keep", "num_logits_to_keep"):
+                try:
+                    return self._model(input_ids=prompt_ids, **{kw: 1}).logits[0, -1]
+                except TypeError:
+                    continue
+        return self._model(input_ids=prompt_ids).logits[0, -1]
 
     def _stop_tokens(self) -> list[int]:
         """Every end-of-turn token. Fine-tuned checkpoints leave the tokenizer's out of their generation config."""

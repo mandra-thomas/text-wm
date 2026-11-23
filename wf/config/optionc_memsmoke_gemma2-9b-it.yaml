@@ -1,0 +1,9 @@
+run_id: optionc_memsmoke_gemma2-9b-it
+# Option C memory smoke for Gemma-2-9B (review 1, S6): a 30-step history of the first game (a seeded walk over
+# admissible actions), every arm and both readouts, scored while vLLM holds half the GPU (run through pace/optionc.sbatch).
+# Records the peak memory and whether last-position-only logits leave every rounded score unchanged.
+model: gemma2-9b-it
+split: valid_unseen
+n_games: 134
+steps: 30
+readouts: [yn, obs]

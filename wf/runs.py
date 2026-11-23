@@ -1448,6 +1448,7 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     **{f"optionc_step0_{tag}": (lambda cfg: _lazy("optionc", "run_optionc_step0")(cfg))
        for tag in ("qwen3-8b", "llama3.1-8b", "gemma2-9b-it")},
     "optionc_step0_analysis": lambda cfg: _lazy("optionc", "run_optionc_step0_analysis")(cfg),
+    "optionc_memsmoke_gemma2-9b-it": lambda cfg: _lazy("optionc", "run_optionc_memsmoke")(cfg),
     **{name: (lambda cfg: _lazy("optionc", "run_optionc_analysis")(cfg)) for name in ("optionc_analysis", "optionc_smoke_analysis")},
 }
 

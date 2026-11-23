@@ -1,13 +1,17 @@
 run_id: optionc_qwen3-8b_obs
 # Option C, Tier 2 (pre-registered secondary, gated): the anchored observation readout, log(1 - P(Nothing)) -
-# log P(Nothing) at the first token of the predicted observation, Qwen3-8B, primary rule, task-blind, task-aware and
-# swapped arms, one seed. Refuses to start unless optionc_step0_analysis found the readout competent for Qwen3-8B
-# (or obs_gate_override is set, with a reason, which is logged).
+# log P(Nothing) at the first token of the predicted observation, Qwen3-8B, primary rule, one seed per arm, matched-state
+# scoring on the aware steps. Refuses to start unless optionc_step0_analysis found the readout competent for Qwen3-8B
+# (or obs_gate_override is set, with a reason). Pre-declared reallocation (design note): if the step-0 check is
+# "question-specific" and this readout is competent, Tier 1's three seeds may move here (set aware and blind to
+# [1, 2, 3]) and this run becomes the primary run of optionc_analysis; the analysis checks that condition.
+tier: 2
 model: qwen3-8b
 readout: obs
 rules: [accepted_only]
 arms: [blind, aware, swapped]
-seeds: [1]
+seeds_by_arm: {blind: [1], aware: [1], swapped: [1]}
+shadow_arms: [blind, swapped]
 split: valid_unseen
 n_games: 134
 step_cap: 30
@@ -16,3 +20,4 @@ k_max: 8
 n_shards: 4
 max_episodes_per_job: 40
 step0_analysis: optionc_step0_analysis
+cost_upper_gpu_hours: 28
