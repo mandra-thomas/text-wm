@@ -273,6 +273,8 @@ reported separately, by class.
 
 ### 5.1 System message
 
+*(Superseded, marked 2026-11-23: the prompt as scored is the one in `wf/tau/prompts.py` at the frozen commit `c737cd6`. The system message gained the section "How the backend checks write calls" between the instruction and the policy (A2), the instruction's wording changed (C4) and every lead says "and nothing else" (C5); the matched arm drops the lead's statement of what the backend sees (B1), and the rules-only arm drops the policy and uses its own lead (A7).)*
+
 The system message (`wf/tau/prompts.py`), fixed text, in this order:
 
 - **Instruction:** "You are a world model of the backend of a retail customer-service system. An agent is
@@ -305,6 +307,8 @@ holds the call's exact output.
 
 ### 5.3 Few-shot examples
 
+*(Superseded, marked 2026-11-23: the prompt as scored is the one in `wf/tau/prompts.py` at the frozen commit `c737cd6`. The three examples below were replaced by four examples forming a 2 × 2 of own or other order by success or failure (A2, "Few-shot examples, replacing §5.3"), shown in the design order or reversed by item (B2), with own-order task lines in the matched arm (B1).)*
+
 There are three examples, from three users who are excluded from every test set. They are chosen as the first
 users, in hash(user) order, who satisfy each example's need (one user per example, all distinct):
 
@@ -319,6 +323,8 @@ users, in hash(user) order, who satisfy each example's need (one user per exampl
 Every example output is real tool output from the port.
 
 ### 5.4 Conditions
+
+*(Superseded, marked 2026-11-23: the prompt as scored is the one in `wf/tau/prompts.py` at the frozen commit `c737cd6`. The yes/no question below was replaced by the backend-execution question of C1 (`YN_QUESTION`: "Question: will the backend execute this call without returning an error? Answer Yes if its output is JSON and No if its output is a line starting with "Error: "."); further conditions (mention pair, witness, matched and rules-only arms) were added in A4, A5, A7 and B1.)*
 
 The aligned, swapped and neutral prompts differ only in the task line of the final user turn; a test checks
 this. The yes/no variant replaces the final "Tool output:" with:

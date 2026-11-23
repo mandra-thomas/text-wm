@@ -24,6 +24,8 @@ Overall verdict, by the joint rule fixed in advance: **ALFWorld direction in bot
   - the median item moves +0.25;
   - the failure-specificity reverses in the arm without the "backend does not see the task" statement.
   Its largest component is that any write request raises predicted success.
+
+  *(Added 2026-11-23.)* `tau_metrics.json` stores Llama's reading as "The task overrides a visible fact about the named object, more for failing calls than for working ones: the ALFWorld effect in its stronger form (below the 0.5-nat size)". That string is the frozen outcome table's label for the observed pattern, written by the frozen analysis code; the metrics file is a frozen output and is not edited. `tau_dx.md` (summary and "Reading") qualifies it and advises against calling Llama's result "the ALFWorld effect in its stronger form", for the reasons in the list above.
 - **Both:** the request to act adds to merely naming the order (write minus mention above 0; an authorization reading predicts this too).
 
 ## Other readouts (descriptive)
@@ -32,8 +34,10 @@ Overall verdict, by the joint rule fixed in advance: **ALFWorld direction in bot
 |---|---|---|
 | First token, aligned − neutral | +1.42 [1.10, 1.74] | +0.92 [0.85, 0.99] |
 | First token, swapped − neutral | −2.56 [−2.82, −2.28] | +0.45 [0.36, 0.53] |
-| Yes/no (reply-anchored question), aligned − swapped | +7.68 [7.21, 8.10] | −0.02 [−0.04, 0.00] |
+| Yes/no (reply-anchored question), aligned − swapped | +7.68 [7.21, 8.10] | −0.02 [−0.043, −0.002] |
 | Full reply, aligned − swapped | +1.88 [1.21, 2.60] | +2.26 [2.04, 2.49] |
+
+*(Corrected 2026-11-23: Llama-3.1-8B's yes/no interval was printed as [−0.04, 0.00]. `tau_metrics.json` (`models.llama3.1-8b-fewshot.primary.yn.aligned_minus_swapped`) gives −0.022 [−0.043, −0.002], and the independent recompute in `tau_dx_metrics.json` gives the same interval, so it excludes zero: a very small negative shift, not an exact null. The reading that Llama's yes/no is an insensitive readout is unchanged.)*
 
 - **Prompt without "the backend does not see the task" (ALFWorld-matched arm):** the effect remains under both prompts for both models, and is larger without the statement (main minus matched: Qwen −0.45, Llama −0.35 on the first token).
 - **Sensitivity without the few-shot tool classes:** same verdict category for both models.

@@ -239,13 +239,15 @@ Qwen's large "status-class history" penalty means that, without product records 
 | Primary, aligned − swapped | Qwen fail | Qwen witness | Llama fail | Llama witness |
 |---|---|---|---|---|
 | First token | +3.98 | +9.45 | +0.47 | +0.38 |
-| Yes/no | +7.68 [7.25, 8.13] | +12.65 | −0.02 [−0.04, 0.00] | −0.04 |
+| Yes/no | +7.68 [7.25, 8.13] | +12.65 | −0.02 [−0.043, −0.002] | −0.04 |
 | Yes/no minus first token | +3.70 [3.43, 3.97] | +3.20 | −0.49 [−0.55, −0.43] | −0.43 |
 | Full reply | +1.88 [1.18, 2.55] | +8.25 | +2.27 [2.02, 2.49] | +3.27 |
 | … of which the success reply's tail | +1.13 [0.51, 1.76] | +0.39 | +1.71 [1.48, 1.93] | +1.47 |
 | … of which the failure reply's tail (enters negatively) | +3.23 [2.90, 3.57] | +1.58 | −0.08 [−0.14, −0.02] | −1.42 |
 | Per-token full reply | −0.06 [−0.09, −0.03] | +0.68 | +0.015 [0.009, 0.020] | +0.16 |
 | Spearman, item effects first token vs yes/no | 0.73 | 0.71 | 0.61 | 0.37 |
+
+*(Corrected 2026-11-23: Llama's yes/no interval in this table was printed as [−0.04, 0.00]; this note's own metrics (`tau_dx_metrics.json`, `q1_recompute.llama3.1-8b-fewshot.yn_L.aligned_minus_swapped`) and `tau_metrics.json` both give [−0.043, −0.002], which excludes zero. The reading of Llama's yes/no as an insensitive readout is unchanged.)*
 
 The full reply's score is its first token plus the rest of the success reply minus the rest of the failure reply. **Llama's** full-reply effect (+2.27, larger than Qwen's) is mostly the success reply's tail, +1.71: the success JSON repeats the order number and product name that the aligned line contains, so it is a copying effect, not a belief about the outcome. Its per-token form is +0.015. **Qwen's** full reply is smaller than its first token because, under the aligned line, the specific error text also becomes more probable (+3.23 nats), most of all in the unavailable class (+5.16), where the error names an item of the product the aligned line names. The design's choice to interpret only the first token, with the per-token full reply as the secondary, is borne out. The results note's table puts the raw full-reply numbers side by side, which invites the wrong comparison (Llama larger than Qwen).
 
