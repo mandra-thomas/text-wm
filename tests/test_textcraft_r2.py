@@ -1631,3 +1631,42 @@ def test_audit_inference_map(small, fast):
                 yield from ps(v, path + "/" + k)
     found = [p for p in ps(out["per_model"]) if not any(f"/contrasts/{c}/" in p for c in A.CONTRASTS)]
     assert found == []
+
+
+# ---------------- pre-freeze audit (15.G, 2026-11-22) ----------------
+
+
+def test_x4_role_gap_is_naming_plus_completion_through_contrasts(small, fast):
+    recs = copy.deepcopy(small)
+    by = A.index_scores(_planted(recs, "qwen3-8b", noise=1.0, seed=13), recs, SHOTS, "qwen3-8b")[0]
+    c = A.contrasts(by, A.populations(recs), 0.4)
+    assert c["role_gap"]["estimate"] == pytest.approx(c["naming"]["estimate"] + c["completion"]["estimate"], abs=1e-12)
+    assert c["role_gap"]["n_goal"] == c["naming"]["n_goal"] and c["role_gap"]["n_ingredient"] == c["naming"]["n_ingredient"]
+
+
+def test_x1_r3_does_not_fire_when_both_gaps_cross_zero():
+    out = A.model_verdicts(_block(rg_ci=(-0.2, 0.5), m_ci=(-0.3, 0.4)), _fam(parent_penalty_differs=0.001), "m")
+    r3 = out["rejections"]["R3_penalty_and_role_gap_disagree"]
+    assert r3["testable"] and not r3["fires"] and r3["note"] == ""
+
+
+def test_x12_lift_difference_is_llama_minus_qwen(small, fast):
+    recs = copy.deepcopy(small)
+    scores = {t: _planted(recs, t, lam=0.2) for t in R.TAGS}
+    scores["llama3.1-8b"] = _planted(recs, "llama3.1-8b", lam=0.9)
+    d = A.analyse(recs, SHOTS, scores, list(R.TAGS))["across_models"]["R4_lift_comparison"]["difference_llama_minus_qwen"]
+    assert d["estimate"] == pytest.approx(0.7) and d["estimate"] > 0
+
+
+def test_x10_central_question_exact_tie_counts_as_inventory_consistent():
+    b = _block(tracking=(0.0, 0.0, -0.1, -0.1))
+    cq = A.model_verdicts(b, _fam(parent_penalty_differs=0.001), "m")["central_question"]
+    assert cq["answer"] == "penalty with inventory-consistent tracking"
+
+
+def test_analysis_requires_the_five_models(small, fast):
+    recs = copy.deepcopy(small)
+    with pytest.raises(ValueError):
+        A.analyse(recs, SHOTS, {}, ["qwen3-8b", "llama3.1-8b"])
+    gates = A.INFERENCE_MAP["gates (interval-based conditions, not tests)"]
+    assert len(gates) == 2 and gates[0].startswith("timing applicability") and "comparable" in gates[1]

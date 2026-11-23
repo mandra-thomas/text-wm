@@ -552,6 +552,21 @@ MUTANTS = [
     ('textcraft r2 F lift difference not reported', 'wf/textcraft/r2_analysis.py', '                                  lift_difference(bys["llama3.1-8b"], bys["qwen3-8b"], pops)', '                                  None'),
     ('textcraft r2 F inference map missing', 'wf/textcraft/r2_analysis.py', ', "inference_map": INFERENCE_MAP}', '}'),
     ('textcraft r2 A interpretation ignores competence', 'wf/textcraft/r2_analysis.py', '        return (DISCRIMINATING_DISTORTION if competent else', '        return (DISCRIMINATING_DISTORTION if True else'),
+    # TextCraft round 2, pre-freeze audit (15.G, 2026-11-22): the auditor's mutants X1-X12 and the hardening
+    ('textcraft r2 audit X1 R3 fires without a signed unmatched gap', 'wf/textcraft/r2_analysis.py', '    disagree = bool(p_sign and rg_sign and p_sign != rg_sign)', '    disagree = bool(p_sign and p_sign != rg_sign)'),
+    ('textcraft r2 audit X2 R3 matched gap only needs not to be opposite', 'wf/textcraft/r2_analysis.py', '    fires = bool(testable and disagree and m_sign == rg_sign)', '    fires = bool(testable and disagree and m_sign != -rg_sign)'),
+    ('textcraft r2 audit X3 R2 counts Llama-3.1 among the others', 'wf/textcraft/r2_analysis.py', '    others = [t for t in passing if t != "llama3.1-8b"]', '    others = list(passing)'),
+    ('textcraft r2 audit X4 role gap on a different row set from Dn and Dc', 'wf/textcraft/r2_analysis.py', '        "role_gap": ("between", *gap_rows(by, roles, lambda i: L(by, i, "aligned") - L(by, i, "swapped"))),', '        "role_gap": ("between", *gap_rows(by, [r for r in pops["goal"] + pops["ingredient"] if r["both_task_line"]], lambda i: L(by, i, "aligned") - L(by, i, "swapped"))),'),
+    ('textcraft r2 audit X5 margin SD from the ingredient failures', 'wf/textcraft/r2_analysis.py', '    d = [L(by, r["id"], "aligned") - L(by, r["id"], "swapped") for r in pops["main_failures"]]', '    d = [L(by, r["id"], "aligned") - L(by, r["id"], "swapped") for r in pops["ingredient"]]'),
+    ('textcraft r2 audit X6 TOST takes the smaller one-sided p', 'wf/textcraft/r2_analysis.py', '    return max(low, high)', '    return min(low, high)'),
+    ('textcraft r2 audit X7 Λ and P sign flip by item', 'wf/textcraft/r2_analysis.py', '"n_items": len(values), "n_pairs": len(set(clusters)), "p_differs": sign_flip_p(values, clusters),', '"n_items": len(values), "n_pairs": len(set(clusters)), "p_differs": sign_flip_p(values, [str(i) for i in range(len(values))]),'),
+    ('textcraft r2 audit X8 equivalence verdict on the unadjusted p', 'wf/textcraft/r2_analysis.py', '    if fam[f"{tag}:{contrast}:equivalent"]["p_holm"] < ALPHA:', '    if fam[f"{tag}:{contrast}:equivalent"]["p_in_family"] < ALPHA:'),
+    ('textcraft r2 audit X9 lift difference over class-matched ingredients only', 'wf/textcraft/r2_analysis.py', '    for r in pops["ingredient"]:\n        a = L(by_a, r["id"], "aligned")', '    for r in pops["ingredient_matched"]:\n        a = L(by_a, r["id"], "aligned")'),
+    ('textcraft r2 audit X10 H6-best needs strictly better tracking', 'wf/textcraft/r2_analysis.py', '    h6_best = bool(defined) and all(tr[k]["estimate"] <= 0 for k in defined)', '    h6_best = bool(defined) and all(tr[k]["estimate"] < 0 for k in defined)'),
+    ('textcraft r2 audit X11 NaN ps dropped from the family instead of entering as 1', 'wf/textcraft/r2_analysis.py', '                p[key] = pv if pv == pv else 1.0', '                p[key] = pv'),
+    ('textcraft r2 audit X12 R4 difference reported as Qwen minus Llama', 'wf/textcraft/r2_analysis.py', '                                  lift_difference(bys["llama3.1-8b"], bys["qwen3-8b"], pops)', '                                  lift_difference(bys["qwen3-8b"], bys["llama3.1-8b"], pops)'),
+    ('textcraft r2 G analysis accepts any model set', 'wf/textcraft/r2_analysis.py', '    if sorted(expected) != sorted(R.TAGS):', '    if False:'),
+    ('textcraft r2 G timing gates missing from the inference map', 'wf/textcraft/r2_analysis.py', '    "gates (interval-based conditions, not tests)": [', '    "gates": ['),
 ]
 
 

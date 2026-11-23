@@ -971,6 +971,8 @@ def model_verdicts(block: dict[str, Any], fam: dict, tag: str) -> dict[str, Any]
 
 
 def analyse(records: list[dict], shots, scores_by_tag: dict[str, list[dict]], expected: list[str]) -> dict[str, Any]:
+    if sorted(expected) != sorted(R.TAGS):  # pre-freeze audit: the Holm family is always the five models' 50 tests
+        raise ValueError(f"the analysis must expect exactly the five round-2 models {list(R.TAGS)}, not {expected}")
     pops = populations(records)
     for r in records:  # fit_measures may be stored as a JSON string
         if isinstance(r.get("fit_measures"), str):
@@ -1026,6 +1028,9 @@ INFERENCE_MAP = {
                     "parent subsets and their differences", "competence AUCs and classification rates",
                     "every other readout"],
     "decision rules from confirmed verdicts (no new test)": ["R1", "R2", "R5", "readings", "interpretations"],
+    "gates (interval-based conditions, not tests)": [
+        "timing applicability: the goal-minus-ingredient ΔL at one look-up has a 95% interval below zero",
+        "timing comparable to the one-look-up change: T's 95% interval contains the one-look-up change"],
 }
 
 

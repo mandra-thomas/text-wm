@@ -39,7 +39,7 @@ Round 2 asks four questions about the account:
 - Is "largest early" about *time* (how many steps the history has) or *content* (what the history has gathered) (the *padding* arm)?
 - Does the picture hold in three more model families, under one clean world-model prompt?
 
-**What round 2 is, and is not (14.U5).** The round-1 TextCraft replication across models failed under its preregistered rule (confirmed for Qwen3-8B, not for Llama-3.1-8B), and round 2 changes nothing about that result. The diagnostics that motivated round 2 were exploratory and post hoc. Round 2 tests the explanations they suggested, prospectively, on a new prompt and new records, with rules fixed before any round-2 score. Its central question: *does Llama's negative TextCraft effect arise from a goal-completion or naming mechanism, from poor reasoning about the environment's state, or from a combination?* Section 14 states which results would reject the two-component decomposition.
+**What round 2 is, and is not (14.U5).** The round-1 TextCraft replication across models failed under its preregistered rule (confirmed for Qwen3-8B, not for Llama-3.1-8B), and round 2 changes nothing about that result. The diagnostics that motivated round 2 were exploratory and post hoc. Round 2 tests the explanations they suggested, prospectively, on a new prompt and new records, with rules fixed before any round-2 score. Its central question: *does Llama's negative TextCraft effect arise from a goal-completion or naming mechanism, from poor reasoning about the environment's state, or from a combination?* Section 14 states which results would reject the two-component decomposition. The answer is reported descriptively, with the neutral labels of 15.C and 15.F5, which describe how the scores co-vary with text heuristics and do not identify an internal mechanism.
 
 **Confirmatory and descriptive.** The confirmatory part is five contrasts per model (section 6), each with a test of difference and a test of equivalence, in one Holm family of fixed size 50 (section 8). Everything else is descriptive: estimates with 95% intervals and no p-values, including the overall goal effect under the clean prompt.
 
@@ -359,7 +359,7 @@ The two-item goals are constructed counterfactual prompts, not native TextCraft 
 | P confirmed below zero in every competent model | The penalty is general across these families under the clean prompt. |
 | P confirmed below zero in some competent models, equivalent to zero or above in others | The penalty is model-specific; the models are named. |
 | P below zero for Llama-3.1 only | The penalty is a Llama-3.1 property; F3 is read by its corrected rule (14.R6). |
-| The same mechanism reading in every model where it is read | One mechanism across families. |
+| The same decomposition reading (completion penalty, naming / partial-completion penalty, or unresolved) in every model where it is read | The same reading of the decomposition across families (a description, not an identified mechanism). |
 | Λ ordering matches the ordering of the overall goal effect | Consistent with the lift carrying the between-model difference; with five models this is a description, not a test. |
 | Fewer than two models competent for the penalty | Round 2 cannot speak across families; per-model results are reported as they are. |
 
@@ -598,7 +598,7 @@ How the penalty depends on partial naming is read from the strict-against-overla
 - **14.R3 The identity's scope.** Dn + Dc equals the goal-minus-ingredient ΔL exactly only on the 500 goal-role and 496 class-matched ingredient failures with a two-item line. It splits the round-2 role gap under the clean prompt, unmatched, and not round 1's (section 6).
 - **14.R4 The ALFWorld mapping.** ALFWorld's goal-directed part, (aligned − mention) − (swapped − fourth), holds naming fixed and varies whether the action advances the task, so it maps to Dc, not Λ. Λ predictions now rest on TextCraft round 1 only. The Dc predictions use the goal-directed part on completing moves (`notes/textcraft_vs_alfworld.md`, branch `xenv-compare`, section 10): Llama −0.81 [−1.02, −0.60] gives below zero; Qwen +0.56 [0.17, 0.95] gives not below zero. The Dn expectation was softened to none, because ALFWorld's mention part names the object in a goal the action does not advance, while in Dn crafting G completes a named sub-goal. The predictions table in section 7 is the revised one.
 - **14.R5 Reading a negative Dn.** It reads "naming or sub-goal-completion penalty" (section 6, caveat a; section 8); relabelled "naming / partial-completion" by 14.V1.
-- **14.R6 F3.** F3 holds only if at least one model competent for P, other than Llama-3.1, has P equivalent to zero or confirmed above zero, and none is confirmed below zero. If one is confirmed below zero, F3 does not hold. Otherwise F3 is "undecided".
+- **14.R6 F3.** F3 holds only if at least one model competent for P, other than Llama-3.1, has P equivalent to zero or confirmed above zero, and none of them (none of the competent models other than Llama-3.1) is confirmed below zero. If one is confirmed below zero, F3 does not hold. Otherwise F3 is "undecided".
 - **14.R7 Section 9's yes/no claim.** Only Λ, Dn and Dc have yes/no versions. P and T are two-candidate only. The wording is corrected rather than adding yes/no arms.
 - **14.R8 The parent's neutral arm.** Each parent record gets `yn_neutral` on its own list (882 single-pass scores per model), so P's competence can be read on the neutral line. With the extended-list two-item arm (S, 873 two-candidate scores per model) each model now scores 25,743 (record, arm) combinations, 128,715 in all, about 9.2 GPU-hours (section 11).
 - **14.R9 Padding's reading.** T above zero reads as sensitivity to added empty-inventory steps (elapsed turns or repeated emphasis). The change from no look-up to one, goal minus class-matched ingredient, is reported beside T, and a T whose 95% interval contains it is "comparable to the one-look-up change" and is not read as timing.
@@ -695,8 +695,8 @@ Each criterion is computed by the analysis: `rejections_for_model` per model, `a
 
 - **R1, no penalty.** For any model competent for P, P is equivalent to zero or confirmed above zero. *Rejects* the penalty component of the decomposition for that model. (F1, now for every model, not only Llama-3.1.)
 - **R2, the penalty is not shared.** Among the models competent for P:
-  - at least one model other than Llama-3.1 has P equivalent to zero or confirmed above zero, and none is confirmed below zero → R2 fires;
-  - if any is confirmed below zero, R2 does not fire;
+  - at least one model other than Llama-3.1 has P equivalent to zero or confirmed above zero, and none of them (none of the competent models other than Llama-3.1) is confirmed below zero → R2 fires;
+  - if any of them (a competent model other than Llama-3.1) is confirmed below zero, R2 does not fire;
   - otherwise R2 is "undecided".
 
   *Rejects* the claim that the penalty is shared across families. (F3, 14.R6.)
@@ -705,9 +705,9 @@ Each criterion is computed by the analysis: `rejections_for_model` per model, `a
   - the round-2 role gap (aligned minus swapped, goal-role minus class-matched ingredient failures, on the 996 rows of the two-item contrasts; equal to Dn + Dc) has a 95% interval on the other side of zero;
   - the matched role gap (matched on length bin, craftable or raw missing inputs, and number of missing inputs, as in 14.V2) agrees in sign with the unmatched role gap, and its own 95% interval also excludes zero.
 
-  If P and the unmatched role gap disagree but the matched role gap does not confirm, the analysis reports "P and the unmatched role gap disagree; the matched role gap does not confirm (item-structure confound)" and does not reject. *Rejects* the decomposition for that model, since the within-item and between-item measures of the same penalty then disagree. *(Owner decision, adopted from review 2's Qwen objection; flagged for the owner before the freeze.)*
+  If P and the unmatched role gap disagree but the matched role gap does not confirm, the analysis reports "P and the unmatched role gap disagree; the matched role gap does not confirm (item-structure confound)", and R3 does not fire. When R3 fires, it *counts against the decomposition (descriptive diagnostic; no familywise error control)* for that model, since the within-item and between-item measures of the same penalty then disagree (15.F1). *(Owner decision, adopted from review 2's Qwen objection; flagged for the owner before the freeze.)*
 - **R4, the lift does not explain the model difference.** *(Withdrawn as a rejection at sign-off, 15.F: R4 is now a descriptive comparison with a paired interval for Λ(Llama-3.1) − Λ(Qwen3).)* This needs both Llama-3.1 and Qwen3 to be competent for Λ. It fires when Llama-3.1's Λ is confirmed above zero and its estimate is at least Qwen3's. *Rejects* the claim that the lift carries the Qwen–Llama difference. (F2. Its second half, the Λ ordering across five models, stays a description and never rejects.)
-- **R5, added steps deepen the penalty.** For a model competent for T, T is confirmed below zero. *Rejects* the claim that the penalty is largest early, in either reading. (F4.) *(Reworded at sign-off, 15.F: R5 rejects the predicted attenuation, not content-based explanations.)*
+- **R5, added steps deepen the penalty.** For a model competent for T, T is confirmed below zero. *Rejects* only the predicted attenuation of the penalty with added inventory-check steps (the "largest early" claim read as timing); it does not reject content-based explanations of round 1's gradient. (F4; worded as in 15.F3 and the code.)
 
 **Not tested.** The account's first claim, that the penalty is "of similar size across models", has no test here. Only its sign is tested (R1, R2). Sizes are reported, but no comparison of sizes across models is planned.
 
@@ -747,7 +747,7 @@ The answers are mutually exclusive:
 
 ### 15.S Other changes
 
-- **Readings say when competence fails.** `reading()` now appends "measurable effect only; not competent for …" whenever a contrast the reading uses (P, Dn, Dc for the penalty reading; T; Λ) is not competent.
+- **Readings say when competence fails.** `reading()` now appends "measurable effect only; does not discriminate successes from failures for …" (worded at sign-off, 15.F4) whenever a contrast the reading uses (P, Dn, Dc for the penalty reading; T; Λ) is not competent.
 - **Fallback in the reading table.** Any combination of P confirmed below zero with Dn and Dc not listed in section 8 (for example Dn confirmed above zero with Dc inconclusive, or Dc confirmed above zero) reads "penalty present, mechanism unresolved".
 - **The same rows for the role gap.** The two-item contrasts, the role gap, its matched version and the descriptive two-item readouts all use the same 996 rows: 500 goal-role and 496 class-matched ingredient failures that have a two-item line and no named goal already made. The matched role gap uses 981 of them, in 13 of 15 cells.
 - **What "padded" means for T's competence.** T's populations use the unpadded yes/no question under the neutral line, on the padded subset of failures (the padded records are scored with padding only under the aligned and swapped lines). The successes are the unpadded successes in the 1–3 and 4–8 step bins.
