@@ -133,6 +133,21 @@ Review 4 put 32 bugs into the code (N1 to N32, listed here as R4-N1 to R4-N32); 
 | M11 NaN upper bound kept | `test_onset_and_deepest_bound_come_from_the_kept_layers` |
 | M15 half-width at the cap without the margin | `test_table_rows_read_interval_bounds_onset_and_h4` (the plan when a cap binds) |
 
+## Interpretability pilot, review 5 (2026-11-22, branch `interp`)
+
+Review 5 (`notes/interp_review5.md`) ran ten spot-check mutants (V1 to V10); five survived its run. Fix round 5 added tests and eight mutants of its own code (W1 to W8). All 240 interpretability mutants are run under the strict rule: pytest exit code 1, which the harness only gets when some test failed (it runs with `--tb=no`, so the failing test's name is not printed). L7, L9 and M11 were adapted to the changed `direct_path_kept` lines. Killing tests (file `tests/test_interp_pilot.py`):
+
+| Mutant | Killed by |
+|---|---|
+| R5-V1 arrival layer not counted as between | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| R5-V2 gate on the smaller fold; R5-V3 gate at 0.5 inclusive; R5-V4 value over every H4 layer; R5-V7 ablation plan without the steering ratio; R5-V8 ablation plan capped at 100; W4 gate on one fold; W5 NaN left as NaN; W6 object-mention need in stratum items; W7 plan for the pooled stratum | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| R5-V5 direct path on the unedited fold | `test_minimal_pilot_end_to_end` |
+| R5-V6 a layer without an estimate excluded | `test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it` |
+| R5-V9 steering gate on the perp steering | `test_steering_ratio_is_gated_on_the_task_steering_and_uses_the_readout_free_direction` |
+| R5-V10 linearity ratio against another layer | `test_linearity_ratio_uses_its_own_layers_removal` |
+| W1 a failing layer excluded again; W2 removal must pass strictly above 0.6; W8 removal's upper bound read as the lower | `test_a_failing_layer_is_never_excluded_so_the_onset_cannot_move_earlier` |
+| W3 ablation summary without the removal profile | `test_onset_and_deepest_bound_come_from_the_kept_layers`, `test_ablation_summary_keeps_a_failing_layer_with_a_large_direct_path` |
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:

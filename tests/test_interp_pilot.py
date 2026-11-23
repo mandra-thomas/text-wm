@@ -478,7 +478,7 @@ def _report(hs, arrival=0.5, onset=8, profile=None, arrival_last=16, perp_ok=Tru
     by = {m: {"perp_over_task_removal": ({"assessable": True, "ratio": 0.5, "se": 0.1} if perp_ok and m != 12 else
                                          {"assessable": False, "ratio": 5.0}),
               "steer_success_perp_readout": {"ratio": 0.6}, "steer_task": {"ratio": 1.2},
-              "steer_perp_over_task": ({"ratio": 0.5, "se": 0.08, "assessable": True} if m not in (4, 8) else
+              "steer_perp_over_task": ({"ratio": 0.5, "se": 0.25, "assessable": True} if m not in (4, 8) else
                                        {"ratio": 9.0, "se": 3.0, "assessable": False}),
               "steer_success": {"ratio": 0.9}} for m in layers}
     cos = {f"{f}|{m}": {"task_success_perp_readout": 0.4 if f == 0 else 0.2, "mention_success_perp_readout": 0.05,
@@ -489,14 +489,17 @@ def _report(hs, arrival=0.5, onset=8, profile=None, arrival_last=16, perp_ok=Tru
     cos.update({f"cross_fold_task_success_perp_readout|1|{m}": 0.1 for m in layers})
     last_curve = {"se": [m / 100 for m in range(36)]}
     noise = {"history_share": hs, "arrival_layer": arrival, "arrival_last_grid": arrival_last, "n_items": 60,
-             "action_share": {"se": 0.04}, "object_mention_share": {"defined": True, "se": 0.09},
+             "action_share": {"se": 0.04}, "object_mention_share": {"defined": True, "se": 0.09, "n": 25},
              "curves": {"last": last_curve}}
     ab = {"onset_layer": onset, "onset_layers": layers, "deepest_upper": 0.8, "profile": prof, "by_layer": by,
           "task": {"share": 0.7}, "gap_neutral": {"ratio": 0.95, "ratio_se": 0.03}, "n_failures": 50,
           "n_successes": 20}
     boot = {f"{f}|{m}": {"readout": {"cos": 0.3, "ci": (0.1, 0.5), "se": 0.1},
-                         "readout_and_answer": {"cos": 0.2 if m != 8 else 0.9, "ci": (0.0, 0.4), "se": 0.1},
-                         "answer_success_perp_readout_cos": 0.2 if m != 8 else -0.7} for f in (0, 1) for m in layers}
+                         "readout_and_answer": {"cos": 0.9 if m in (4, 8) else 0.2, "ci": (0.0, 0.4), "se": 0.1},
+                         # layer 4: 0.2 in fold 0 but 0.7 in fold 1 (gated: both folds must be below 0.5); layer 8:
+                         # exactly 0.5 (gated: strictly below); layer 12 and the rest: 0.2 (kept)
+                         "answer_success_perp_readout_cos": ({4: (0.2, 0.7)[f], 8: -0.5}.get(m, 0.2))}
+            for f in (0, 1) for m in layers}
     return {"patching": {"noise": {s: noise for s in ("step0", "later", "all")}},
             "ablation": {"layers": layers, **{s: ab for s in ("step0", "later", "all")}}, "cosines": cos,
             "h4_cosines": boot}
@@ -523,8 +526,18 @@ def test_table_rows_read_interval_bounds_onset_and_h4():
     assert h4["null_between_folds_task"] == pytest.approx(0.8)
     # the median over the assessable layer only (12): over every H4 layer it would be 9.0
     assert h4["steer_perp_over_task"] == pytest.approx(0.5) and h4["steer_perp_over_task_layers"] == [12]
-    assert h4["cos_task_success_perp_readout_and_answer_layers"] == [4, 12]  # |cos(answer, s_perp)| 0.7 at 8
-    assert h4["steer_perp_over_task_se"] == pytest.approx(0.08)
+    assert h4["cos_task_success_perp_readout_and_answer_layers"] == [12]
+    # the gated value: over every H4 layer the median would be 0.9
+    assert h4["cos_task_success_perp_readout_and_answer"] == pytest.approx(0.2)
+    assert h4["steer_perp_over_task_se"] == pytest.approx(0.25)
+    one = _report({"defined": False})  # fold 1's answer cosine missing at layer 12: not assessable there
+    del one["h4_cosines"]["1|12"]["answer_success_perp_readout_cos"]
+    h1 = PI.table_rows(one, 36)["all"]["h4"]
+    assert h1["cos_task_success_perp_readout_and_answer"] == "not assessable"
+    assert h1["cos_task_success_perp_readout_and_answer_layers"] == []
+    empty = PI.table_rows(_report({"defined": False}, arrival=4 / 35, arrival_last=4), 36)["all"]["h4"]
+    assert empty["layers"] == [] and empty["cos_task_success_perp_readout"] == "not assessable"
+    assert empty["steer_task_share"] == "not assessable" and empty["goal_role"]["task_minus_mention"] == "not assessable"
     assert h4["perp_success_over_task_removal"] == pytest.approx(0.5)
     assert h4["perp_success_over_task_removal_layers"] == [4, 8]  # 12 is not assessable
     # H4 layers are cut at the earlier of the two arrivals (amendment 4, D4)
@@ -554,15 +567,23 @@ def test_table_rows_read_interval_bounds_onset_and_h4():
     rep["table_rows"] = PI.table_rows(rep, 36)
     ss = PI.sample_sizes(rep)
     assert ss["all"]["history_share"]["n_needed"] == A.n_for_half_width(60, 0.06)
-    assert ss["all"]["object_mention_share"]["n_needed"] == A.n_for_half_width(60, 0.09)
+    # counted in the items that have object-mention tokens (25), not in the stratum's items (60)
+    assert ss["all"]["object_mention_share"]["n_needed"] == A.n_for_half_width(25, 0.09)
     assert ss["all"]["arrival_answer_position"]["se"] == 0.16  # the SE at the arrival layer, 16
     assert ss["all"]["h4"]["cos_task_success_perp_readout"]["n_needed"].startswith("not applicable")
-    pl = ss["all"]["plan"]
-    want = max(A.n_for_half_width(60, x) for x in (0.06, 0.04, 0.09, 0.16))
+    assert "plan" not in ss["all"]  # the draw is per weighting stratum; the pooled row has no plan
+    pl = ss["later"]["plan"]
+    want = max(A.n_for_half_width(60, x) for x in (0.06, 0.04, 0.16))
     assert pl["patching"]["n_wanted"] == want and pl["patching"]["n"] == min(want, 400)
     assert pl["patching"]["cap_binds"] is (want > 400)
+    assert pl["object_mention_items"]["n_wanted"] == A.n_for_half_width(25, 0.09)
+    # the ablation plan: the largest of the removal, gap-ratio, steering-ratio and perp-over-task needs, capped at 400
+    needs = [A.n_for_half_width(50, 0.05), A.n_for_half_width(70, 0.03), A.n_for_half_width(50, 0.25),
+             A.n_for_half_width(50, 0.1)]
+    assert pl["ablation"]["n_wanted"] == max(needs) == A.n_for_half_width(50, 0.25) > 400
+    assert pl["ablation"]["cap"] == 400 and pl["ablation"]["n"] == 400 and pl["ablation"]["cap_binds"]
     assert ss["all"]["gap_ratio"]["n_needed"] == A.n_for_half_width(70, 0.03)
-    assert ss["all"]["h4"]["steer_perp_over_task"]["n_needed"] == A.n_for_half_width(50, 0.08)
+    assert ss["all"]["h4"]["steer_perp_over_task"]["n_needed"] == A.n_for_half_width(50, 0.25)
     assert ss["all"]["h4"]["cos_task_success_perp_readout"]["se"] == pytest.approx(0.1)
     # the plan when a cap binds: half-widths at the cap, bands unchanged
     big = A.plan_sizes({"x": 900, "y": 100}, 400, {"x": (60, 0.2), "y": (60, 0.05)})
@@ -786,13 +807,15 @@ def test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it():
     rem, lam = out[25.0]
     assert lam["share"] > 0.5 and rem["ci"][0] >= 0.6  # the naive onset would be found at the middle layer
     assert A.onset_layer({8: rem}) == 8
-    kept = A.direct_path_kept([8], {8: lam})
+    kept = A.direct_path_kept([8], {8: lam}, {8: rem})
     assert kept == [] and A.onset_layer({m: rem for m in kept}) is None  # the rule takes it out
-    assert A.direct_path_kept([8], {8: out[0.0][1]}) == [8]
+    assert A.direct_path_kept([8], {8: out[0.0][1]}, {8: out[0.0][0]}) == [8]
+    passing = {4: {"ci": (0.7, 0.9)}, 8: {"ci": (0.7, 0.9)}}
     assert A.onset_versus_arrival(None, 8, kept).startswith("not assessable (every profile layer excluded")
-    assert A.direct_path_kept([4, 8], {"8": {"ci": (0.1, 0.31)}}) == [4]  # an upper bound of 0.31 is excluded
-    assert A.direct_path_kept([4, 8], {8: {"ci": (0.1, 0.29)}}) == [4, 8] and A.direct_path_kept([4], None) == [4]
-    assert A.direct_path_kept([4], {4: {"ci": (0.1, 0.3)}}) == []  # an upper bound of exactly 0.3 is excluded
+    assert A.direct_path_kept([4, 8], {"8": {"ci": (0.1, 0.31)}}, passing) == [4]  # an upper bound of 0.31 is excluded
+    assert A.direct_path_kept([4, 8], {8: {"ci": (0.1, 0.29)}}, passing) == [4, 8]
+    assert A.direct_path_kept([4], None, passing) == [4]
+    assert A.direct_path_kept([4], {4: {"ci": (0.1, 0.3)}}, passing) == []  # an upper bound of exactly 0.3 is excluded
 
 
 class _Store0:
@@ -1056,7 +1079,7 @@ def test_an_excluded_layer_between_arrival_and_onset_makes_it_not_assessable():
     rem = {m: {"ci": (0.65, 0.9)} if m >= 12 else {"ci": (0.0, 0.2)} for m in prof}
 
     def row(direct):
-        kept = A.direct_path_kept(prof, direct)
+        kept = A.direct_path_kept(prof, direct, rem)
         onset = A.onset_layer({m: rem[m] for m in kept})
         return A.onset_versus_arrival(onset, 12, kept, rem[max(kept)]["ci"][1] if kept else None, all_layers=prof)
     # review 4's cases: arrival 12; the naive onset is 12
@@ -1084,8 +1107,10 @@ def test_onset_and_deepest_bound_come_from_the_kept_layers():
     assert out["all"]["deepest_upper"] == pytest.approx(out["all"]["profile"][4]["ci"][1])
     assert out["all"]["deepest_upper"] != pytest.approx(out["all"]["profile"][8]["ci"][1])
     # a NaN upper bound is excluded; a layer with no estimate is kept
-    assert A.direct_path_kept([4, 8], {4: {"ci": (float("nan"), float("nan"))}}) == [8]
-    assert A.direct_path_kept([4, 8], {4: {"n": 0}}) == [8] and A.direct_path_kept([4, 8], {8: {"ci": (0, 0.1)}}) == [4, 8]
+    passing = {4: {"ci": (0.7, 0.9)}, 8: {"ci": (0.7, 0.9)}}
+    assert A.direct_path_kept([4, 8], {4: {"ci": (float("nan"), float("nan"))}}, passing) == [8]
+    assert A.direct_path_kept([4, 8], {4: {"n": 0}}, passing) == [8]
+    assert A.direct_path_kept([4, 8], {8: {"ci": (0, 0.1)}}, passing) == [4, 8]
 
 
 def _steer_recs(task_gain, perp_gain=0.5, raw_gain=2.0, n=12):
@@ -1255,6 +1280,64 @@ def test_ablation_minimum_scaled_against_75_and_mention_disattenuated_by_its_own
                            cos["between_folds_success_perp_readout|5"])
     assert c.get("mention_success_perp_readout_disattenuated", float("nan")) == pytest.approx(want, nan_ok=True)
     assert cos["between_folds_mention_perp_readout|5"] != pytest.approx(cos["between_folds_task_perp_readout|5"])
+
+
+# ---------------- amendment 5 (review 5) ----------------
+
+
+def test_a_failing_layer_is_never_excluded_so_the_onset_cannot_move_earlier():
+    """Review 5's case: arrival at 12, removal lower bounds 0.10, 0.65, 0.70, 0.45, 0.70, 0.75, 0.80 at layers 4 to
+    28. Without exclusions the onset is 20, after the arrival. Dropping the failing layer 16 (alone, or with 20
+    to 28) would give onset 8, at or before the arrival; a failing layer is therefore never excluded."""
+    prof = A.profile_layers(36)
+    lows = dict(zip(prof, (0.10, 0.65, 0.70, 0.45, 0.70, 0.75, 0.80)))
+    rem = {m: {"ci": (lo, lo + 0.2)} for m, lo in lows.items()}
+
+    def reading(direct):
+        kept = A.direct_path_kept(prof, direct, rem)
+        onset = A.onset_layer({m: rem[m] for m in kept})
+        return kept, onset, A.onset_versus_arrival(onset, 12, kept, rem[max(kept)]["ci"][1] if kept else None,
+                                                   all_layers=prof)
+    assert reading(None) == (prof, 20, "after arrival")
+    big = {"ci": (0.2, 0.33)}
+    kept, onset, row = reading({16: big})
+    assert 16 in kept and onset == 20 and row == "after arrival"  # the failing layer stays
+    kept, onset, row = reading({m: big for m in (16, 20, 24, 28)})
+    assert kept == [4, 8, 12, 16] and onset is None and row == "inconclusive (no onset, interval too wide)"
+    assert onset != 8
+    # a passing layer with a large direct-path share is still excluded; the exclusion can then only push the onset
+    # later or leave it undefined
+    kept, onset, _ = reading({8: big})
+    assert 8 not in kept and onset == 20
+    # the threshold is the onset's own: a removal lower bound of exactly 0.6 passes and can be excluded
+    assert A.direct_path_kept([4], {4: big}, {4: {"ci": (0.6, 0.8)}}) == []
+    assert A.direct_path_kept([4], {4: big}, {4: {"ci": (0.59, 0.8)}}) == [4]
+    assert A.direct_path_kept([4], {4: big}, {}) == [4]  # no removal estimate: cannot pass, kept
+
+
+def test_ablation_summary_keeps_a_failing_layer_with_a_large_direct_path():
+    recs, fold_of, succ = _ablate_recs({0: 4, 1: 4})
+    for r in recs:  # layer 4 passes (removes everything), layer 8 fails (removes a sixth)
+        if r["goal"] == "aligned":
+            r["edits"].update({"task|4": 1.0, "task|8": 3.5})
+    big = {"ci": (0.3, 0.5)}
+    out = A.ablation_summary(recs, fold_of, succ, [4, 8], B=50, direct={"all": {4: big, 8: big}})
+    assert out["all"]["onset_layers"] == [8] and out["all"]["onset_layer"] is None
+
+
+def test_linearity_ratio_uses_its_own_layers_removal():
+    recs, fold_of = _steer_recs(task_gain=2.0)
+    for r in recs:  # a second layer with a different removal and the same task steering
+        if r["goal"] == "aligned":
+            r["edits"]["task|8"] = 1.0
+        elif r["goal"] == "swapped":
+            r["edits"].update({"task|8": 1.0, "steer_task|8": r["edits"]["steer_task|4"]})
+        else:
+            r["edits"]["task|8"] = 0.0
+        r["edit_clean"] = {x: r["d"] for x in r["edits"]}
+    out = A.ablation_summary(recs, fold_of, set(), [4, 8], B=50)
+    lin4 = out["all"]["by_layer"][4]["linearity_steer_task_vs_removal"]
+    assert lin4["task_removal"] == pytest.approx(0.5) and out["all"]["profile"][8]["share"] == pytest.approx(1.0)
 
 
 # ---------------- the runs end to end on a tiny model ----------------

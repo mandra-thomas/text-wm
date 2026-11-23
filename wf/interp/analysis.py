@@ -349,7 +349,7 @@ def patch_summary(records: list[dict], placebo: list[dict], n_layers: int, B: in
                              "se": curves["hist_all"]["max_se"], "layer": curves["hist_all"]["argmax_layer"]})
     ho, hm = curves["hist_obj"], curves["hist_obj_matched"]
     out["object_mention_share"] = ({"defined": False} if not ho.get("defined") else
-                                   {"defined": True, "max": ho["max"], "ci": ho["max_ci"], "se": ho["max_se"],
+                                   {"defined": True, "max": ho["max"], "ci": ho["max_ci"], "se": ho["max_se"], "n": ho["n"],
                                     "matched_max": hm.get("max"), "matched_ci": hm.get("max_ci")})
     out["action_share"] = {"max": curves["action"].get("max"), "ci": curves["action"].get("max_ci"),
                            "se": curves["action"].get("max_se")}
@@ -715,10 +715,16 @@ def direct_path_share(dA: Any, dS: Any, DA: Any, DS: Any, games: list[str], ids:
     return {"n": len(num), "share": float(lam[0]), "ci": _interval(lam[1:]), "se": _se(lam[1:])}
 
 
-def direct_path_kept(layers: list[int], direct: dict | None, bound: float = DIRECT_PATH_MAX) -> list[int]:
-    """Profile layers on which the onset is read (amendment 3, C2): those whose direct-path share has a 95% upper
-    bound below `bound`. A layer without a direct-path estimate is kept; a layer whose estimate has no finite
-    upper bound is excluded (amendment 4, D8)."""
+def direct_path_kept(layers: list[int], direct: dict | None, removal: dict[int, dict],
+                     bound: float = DIRECT_PATH_MAX, threshold: float = ONSET_THRESHOLD) -> list[int]:
+    """Profile layers on which the onset is read (amendment 3, C2; amendment 5, E1).
+
+    A layer is excluded only if its direct-path share's 95% upper bound is at least `bound` (or not finite,
+    amendment 4, D8) AND its removal (`removal[m]`, the task direction's removed share) passes, with a lower
+    bound of at least `threshold`. The direct path can inflate a removal into a pass, never into a failure, so a
+    failing layer is real evidence and stays: dropping it could let the onset jump back to an earlier run of
+    passing layers. Excluding only passing layers can move the onset later or leave it undefined, never earlier.
+    A layer without a direct-path estimate is kept."""
     if not direct:
         return list(layers)
     out = []
@@ -728,7 +734,9 @@ def direct_path_kept(layers: list[int], direct: dict | None, bound: float = DIRE
             out.append(m)
             continue
         hi = (x.get("ci") or (float("nan"), float("nan")))[1]
-        if hi == hi and hi < bound:
+        lo = ((removal.get(m) or removal.get(str(m)) or {}).get("ci") or (float("nan"),))[0]
+        passes = lo == lo and lo >= threshold
+        if (hi == hi and hi < bound) or not passes:
             out.append(m)
     return out
 
@@ -974,7 +982,7 @@ def ablation_summary(recs: list[dict], fold_of: dict[str, int], succ_ids: set[st
         row: dict[str, Any] = {"n_failures": len(fails), "n_successes": len(succ)}
         row["profile"] = {m: removed_share(by, fails, at("task", m), games, B, seed, weights=weights)
                           for m in list(layers) + list(caveat)}
-        kept = direct_path_kept(layers, (direct or {}).get(s))
+        kept = direct_path_kept(layers, (direct or {}).get(s), row["profile"])
         row["onset_layers"] = kept
         row["onset_layer"] = onset_layer({m: row["profile"][m] for m in kept})
         row["deepest_upper"] = (row["profile"][max(kept)].get("ci") or (float("nan"),) * 2)[1] if kept else float("nan")

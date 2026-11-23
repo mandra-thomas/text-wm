@@ -773,6 +773,20 @@ def _median(xs: list[float]) -> float:
     return float(np.median(v)) if v else float("nan")
 
 
+def _not_assessable_for_nan(x: Any) -> Any:
+    """Every NaN number in a row (or a nested row) read as "not assessable" (amendment 5, E5): for example every H4
+    quantity when no profile layer lies before the arrival."""
+    if isinstance(x, dict):
+        return {k: _not_assessable_for_nan(v) for k, v in x.items()}
+    if isinstance(x, float) and x != x:
+        return "not assessable"
+    return x
+
+
+def _num(x: Any) -> float:
+    return x if isinstance(x, (int, float)) and not isinstance(x, bool) else float("nan")
+
+
 def h4_rows(ab: dict, cos: dict, layers: list[int], boot: dict | None = None) -> dict:
     """The H4 rows (amendment 2, B2; amendment 3, C3) at `layers` (up to two thirds of depth and strictly before
     the patching arrival layer), each next to its null baselines. Medians over the layers; cosines averaged over
@@ -809,9 +823,9 @@ def h4_rows(ab: dict, cos: dict, layers: list[int], boot: dict | None = None) ->
     def ans_cos(m: int) -> float:
         v = [boot.get(f"{f}|{m}", {}).get("answer_success_perp_readout_cos") for f in (0, 1)]
         v = [abs(x) for x in v if x is not None and x == x]
-        return max(v) if v else float("nan")
+        return max(v) if len(v) == 2 else float("nan")  # amendment 5, E4: both folds, or not assessable
     second_ok = [m for m in layers if ans_cos(m) == ans_cos(m) and ans_cos(m) < ANSWER_SUCCESS_MAX_COS]
-    return {
+    return _not_assessable_for_nan({
         "layers": layers,
         "cos_task_success_perp_readout": _median([fold_mean("task_success_perp_readout", m) for m in layers]),
         "cos_task_success_perp_readout_ci_by_layer": {m: boot_mean(m, "readout", "ci") for m in layers},
@@ -851,7 +865,7 @@ def h4_rows(ab: dict, cos: dict, layers: list[int], boot: dict | None = None) ->
             "task_minus_mention": _median([fold_mean("task_success_perp_readout", m)
                                            - fold_mean("mention_success_perp_readout", m) for m in layers]),
         },
-    }
+    })
 
 
 def table_rows(report: dict, n_layers: int | None = None) -> dict:
@@ -906,7 +920,7 @@ def sample_sizes(report: dict) -> dict:
                                     TARGET_HALF_WIDTH, n_for_half_width, plan_sizes)
 
     def nn(n: Any, se: Any) -> dict:
-        se = float("nan") if se is None else se
+        se = _num(se)
         return {"n": n, "se": se, "n_needed": n_for_half_width(n or 0, se)}
 
     na = "not applicable (stage 0 uses every item of the fold)"
@@ -916,9 +930,14 @@ def sample_sizes(report: dict) -> dict:
         ab = report["ablation"].get(s, {})
         n_p = noise["n_items"]
         row: dict[str, Any] = {}
-        for name in ("history_share", "action_share", "object_mention_share"):
+        for name in ("history_share", "action_share"):
             x = noise.get(name, {})
             row[name] = nn(n_p, x.get("se") if x.get("defined", True) else None)
+        # amendment 5, E6: the object-mention share's SE comes from the items with object-mention history tokens
+        # only, so its need is counted in those items (the mention quota), not in the stratum's items
+        om = noise.get("object_mention_share", {})
+        row["object_mention_share"] = {**nn(om.get("n"), om.get("se") if om.get("defined", True) else None),
+                                       "unit": "items whose history names the action's object"}
         last = noise.get("curves", {}).get("last", {})
         a = noise.get("arrival_last_grid")
         row["arrival_answer_position"] = nn(n_p, (last.get("se") or [None] * (a + 1))[a] if a is not None else None)
@@ -934,7 +953,10 @@ def sample_sizes(report: dict) -> dict:
                          [(by.get(m) or {}).get("perp_over_task_removal", {}).get("se") for m in h4.get("layers", [])]))}
         dp = (report.get("direct_path") or {}).get(s, {})
         row["direct_path_share"] = {m: {"se": v.get("se"), "n_needed": na} for m, v in dp.items()}
-        patch_m = {k: row[k] for k in ("history_share", "action_share", "object_mention_share", "arrival_answer_position")}
+        if s == "all":  # amendment 5, E7: the draw is made per weighting stratum, so the pooled row has no plan
+            out[s] = row
+            continue
+        patch_m = {k: row[k] for k in ("history_share", "action_share", "arrival_answer_position")}
         abl_m = {**{f"removal|{m}": v for m, v in row["removal_by_layer"].items()}, "gap_ratio": row["gap_ratio"],
                  "steer_perp_over_task": row["h4"]["steer_perp_over_task"],
                  "perp_over_task_removal": row["h4"]["perp_over_task_removal"]}
@@ -943,6 +965,10 @@ def sample_sizes(report: dict) -> dict:
                                    {k: (v["n"], v["se"]) for k, v in patch_m.items()}),
             "ablation": plan_sizes({k: v["n_needed"] for k, v in abl_m.items()}, ABLATE_CAP_PER_STRATUM,
                                    {k: (v["n"], v["se"]) for k, v in abl_m.items()}),
+            "object_mention_items": plan_sizes({"object_mention_share": row["object_mention_share"]["n_needed"]},
+                                               PATCH_CAP_PER_STRATUM,
+                                               {"object_mention_share": (row["object_mention_share"]["n"],
+                                                                         row["object_mention_share"]["se"])}),
         }
         out[s] = row
     return out
