@@ -553,7 +553,18 @@ smoke run and its record in this note; the full run; the analysis.
 - **General suppression.** An explicit "the task never changes the output" could suppress a bias that is not a
   belief; the naming control addresses this for Qwen and is unavailable for Llama.
 - **Comprehension is read on yes/no**, which for Qwen carries a task judgement and a lean toward No. K2 and K4 detect
-  a lean; the questions are general, not about the scored call.
+  a lean; the questions are general, not about the scored call. *(Review 1, S3:)* the questions now follow the history
+  without the scored call, and the correct answers are two Yes and two No in every arm, but the residual risk stands:
+  Qwen said No to every status-class call in the confirmatory run, so a lean toward No can still fail the gate in arm
+  (iii) (where K1 and K4 are Yes) for a reason other than misreading the backend, and every Qwen category would then be
+  inconclusive. The 24 items repeat the same four questions in different contexts; they test robustness across
+  contexts, not 24 independent understandings.
+- **The demonstrations cover write-request lines only** *(review 1, M2)*. Every few-shot example in every arm has a
+  write-request task line, and the two minimal pairs of arms (ii) and (iii) contrast a request on this order with a
+  request on another order. A model that copies the pairs raises the swapped write line and leaves the question lines
+  alone, which mimics "(a) for naming, (b) for the request". The amended reading (R1-M2) separates the two by where the
+  removal lies; a question-line minimal pair was considered and not added (it costs examples and tokens, and the split
+  already discriminates).
 - **192 items of two classes.** Per-class results are secondary; one domain, one prompt format.
 - **Arm (i) is rescored, not reused,** so that all three arms are compared within one run on the same hardware and
   code. The confirmatory scores serve only as the reproducibility check of §7.9.
@@ -605,3 +616,142 @@ Built as designed (`6bc8a41`, `069ff00`). Nothing has been scored. What the buil
 - **Full test suite** (once, single process, at `069ff00`): 966 passed, 7 skipped.
 
 Before scoring: an independent review, then the freeze tag, then the smoke run (§10).
+
+## Amendments after review 1, before any score (2026-11-22)
+
+Review 1 (`notes/tau_auth_review1.md`, read at `d4cc451`) found the design not ready to freeze: two must-fix items in
+how a removal is read, and six should-fix items. Everything below was decided and committed before any score of any
+model in this experiment exists. No job, item, task line, arm or first-token or yes/no prompt changed; the comprehension
+prompts changed (S3). Where an amendment changes an earlier section, the earlier text stands as a record and this
+section governs.
+
+### R1-M1. The general-suppression caveat follows the naming control, and the removed shares are reported
+
+**Problem.** §6.5 attached the caveat only when the naming component's removal was itself shown material. A uniform
+damping of every task effect by about 35% (Qwen: request removed 0.76, naming removed 0.63) was read as "part of the
+request component behaves like an authorization belief" with no caveat; and for Llama, which has no naming component,
+partial removals carried no caveat either.
+
+**Now** (`model_reading`, `wf/tau/auth.py`). Whenever a removal of the request component is shown (category
+authorization-like, both, or authorization-like part shown), the reading carries the general-suppression caveat unless
+the naming component is relevance-like (its removal shown negligible). When the naming component is absent, the reading
+always carries the sentence "With no naming component in this model, a general suppression of task effects by the arm
+is not excluded." Beside every reading, as a descriptive line that decides nothing, the analysis reports the share of
+each component that arm (iii) removes,
+
+$$s_W = \frac{\overline{Z_W}}{\overline{W^{\text{main}}}}, \qquad s_M = \frac{\overline{Z_M}}{\overline{M^{\text{main}}}},$$
+
+and their difference, with 95% intervals from the same 2,000 user resamples (`removed_shares`). A uniform suppression
+predicts equal shares; a request-specific belief predicts the request share larger. A test runs the reviewer's uniform
+35% scenario end to end and requires the caveat and equal shares.
+
+### R1-M2. Where the removal lies: the aligned and the swapped half of the request component
+
+**Problem.** Copying of the request-line minimal pairs (see §11) raises the swapped write line and leaves the question
+lines alone, which the naming control cannot see; complete copying even makes the persisting part about −1.8 nats for
+Qwen, which §6.4 labelled "authorization-like part shown".
+
+**The split.** The request component is the difference of two halves,
+
+$$W = \big[L(\text{al}) - L(\text{ma})\big] - \big[L(\text{sw}) - L(\text{ms})\big],$$
+
+so its removed part is the aligned half's removed part minus the swapped half's,
+
+$$Z_W = Z_{\text{al}-\text{ma}} - Z_{\text{sw}-\text{ms}}.$$
+
+An authorization belief refuses every unrequested write, so under arm (i) it lowers the swapped, neutral and both
+question lines relative to aligned; its removal lies in the aligned half ($Z_{\text{al}-\text{ma}}$ near $Z_W$) together
+with a drop of aligned − neutral, and leaves swapped − mention-swapped and swapped − neutral in place. Copying of the
+demonstrated pairs does the opposite: the swapped half carries the removal ($-Z_{\text{sw}-\text{ms}}$ near $Z_W$),
+swapped − neutral rises in arm (iii), and the aligned half and aligned − neutral stay. In the confirmatory Qwen numbers the
+aligned half is +1.59 and the swapped half +0.58 nats of the 2.17.
+
+**Now.** Prespecified and reported in the primary block: the removed part of the aligned half, the swapped half's
+contribution (the two add up to $Z_W$), and the removed parts of aligned − neutral and swapped − neutral. **The
+authorization reading is stated only if the aligned half shows a removal**: its removed part is at least half of $Z_W$
+and its 95% CI excludes 0, both in the direction of $W$ in arm (i) (`aligned_half_shown`). Otherwise a shown removal
+reads: "The request component's removed part is not carried by its aligned half (aligned minus mention-aligned), so it
+lies on the demonstrated request lines (swapped minus mention-swapped): it is not separated from copying of the
+demonstrated minimal pairs and is not read as an authorization belief." A new category, checked after "grows" and
+before every other, is **overshoot**: the persisting part materially of the opposite sign (estimate at most $-\delta$,
+CI on the far side of 0, Holm $p < 0.01$), labelled "the task-blind arm removes more than the component ... consistent
+with copying of the demonstrated minimal pairs, not with an authorization belief; reported, not interpreted". Tests:
+partial copying (category authorization-like, copying reading, no authorization sentence), full copying (overshoot), and
+the authorization pattern (aligned half shown, the AB reading).
+
+### R1-S1. The Holm family always has eight members
+
+A primary test whose p is not a number (for example, a model whose blind-arm records for a whole action were lost)
+enters the family as p = 1, as a missing model already did; the shared `wf.analysis.stats.holm`, which drops NaN for
+other studies, is unchanged. Test added.
+
+### R1-S2. Per-class values in every reading
+
+Each model's decision entry quotes, for both components and both classes, the arm (i) value and the removed and
+persisting parts. When the two classes' arm (i) values have opposite signs with both CIs excluding 0, the reading adds
+"The pooled request (or naming) component averages opposite class effects (status …, unavailable …); see per class."
+(Llama's confirmatory goal effect was +1.23 in the status class and −0.33 in the unavailable class.) No per-class
+decision.
+
+### R1-S3. The comprehension check
+
+The four questions now follow the task line and the history with no "Next call" line, so they are not read as
+questions about the scored call. K3 is reworded to ask whether the backend would **return an error** (instead of
+whether it would execute the call), so the correct answers are two Yes and two No in every arm:
+
+| Question | Arms (i) and (iii) | Arm (ii) |
+|---|---|---|
+| K1, a valid write on an order the task does not ask to change: executed without an error? | Yes | No |
+| K2, a requested write that breaks a rule: executed without an error? | No | No |
+| K3, a valid write when the task is only a question: does it return an error? | No | Yes |
+| K4, a valid requested write: executed without an error? | Yes | Yes |
+
+The scored first-token and yes/no prompts are unchanged. **Decision on the smoke run:** its comprehension and
+positive-control results may be read (`gates_readable` in the smoke metrics), because they are gates, not outcomes.
+Any change made after reading them is logged as a deviation, and the contrasts themselves stay unread (the smoke
+metrics still contain no estimate, CI, p or category of any contrast). The residual risk is stated in §11.
+
+### R1-S4. The reading table's fallback, and the naming-only removal
+
+Every combination not listed in §6.5 reads "Reported per component; no combined reading (request: …; naming: …)", with
+the caveat of R1-M1 when a request removal is shown. One more row is written out: request relevance-like with the naming
+component's removal shown (authorization-like, both, or part shown) reads "The naming component is removed while the
+request component persists: the control moves and the target does not. Neither explanation of the request component
+predicts this; the request component is read as relevance-like and the naming change is reported, not interpreted."
+
+### R1-S5. The longest prompt in the smoke run; no 40 GB A100s
+
+The smoke set adds `tau-g-77cc59152d73`, the item with the longest scored prompt (15,535 Qwen tokens, arm (iii), yes/no),
+so the smoke run has 7 items (comprehension on all 7). `pace/tau_auth_score.sbatch` accepts L40S, A40, 80 GB A100 and
+H100 nodes (`A100-80GB` replaces `gpu-a100`), because at 15.5k tokens the full-vocabulary logits put a 40 GB A100 near
+its limit.
+
+### R1-S6. Tests for the properties the reviewer's surviving mutants exposed
+
+User clustering of both the permutation test and the bootstrap in `lin` (four users with strong user-level effects:
+p above 0.1 and an interval spanning the user means); the positive control failing with an estimate above 1 nat and a
+CI crossing 0; the scorer refusing resumed records with a wrong item hash; the prompt checks' "final turn differs from
+main's" and "differs from the confirmatory prompt" branches; a non-finite per-item value left out; a CI touching 0 not
+counting as above 0.
+
+### R1 checks
+
+All at `1eedecb` (the code of these amendments; this note and the deviations entry follow it).
+
+- **Tests:** `tests/test_tau_auth.py`, 100 tests (66 before), all passing. Full suite, once, single process: 1000
+  passed, 7 skipped.
+- **Mutants:** 87 `tau-auth` mutants in `scripts/mutation_check.py`: the reviewer's 12 (R1-1 to R1-12), 17 for the
+  amendments (A-1 to A-17) and the earlier 58 (three adapted to the changed code: the authorization arm's K1, the
+  removed part against arm (ii), the Holm family's missing model). Run through `scripts/tau_mutation_check.py` against
+  `tests/test_tau_auth.py` after the unmutated copy passed: **87 of 87 killed, each with its killing test logged**,
+  none timed out, none failed to apply. The reviewer's six real gaps are killed by the S6 tests, and both of its
+  near-equivalent survivors by new tests (a CI touching 0; a non-finite per-item value).
+- **Token check on ICE** (job 7244868, checkout `text-wm-fix35` at `1eedecb`, both tokenizers at the pinned revisions,
+  report in [tau_auth_tokcheck.json](tau_auth_tokcheck.json), replacing the report of `069ff00`): PASS for both models
+  on all 9,504 scored prompts each, including the reworded comprehension prompts; no first-token, boundary or
+  task-line problem, and the scoring run's prompt checks report none. System messages unchanged (`7cc04248…`,
+  `11ede0a6…`, `2c621c0e…`). The comprehension prompts are now about 85 tokens shorter (median, Qwen: arm (i) 11,081,
+  arm (ii) 12,753, arm (iii) 13,145); the longest prompt is unchanged (15,535 Qwen and 13,638 Llama tokens,
+  `tau-g-77cc59152d73`).
+
+Before scoring: review 2 of these amendments, then the freeze tag, then the smoke run.

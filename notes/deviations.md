@@ -10,6 +10,19 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## τ-bench authorization experiment: amendments after review 1, before any score (2026-11-22)
+
+The design of `notes/tau_auth_design.md` (committed `6dd0026`, before any code) was amended after its first independent
+review (`notes/tau_auth_review1.md`), before any model was scored in it and before the freeze tag. The reading of a
+removal changed: the general-suppression caveat now applies to any shown removal of the request component unless the
+naming component is relevance-like, and always without a naming component; the authorization reading needs the removal
+in the aligned half of the request component, otherwise a copying reading applies; a new "overshoot" category; the
+removed shares are reported. Also: a NaN primary p enters the Holm family as 1; per-class values in each reading; the
+comprehension questions no longer show the scored call and have two Yes and two No answers per arm (one question
+reworded); the smoke run adds the longest-prompt item and its gates may be read; 40 GB A100s are excluded. No item, arm,
+job, first-token or yes/no prompt, margin, threshold or Holm family changed. Details: the design note's section
+"Amendments after review 1, before any score".
+
 ## Decided or found 2026-11-20 (documentation and rigor audit)
 
 ### Changes from the 2026-11-20 audit

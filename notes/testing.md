@@ -63,3 +63,23 @@ These were planned on 2026-11-17 and were all in use before any confirmatory ite
 ## Model families, wave A (2026-11-20)
 
 `tests/test_families.py` covers the family runs: golden renders of one real item from each pinned chat template, the tokenization gate on stand-in tokenizers built to fail in one item or one prompt (a late success's candidate, one item's swapped yes/no prompt, a template that writes "Yes" as another token than the scorer reads), the gate's scope in the shard runner (every item, on a resume too, with the scorer's template settings), the analysis (flip definitions by name, the yes/no arms in the standardised effect, records filtered by model and by population), the pre-data primary metrics (the item share toward Yes and the goal-to-evidence ratio R, including their invariance to rescaled logits), the competence gate at each of its bounds, the TOST equivalence of R on paired items, the Holm-corrected primary family, and the Mistral placement run. Fix round 2 (third amendment) adds: the R comparison's fallback to the paired difference when the ratio is not estimable (review 2's synthetic models with R near zero, slightly positive and negative), the 2% cap on dropped draws, the item-share comparison (difference by game sign flips, TOST within ±0.05 as the larger one-sided p), the 90% and 95% interval rules for both comparisons on hand-set bootstrap draws, pairing across noisy games, the primary family padded with p = 1 for missing or NaN tests, the planned comparisons including Gemma 2 against Mistral, the two-sided noise floor, ties at log-odds zero, NaN scores, and game-clustered p-values on games that move together. With transformers, torch and the tokenizers cached (`WF_TEST_HF_CACHE`), the real templates run too. `scripts/mutation_check.py` holds 75 families mutants (`MUTANTS_MATCHING=families`), including the ten a review found surviving, seventeen for the primary metrics, gate, equivalence and family, review 2's M1 to M14 (two each for M6 and M7, R and share) and nine for fix round 2. All 75 are caught (2026-11-20). Two survived the first run and were killed by added tests: the TOST p taken from the smaller side (the test's draws had been symmetric) and R kept when the evidence effect is negative (the test had used an evidence effect of exactly zero). The refactored gate was also run against the earlier one on every real item with the pinned tokenizers, with identical results (`notes/families_design.md`).
+
+## τ-bench authorization experiment (2026-11-22)
+
+`tests/test_tau_auth.py` (100 tests) covers `wf/tau/auth.py` (`notes/tau_auth_design.md`): golden system messages and
+texts of the three arms; the arms' diffs at the level of the system message, the few-shot examples and every rendered
+turn; the example cells and minimal pairs; the per-item few-shot order; item, comprehension and job selection; the
+comprehension questions (history without the scored call, two Yes and two No per arm) and the 80% rule; the positive
+control's arms, action, threshold and CI; user clustering of the permutation test and the bootstrap; the decomposition
+identity and the aligned/swapped halves of the request component; every row of the category and reading tables,
+including overshoot and the general-suppression and no-control sentences; Holm over exactly eight tests with NaN as
+p = 1; per-class values and the opposite-sign sentence; the removed shares; synthetic data for each predicted pattern
+(relevance throughout, authorization for the request, authorization throughout, both, grows, uniform suppression, partial
+and full copying of the demonstrated pairs, a Llama-sized component without a naming component, each failed gate); the
+token report's authorization-error check on a stand-in tokenizer; and the runs end to end on mock scores (scoring gates,
+prompt-check refusal, stale-record refusal on resume, missing and stale scores, the smoke analysis with gates but no
+estimates, the projection). `scripts/mutation_check.py` holds 87 `tau-auth` mutants (58 of the build, review 1's 12 and
+17 for its amendments); `MUTANTS_MATCHING=tau-auth python scripts/tau_mutation_check.py` runs them against this file
+after the unmutated copy passes and logs each kill's test. All 87 are killed (2026-11-22). Before review 1, six of the
+reviewer's mutants survived (clustering in `lin`, the positive control's CI, the scorer's stale-record refusal, two
+prompt-check branches) and one of the build's own (the system-message check); each now has a test.

@@ -87,8 +87,8 @@
    },
    "prompt_tokens": {
     "auth/fail/comp": {
-     "median": 12833.0,
-     "max": 14716,
+     "median": 12753.0,
+     "max": 14635,
      "n": 96
     },
     "auth/fail/first": {
@@ -112,8 +112,8 @@
      "n": 192
     },
     "blind/fail/comp": {
-     "median": 13225.0,
-     "max": 15108,
+     "median": 13145.0,
+     "max": 15027,
      "n": 96
     },
     "blind/fail/first": {
@@ -137,8 +137,8 @@
      "n": 192
     },
     "main/fail/comp": {
-     "median": 11161.0,
-     "max": 13044,
+     "median": 11081.0,
+     "max": 12963,
      "n": 96
     },
     "main/fail/first": {
@@ -249,8 +249,8 @@
    },
    "prompt_tokens": {
     "auth/fail/comp": {
-     "median": 11483.0,
-     "max": 13019,
+     "median": 11423.0,
+     "max": 12958,
      "n": 96
     },
     "auth/fail/first": {
@@ -274,8 +274,8 @@
      "n": 192
     },
     "blind/fail/comp": {
-     "median": 11795.0,
-     "max": 13331,
+     "median": 11735.0,
+     "max": 13270,
      "n": 96
     },
     "blind/fail/first": {
@@ -299,8 +299,8 @@
      "n": 192
     },
     "main/fail/comp": {
-     "median": 10064.0,
-     "max": 11600,
+     "median": 10004.0,
+     "max": 11539,
      "n": 96
     },
     "main/fail/first": {
