@@ -3,14 +3,31 @@
 
 A surviving mutant means the tests would not catch that bug coming back. Runs on a copy of
 the repo, so the working tree is never touched.
+
+Kill rule (strict, the default from 2026-11-23): a mutant is killed only when pytest exits 1 and names a failing
+test. A collection or import error, any other non-zero exit, or a run with only setup or teardown errors is
+"error-only", not a kill; a timeout is inconclusive. `--legacy-any-exit` restores the earlier rule (any non-zero
+exit is a kill) to reproduce logs written before 2026-11-23. See notes/testing.md, "Mutation runner: strict kill rule".
+
+    python scripts/mutation_check.py [i/n] [--results out.jsonl] [--root CHECKOUT] [--mutants-from FILE]
+
+`--root` and `--mutants-from` run another checkout's mutants against that checkout's code and tests (for instance a
+worktree of a frozen study's tag), mutating a temporary copy so the checkout stays byte-identical. `--results`
+appends one JSON record per mutant as it finishes and skips mutants already recorded there, so a cut-off run resumes.
 """
 from __future__ import annotations
 
+import argparse
+import hashlib
+import importlib.util
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1009,6 +1026,13 @@ MUTANTS = [
 ]
 
 
+
+# Stage 1b mutants (2026-11-20) are in their own file, so the Stage 1a and Stage 1b branches merge cleanly.
+from mutants_decisionsim_agent import MUTANTS as _DSA_MUTANTS  # noqa: E402
+
+MUTANTS += _DSA_MUTANTS
+
+
 def _covering_tests(work: Path, rel: str) -> list[str]:
     """Test files that reference the mutated module (dotted name, `from pkg import mod`, or file name)."""
     path = Path(rel)
@@ -1021,72 +1045,208 @@ def _covering_tests(work: Path, rel: str) -> list[str]:
     return found or ["tests"]
 
 
-KILLERS: dict[str, str] = {}  # mutant -> the first test that failed on it, printed with the outcome
+# Kill rules (notes/testing.md, "Mutation runner: strict kill rule", 2026-11-23).
+#
+# "strict", the default: a mutant is killed only when pytest exits 1 (tests ran and failed) and at least one named test
+# FAILED. Anything else that is not a pass is "error-only": a collection or import error, a usage or internal error,
+# no tests collected, or a run whose only named problems are ERRORs in setup or teardown. Such a mutant made the
+# suite unrunnable, which says nothing about whether any test checks the behaviour it changed. A timeout is
+# inconclusive and never a kill. This is families wave B's rule (scripts/mutation_check.py on families-waveb-r1,
+# 2026-11-22) with one tightening: wave B also accepted a named ERROR line as a kill.
+#
+# "any-exit" (--legacy-any-exit): any non-zero exit is a kill, the rule of every log of this runner before 2026-11-23.
+# Kept only to reproduce those logs; it skips the baseline check, as they did.
+FAILED_RE = re.compile(r"^FAILED (\S+::\S+)", re.MULTILINE)
+ERROR_RE = re.compile(r"^ERROR (\S+::\S+)", re.MULTILINE)
+STRICT, ANY_EXIT = "strict", "any-exit"
 
 
-def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900) -> str:
+def classify(returncode: int | None, stdout: str, rule: str = STRICT) -> tuple[str, str]:
+    """(outcome, detail) of one pytest run: killed, error, survived or timeout (returncode None)."""
+    if returncode is None:
+        return "timeout", "no result within the time limit"
+    if returncode == 0:
+        return "survived", ""
+    failed = FAILED_RE.findall(stdout)
+    if rule == ANY_EXIT:
+        return "killed", failed[0] if failed else f"pytest exit {returncode} (no failing test named)"
+    if returncode == 1 and failed:
+        return "killed", failed[0]
+    errors = ERROR_RE.findall(stdout)
+    if errors:
+        return "error", f"pytest exit {returncode}, no named test failed (first error {errors[0]})"
+    return "error", f"pytest exit {returncode} (no failing test named)"
+
+
+def _pytest(python: str, work: Path, targets: list[str], timeout: int, stop_first: bool = True) -> tuple[int | None, str, str]:
+    cmd = [python, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider", "--tb=line", *(["-x"] if stop_first else []), *targets]
+    # No bytecode: a .pyc records the source's mtime in whole seconds and its size, so a same-length mutant written
+    # within a second of an earlier run of the same file would be read from the stale cache and look like a survivor.
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     try:
-        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", "-rf", *targets],
-                                cwd=work, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, cwd=work, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
-        return "timeout"
-    failed = [ln.split(" ", 1)[1].split(" - ", 1)[0] for ln in result.stdout.splitlines() if ln.startswith("FAILED ")]
-    KILLERS["last"] = failed[0] if failed else ""
-    return "killed" if result.returncode != 0 else "survived"
+        return None, "", ""
+    return r.returncode, r.stdout, r.stderr
 
 
-# Stage 1b mutants (2026-11-20) are in their own file, so the Stage 1a and Stage 1b branches merge cleanly.
-from mutants_decisionsim_agent import MUTANTS as _DSA_MUTANTS  # noqa: E402
-
-MUTANTS += _DSA_MUTANTS
+def _tail(stdout: str, stderr: str, n: int = 8) -> str:
+    return "\n".join((stdout.strip().splitlines() + stderr.strip().splitlines())[-n:])
 
 
-def main() -> int:
+def _run_tests(python: str, work: Path, targets: list[str], timeout: int, rule: str) -> dict:
+    rc, out, err = _pytest(python, work, targets, timeout)
+    outcome, detail = classify(rc, out, rule)
+    if rule == STRICT and outcome == "error" and rc == 1 and not FAILED_RE.search(out):
+        # -x stopped at a setup or teardown error; a later test may still fail by name, so run on without -x.
+        rc2, out2, err2 = _pytest(python, work, targets, timeout, stop_first=False)
+        outcome2, detail2 = classify(rc2, out2, rule)
+        if outcome2 == "killed":
+            return {"outcome": outcome2, "by": detail2 + " (run without -x after a setup error)", "returncode": rc2,
+                    "targets": targets, "tail": _tail(out2, err2)}
+    return {"outcome": outcome, "by": detail, "returncode": rc, "targets": targets, "tail": _tail(out, err)}
+
+
+def mutant_key(mutant: tuple[str, str, str, str]) -> str:
+    return hashlib.sha256("\x00".join(mutant).encode("utf-8")).hexdigest()[:16]
+
+
+def load_mutants(path: Path) -> list[tuple[str, str, str, str]]:
+    """MUTANTS of another runner or mutant file (for instance a frozen study's, from a checkout of its tag)."""
+    path = path.resolve()
+    siblings = {p.stem for p in path.parent.glob("*.py")}
+    saved = {k: sys.modules.pop(k) for k in list(sys.modules) if k in siblings}  # the file's own imports, not ours
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec = importlib.util.spec_from_file_location(f"_mutants_from_{mutant_key((str(path), '', '', ''))}", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    finally:
+        sys.path.remove(str(path.parent))
+        for k in siblings:
+            sys.modules.pop(k, None)
+        sys.modules.update(saved)
+    return [tuple(m) for m in mod.MUTANTS]
+
+
+def _read_results(path: Path | None, rule: str) -> dict[str, dict]:
+    """Records already written under this rule, by mutant key (resume); a cut-off last line is ignored."""
+    done: dict[str, dict] = {}
+    if path and path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("rule") == rule:
+                done[rec["key"]] = rec
+    return done
+
+
+def _git(root: Path, *args: str) -> str:
+    try:
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=60).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+LABELS = {"killed": "killed     ", "error": "ERROR-ONLY ", "survived": "SURVIVED   ", "timeout": "TIMEOUT    ",
+          "not applied": "NOT APPLIED"}
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("shard", nargs="?", default="0/1", help="i/n runs MUTANTS[i::n] (several cores, one process each)")
+    ap.add_argument("--legacy-any-exit", action="store_true",
+                    help="count any non-zero pytest exit as a kill (the rule before 2026-11-23; to reproduce old logs)")
+    ap.add_argument("--root", type=Path, default=ROOT,
+                    help="repository to copy and mutate (default: this one); e.g. a worktree of a frozen study's tag")
+    ap.add_argument("--mutants-from", type=Path, default=None,
+                    help="take MUTANTS from this file instead of this runner's list")
+    ap.add_argument("--results", type=Path, default=None,
+                    help="JSONL file: one record appended per mutant as it finishes; mutants already in it are skipped")
+    ap.add_argument("--require-unique", action="store_true",
+                    help="a mutant whose correct text is not found exactly once is not applied (the τ-bench runner's rule)")
+    args = ap.parse_args(argv)
+    rule = ANY_EXIT if args.legacy_any_exit else STRICT
+    root = args.root.resolve()
     python = sys.executable
-    # `mutation_check.py 2/4` runs the third of four shards, so the check can use several cores.
-    shard, shards = map(int, sys.argv[1].split("/")) if len(sys.argv) > 1 else (0, 1)
-    chosen = MUTANTS[shard::shards]
+    shard, shards = map(int, args.shard.split("/"))
+    mutants = load_mutants(args.mutants_from) if args.mutants_from else MUTANTS
+    chosen = mutants[shard::shards]
     # MUTANTS_MATCHING="2026-11-17" runs only the mutants whose name contains that text ("a|b": either).
     only = os.environ.get("MUTANTS_MATCHING")
     if only:
         chosen = [m for m in chosen if any(o in m[0] for o in only.split("|"))]
     # MUTATION_TIMEOUT: seconds per test run (raise it when shards share a machine and the suite is slow).
     timeout = int(os.environ.get("MUTATION_TIMEOUT", "900"))
-    survivors: list[str] = []
-    broken: list[str] = []
-    timeouts: list[str] = []
+    done = _read_results(args.results, rule)
+    text = args.results.read_text(encoding="utf-8") if args.results and args.results.exists() else ""
+    if text and not text.endswith("\n"):
+        with args.results.open("a", encoding="utf-8") as f:  # a run cut off mid-record: start the next on its own line
+            f.write("\n")
+    commit, dirty = _git(root, "rev-parse", "HEAD"), bool(_git(root, "status", "--porcelain", "--untracked-files=no"))
+    counts: dict[str, list[str]] = {k: [] for k in LABELS}
+    passed_baselines: set[tuple[str, ...]] = set()
+
+    def baseline(work: Path, targets: list[str]) -> None:
+        """The unmutated copy must pass the tests a mutant is judged by, or every mutant would look killed."""
+        if rule == ANY_EXIT or tuple(targets) in passed_baselines:
+            return
+        rc, out, err = _pytest(python, work, targets, timeout)
+        if rc != 0:
+            raise SystemExit(f"BASELINE FAILS on {targets} (pytest exit {rc}): no mutant can be judged\n{_tail(out, err, 20)}")
+        passed_baselines.add(tuple(targets))
+
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp) / "repo"
-        def skip(folder: str, names: list[str]) -> list[str]:
-            top = {".git", ".venv", "runs", "runs_mock", "docs"} if Path(folder) == ROOT else set()
-            return [n for n in names if n in top or n in ("__pycache__", ".pytest_cache") or n.endswith(".pdf")]
 
-        shutil.copytree(ROOT, work, ignore=skip)
-        for name, rel, good, bad in chosen:
-            path = work / rel
-            source = path.read_text(encoding="utf-8")
-            if good not in source:
-                broken.append(name)
-                print(f"NOT APPLIED  {name}")
-                continue
-            path.write_text(source.replace(good, bad), encoding="utf-8")
-            # Fast path: the test files that name the mutated module. A mutant that survives them is run
-            # against the whole suite before it counts as a survivor; a timeout is never counted as a kill.
-            outcome = _run_tests(python, work, _covering_tests(work, rel), timeout)
-            if outcome == "survived":
-                outcome = _run_tests(python, work, ["tests"], timeout)
-            path.write_text(source, encoding="utf-8")
-            label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]
-            killer = KILLERS.get("last", "") if outcome == "killed" else ""
-            print(f"{label}  {name}" + (f"  [{killer}]" if killer else ""), flush=True)
-            if outcome == "survived":
-                survivors.append(name)
-            elif outcome == "timeout":
-                timeouts.append(name)
-    killed = len(chosen) - len(survivors) - len(broken) - len(timeouts)
-    print(f"\n{killed}/{len(chosen)} killed; survivors={survivors}; inconclusive (timeout)={timeouts}; "
-          f"not applied={broken}")
-    return 1 if survivors or broken or timeouts else 0
+        def skip(folder: str, names: list[str]) -> list[str]:
+            top = {".git", ".venv", ".envs", "runs", "runs_mock", "docs"} if Path(folder) == root else set()
+            return [n for n in names if n in top or n in ("__pycache__", ".pytest_cache", "pace.env") or n.endswith(".pdf")]
+
+        shutil.copytree(root, work, ignore=skip)
+        for mutant in chosen:
+            name, rel, good, bad = mutant
+            key = mutant_key(mutant)
+            if key in done:
+                rec = done[key]
+            else:
+                path = work / rel
+                source = path.read_text(encoding="utf-8") if path.exists() else ""
+                n = source.count(good)
+                rec = {"name": name, "file": rel, "key": key, "rule": rule, "root": str(root), "root_commit": commit,
+                       "root_dirty": dirty, "occurrences": n}
+                start = time.time()
+                if n == 0 or (args.require_unique and n != 1):
+                    rec.update(outcome="not applied", by=f"correct text found {n} times")
+                else:
+                    covering = _covering_tests(work, rel)
+                    baseline(work, covering)
+                    path.write_text(source.replace(good, bad), encoding="utf-8")
+                    try:
+                        # Fast path: the test files that name the mutated module. A mutant that survives them is run
+                        # against the whole suite before it counts as a survivor.
+                        res = _run_tests(python, work, covering, timeout, rule)
+                        if res["outcome"] == "survived" and covering != ["tests"]:
+                            path.write_text(source, encoding="utf-8")
+                            baseline(work, ["tests"])
+                            path.write_text(source.replace(good, bad), encoding="utf-8")
+                            res = _run_tests(python, work, ["tests"], timeout, rule)
+                    finally:
+                        path.write_text(source, encoding="utf-8")
+                    rec.update(res)
+                rec["seconds"] = round(time.time() - start, 1)
+                if args.results:
+                    with args.results.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(rec) + "\n")
+            counts[rec["outcome"]].append(name)
+            by = f"  [{rec['by']}]" if rec.get("by") and rec["outcome"] != "survived" else ""
+            print(f"{LABELS[rec['outcome']]}  {name}{by}", flush=True)
+    print(f"\nrule {rule}: {len(counts['killed'])}/{len(chosen)} killed by a named failing test; "
+          f"error-only (not counted as killed)={counts['error']}; survivors={counts['survived']}; "
+          f"inconclusive (timeout)={counts['timeout']}; not applied={counts['not applied']}")
+    return 1 if any(counts[k] for k in ("error", "survived", "timeout", "not applied")) else 0
 
 
 if __name__ == "__main__":
