@@ -1,5 +1,7 @@
 # RQ2 confirmatory result (2026-11-18)
 
+*Exploratory follow-up 2026-11-22: a forensic audit of the stored scores ([qwen_effect_audit_forensic.md](qwen_effect_audit_forensic.md)) found no pipeline fault and leaves this result unchanged. It finds that 59% of Qwen3-8B's 6.12 nats (3.60) is the success sentence's tail, that two-candidate nats are not comparable across models, and that, divided by the SD of each model's item-level shifts, Qwen3-8B's effect (1.02) is close to Llama-3.1-8B's (0.85). The confirmatory text below is unchanged.*
+
 Scoring: run `rq2_score`, 4 shards at ddeabc2. Shards 0–2 ran on A40s and shard 3 on an L40S; each item's aligned and swapped prompts were scored in the same job on the same GPU. Analysis: run `rq2_analysis` at ddeabc2. Full numbers are in `rq2_confirmatory_metrics.json` (a copy of the run's metrics.json).
 
 Items: 4,666 main-test items from 1,033 states in 125 of the 134 unseen games. All passed full replay verification. The preregistered minimum was met, and no primary scores are missing. Every item is a failure that the context determines: the true next observation is "Nothing happens." How the items were built, and which were left out, is in "Methods" below.
