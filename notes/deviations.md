@@ -10,6 +10,74 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided or found 2026-11-22
+
+- **Model families, wave B: review 1 and its fixes, before any wave B score** (branch `families-waveb`; [families_waveb_review1.md](families_waveb_review1.md); design note section 18). No wave B weight had been downloaded and no wave B model scored.
+  - *A crash found before any run.* In transformers 5, `apply_chat_template(tokenize=True)` returns a BatchEncoding, which the scorer passed to `torch.cat` and to the model; every chat-format score would have stopped the job. The scorer now takes the ids out of it (transformers 4 unchanged), and a serve2-only test scores end to end through tiny random-weight models of the three wave B classes with the pinned tokenizers.
+  - *B1's basis corrected.* Qwen3-4B is competent but its share toward Yes is 0.49 with a yes/no effect of 2.27 nats, so "every interpretable model shows it" holds for the log-odds effect, not the share. A share that is not supported now reads "effect carried by a minority of items (as Qwen3-4B)" when the yes/no effect's CI is above zero, and "no detectable effect" only when both are null. The prediction is unchanged.
+  - *Route A (node-local weights) chosen,* with a committed manifest of every file's size and hash per model (from Hub metadata, no token), a disk-space check, a hash check of every downloaded file, a refusal of any folder on `/storage`, and the hashes saved in each shard.
+  - *Gates added or tightened:* the environment check's GPU type pinned (A40 for Mistral 7B, L40S for Qwen3-8B); no wave B number written anywhere unless the environment check passed; GPU and job memory checked before loading; an eager-against-SDPA agreement check at the start of each Gemma 4 job; the CPU gate tool runs the check variants and exits 1 on any failure.
+  - *Pre-registered additions:* a 300-item check of Qwen3.8 27B with `preserve_thinking=False` (its template otherwise writes empty think blocks into the examples), read by the one-fifth rule; B3's readout on the two-candidate item share if the base model fails only the yes/no coverage criterion; the run order (environment check, the four small models, Qwen3.8 with its check, Gemma 4 31B last).
+  - *Wording:* generation pairs carry the Qwen3 size spread of the share (0.49 / 0.89 / 0.70 / 0.71 at 4B / 8B / 14B / 32B), and a "differs" is not read as a generation effect; B2 can fail only on a clear negative difference; the outcome table says "goal-congruent shift" and does not read the share as separating wishful prediction from task relevance.
+  - *Gemma pair kept as designed.* Gemma-4-12B-it exists and fits the GPU tier, but uses the 31B template (an empty thought channel ends its generation prompt) and another architecture, so Gemma 4 E4B stays, with its size confound stated.
+
+## Decided or found 2026-11-21
+
+- **TextCraft follow-ups (exploratory).** These are the cross-environment comparison (`xenv-compare`) and the Llama diagnostics (`textcraft-llama-dx`); summary in `textcraft_results.md`, "Follow-up analyses". Every diagnostic GPU run had a dated plan committed before its data. The runs used new checkouts on the cluster and left the confirmatory runs untouched.
+- **Clean TextCraft prompt adopted for later runs.** The world-model system text without the original agent's instructions becomes the default for all later TextCraft runs, once its tokenization and golden-prompt checks pass for every model. The confirmatory result stays reported under the prompt it was frozen with.
+- **TextCraft round 2 planned (branch `textcraft-r2`).** It is a pre-registered test of the two-component account (a lift on intermediate crafts and a penalty on crafting the named goal that shrinks as inputs accumulate), run under the clean prompt.
+  - Models: Gemma-2-9B, Mistral-7B and Llama-3.2-3B, with Qwen3-8B and Llama-3.1-8B rescored.
+  - Arms that separate naming the object from completing the task: a parent goal, and a two-item goal line if it can be made faithful to the environment.
+  - A padding arm separates timing from history content.
+  - The design is frozen at a tag and reviewed before any score.
+- **τ-bench smoke run recorded before the full run.** Format passes for both models, and the projection fits the time limit (largest shard 3.1 h of 8). Qwen's projected half-width exceeds the 0.5-nat equivalence margin, so a Qwen result that is not positive will read as inconclusive, not as no effect (`tau_design.md` on branch `taubench`). The items were rebuilt and verified at the commit that records this, and full scoring was submitted.
+- **Decision simulation, fixed menus.** Branch `decisionsim`. Stage 1a adds a literal task-blind verifier (the task sentence deleted from the first observation; the prompt examples keep theirs), a no-verifier baseline (the agent's proposal fails at 5.8% of even-step states) and a simulator oracle. The gate for a closed-loop study is now evaluated against the task-blind verifier; the neutral version is reported as a secondary verdict that never decides. A confirming review is running.
+- **Decision simulation, agent-generated candidates.** Branch `decisionsim-agent`, built, not run.
+  - Candidates: at each of the 2,973 decisions of the RQ3 no-foresight episodes, rank 1 is the agent's actual action, and ranks 2 to 8 come from 20 samples at temperature 1.
+  - Verifiers: none, task-aware, task-blind, oracle and swapped.
+  - Primary measure: the failure rate of the chosen action, task-aware minus task-blind.
+  - The agent's own greedy action falls in the RQ2 regime at only 61 states (2.1%, in 15 games), and under the strict RQ2 definition at 4.
+  - The design is under review.
+- **Follow-up designs revised again before any score.**
+  - *Mechanism battery, review 3.* A mention component, computed from arms already scored, separates "task as evidence" from "salience plus normal reading of explicit claims". A contrast counts as consistent only when the prediction it confirms excludes zero. A negation placebo arm is added. A completing-versus-intermediate split of the aligned effect is added.
+  - *Interpretability pilot, review 2.* See the 2026-11-20 entry; now in a confirming review.
+- **Test suite.** TextCraft's recipe file is Mojang game data and is not committed. In a clone without it, TextCraft tests that error are now skipped with the rebuild instruction (`tests/conftest.py`); with the file present nothing is skipped.
+
+## Decided or found 2026-11-20, later (replications and follow-up designs)
+
+None of this changes a preregistered threshold or the RQ2 result.
+
+- **TextCraft: frozen, scored, merged.** The design and analysis code were frozen before scoring at the annotated tag `textcraft-design-frozen-2026-11-20` (commit `5a3702a`). The tag message records the test, the item hashes, the design history and what was seen before the freeze: one format-only smoke run, with no aligned-against-swapped difference computed. Full scoring (51,200 scores) and the analysis ran at that commit. Result: confirmed for Qwen3-8B, a small negative effect for Llama-3.1-8B, so not a replication across both models (`textcraft_results.md`). The branch was merged into the main line after scoring. Two exploratory prompt variants (design section 13, D10) were scored afterwards. An exploratory investigation of the Llama result is in progress on branch `textcraft-llama-dx`.
+- **Mistral placement check read.** Moving Mistral's system text to the first turn changes its goal effect by +0.30 nats [0.13, 0.48] on the yes/no question and +0.02 [−0.15, 0.20] on the two-candidate scale. Both are below the logged one-fifth threshold, so placement is reported as not moving the effect (`families_results.md`).
+- **τ-bench (branch `taubench`).** Review 3 added a validity gate: do the prompts and labels concern only whether the backend executes the call, rather than whether the call is appropriate or allowed by policy? The labels are task-invariant: the simulated backend never sees the task, and every failure reply comes from a listed rule. The wording was changed before any score:
+  - the yes/no question asks whether the backend executes the call without an error, instead of whether it "succeeds";
+  - a null on failing calls is read together with the working "witness" call;
+  - the reading of the prompt variant without the "backend does not see the task" sentence is narrowed;
+  - the instruction no longer frames the task as an input to the prediction.
+
+  Review 4 confirmed these with wording-only fixes. The full token check passed on the final prompts for both models (1,413 items each, no problems). The items were rebuilt and verified on the cluster at the final commit, and the rebuild reproduces the pinned hashes. A format and timing smoke run is in progress.
+- **Follow-up designs revised before any score.** Each change below was made in response to an independent review, before any data.
+  - **Mechanism battery (`mechanism2`).** Reviews 1 and 2.
+    - Two contrasts were made into minimal pairs, because the desire lines had dropped the household task their comparators kept.
+    - An affirmed-existence arm was added. It pairs with the negated one and differs only in "no" against "a".
+    - Prediction cells that favoured one account were made symmetric.
+  - **Interpretability pilot (`interp`).** Reviews 1 and 2.
+    - The last layer is excluded from the ablation summary, because there the removal is complete by construction.
+    - The test of a generic success feature removes the readout component before comparing directions.
+    - Substantive thresholds stay as written; the pilot sets only sample sizes.
+    - Step-0 quotas were added.
+  - **Decision simulation (`decisionsim`).** Review 1.
+    - State-level rates use even steps only, because of the collector's schedule (`exploratory_results.md`, section 7).
+    - Scores are rounded to 1/64 nat before comparison.
+    - The swapped task is scored, so the object-naming effect can be separated from the relevance penalty.
+    - The gate for a closed-loop agent study tests a verifier that checks the agent's own proposal. It is no longer a maximum over a menu whose make-up guarantees a positive result.
+- **Decision studies staged.** The question "does the prediction shift change decisions?" is studied offline in stages.
+  - **Fixed candidate menus** at collected states measure whether the shift *can* change a choice. This adds a literal task-blind verifier, a no-verifier baseline and a simulator-oracle verifier.
+  - **Candidates generated and ranked by an agent** measure how often it happens in a real decision distribution. This stage is primary for claims about practical impact.
+  - **Branching the simulator where verifiers disagree** is designed only after the first two show enough disagreements.
+  - A closed-loop comparison of agents is out of scope. No stage is designed to guarantee a harmful result.
+- **Facts found while designing these studies** are in `exploratory_results.md`, section 7: the agent's natural failure rate, the step-0 concentration of the yes/no effect, the relevance penalty of a neutral comparison, the 1/64-nat steps of the scores, and the collector's odd-step schedule.
+
 ## Decided or found 2026-11-20 (documentation and rigor audit)
 
 ### Changes from the 2026-11-20 audit

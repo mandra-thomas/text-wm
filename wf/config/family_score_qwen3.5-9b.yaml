@@ -1,0 +1,11 @@
+run_id: family_score_qwen3.5-9b
+# Model families, wave B (decided 2026-11-22, before any score; notes/families_waveb_design.md): qwen3.5-9b, pinned in
+# wf.constants.REVISIONS, scored in serve2 (transformers 5) with the size series' prompts and arms (wf/families.py).
+# One shard by default; WF_N_SHARDS / WF_SHARD split it by game. Job: pace/family_score_serve2.sbatch.
+model: qwen3.5-9b
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_shards: 1
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

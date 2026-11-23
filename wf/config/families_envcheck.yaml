@@ -1,0 +1,22 @@
+run_id: families_envcheck
+# Wave B environment-equivalence check (2026-11-22, notes/families_waveb_design.md section 8). CPU only. Compares
+# each model's serve2 rescores with its earlier scores on the same 300 items, and reads part 1's token comparison.
+# Earlier runs are named under this checkout's runs/ (symlinks to the checkouts that hold them are fine).
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_items: 300
+models:
+  mistral-7b-v0.3:
+    new_run: family_envcheck_mistral-7b-v0.3
+    old:
+      model: mistral-7b-v0.3
+      runs:
+        family_score_mistral-7b-v0.3: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+  qwen3-8b:
+    new_run: family_envcheck_qwen3-8b
+    old:
+      model: qwen3-8b
+      runs:
+        size_score_qwen3-8b: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+tokens:
+  mistral-7b-v0.3: envcheck_tokens/compare_mistral-7b-v0.3.json
+  qwen3-8b: envcheck_tokens/compare_qwen3-8b.json

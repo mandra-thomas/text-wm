@@ -454,3 +454,80 @@ A further test, `test_analysis_requires_the_five_models`, covers the model-set c
 
 Rerun at ae8f005 with the auditor's strict script, all 12 audit mutants are killed by named tests. The two new mutants (the model-set check, the gates entry) are killed in official mode. The 12 audit mutants and the 2 new ones are now also in `scripts/mutation_check.py`, which holds 159 round-2 mutants. The log is appended to `notes/textcraft_r2_mutation_log.txt`.
 Full suite at the pre-freeze audit (run once at 0db1f7c, before the deviations entry): 1,008 passed, 7 skipped.
+## Model families, wave B, review 1 (2026-11-22, before any wave B score)
+
+Review 1 of the wave B design ([families_waveb_review1.md](families_waveb_review1.md)) found that every chat-format score would have crashed in serve2, because transformers 5 returns a BatchEncoding from `apply_chat_template(tokenize=True)` and no test ran a real forward pass through the scorer. Three test layers were added.
+
+- **`tests/test_families_waveb_serve2.py` (serve2 only).** Tiny random-weight models built from each pinned wave B config (two decoder layers, four for Gemma 4 E4B so that key-value sharing stays in; small widths; the real vocabulary), with each pinned tokenizer, run `score_pair` and `score_one_token_pair` end to end, and the one-pass yes/no score must equal the teacher-forced one. They also run the eager-against-SDPA switch on the real Gemma 4 class and the gate of the two check variants with the real templates. It skips everywhere but serve2. On ICE (2026-11-22, login node, read-only) all 11 tests passed; with the fix reverted, all five chat-format tags failed and the two plain-format tags passed, as they never call the template.
+- **`tests/test_families_waveb_review1.py` (local).** A stand-in tokenizer that returns a BatchEncoding and a stand-in torch and model run the scorer's two scoring paths (fails on the unfixed scorer); the weights manifest and the hash check (missing, extra, size, LFS hash, Git blob hash, disk margin, `/storage` refusal, also behind a link, the folder passed by name); the environment check's GPU type; resources at job start; the CPU gate tool's variants and exit code; the plain gate with a shared first token; the first-turn note; the preserve_thinking variant and the one-fifth rule; the eager-SDPA agreement check and its tolerances; the run order.
+- **`tests/test_families_waveb.py` (extended).** B1's readings (minority, no effect, reversed), the size caveat on generation pairs, B3's two-candidate fallback, the predictions read nothing unless the environment check passed, and the dry run: with a failed environment check no wave B number reaches the metrics, the report or the status lines.
+
+**Mutation check, strict rule.** From this round a mutant counts as killed only when pytest exits 1 and names a failing test (`scripts/mutation_check.py`); any other non-zero exit is reported as "suite unrunnable", not as a kill. The 63 mutants named "families wave B review1" are listed below with the test that killed each; R1 to R8 put back the review's findings (R1 and R2 are the two survivors the reviewer named; R3 to R8 are the other findings written as mutants), the rest break each fix. Run with `MUTANTS_MATCHING="families wave B review1" MUTATION_TESTS_FIRST=tests/test_families_waveb_review1.py`, four shards.
+
+| Mutant (families wave B review1 …) | Killed by |
+|---|---|
+| R1 node-local cache not exported to scoring | `tests/test_families_waveb_review1.py::test_serve2_job_downloads_node_local_and_checks_hashes_before_scoring` |
+| R2 plain gate allows a shared first token | `tests/test_families_waveb_review1.py::test_plain_gate_fails_when_the_candidates_share_their_first_token` |
+| R3 BatchEncoding passed to torch.cat and the model | `tests/test_families_waveb_review1.py::test_scoring_reads_the_ids_out_of_a_batch_encoding` |
+| R4 B1 holds although the environment check failed | `tests/test_families_waveb.py::test_predictions_read_nothing_unless_the_environment_check_passed` |
+| R5 status lines print wave B numbers when blocked | `tests/test_families_waveb.py::test_dry_run_scores_every_wave_b_model_and_reads_the_family` |
+| R6 CPU gate tool exits 0 when a gate fails | `tests/test_families_waveb_review1.py::test_gate_tool_exits_non_zero_when_a_gate_fails[oks1-1]` |
+| R7 Gemma first-turn note says not the last | `tests/test_families_waveb_review1.py::test_first_turn_note_is_right_for_each_template` |
+| R8 envcheck GPU type not enforced | `tests/test_families_waveb_review1.py::test_envcheck_fails_on_the_wrong_gpu_type` |
+| B3 fallback for any competence failure | `tests/test_families_waveb.py::test_b3_falls_back_to_the_two_candidate_share_only_when_the_base_fails_only_coverage` |
+| B3 fallback holds on a negative difference | `tests/test_families_waveb.py::test_b3_falls_back_to_the_two_candidate_share_only_when_the_base_fails_only_coverage` |
+| B3 fallback ignores the base two-candidate AUC | `tests/test_families_waveb.py::test_b3_falls_back_to_the_two_candidate_share_only_when_the_base_fails_only_coverage` |
+| B3 fallback on the yes/no rows | `tests/test_families_waveb.py::test_b3_falls_back_to_the_two_candidate_share_only_when_the_base_fails_only_coverage` |
+| M1 template ids not unwrapped | `tests/test_families_waveb_review1.py::test_scoring_reads_the_ids_out_of_a_batch_encoding` |
+| M2 CI touching zero read as above it | `tests/test_families_waveb.py::test_b1_reading_separates_a_minority_effect_from_no_effect[not` |
+| M2 minority effect read as no effect | `tests/test_families_waveb.py::test_b1_reading_separates_a_minority_effect_from_no_effect[not` |
+| M2 reversed effect read as none | `tests/test_families_waveb.py::test_b1_reading_separates_a_minority_effect_from_no_effect[not` |
+| M3 Git blob hash without its header | `tests/test_families_waveb_review1.py::test_file_digest_matches_git_and_lfs` |
+| M3 extra file not reported | `tests/test_families_waveb_review1.py::test_verify_snapshot_fails_on_any_difference[change3-extra:` |
+| M3 hash failure does not fail the download | `tests/test_families_waveb_review1.py::test_prefetch_checks_disk_before_and_hashes_after` |
+| M3 hash not compared | `tests/test_families_waveb_review1.py::test_verify_snapshot_fails_on_any_difference[change0-hash:` |
+| M3 hashes not saved in the shard | `tests/test_families_waveb_review1.py::test_the_gate_saves_the_weights_hashes_in_the_shard` |
+| M3 manifest revision not checked | `tests/test_families_waveb_review1.py::test_committed_manifests_cover_every_wave_b_model_at_its_pinned_revision` |
+| M3 missing file not reported | `tests/test_families_waveb_review1.py::test_verify_snapshot_fails_on_any_difference[change4-missing:` |
+| M3 scoring accepts a failed hash check | `tests/test_families_waveb_review1.py::test_weights_check_requires_a_passed_record_for_this_model_and_revision` |
+| M3 scoring accepts another revision | `tests/test_families_waveb_review1.py::test_weights_check_requires_a_passed_record_for_this_model_and_revision` |
+| M3 size not compared | `tests/test_families_waveb_review1.py::test_verify_snapshot_fails_on_any_difference[change2-size:` |
+| M3 weights check skipped for node-local weights | `tests/test_families_waveb_review1.py::test_weights_check_requires_a_passed_record_for_this_model_and_revision` |
+| S1 job prefetch without --node-local | `tests/test_families_waveb_review1.py::test_serve2_job_downloads_node_local_and_checks_hashes_before_scoring` |
+| S1 links not resolved | `tests/test_families_waveb_review1.py::test_node_local_cache_behind_a_link_to_storage_is_refused` |
+| S1 node-local folder not checked | `tests/test_families_waveb_review1.py::test_prefetch_node_local_downloads_into_the_named_cache` |
+| S1 prefetch ignores --cache | `tests/test_families_waveb_review1.py::test_prefetch_node_local_downloads_into_the_named_cache` |
+| S1 shared storage below /storage accepted | `tests/test_families_waveb_review1.py::test_node_local_cache_is_never_on_the_shared_file_system[/storage/ice1/2/1/gmat3/hfcache-True]` |
+| S2 download despite too little space | `tests/test_families_waveb_review1.py::test_prefetch_checks_disk_before_and_hashes_after` |
+| S2 no disk margin | `tests/test_families_waveb_review1.py::test_check_disk_needs_the_manifest_total_plus_ten_percent` |
+| S3 xet cache on shared storage | `tests/test_families_waveb_review1.py::test_serve2_job_downloads_node_local_and_checks_hashes_before_scoring` |
+| S4 Qwen3-8B pinned to the wrong GPU | `tests/test_families_waveb_review1.py::test_envcheck_gpu_must_be_the_pinned_type[jobs0-True]` |
+| S4 any GPU type accepted | `tests/test_families_waveb_review1.py::test_envcheck_gpu_must_be_the_pinned_type[jobs2-False]` |
+| S4 job does not stop on the wrong GPU | `tests/test_families_waveb_review1.py::test_serve2_job_stops_an_envcheck_on_another_gpu_type` |
+| S5 B2 estimate shown when blocked | `tests/test_families_waveb.py::test_predictions_read_nothing_unless_the_environment_check_passed` |
+| S5 comparisons kept when blocked | `tests/test_families_waveb.py::test_dry_run_scores_every_wave_b_model_and_reads_the_family` |
+| S5 competence verdict read when blocked | `tests/test_families_waveb.py::test_environment_gate_blocks_every_read_verdict_unless_passed` |
+| S5 estimates kept when blocked | `tests/test_families_waveb.py::test_environment_gate_blocks_every_read_verdict_unless_passed` |
+| S5 wave B blocks written when blocked | `tests/test_families_waveb.py::test_dry_run_scores_every_wave_b_model_and_reads_the_family` |
+| S6 GPU memory not enforced | `tests/test_families_waveb_review1.py::test_resources_are_checked_before_loading[gemma4-31b-it-47.7-131072-False]` |
+| S6 Qwen3.8 job memory not required | `tests/test_families_waveb_review1.py::test_resources_are_checked_before_loading[qwen3.8-27b-85.1-131071-False]` |
+| S6 job memory compared in GB not MB | `tests/test_families_waveb_review1.py::test_resources_are_checked_before_loading[gemma4-31b-it-85.1-65536-False]` |
+| S6 resources not checked at job start | `tests/test_families_waveb.py::test_dry_run_scores_every_wave_b_model_and_reads_the_family` |
+| S7 first-turn variant not resolved | `tests/test_families_waveb_review1.py::test_gate_tool_resolves_check_variants_and_gates_their_shards_items` |
+| S7 variants gated on every item | `tests/test_families_waveb_review1.py::test_gate_tool_resolves_check_variants_and_gates_their_shards_items` |
+| S8 one-fifth rule at one half | `tests/test_families_waveb_review1.py::test_one_fifth_rule[0.5-ci0-2.0-True]` |
+| S8 one-fifth rule ignores the CI | `tests/test_families_waveb_review1.py::test_one_fifth_rule[0.5-ci3-2.0-False]` |
+| S8 template check reads the first-turn tag | `tests/test_families_waveb.py::test_dry_run_scores_every_wave_b_model_and_reads_the_family` |
+| S8 think blocks before the ending not checked | `tests/test_families_waveb_review1.py::test_the_gate_finds_think_blocks_in_the_examples` |
+| S8 variant keeps the think blocks | `tests/test_families_waveb_review1.py::test_gate_tool_resolves_check_variants_and_gates_their_shards_items` |
+| S9 Gemma 4 31B without the attention check | `tests/test_families_waveb_review1.py::test_the_gate_runs_the_attention_check_for_gemma4_and_stops_on_disagreement` |
+| S9 disagreement does not stop the job | `tests/test_families_waveb_review1.py::test_the_gate_runs_the_attention_check_for_gemma4_and_stops_on_disagreement` |
+| S9 failed switch to eager not reported | `tests/test_families_waveb_review1.py::test_attention_agreement_fails_on_disagreement_or_no_switch[model_kw3-scorer_kw3-could` |
+| S9 gate skips the attention check | `tests/test_families_waveb_review1.py::test_the_gate_runs_the_attention_check_for_gemma4_and_stops_on_disagreement` |
+| S9 no switch back to SDPA | `tests/test_families_waveb_review1.py::test_attention_agreement_passes_within_the_tolerance` |
+| S9 scores read from the cache | `tests/test_families_waveb_review1.py::test_attention_agreement_passes_within_the_tolerance` |
+| S9 whole-model attention switch | `tests/test_families_waveb_review1.py::test_attention_agreement_passes_within_the_tolerance` |
+| S9 yes/no tolerance loosened | `tests/test_families_waveb_review1.py::test_attention_agreement_passes_within_the_tolerance` |
+| pair readings without the size caveat | `tests/test_families_waveb.py::test_b2_generation_pairs_carry_the_size_caveat` |
+
+All 63 killed under the strict rule, by 31 different tests; none survived, timed out or left the suite unrunnable. The 72 earlier wave B mutants were rerun under the strict rule on the same code: 72 of 72 killed (both lists, with the killing test of each, are in `notes/families_waveb_mutants.txt`).

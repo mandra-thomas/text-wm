@@ -1,0 +1,12 @@
+run_id: family_envcheck_mistral-7b-v0.3
+# Wave B environment-equivalence check, part 2 (2026-11-22, notes/families_waveb_design.md section 8): mistral-7b-v0.3 rescored
+# in serve2 on the placement check's 300 seeded primary items, all three tasks in both formats, saved under
+# mistral-7b-v0.3-serve2. Run on the GPU type of its earlier run (pace/family_score_serve2.sbatch, --constraint).
+model: mistral-7b-v0.3
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_shards: 1
+n_items: 300
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

@@ -183,3 +183,43 @@ The two yes columns agree closely except for 32B, whose yes/no scores on failure
 - **The largest model is still clearly moved.** On failing actions, Qwen3-32B answers "Yes" (scores "Yes" above "No") on 11.6% [10.1%, 13.1%] of items under the aligned task, against 3.8% [2.9%, 4.7%] under the swapped task and 2.4% under the neutral task (`audit_metrics.json`, `size_yes_share.qwen3-32b.failures`). Its mean σ of the yes/no score (its average probability of "Yes" against "No") is 15.0% and 5.8% (mean s 0.150 and 0.058).
 
 Scaling within Qwen3 does not remove the leak.
+
+## 7. Facts found while designing the follow-up studies (2026-11-20, post hoc)
+
+These came up in design reviews of the decision simulation, the interpretability pilot and the mechanism battery. Each was recomputed from the archived runs before being written here. All are **post hoc** descriptions; none is a test.
+
+**How often a real agent proposes the failures RQ2 tests.** In the 134 no-foresight RQ3 episodes (`rq3`, condition "none"; Qwen3-8B ReAct agent, greedy), the agent made 2,973 proposals.
+
+- 671 of them fail (22.6%), and 482 of those failures are `go to` actions.
+- 108 failures act on the task's object, but only 30 of these are first attempts; the other 78 repeat an action that had already failed.
+- The 30 first attempts occur in 20 of the 134 episodes, never at step 0, and at a median step of 20.
+- So this agent's own behaviour rarely enters the regime the RQ2 items test: a determined failure on the task's object, proposed fresh. A sampling or ranking planner that considers broader candidate sets would meet it more often. This is why the decision simulation scores whole candidate sets rather than only the agent's proposal.
+
+**The yes/no effect is concentrated at step 0, more strongly for Qwen.** On RQ2's 4,666 determined failures, the yes/no ΔL from `rq1v_score` splits as follows (nats, game-clustered 95% intervals, 125 games):
+
+| Model | Step 0 (514 failures) | Later steps (4,152 failures) |
+|---|---|---|
+| Qwen3-8B | 7.71 [7.25, 8.20] | 2.20 [1.99, 2.39] |
+| Llama-3.1-8B | 3.34 [3.05, 3.64] | 2.07 [1.91, 2.24] |
+
+This matches the two-candidate pattern in section 1, where Qwen's step-0 effect is 11.0 nats. As the step-0 bullet under "Further post hoc breakdowns" notes, the agent never proposes such actions at step 0.
+
+**Any real task lowers predicted success on actions unrelated to it, relative to a neutral line.** The yes/no scores of `rq1v_score` have three task lines: aligned (the real task), swapped (another object), and the neutral "explore the room". On determined *successes* that do not involve the task's object, the real task lowers L against the neutral line far more than against the swapped task. Mean differences in nats; the groups are small and the figures are descriptive:
+
+| Model | Action type (n) | Aligned − neutral | Aligned − swapped |
+|---|---|---|---|
+| Qwen3-8B | `go to` (24) | −2.99 | −0.76 |
+| Qwen3-8B | `take`, other object (94) | −13.30 | −0.43 |
+| Llama-3.1-8B | `go to` (24) | −0.51 | +0.06 |
+| Llama-3.1-8B | `take`, other object (94) | −1.71 | +0.07 |
+
+A neutral comparison therefore mixes two things: the object-naming effect that RQ2 isolates (aligned against swapped), and a penalty that any concrete task puts on task-irrelevant actions. Only the aligned-against-swapped contrast isolates the first. The decision simulation reports both and decomposes aligned − neutral into (aligned − swapped) + (swapped − neutral).
+
+**Scores move in steps of 1/64 nat.** Every logged yes/no L of both models (14,874 per model) lies within 0.001 of a multiple of 1/64, the bfloat16 resolution of the logit difference. Qwen's are almost all exactly on the grid (14,122). Llama's mostly sit a float32 rounding error off it (only 1,629 exactly on it), because the error comes from the log-sum-exp and differs from prompt to prompt. Under the aligned task, Qwen's L takes only 212 distinct values and Llama's 118. Exact ties are therefore common. Any analysis that compares scores across actions, such as an argmax over candidates, should round to 1/64 before comparing, so that rounding error does not break ties differently in different conditions.
+
+**How the item collection sampled states.** The collector ran the broad candidate generator at every second step and also at any step where the agent's own action failed (`wf/data/transitions.py`, `contents_holding_only=not ((i % k == 0) or invalid)` with k = 2; see `rq2_results.md`). Odd-step states therefore enter the broad candidate set only when the agent's proposal failed.
+
+- Among states with a known agent action, a working action and a determined failure, all 33 odd-step states have a failing proposal.
+- Of the 728 even-step states, 42 have a failing proposal (5.8%) and 686 a working one.
+- This does not affect RQ2, which scores items, not states. Analyses at the level of states should use even steps for rates and treat the odd-step states as a census of failing proposals.
+- Only 6 of the 75 failing agent proposals at these states act on the task's object; most are `go to` the agent's current location.

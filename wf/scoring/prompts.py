@@ -168,6 +168,31 @@ def world_model_prompt(
     return messages
 
 
+PLAIN_TURN_SEPARATOR = "\n\n"
+PLAIN_REPLY_SEPARATOR = " "
+
+
+def plain_text_prompt(messages: list[dict[str, str]]) -> str:
+    """The messages as one plain text, for base models and their instruct control (wave B, 2026-11-22;
+    notes/families_waveb_design.md section 6): the system text, then each example as its user text, one space and its
+    reply, then the query's user text, separated by blank lines. No role labels and no template: the user texts end
+    with 'Next observation:' or 'Answer:', so the examples read 'Next observation: You arrive at ...', and a
+    candidate is scored after one space (PLAIN_REPLY_SEPARATOR), as the examples write a reply.
+    """
+    rest = list(messages)
+    parts: list[str] = []
+    if rest and rest[0]["role"] == "system":
+        parts.append(rest[0]["content"])
+        rest = rest[1:]
+    roles = [m["role"] for m in rest]
+    if not rest or roles != ["user", "assistant"] * (len(rest) // 2) + ["user"]:
+        raise ValueError(f"plain format needs alternating user/assistant turns ending with the user's: {roles}")
+    for k in range(0, len(rest) - 1, 2):
+        parts.append(rest[k]["content"] + PLAIN_REPLY_SEPARATOR + rest[k + 1]["content"])
+    parts.append(rest[-1]["content"])
+    return PLAIN_TURN_SEPARATOR.join(parts)
+
+
 def _replace_task_line(history_text: str, task_line: str) -> str:
     """Swap the task line in place, leaving every other byte of the history unchanged.
 

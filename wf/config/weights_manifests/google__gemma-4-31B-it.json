@@ -1,0 +1,78 @@
+{
+ "hf_id": "google/gemma-4-31B-it",
+ "revision": "842da3794eaa0b77d5f08bae87a17459d91ff475",
+ "allow_patterns": [
+  "*.json",
+  "*.safetensors",
+  "*.model",
+  "*.model.v3",
+  "*.jinja",
+  "merges.txt"
+ ],
+ "ignore_patterns": [
+  "original/*",
+  "consolidated*",
+  "*.pth",
+  "*.bin",
+  "*.gguf",
+  "*.msgpack",
+  "*.h5"
+ ],
+ "files": [
+  {
+   "name": "chat_template.jinja",
+   "size": 18683,
+   "git_sha1": "4741bf6e4132ba23a5537f9d6e74e9a6d613d7cd"
+  },
+  {
+   "name": "config.json",
+   "size": 4621,
+   "git_sha1": "5f291aa9973fbb38982f9bade924989edc7b895d"
+  },
+  {
+   "name": "generation_config.json",
+   "size": 208,
+   "git_sha1": "e605bb4523b1462ea9d9a3810b9e3ecf7ab7b1f6"
+  },
+  {
+   "name": "model-00001-of-00002.safetensors",
+   "size": 49784788364,
+   "sha256": "eeef8791537bc04f110967c513149e037d2a9ae97d49add7291ebfa62806bbfa"
+  },
+  {
+   "name": "model-00002-of-00002.safetensors",
+   "size": 12761549884,
+   "sha256": "018912220f559f7025d60333e0996183cd538aa77ad6f4988a89ce47be681f10"
+  },
+  {
+   "name": "model.safetensors.index.json",
+   "size": 120246,
+   "git_sha1": "17fcef4a0ceb639c8ad4e2f7719f70aaff7de63b"
+  },
+  {
+   "name": "processor_config.json",
+   "size": 1689,
+   "git_sha1": "5465974d23e1eca2c46c2809b26c997946ce0d90"
+  },
+  {
+   "name": "tokenizer.json",
+   "size": 32169626,
+   "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f"
+  },
+  {
+   "name": "tokenizer_config.json",
+   "size": 3082,
+   "git_sha1": "6068e357379d36f823c377e30efb101fa2c67fe4"
+  }
+ ],
+ "n_files": 9,
+ "total_bytes": 62578656403,
+ "source": "HfApi.model_info(files_metadata=True), no token",
+ "dry_run_cross_check": {
+  "available": true,
+  "same_files_and_sizes": true,
+  "only_in_dry_run": [],
+  "only_in_metadata": [],
+  "size_differs": []
+ }
+}

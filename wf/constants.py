@@ -68,6 +68,15 @@ REVISIONS = {
     "mistralai/Mistral-7B-Instruct-v0.3": "c170c708c41dac9275d15a8fff4eca08d52bab71",
     "meta-llama/Llama-3.2-1B-Instruct": "9213176726f574b556790deb65791e0c5aa438b6",
     "meta-llama/Llama-3.2-3B-Instruct": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+    # Model families, wave B (2026-11-22, wf/families.py, notes/families_waveb_design.md): the Hub's current commit,
+    # read 2026-11-22 before any weight was downloaded. Ministral 3 is its bf16 release (the default repository's
+    # language model is FP8).
+    "mistralai/Ministral-3-8B-Instruct-2512-BF16": "f6fae9795746f63c9be8344932f01275f3c63734",
+    "Qwen/Qwen3.5-9B": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+    "Qwen/Qwen3.5-9B-Base": "68c46c4b3498877f3ef123c856ecfde50c39f404",
+    "google/gemma-4-E4B-it": "4ecc2ba63bcac23ba4a767fc87025b1450f84c9c",
+    "Qwen/Qwen3.8-27B": "37561816e66b5b9153b1b64c10968c18c1e6f4a0",
+    "google/gemma-4-31B-it": "842da3794eaa0b77d5f08bae87a17459d91ff475",
 }
 
 
