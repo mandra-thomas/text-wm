@@ -1,11 +1,46 @@
 run_id: families_waveb_analysis
 # Model families, wave B (wf/families.py; notes/families_waveb_design.md). CPU only. The primary family is fixed in
-# code (WAVE_B_SHARE_TESTS and WAVE_B_PLANNED, 16 tests); no test is read unless families_envcheck passed.
+# code (WAVE_B_SHARE_TESTS and WAVE_B_PLANNED, 16 tests). Amended 2026-11-23 (section 8, after the environment check
+# failed and its cause was found, before any wave B score): every reference model is read from its serve2 rescoring
+# (family_rescore_<tag>, scores under <tag>-serve2), and no test is read unless every rescoring passes its checks
+# (`rescore`); the environment check's verdict is still reported, and the original-environment scores
+# (`reference_original`) are reported beside the serve2 ones, descriptively.
 wave: B
 envcheck: families_envcheck
 sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
 models: [ministral3-8b-it, qwen3.5-9b, qwen3.5-9b-plain, qwen3.5-9b-base-plain, gemma4-e4b-it, qwen3.8-27b, gemma4-31b-it]
 reference:
+  qwen3-8b:
+    model: qwen3-8b-serve2
+    runs:
+      family_rescore_qwen3-8b: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+  llama3.1-8b:
+    model: llama3.1-8b-serve2
+    runs:
+      family_rescore_llama3.1-8b: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+  qwen3-32b:
+    model: qwen3-32b-serve2
+    runs:
+      family_rescore_qwen3-32b: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+  gemma2-9b-it:
+    model: gemma2-9b-it-serve2
+    runs:
+      family_rescore_gemma2-9b-it: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+  mistral-7b-v0.3:
+    model: mistral-7b-v0.3-serve2
+    runs:
+      family_rescore_mistral-7b-v0.3: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
+# The gate (wf.families.rescore_check): each rescoring run and its token comparison (wf.tools.envcheck_tokens with
+# --rescore, pace/families_envcheck_tokens.sbatch with ENVTOK_TAGS and ENVTOK_OUT=rescore_tokens).
+rescore:
+  mistral-7b-v0.3: {run: family_rescore_mistral-7b-v0.3, tokens: rescore_tokens/compare_mistral-7b-v0.3.json}
+  qwen3-8b: {run: family_rescore_qwen3-8b, tokens: rescore_tokens/compare_qwen3-8b.json}
+  gemma2-9b-it: {run: family_rescore_gemma2-9b-it, tokens: rescore_tokens/compare_gemma2-9b-it.json}
+  llama3.1-8b: {run: family_rescore_llama3.1-8b, tokens: rescore_tokens/compare_llama3.1-8b.json}
+  qwen3-32b: {run: family_rescore_qwen3-32b, tokens: rescore_tokens/compare_qwen3-32b.json}
+# The original-environment scores (transformers 4.51.3), descriptive only: the environment-sensitivity column and the
+# comparisons repeated with them (comparisons_original_environment). Never a test or a reading.
+reference_original:
   qwen3-8b:
     model: qwen3-8b
     runs:

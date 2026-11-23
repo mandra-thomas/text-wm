@@ -1444,6 +1444,9 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     **{f"family_envcheck_{tag}": (lambda cfg: _lazy("families", "run_family_envcheck")(cfg))
        for tag in ("mistral-7b-v0.3", "qwen3-8b")},
     "families_envcheck": lambda cfg: _lazy("families", "run_families_envcheck")(cfg),
+    # 2026-11-23, wave B section 8 amendment (before any wave B score): the older comparison models rescored in serve2
+    **{f"family_rescore_{tag}": (lambda cfg: _lazy("families", "run_family_rescore")(cfg))
+       for tag in ("mistral-7b-v0.3", "qwen3-8b", "gemma2-9b-it", "llama3.1-8b", "qwen3-32b")},
     "families_waveb_analysis": lambda cfg: _lazy("families", "run_families_analysis")(cfg),
 }
 

@@ -128,7 +128,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="node-local weights: --cache required, never under /storage; manifest, disk and hash checks")
     args = ap.parse_args(argv)
     tags = args.tags or list(families.MODELS)
-    known = {**families.MODELS, **families.WAVE_B}
+    # the reference models too (wave B section 8 amendment, 2026-11-23: Qwen3-32B is rescored with node-local weights)
+    known = {**families.MODELS, **families.WAVE_B, **families.REFERENCE}
     unknown = [t for t in tags if t not in known]
     if unknown:
         print(f"unknown tags {unknown}; known: {sorted(known)}", file=sys.stderr)

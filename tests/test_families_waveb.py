@@ -74,9 +74,15 @@ def test_wave_b_analysis_config_reads_every_model_and_every_planned_partner():
     assert cfg["models"] == list(B)
     have = set(cfg["models"]) | set(cfg["reference"])
     assert all(a in have and b in have for a, b in families.WAVE_B_PLANNED)
+    # section 8 amendment (2026-11-23): every reference is its serve2 rescoring; the originals are descriptive only
+    assert set(cfg["reference"]) == set(families.RESCORE_MODELS) == set(cfg["rescore"]) == set(cfg["reference_original"])
     for tag, ref in cfg["reference"].items():
         spec = families.spec_for(tag)
-        assert spec.hf_id in C.REVISIONS and ref["model"] in (tag, "llama3.1-8b-fewshot")
+        assert spec.hf_id in C.REVISIONS and ref["model"] == tag + families.RESCORE_SUFFIX
+        assert ref["runs"] == {f"family_rescore_{tag}": list(families.ENVCHECK_ARMS)}
+        assert cfg["rescore"][tag]["run"] == f"family_rescore_{tag}" and f"family_rescore_{tag}" in RUNNERS
+        assert cfg["rescore"][tag]["tokens"] == f"rescore_tokens/compare_{tag}.json"
+        assert cfg["reference_original"][tag]["model"] in (tag, "llama3.1-8b-fewshot")
     assert cfg["placement"] == {"gemma4-e4b-it": "family_placement_gemma4-e4b-it"}
     assert "family_placement_gemma4-e4b-it" in RUNNERS
 
@@ -580,7 +586,8 @@ def _report(readings, estimates, share_verdicts, both=True, passed=True, yn_ci=(
     tests.update({f"{k}:share_differs": {"verdict": "supported", "estimate": e} for k, e in estimates.items()})
     return {"models": {t: {} for t in B}, "prediction_check": {t: {"holds": both, "yes_no_ci": list(yn_ci)} for t in B},
             "primary_family": {"tests": tests, "comparison_readings": readings},
-            "environment_check": {"pass": passed}}
+            # section 8 amendment: the environment check stays failed and no longer gates; the serve2 rescorings do
+            "environment_check": {"pass": False, "gates": False}, "serve2_rescoring": {"pass": passed}}
 
 
 def test_wave_b_predictions_are_read_as_logged():
@@ -714,10 +721,10 @@ def test_b3_falls_back_to_the_two_candidate_share_only_when_the_base_fails_only_
     neg, _, _ = _b3_scores(shift_inst=-1.0)  # the instruct model moves fewer failures: a clear negative difference
     rep["b3_fallback"] = families.b3_fallback(_b3_blocks(), neg, primary, successes)
     assert rep["b3_fallback"]["comparison"]["differs"] and families.waveb_predictions(rep)["B3"][key]["holds"] is False
-    rep["environment_check"]["pass"] = False
+    rep["serve2_rescoring"]["pass"] = False  # section 8 amendment: wave B's gate
     assert families.waveb_predictions(rep)["B3"][key]["holds"] is None
     rep["b3_fallback"] = {"applies": False}
-    rep["environment_check"]["pass"] = True
+    rep["serve2_rescoring"]["pass"] = True
     assert families.waveb_predictions(rep)["B3"][key]["holds"] is None  # not interpretable, no fallback
 
 
@@ -889,6 +896,23 @@ def _envcheck_runs(monkeypatch, n, gpus=None):
     monkeypatch.setattr(prov, "gpu_names", lambda: None)
 
 
+def _rescore_runs(monkeypatch, gpus=None, tokens_ok=None, mock_root=None):
+    """Every older comparison model rescored in serve2 (section 8 amendment), each on the GPU its job records (the
+    pinned type by default), and the token comparisons (all identical by default) in rescore_tokens/."""
+    import wf.provenance as prov
+
+    for tag in families.RESCORE_MODELS:
+        gpu = (gpus or families.RESCORE_GPU)[tag]
+        monkeypatch.setattr(prov, "gpu_names", lambda gpu=gpu: [gpu] if gpu else None)
+        assert families.run_family_rescore(_cfg(f"family_rescore_{tag}", tag)) == 0
+    monkeypatch.setattr(prov, "gpu_names", lambda: None)
+    if mock_root is not None:
+        (mock_root / "rescore_tokens").mkdir(exist_ok=True)
+        for tag in families.RESCORE_MODELS:
+            ok = (tokens_ok or {}).get(tag, True)
+            (mock_root / "rescore_tokens" / f"compare_{tag}.json").write_text(json.dumps({"ok": ok, "model": tag}))
+
+
 def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root, monkeypatch):
     for tag in B:
         assert families.run_family_score(_cfg(f"family_score_{tag}", tag)) == 0
@@ -916,13 +940,29 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root, monke
     env = json.loads((mock_root / "families_envcheck" / "metrics.json").read_text())
     assert env["pass"] is True and set(env["models"]) == set(families.ENVCHECK_MODELS)
     assert all(m["yes_no"]["share_identical"] == 1 for m in env["models"].values())  # the mock scorer is deterministic
+    # section 8 amendment: the environment check stays failed (as on ICE) and no longer gates; the rescorings do
+    (mock_root / "families_envcheck" / "metrics.json").write_text(json.dumps({**env, "pass": False}))
+    _rescore_runs(monkeypatch, mock_root=mock_root)
 
     cfg = {**load_config("families_waveb_analysis"), "sources": ["rq12_transitions_smoke"]}
-    cfg["reference"] = {k: v for k, v in cfg["reference"].items() if k != "llama3.1-8b"}  # its RQ1 runs are not mocked here
+    # Llama's original-environment RQ1 runs are not mocked here (its serve2 rescoring is)
+    cfg["reference_original"] = {k: v for k, v in cfg["reference_original"].items() if k != "llama3.1-8b"}
     assert families.run_families_analysis(cfg) == 0
     rep = json.loads((mock_root / "families_waveb_analysis" / "metrics.json").read_text())
     fam = rep["primary_family"]
-    assert fam["n_tests_planned"] == 16 == len(fam["tests"]) and rep["environment_check"]["pass"] is True
+    assert fam["n_tests_planned"] == 16 == len(fam["tests"]) and rep["environment_check"]["pass"] is False
+    assert rep["environment_check"]["gates"] is False and rep["serve2_rescoring"]["pass"] is True
+    assert set(rep["serve2_rescoring"]["models"]) == set(families.RESCORE_MODELS) and not rep["waiting"]
+    # every reference is read from its serve2 rescoring; the originals only in the environment-sensitivity column
+    for tag in families.RESCORE_MODELS:
+        assert list(rep["reference"][tag]["read"]["problems"]) == []
+    assert "qwen3-8b:family_rescore_qwen3-8b" in rep["provenance"]["runs_read"]
+    assert "qwen3-8b (original environment):size_score_qwen3-8b" in rep["provenance"]["runs_read"]
+    assert set(rep["environment_sensitivity"]) == set(families.RESCORE_MODELS) - {"llama3.1-8b"}
+    assert {"serve2", "original", "serve2_minus_original"} == set(rep["environment_sensitivity"]["qwen3-8b"])
+    assert "qwen3.5-9b vs qwen3-8b" in rep["comparisons_original_environment"]
+    assert "qwen3.5-9b vs qwen3.5-9b-plain" not in rep["comparisons_original_environment"]
+    assert rep["amendments"]["serve2_rescoring"] == families.RESCORE_AMENDMENT
     assert set(rep["models"]) == set(B) and set(rep["predictions_b"]["B1"]) == set(B)
     assert set(rep["comparisons"]) >= {f"{a} vs {b}" for a, b in families.WAVE_B_PLANNED}
     assert "qwen3.5-9b vs qwen3.5-9b-plain" in rep["comparisons"] and "gemma4-e4b-it" in rep["placement"]
@@ -935,12 +975,13 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root, monke
     status = (mock_root / "families_waveb_analysis" / "STATUS.md").read_text()
     assert "share toward Yes" in status and "preserve_thinking=False minus native" in status
 
-    # the same analysis with a failed environment check reads no test
-    m = json.loads((mock_root / "families_envcheck" / "metrics.json").read_text())
-    (mock_root / "families_envcheck" / "metrics.json").write_text(json.dumps({**m, "pass": False}))
+    # the same analysis with one rescoring's tokens differing reads no test
+    (mock_root / "rescore_tokens" / "compare_gemma2-9b-it.json").write_text(
+        json.dumps({"ok": False, "model": "gemma2-9b-it"}))
     assert families.run_families_analysis({**cfg, "run_id": "families_waveb_analysis_blocked"}) == 0
     rep = json.loads((mock_root / "families_waveb_analysis_blocked" / "metrics.json").read_text())
-    assert rep["environment_check"]["pass"] is False and rep["primary_family"]["environment_check_passed"] is False
+    assert rep["serve2_rescoring"]["pass"] is False and rep["primary_family"]["environment_check_passed"] is False
+    assert rep["serve2_rescoring"]["models"]["gemma2-9b-it"]["checks"]["tokens_identical"] is False
     assert not any(v["verdict"] in ("supported", "not supported") for v in rep["primary_family"]["tests"].values())
     # review 1 (S5): nothing read from a wave B score is written anywhere: no estimate, block, comparison or check
     assert all(v["verdict"] in (families.ENVIRONMENT_BLOCKED, "waiting") and v["estimate"] is None and v["p"] is None
@@ -948,6 +989,9 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root, monke
     assert all(set(m) == {"withheld", "spec", "tokenization_gate", "records_outside_population"}
                for m in rep["models"].values())
     assert all(c == {"withheld": families.ENVIRONMENT_BLOCKED} for c in rep["comparisons"].values())
+    assert rep["comparisons_original_environment"] and all(
+        c == {"withheld": families.ENVIRONMENT_BLOCKED} for c in rep["comparisons_original_environment"].values())
+    assert "gemma2-9b-it" in rep["environment_sensitivity"]  # reference models only: stays
     assert rep["placement"]["gemma4-e4b-it"]["withheld"] == families.ENVIRONMENT_BLOCKED
     assert rep["template_checks"]["qwen3.8-27b"]["withheld"] == families.ENVIRONMENT_BLOCKED
     assert rep["b3_fallback"]["withheld"] == families.ENVIRONMENT_BLOCKED
@@ -959,12 +1003,206 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root, monke
         assert f"{tag}: {families.ENVIRONMENT_BLOCKED}; scores complete, nothing read" in status
     assert "share toward Yes" not in status.split("(reference)")[0] and "Holm p" not in status
     assert "item share" not in status and "placement" not in status and "B1 " not in status
+    assert "serve2 rescoring of the older models not complete or not passed: ['gemma2-9b-it']" in status
     # the mock models may fail the competence gate; whatever would have been read is now blocked
     unblocked = json.loads((mock_root / "families_waveb_analysis" / "metrics.json").read_text())["primary_family"]
     for k, v in unblocked["tests"].items():
         if v["verdict"] in ("supported", "not supported"):
             assert rep["primary_family"]["tests"][k]["verdict"] == families.ENVIRONMENT_BLOCKED
     assert unblocked["environment_check_passed"] is True
+
+
+# ---------------- section 8 amendment (2026-11-23): the older comparison models rescored in serve2 ----------------
+
+
+def test_rescore_list_is_every_older_model_a_wave_b_comparison_uses():
+    from wf.runs import load_config
+
+    older = {b for _, b in families.WAVE_B_PLANNED if b not in B} | set(families.REFERENCE_TAGS)
+    assert set(families.RESCORE_MODELS) == older == {"qwen3-8b", "llama3.1-8b", "qwen3-32b", "gemma2-9b-it",
+                                                     "mistral-7b-v0.3"}
+    cfg = load_config("families_waveb_analysis")
+    # descriptive comparisons, the placement check and the template check compare wave B models only
+    assert all(a in B and b in B for a, b in cfg["descriptive_comparisons"])
+    assert set(cfg["placement"]) <= set(B) and set(cfg["template_checks"]) <= set(B)
+    assert families.RUN_ORDER_B[3:8] == tuple(f"family_rescore_{t}" for t in families.RESCORE_MODELS)
+    assert families.RUN_ORDER_B.index("family_rescore_qwen3-32b") < families.RUN_ORDER_B.index("family_score_ministral3-8b-it")
+
+
+def test_rescore_spec_keeps_the_earlier_prompts_and_loads_as_wave_b():
+    for tag in families.RESCORE_MODELS:
+        old, new = families.spec_for(tag), families.rescore_spec(tag)
+        assert new.tag == tag + "-serve2" and new.env == "serve2" and new.wave == "rescore" and new.strict_load
+        assert (new.hf_id, new.revision, new.system, new.attn_implementation, new.template_kwargs) == \
+               (old.hf_id, old.revision, old.system, old.attn_implementation, old.template_kwargs)
+        assert new.tokenizer_kwargs == ({"mistral_format": False} if tag == "mistral-7b-v0.3" else {})
+        assert (new.gpu_min_gb, new.host_mem_min_gb) == ((80, 128) if tag == "qwen3-32b" else (24, 0))
+        cfg = load_config_safe(f"family_rescore_{tag}")
+        assert cfg["model"] == tag and cfg["n_shards"] == (2 if tag == "qwen3-32b" else 1)
+    assert families.rescore_spec("gemma2-9b-it").attn_implementation == "eager"
+    for tag in ("gemma4-e4b-it", "llama3.2-1b", "nope"):
+        with pytest.raises((ValueError, KeyError)):
+            families.rescore_spec(tag)
+
+
+def load_config_safe(run_id):
+    from wf.runs import RUNNERS, load_config
+
+    assert run_id in RUNNERS
+    return load_config(run_id)
+
+
+def test_rescore_gpu_types_and_node_local_weights_are_pinned():
+    from wf.tools import weights_manifest as wm
+
+    assert families.RESCORE_GPU == {"mistral-7b-v0.3": "NVIDIA A40", "qwen3-8b": "NVIDIA L40S",
+                                    "gemma2-9b-it": "NVIDIA L40S", "llama3.1-8b": "NVIDIA L40S",
+                                    "qwen3-32b": "NVIDIA A100 80GB PCIe"}
+    assert families.RESCORE_NODE_LOCAL == ("qwen3-32b",)
+    m = wm.load_manifest("Qwen/Qwen3-32B", C.REVISIONS["Qwen/Qwen3-32B"])
+    assert m["n_files"] == 24 and m["total_bytes"] == 65540268929 and m["dry_run_cross_check"]["same_files_and_sizes"]
+
+
+def test_family_rescore_refuses_other_models(mock_root):
+    with pytest.raises(SystemExit, match="rescoring covers"):
+        families.run_family_rescore(_cfg("family_rescore_gemma4-e4b-it", "gemma4-e4b-it"))
+
+
+def _rewrite(path, **changes):
+    rec = json.loads(path.read_text())
+    for k, v in changes.items():
+        rec[k] = v
+    path.write_text(json.dumps(rec))
+
+
+def test_rescore_check_passes_only_with_every_check(mock_root, monkeypatch):
+    _rescore_runs(monkeypatch, mock_root=mock_root)
+    tok = "rescore_tokens/compare_{}.json"
+    for tag in families.RESCORE_MODELS:
+        r = families.rescore_check(tag, f"family_rescore_{tag}", tok.format(tag))
+        assert r["pass"] is True, (tag, r["checks"])
+        assert set(r["checks"]) == ({"complete", "tokens_identical", "gpu_type", "gate_passed_in_serve2",
+                                     "pinned_revision"} | ({"weights_hashed"} if tag == "qwen3-32b" else set()))
+    q = "qwen3-8b"
+    run = f"family_rescore_{q}"
+
+    def failed(tokens=tok.format(q), tag=q, r=run):
+        return sorted(k for k, v in families.rescore_check(tag, r, tokens)["checks"].items() if not v)
+
+    assert failed(tokens=None) == ["tokens_identical"]
+    assert failed(tokens="rescore_tokens/missing.json") == ["tokens_identical"]
+    assert failed(tokens=tok.format("mistral-7b-v0.3")) == ["tokens_identical"]  # another model's comparison
+    shard = mock_root / run / "shard_00_of_01"
+    gate = shard / "tokenization_checks.json"
+    good = gate.read_text()
+    real_env = {"checked": True, "transformers": "5.23.0"}
+    _rewrite(gate, ok=False, skipped=None, environment=real_env)
+    assert failed() == ["gate_passed_in_serve2"]
+    _rewrite(gate, ok=True, environment={"checked": True, "transformers": "4.51.3"})
+    assert failed() == ["gate_passed_in_serve2"]
+    _rewrite(gate, ok=True, environment=real_env)
+    assert failed() == []
+    gate.write_text(good)
+    conf = shard / "config.json"
+    spec = json.loads(conf.read_text())["model_spec"]
+    _rewrite(conf, model_spec={**spec, "revision": "0" * 40})
+    assert failed() == ["pinned_revision"]
+    _rewrite(conf, model_spec=spec)
+    (shard / "STATUS.md").write_text("# STATUS — running\n")
+    assert "complete" in failed()
+    # the node-local model needs its download's hash check in every shard
+    big = mock_root / "family_rescore_qwen3-32b" / "shard_00_of_01" / "tokenization_checks.json"
+    _rewrite(big, ok=True, skipped=None, environment=real_env)
+    assert failed(tokens=tok.format("qwen3-32b"), tag="qwen3-32b", r="family_rescore_qwen3-32b") == ["weights_hashed"]
+    _rewrite(big, weights_check={"ok": True, "revision": "0" * 40})
+    assert failed(tokens=tok.format("qwen3-32b"), tag="qwen3-32b", r="family_rescore_qwen3-32b") == ["weights_hashed"]
+    _rewrite(big, weights_check={"ok": True, "revision": C.REVISIONS["Qwen/Qwen3-32B"]})
+    assert failed(tokens=tok.format("qwen3-32b"), tag="qwen3-32b", r="family_rescore_qwen3-32b") == []
+
+
+def test_rescore_check_fails_on_another_gpu_type(mock_root, monkeypatch):
+    gpus = {**families.RESCORE_GPU, "qwen3-32b": "NVIDIA A100-PCIE-40GB", "mistral-7b-v0.3": None}
+    _rescore_runs(monkeypatch, gpus=gpus, mock_root=mock_root)
+    for tag in families.RESCORE_MODELS:
+        r = families.rescore_check(tag, f"family_rescore_{tag}", f"rescore_tokens/compare_{tag}.json")
+        assert r["checks"]["gpu_type"] is (tag not in ("qwen3-32b", "mistral-7b-v0.3")), tag
+
+
+def test_rescore_gate_needs_every_model(mock_root, monkeypatch):
+    _rescore_runs(monkeypatch, mock_root=mock_root)
+    given = {t: {"run": f"family_rescore_{t}", "tokens": f"rescore_tokens/compare_{t}.json"}
+             for t in families.RESCORE_MODELS}
+    assert families.rescore_gate({"rescore": given})["pass"] is True
+    g = families.rescore_gate({"rescore": {k: v for k, v in given.items() if k != "llama3.1-8b"}})
+    assert g["pass"] is False and g["missing_from_config"] == ["llama3.1-8b"]
+    assert families.rescore_gate({})["pass"] is False
+    g = families.rescore_gate({"rescore": {**given, "qwen3-32b": {"run": "family_rescore_nope", "tokens": None}}})
+    assert g["pass"] is False and g["models"]["qwen3-32b"]["checks"]["complete"] is False
+
+
+def test_environment_sensitivity_is_serve2_minus_original():
+    def block(share, r, yn, two):
+        return {"primary_metrics": {"item_share_toward_yes": {"estimate": share},
+                                    "goal_to_evidence_ratio": {"estimate": r}},
+                "yes_no": {"goal_effect": {"delta_L_nats": yn}}, "goal_effect": {"delta_L_nats": two}}
+    out = families.environment_sensitivity(block(0.88, 1.2, 2.81, 6.02), block(0.89, 1.1, 2.78, 6.01))
+    d = out["serve2_minus_original"]
+    assert out["serve2"]["item_share_toward_yes"] == 0.88 and out["original"]["yes_no_delta_L"] == 2.78
+    assert d == pytest.approx({"item_share_toward_yes": -0.01, "goal_to_evidence_ratio": 0.1,
+                               "yes_no_delta_L": 0.03, "two_candidate_delta_L": 0.01})
+
+
+def test_serve2_job_runs_a_rescoring_only_on_its_pinned_gpu_and_qwen3_32b_node_local():
+    text = (ROOT / "pace" / "family_score_serve2.sbatch").read_text()
+    assert 'family_rescore_*) TAG=""; RESCORETAG="${RUN#family_rescore_}" ;;' in text
+    assert "want, have = RESCORE_GPU[tag], gpu_names()" in text
+    assert 'if have != [want]:\n    sys.exit(f"the serve2 rescoring of {tag} runs on one {want} only' in text
+    assert 'if tag in RESCORE_NODE_LOCAL and weights != "local":' in text
+    assert 'TAG="${TAG:-${RESCORETAG}}"' in text
+    # the rescoring's GPU check runs before anything is downloaded or loaded
+    assert text.index("RESCORE_GPU[tag]") < text.index("prefetch_models") < text.index('run_wf "${RUN}"')
+    tok = (ROOT / "pace" / "families_envcheck_tokens.sbatch").read_text()
+    assert 'OUT="${RUNS_DIR}/rescore_tokens"' in tok and 'RESCORE=(--rescore)' in tok
+    assert 'TAGS="mistral-7b-v0.3 qwen3-8b gemma2-9b-it llama3.1-8b qwen3-32b"' in tok
+    assert 'CACHE="${WORK}/hf"' in tok  # Qwen3-32B's tokenizer files node-local, never the shared cache
+
+
+def test_token_tool_rescore_mode_covers_every_older_model_with_its_settings(monkeypatch, tmp_path, capsys):
+    from wf.tools import envcheck_tokens as et
+
+    class Stop(Exception):
+        pass
+
+    seen: dict = {}
+
+    def from_pretrained(hf_id, **kw):
+        seen.update(hf_id=hf_id, **kw)
+        raise Stop
+
+    stub = types.SimpleNamespace(__version__="5.23.0", AutoTokenizer=types.SimpleNamespace(from_pretrained=from_pretrained))
+    monkeypatch.setitem(sys.modules, "transformers", stub)
+    out = str(tmp_path / "x.json")
+    assert et.main(["dump", "gemma2-9b-it", "--out", out]) == 2  # not an environment-check model
+    assert et.main(["dump", "gemma4-e4b-it", "--rescore", "--out", out]) == 2  # not an older comparison model
+    for tag in families.RESCORE_MODELS:
+        seen.clear()
+        with pytest.raises(Stop):
+            et.main(["dump", tag, "--rescore", "--out", out])
+        assert seen["hf_id"] == families.spec_for(tag).hf_id and seen["local_files_only"] is True
+        assert seen.get("mistral_format", "unset") == (False if tag == "mistral-7b-v0.3" else "unset")
+    seen.clear()
+    with pytest.raises(Stop):  # without --rescore, the environment check's settings, as before
+        et.main(["dump", "qwen3-8b", "--out", out])
+    assert seen["mistral_format"] is False
+
+
+def test_prefetch_accepts_the_reference_models(capsys):
+    from wf.tools import prefetch_models as pm
+
+    assert pm.main(["qwen3-32b", "--node-local"]) == 2  # stops for the missing --cache, not for an unknown tag
+    err = capsys.readouterr().err
+    assert "--node-local needs --cache" in err and "unknown tags" not in err
+    assert pm.main(["nope"]) == 2 and "unknown tags" in capsys.readouterr().err
 
 
 def test_envcheck_fails_without_the_token_comparison(mock_root, monkeypatch):

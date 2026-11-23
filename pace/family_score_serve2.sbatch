@@ -22,6 +22,12 @@
 # preserve_thinking check, Gemma 4 31B last (wf.families.RUN_ORDER_B).
 #   bash pace/submit.sh family_score_serve2.sbatch --export=ALL,FAMILY_RUN=family_envcheck_mistral-7b-v0.3 --constraint=gpu-a40
 #   bash pace/submit.sh family_score_serve2.sbatch --export=ALL,FAMILY_RUN=family_envcheck_qwen3-8b --constraint=gpu-l40s
+# Section 8 amendment (2026-11-23), the older comparison models rescored in serve2 on their pinned types:
+#   bash pace/submit.sh family_score_serve2.sbatch --export=ALL,FAMILY_RUN=family_rescore_mistral-7b-v0.3 --constraint='(gpu-a40)'
+#   bash pace/submit.sh family_score_serve2.sbatch --export=ALL,FAMILY_RUN=family_rescore_qwen3-8b --constraint='(gpu-l40s)'
+#   (the same for family_rescore_gemma2-9b-it and family_rescore_llama3.1-8b on gpu-l40s)
+#   bash pace/submit.sh family_score_serve2.sbatch --export=ALL,FAMILY_RUN=family_rescore_qwen3-32b,WF_WEIGHTS=local,WF_SHARD=0,WF_N_SHARDS=2 \
+#        --constraint=A100-80GB --mem=128G --time=8:00:00   (and WF_SHARD=1)
 #   bash pace/submit.sh family_score_serve2.sbatch --export=ALL,FAMILY_RUN=family_score_gemma4-e4b-it,WF_WEIGHTS=local
 #   bash pace/submit.sh family_score_serve2.sbatch --export=ALL,FAMILY_RUN=family_score_qwen3.8-27b,WF_WEIGHTS=local \
 #        --constraint=A100-80GB --mem=128G --time=10:00:00
@@ -44,12 +50,15 @@ if [[ ! -f "${RUNS_DIR}/FILED.txt" ]]; then
 fi
 RUN="${FAMILY_RUN:?set FAMILY_RUN, e.g. family_score_gemma4-e4b-it}"
 ENVTAG=""
+RESCORETAG=""
 case "${RUN}" in
   family_score_*) TAG="${RUN#family_score_}" ;;
   family_placement_*) TAG="${RUN#family_placement_}" ;;
   family_nopreserve_*) TAG="${RUN#family_nopreserve_}" ;;  # review 1, S8: Qwen3.8 with preserve_thinking=False
   family_envcheck_*) TAG=""; ENVTAG="${RUN#family_envcheck_}" ;;  # earlier models, already in the shared cache
-  *) echo "ERROR: FAMILY_RUN must be family_score_<tag>, family_placement_<tag>, family_nopreserve_<tag> or family_envcheck_<tag>, not ${RUN}" >&2; exit 2 ;;
+  # section 8 amendment (2026-11-23): an older comparison model rescored in serve2 on every item and condition
+  family_rescore_*) TAG=""; RESCORETAG="${RUN#family_rescore_}" ;;
+  *) echo "ERROR: FAMILY_RUN must be family_score_<tag>, family_placement_<tag>, family_nopreserve_<tag>, family_envcheck_<tag> or family_rescore_<tag>, not ${RUN}" >&2; exit 2 ;;
 esac
 
 # serve2, whatever pace.env says SERVE_ENV is (that one is the study's environment, transformers 4.51.3).
@@ -81,6 +90,22 @@ if have != [want]:
 print("GPU", have)
 PY
 fi
+# Section 8 amendment: each serve2 rescoring runs on its pinned GPU type (wf.families.RESCORE_GPU), and a model that is
+# in no ICE cache (RESCORE_NODE_LOCAL: Qwen3-32B) only with node-local weights checked against its manifest.
+if [[ -n "${RESCORETAG}" ]]; then
+  python - "${RESCORETAG}" "${WF_WEIGHTS:-shared}" <<'PY'
+import sys
+from wf.families import RESCORE_GPU, RESCORE_NODE_LOCAL
+from wf.provenance import gpu_names
+tag, weights = sys.argv[1], sys.argv[2]
+want, have = RESCORE_GPU[tag], gpu_names()
+if have != [want]:
+    sys.exit(f"the serve2 rescoring of {tag} runs on one {want} only; this job has {have}")
+if tag in RESCORE_NODE_LOCAL and weights != "local":
+    sys.exit(f"{tag} is in no ICE cache: rescore it with WF_WEIGHTS=local (route A)")
+print("GPU", have)
+PY
+fi
 
 LOCAL_CACHE=""
 cleanup() {
@@ -90,7 +115,8 @@ cleanup() {
 }
 trap cleanup EXIT
 if [[ "${WF_WEIGHTS:-shared}" == "local" ]]; then
-  [[ -n "${TAG}" ]] || { echo "ERROR: WF_WEIGHTS=local is for wave B models" >&2; exit 2; }
+  [[ -n "${TAG}" || -n "${RESCORETAG}" ]] || { echo "ERROR: WF_WEIGHTS=local is for wave B models and rescorings" >&2; exit 2; }
+  TAG="${TAG:-${RESCORETAG}}"
   LOCAL_CACHE="${TMPDIR:-/tmp}/wf_hf_${SLURM_JOB_ID:-local}"
   mkdir -p "${LOCAL_CACHE}"
   df -h "${LOCAL_CACHE}" || true

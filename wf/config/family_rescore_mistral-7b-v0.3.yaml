@@ -1,0 +1,11 @@
+run_id: family_rescore_mistral-7b-v0.3
+# Wave B, section 8 amendment (2026-11-23, after the environment check failed and its cause was found, before any
+# wave B score): mistral-7b-v0.3 rescored in serve2 on every item and condition its wave B comparisons use, saved under
+# mistral-7b-v0.3-serve2, on its pinned GPU type (wf.families.RESCORE_GPU; pace/family_score_serve2.sbatch checks it before loading).
+model: mistral-7b-v0.3
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+n_shards: 1
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

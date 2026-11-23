@@ -131,6 +131,69 @@ Also reported: the largest difference, the share of scores identical to the last
 
 **If it fails.** No wave B score is read. The cause is found first (an attention or kernel change, a tokenizer difference, a dtype path) and fixed or documented in an amendment made before any wave B score is read; the check is rerun. `families_waveb_analysis` reads the check's verdict and marks every wave B test "not interpretable (environment check)" unless it passed.
 
+### Amendment after the environment check failed (cause found), before any wave B score was read (2026-11-23)
+
+Written on 2026-11-23, when no wave B model had been scored (no wave B weight downloaded, no wave B score in any run folder) and nothing from a wave B run had been read. The decision (the user's) is to rescore the older comparison models in serve2, so that every comparison sits in one software environment. The rule it replaces, as frozen at `families-waveb-design-frozen-2026-11-22`:
+
+> **If it fails.** No wave B score is read. The cause is found first (an attention or kernel change, a tokenizer difference, a dtype path) and fixed or documented in an amendment made before any wave B score is read; the check is rerun. `families_waveb_analysis` reads the check's verdict and marks every wave B test "not interpretable (environment check)" unless it passed.
+
+**The check's verdict stays FAILED.** `families_envcheck` (CPU job 7247973, checkout `text-wm-fix39`): Mistral 7B v0.3 passed every criterion (yes/no mean absolute difference per score 0.069 nats, goal effect moved 0.003, item share unchanged; two-candidate 0.089 and 0.006). Qwen3-8B failed one criterion, the yes/no mean absolute difference per score: 0.248 nats against the limit of 0.07 (largest 1.0; 30% of scores identical). Every effect-level criterion passed for Qwen3-8B too: the yes/no goal effect moved by 0.026 nats (limit 0.10), the item share toward Yes by 0.010 (limit 0.02), the two-candidate goal effect by 0.011 (limit 0.10), and the two-candidate mean absolute difference was 0.341 (limit 0.35). Token ids were identical in both environments for both models (part 1), and both rescorings ran on their pinned GPU types. The verdict is not re-scored, re-thresholded or re-read: it stays failed.
+
+**The cause, found with a precision diagnostic** (`scripts/families_envcheck_precision.py`, GPU job 7248092 on an L40S, checkout `text-wm-fix45`; 50 of the 300 check items, every sixth, Qwen3-8B in both environments). In each environment the diagnostic reproduced the archived scores exactly (300 of 300 scores equal to the last bit: `size_score_qwen3-8b` in the study environment, `family_envcheck_qwen3-8b` in serve2), and the token ids were identical (450 of 450 prompts). The load-time settings were the same in both (SDPA attention, bf16, the same model class and pinned revision, TF32 off, the same SDPA back-end switches); only the library versions differed (torch 2.6.0 against 2.14.1, CUDA 12.4 against 12.6, cuDNN 9.1 against 9.10, transformers 4.51.3 against 5.23.0). For each score the diagnostic also kept the same final hidden state multiplied by the output layer in float64, so that no logit is rounded to bf16.
+
+- Qwen3-8B's Yes and No logits at the readout position are large: 30 to 65.5 in magnitude (median 52; the larger of the two has median 62). Where a logit lies between 32 and 64, bf16 values are 0.25 apart, which is why every yes/no difference was a multiple of 0.25.
+- The bf16 differences are exactly the rounding of the float64 logits: 205 of the 207 logits that changed equal their float64 value rounded to bf16 in both environments, and rounding the float64 logits predicts 100 of the 101 changed scores exactly.
+- But the float64 logits themselves moved. Before any bf16 rounding, the yes/no score differs between the environments by 0.217 nats per score on average (median 0.16, largest 0.96), three times the limit; each logit moved by 0.25 nats on average, a median relative change of 0.44%, about one bf16 epsilon (0.39%). The float64 differences by condition were −0.059 (aligned; standard error 0.037), +0.054 (swapped; 0.035) and −0.070 (neutral; 0.043), pooled −0.025 (0.023). Recomputing the final norm in float64 as well leaves the mean difference the same to within 0.01 nats (0.218).
+- So the hypothesis that rounding alone explains the failure was refuted. The software stack perturbs the final hidden state by about one bf16 epsilon, as a change of GPU type does, and Qwen3-8B's large readout logits turn that relative perturbation into about a quarter of a nat in absolute terms. Mistral 7B's logits are smaller, so the same kind of perturbation moved its scores less. The perturbation is not tied to one condition, and the effect-level criteria passed.
+- The two-candidate scores show the same mechanism. Qwen3-8B's two-candidate L moved by −0.10 (aligned), −0.11 (swapped) and −0.06 (neutral) on the 300 items. On the diagnostic's 50 items, the float64 change was −0.05, −0.04 and −0.05. It comes from the longer candidate ("You …"), whose log-probability fell by 0.04 to 0.07 nats while "Nothing happens." moved by 0.02 at most: each token lost about 0.004 nats because the log-normaliser rose slightly more than the target logit. The shift is the same in the aligned and swapped conditions, so it cancels in the goal effect (moved 0.011).
+
+A rule that only tolerated rounding would not have fixed this: the change is in the numbers before rounding. Comparing a wave B model scored in serve2 with an older model scored in the study environment would therefore carry an environment difference of about this size per score.
+
+**The fix: every older comparison model is rescored in serve2.** Every older model used in any wave B comparison is rescored in serve2 on the full item set and conditions it is compared on: all 4,666 primary items under the aligned, swapped and neutral tasks in both formats, and the 292 determined successes under the aligned and neutral tasks in both formats (every arm of `sizes.size_jobs`, about 43,700 forward passes per model), with its own chat template, prompts and attention setting as in its earlier run, and wave B's loading check, gate and environment record. The list, read off the analysis's design:
+
+| Model | Why it is compared | Rescoring run (scores under `<tag>-serve2`) | GPU type (pinned) |
+|---|---|---|---|
+| Qwen3-8B | planned pair with Qwen3.5 9B; descriptive reference for every wave B model | `family_rescore_qwen3-8b` | NVIDIA L40S (its earlier type) |
+| Llama-3.1-8B | descriptive reference for every wave B model | `family_rescore_llama3.1-8b` | NVIDIA L40S (its earlier runs were on mixed types) |
+| Qwen3-32B | planned pair with Qwen3.8 27B | `family_rescore_qwen3-32b` (two shards) | NVIDIA A100 80GB PCIe (its earlier type) |
+| Gemma 2 9B | planned pair with Gemma 4 E4B | `family_rescore_gemma2-9b-it` | NVIDIA L40S (its earlier type) |
+| Mistral 7B v0.3 | planned pair with Ministral 3 8B | `family_rescore_mistral-7b-v0.3` | NVIDIA A40 (its earlier type) |
+
+No other comparison involves an older model. The fifth planned pair (Qwen3.5 9B instruct against base, plain format), the three descriptive comparisons in the configuration (format, and size within the Gemma 4 and Qwen lines), the Gemma 4 E4B placement check (its first-turn variant against its own run) and the Qwen3.8 preserve_thinking check (against its own run) compare wave B runs only, all already in serve2. `families_waveb_analysis` reads every reference model from its serve2 rescoring, so every comparison, planned or descriptive, sits in serve2: a difference between models can no longer be a difference between environments. (A difference of GPU type between two models remains, as in every earlier comparison; the GPU types are pinned and recorded.)
+
+**Unchanged:** the six per-model item-share tests (wave B models only, already scored in serve2), the 16-test Holm family and its planned pairs, every threshold and margin, the competence gate, the predictions B1 to B3 and their readings, B3's fallback, the placement and template checks and their one-fifth rule, the 0.3-nat noise floor, and the wave B models' runs and their order among themselves.
+
+**How the analysis gates now.** It no longer withholds wave B because the environment check failed. That verdict is still read and reported, as failed, with `gates: false`. Wave B is withheld (every wave B test, comparison, check and prediction "not interpretable (environment check)", with no estimate written, as before) unless every serve2 rescoring passes `rescore_check`:
+
+- every shard is complete, at one commit;
+- the token ids are identical between the study environment's tokenizer stack and serve2 for every prompt, candidate and answer token. This is the comparison of part 1, run again for all five models with the rescoring's tokenizer settings (`wf.tools.envcheck_tokens dump --rescore`, `pace/families_envcheck_tokens.sbatch` with `ENVTOK_RESCORE=1`, written to `rescore_tokens/`; Qwen3-32B's tokenizer files are downloaded at the pinned revision into the job's node-local folder);
+- every shard ran on the model's pinned GPU type alone;
+- every shard's gate passed in transformers 5 at the pinned revision;
+- for the node-local model, the downloaded files matched the committed manifest in every shard.
+
+The original-environment scores (`size_score_qwen3-8b`, `size_score_qwen3-32b`, `family_score_gemma2-9b-it`, `family_score_mistral-7b-v0.3`, and Llama's `rq1_score`, `rq1x_score` and `rq1v_score`) are reported beside the serve2 ones, descriptively only: each reference's item share, R and goal effects in both environments and their difference (`environment_sensitivity`), and every comparison involving a reference repeated with its original-environment scores (`comparisons_original_environment`). Neither is a test or a reading, and both are withheld with the rest whenever wave B is withheld.
+
+**Storage and cost.** Qwen3-32B's weights are in no ICE cache any more, so it uses route A (section 13): the pinned snapshot is downloaded into the GPU node's local disk and every file is hashed against a committed manifest before loading. The manifest is `wf/config/weights_manifests/Qwen__Qwen3-32B.json`, built from Hub metadata with no token: 24 files, 65.54 GB, and a dry run agrees. The job stops before loading if the model is not on node-local weights. It runs on an A100-80GB with a 128 GB job, in two shards, each downloading the snapshot again. The other four models are in the shared cache. Estimates are scaled from wave A's timings (section 12); serve2 may differ, and the Qwen3-32B figure is the least certain.
+
+| Rescoring | GPU | Estimate |
+|---|---|---|
+| Mistral 7B v0.3 | A40 | 1.7–2.5 GPU-hours |
+| Qwen3-8B | L40S | 1.5–2.5 GPU-hours |
+| Gemma 2 9B (eager attention) | L40S | 1.8–2.5 GPU-hours |
+| Llama-3.1-8B | L40S | 1.5–2.5 GPU-hours |
+| Qwen3-32B | A100-80GB, two shards | 4–8 GPU-hours, plus 0.6–1.0 for the two downloads and hash checks |
+
+The total is about 11 to 19 GPU-hours, of which about 5 to 9 are on 80 GB cards, on top of section 12's wave B budget. The token comparison is a CPU job of one to three hours.
+
+**Order** (`RUN_ORDER_B`, amended): after the environment check, the five rescorings (Mistral 7B, Qwen3-8B, Gemma 2 9B, Llama-3.1-8B, Qwen3-32B) and the CPU token comparison; then the wave B models in their pre-registered order; then `families_waveb_analysis`. No rescoring and no wave B scoring runs before this amendment has had its independent review and the design is frozen again.
+
+**Code:**
+- `wf/families.py`: `RESCORE_MODELS`, `RESCORE_GPU`, `RESCORE_NODE_LOCAL`, `rescore_spec`, `run_family_rescore`, `rescore_check`, `rescore_gate`, `environment_sensitivity` and `RESCORE_AMENDMENT`; the analysis's gate, the original-environment column and `RUN_ORDER_B`.
+- `wf/config/family_rescore_<tag>.yaml` (five) and `families_waveb_analysis.yaml` (`reference`, `rescore`, `reference_original`).
+- `pace/family_score_serve2.sbatch` (`family_rescore_<tag>`, its GPU check before loading, and node-local weights required for Qwen3-32B) and `pace/families_envcheck_tokens.sbatch` (`ENVTOK_RESCORE=1`).
+- `wf/tools/envcheck_tokens.py` (`--rescore`) and `wf/tools/prefetch_models.py` (reference tags).
+- Tests are in `tests/test_families_waveb.py`.
+
 ## 9. Measures and analysis
 
 Everything in wave A's "Measures" section and its three amendments applies unchanged: the size series' block per model; the item share toward Yes (primary), R, ΔL, the standardised effect d and the two-candidate format (secondary); argmax answers and flips; first-token coverage; one (item, condition) population for every model; game-clustered bootstrap CIs and sign-flip permutation p-values; paired comparisons on shared items with the difference test and the ±0.05 equivalence test (TOST); readings "differs", "matches", "differs, within the margin", "inconclusive (no difference detected)"; the 0.3-nat noise floor for ΔL differences.
@@ -220,6 +283,8 @@ The tokenizer and configuration files of all six repositories (about 0.2 GB) are
 2. GPU: part 2 of the environment check (Mistral 7B on an A40, Qwen3-8B on an L40S); then `families_envcheck` (CPU). Stop here if it fails.
 3. GPU, in this order (pre-registered after review 1, `wf.families.RUN_ORDER_B`), each with node-local weights (route A): the four small models (Ministral 3; Qwen3.5 9B in chat and plain format; Qwen3.5 9B base; Gemma 4 E4B, then its placement check), then Qwen3.8 27B followed by its preserve_thinking check, then Gemma 4 31B last.
 4. CPU: `families_waveb_analysis`.
+
+Amended 2026-11-23 (section 8, "Amendment after the environment check failed (cause found)"): the check failed, and step 2's "stop here" is replaced. After an independent review and a new freeze, the five serve2 rescorings of the older comparison models and their CPU token comparison run between steps 2 and 3, and the analysis reads wave B only if they pass.
 
 ## 15. Build (code written after this note's first commit)
 

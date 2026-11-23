@@ -265,7 +265,11 @@ B3_FALLBACK = {"applies_when": "base model fails only the median yes/no mass cri
 # Run order, pre-registered after review 1: the environment check first, then the four small models (Ministral 3,
 # Qwen3.5 9B in both formats, Qwen3.5 9B base, Gemma 4 E4B with its placement check), then Qwen3.8 27B with its
 # preserve_thinking check, then Gemma 4 31B last.
+# Amended 2026-11-23 (section 8, after the environment check failed and its cause was found, before any wave B score):
+# the older comparison models' serve2 rescorings run after the check and before the wave B models.
 RUN_ORDER_B = ("family_envcheck_mistral-7b-v0.3", "family_envcheck_qwen3-8b", "families_envcheck",
+               "family_rescore_mistral-7b-v0.3", "family_rescore_qwen3-8b", "family_rescore_gemma2-9b-it",
+               "family_rescore_llama3.1-8b", "family_rescore_qwen3-32b",
                "family_score_ministral3-8b-it", "family_score_qwen3.5-9b", "family_score_qwen3.5-9b-plain",
                "family_score_qwen3.5-9b-base-plain", "family_score_gemma4-e4b-it", "family_placement_gemma4-e4b-it",
                "family_score_qwen3.8-27b", "family_nopreserve_qwen3.8-27b", "family_score_gemma4-31b-it")
@@ -1124,6 +1128,128 @@ def run_families_envcheck(cfg: dict) -> int:
     return 0
 
 
+# ---------------- wave B: every older comparison model rescored in serve2 (design section 8, amendment of 2026-11-23,
+# after the environment check failed and its cause was found, before any wave B score existed) ----------------
+
+# Every older model any wave B comparison uses (the reference models of families_waveb_analysis: the planned pairs'
+# older members and the two descriptive references), rescored in serve2 on every item and condition it is compared on.
+RESCORE_MODELS = ("mistral-7b-v0.3", "qwen3-8b", "gemma2-9b-it", "llama3.1-8b", "qwen3-32b")
+RESCORE_SUFFIX = ENVCHECK_SUFFIX  # scores saved under `<tag>-serve2`, in their own runs (family_rescore_<tag>)
+# One GPU type per model, for every shard (checked by the job before loading and by the analysis): the type of the
+# model's earlier run where it had one (Mistral 7B A40; Qwen3-8B and Gemma 2 9B L40S; Qwen3-32B the A100-80GB),
+# L40S for Llama-3.1-8B (its earlier runs were on mixed types).
+RESCORE_GPU = {"mistral-7b-v0.3": "NVIDIA A40", "qwen3-8b": "NVIDIA L40S", "gemma2-9b-it": "NVIDIA L40S",
+               "llama3.1-8b": "NVIDIA L40S", "qwen3-32b": "NVIDIA A100 80GB PCIe"}
+# Route A (section 13, node-local download checked against the committed manifest): the models not in the shared
+# cache. Qwen3-32B's weights are in no ICE cache any more.
+RESCORE_NODE_LOCAL = ("qwen3-32b",)
+RESCORE_AMENDMENT = (
+    "Amended 2026-11-23, after the environment check failed and its cause was found, before any wave B score existed "
+    "(design section 8): the check stays FAILED (Qwen3-8B's yes/no per-score difference 0.248 nats; a float64 "
+    "diagnostic showed a hidden-state perturbation of about one bf16 epsilon, amplified by Qwen's large readout "
+    "logits, not rounding). Every older model used in a wave B comparison is rescored in serve2 on every item and "
+    "condition (RESCORE_MODELS), and every comparison, planned or descriptive, uses those rescorings. Wave B is read "
+    "only when every rescoring is complete, its tokens match the study environment's, it ran on its pinned GPU type, "
+    "its gate passed in transformers 5 at the pinned revision and, for node-local weights, its files matched the "
+    "manifest (rescore_check). The original-environment scores are reported beside the serve2 ones, descriptively. "
+    "The six item-share tests, the 16-test Holm family, the thresholds and the competence gate are unchanged.")
+
+
+def rescore_spec(tag: str) -> ModelSpec:
+    """An older comparison model as serve2 loads it for the full rescoring: its own template, class, attention and
+    prompts (as its earlier run), wave B's loading check and environment record, scores under `<tag>-serve2`. The
+    Mistral tokenizer is read from tokenizer.json (mistral_format=False, as wave B and the environment check); the
+    32B model needs an 80 GB card and a 128 GB job."""
+    spec = spec_for(tag)
+    if tag not in RESCORE_MODELS or spec.env != "serve":
+        raise ValueError(f"{tag} is not an older comparison model of wave B ({RESCORE_MODELS})")
+    big = spec.params_b > 20
+    return replace(spec, tag=tag + RESCORE_SUFFIX, wave="rescore", env="serve2",
+                   tokenizer_kwargs={"mistral_format": False} if spec.family == "mistral" else {},
+                   strict_load=True, gpu_min_gb=80 if big else 24, host_mem_min_gb=128 if big else 0,
+                   template_notes=f"Serve2 rescoring of {tag} for every wave B comparison (design section 8 amendment).")
+
+
+def run_family_rescore(cfg: dict) -> int:
+    """`family_rescore_<tag>`: an older comparison model rescored in serve2 on every item and condition (all primary
+    items and determined successes, every arm of sizes.size_jobs), after the same gate as a wave B model."""
+    tag = cfg["model"]
+    if tag not in RESCORE_MODELS:
+        raise SystemExit(f"the serve2 rescoring covers {RESCORE_MODELS}, not {tag!r}")
+    spec = rescore_spec(tag)
+    env = require_environment(spec)
+    env["resources"] = require_resources(spec)
+    cfg = {**cfg, "model_spec": spec.record()}
+    return sizes.score_shard(cfg, spec.tag, lambda: open_scorer(spec), lambda t, arm: family_messages(spec, t, arm),
+                             gate=_gate(spec, env))
+
+
+def rescore_check(tag: str, run: str, tokens: str | None) -> dict[str, Any]:
+    """Whether `tag`'s serve2 rescoring may be read (the amendment's gate): every shard complete at one commit; the
+    token ids identical between the study environment and serve2 (`tokens`: the compare JSON of
+    wf.tools.envcheck_tokens); every shard on RESCORE_GPU[tag] alone; every shard's gate passed in transformers 5 at
+    the pinned revision; and, for a node-local model, the downloaded files hashed against the manifest."""
+    from wf.provenance import run_record
+
+    folders, problems = complete_shards(run)
+    out: dict[str, Any] = {"run": run, "problems": list(problems)}
+    checks: dict[str, bool] = {"complete": bool(folders) and not problems}
+    tok = _resolve(tokens) if tokens else None
+    trec = json.loads(tok.read_text(encoding="utf-8")) if tok is not None and tok.exists() else None
+    out["tokens"] = {"path": str(tok) if tok else None, "found": trec is not None,
+                     **({k: trec.get(k) for k in ("ok", "model", "n_compared", "n_different", "n_only_one_side")}
+                        if trec else {})}
+    checks["tokens_identical"] = bool(trec and trec.get("ok") is True and trec.get("model") == tag)
+    want = RESCORE_GPU[tag]
+    gpus = {p.name: run_record(p)["gpu"] for p in folders}
+    out["gpu"] = {"expected": want, "recorded": gpus}
+    checks["gpu_type"] = bool(folders) and all(g == [want] for g in gpus.values())
+    gates, revisions, weights = {}, set(), {}
+    for p in folders:
+        g = json.loads((p / "tokenization_checks.json").read_text(encoding="utf-8")) \
+            if (p / "tokenization_checks.json").exists() else {}
+        env = g.get("environment") or {}
+        mock = g.get("skipped") == "mock" and env.get("checked") == "mock"
+        major = int(str(env.get("transformers") or "0").split(".")[0] or 0)
+        gates[p.name] = mock or (g.get("ok") is True and env.get("checked") is True and major >= 5)
+        cfg_rec = json.loads((p / "config.json").read_text(encoding="utf-8")) if (p / "config.json").exists() else {}
+        spec_rec = cfg_rec.get("model_spec") or {}
+        revisions.add((spec_rec.get("tag"), spec_rec.get("revision")))
+        if tag in RESCORE_NODE_LOCAL:
+            w = g.get("weights_check") or {}
+            weights[p.name] = mock or bool(w.get("ok") is True and w.get("revision") == C.REVISIONS[spec_for(tag).hf_id])
+    out["gate"], out["weights"] = gates, weights
+    checks["gate_passed_in_serve2"] = bool(folders) and all(gates.values())
+    checks["pinned_revision"] = revisions == {(tag + RESCORE_SUFFIX, C.REVISIONS[spec_for(tag).hf_id])}
+    if tag in RESCORE_NODE_LOCAL:
+        checks["weights_hashed"] = bool(folders) and all(weights.values())
+    out["checks"] = checks
+    out["pass"] = all(checks.values())
+    return out
+
+
+def rescore_gate(cfg: dict) -> dict[str, Any]:
+    """The analysis's gate after the amendment: every older comparison model's serve2 rescoring passes rescore_check
+    (cfg["rescore"]: {tag: {"run": ..., "tokens": ...}}); every model of RESCORE_MODELS must be there."""
+    given = cfg.get("rescore") or {}
+    models = {t: rescore_check(t, given[t]["run"], given[t].get("tokens")) for t in RESCORE_MODELS if t in given}
+    missing = [t for t in RESCORE_MODELS if t not in given]
+    return {"models": models, "missing_from_config": missing,
+            "pass": not missing and all(m["pass"] for m in models.values())}
+
+
+def environment_sensitivity(serve2: dict[str, Any], original: dict[str, Any]) -> dict[str, Any]:
+    """A reference model's serve2 block against its original-environment block (descriptive; the amendment): the
+    headline numbers side by side, serve2 minus original."""
+    def nums(b: dict[str, Any]) -> dict[str, float]:
+        return {"item_share_toward_yes": b["primary_metrics"]["item_share_toward_yes"]["estimate"],
+                "goal_to_evidence_ratio": b["primary_metrics"]["goal_to_evidence_ratio"]["estimate"],
+                "yes_no_delta_L": b["yes_no"]["goal_effect"]["delta_L_nats"],
+                "two_candidate_delta_L": b["goal_effect"]["delta_L_nats"]}
+    a, b = nums(serve2), nums(original)
+    return {"serve2": a, "original": b, "serve2_minus_original": {k: a[k] - b[k] for k in a}}
+
+
 # ---------------- analysis ----------------
 
 
@@ -1645,11 +1771,11 @@ def b1_reading(share_verdict: str | None, yes_no_ci: list[float] | None) -> str 
 
 
 def waveb_predictions(report: dict[str, Any], environment_passed: bool | None = None) -> dict[str, Any]:
-    """The wave B predictions read off the report (section 10). None: not yet decidable. Nothing is read unless the
-    environment check passed (`environment_passed`, default: report["environment_check"]["pass"]); B1's per-model
-    effect and reading are then left out as well (review 1, S5)."""
+    """The wave B predictions read off the report (section 10). None: not yet decidable. Nothing is read unless wave
+    B's gate passed (`environment_passed`; since the section 8 amendment, default: the serve2 rescorings' gate,
+    report["serve2_rescoring"]["pass"]); B1's per-model effect and reading are then left out as well (review 1, S5)."""
     if environment_passed is None:
-        environment_passed = (report.get("environment_check") or {}).get("pass")
+        environment_passed = (report.get("serve2_rescoring") or {}).get("pass")
     fam = report["primary_family"]
     tests, readings = fam["tests"], fam["comparison_readings"]
     b1 = {}
@@ -1736,10 +1862,11 @@ def withhold_waveb_readings(report: dict[str, Any], tags: list[str]) -> dict[str
                                      "tokenization_gate": m.get("tokenization_gate"),
                                      "records_outside_population": m.get("records_outside_population")}
             report["prediction_check"][tag] = {"withheld": ENVIRONMENT_BLOCKED}
-    for k in list(report.get("comparisons") or {}):
-        a, b = k.split(" vs ")
-        if a in tags or b in tags:
-            report["comparisons"][k] = {"withheld": ENVIRONMENT_BLOCKED}
+    for key in ("comparisons", "comparisons_original_environment"):
+        for k in list(report.get(key) or {}):
+            a, b = k.split(" vs ")
+            if a in tags or b in tags:
+                report[key][k] = {"withheld": ENVIRONMENT_BLOCKED}
     for key in ("placement", "template_checks"):
         report[key] = {t: {"withheld": ENVIRONMENT_BLOCKED, "run": v.get("run")} for t, v in (report.get(key) or {}).items()}
     if report.get("b3_fallback"):
@@ -1791,6 +1918,22 @@ def run_families_analysis(cfg: dict) -> int:
         read.update({f"{tag}:{run}": f for run, f in got.items()})
         ref_scores[tag] = s
         report["reference"][tag] = {**family_block(s, primary, successes, spec_for(tag)), "read": info}
+    # wave B after the section 8 amendment: the references above are the serve2 rescorings; their original-environment
+    # scores are read too, for the descriptive environment-sensitivity column only (never a test or a reading)
+    orig_scores: dict[str, list[dict]] = {}
+    if wave != "A":
+        report["environment_sensitivity"] = {}
+        for tag, ref in (cfg.get("reference_original") or {}).items():
+            s, got, info = reference_scores(ref)
+            if info["problems"]:
+                report["waiting"][f"original-environment reference {tag}"] = info["problems"]
+                continue
+            s, _ = same_population(s, primary, successes)
+            read.update({f"{tag} (original environment):{run}": f for run, f in got.items()})
+            orig_scores[tag] = s
+            if tag in report["reference"]:
+                report["environment_sensitivity"][tag] = environment_sensitivity(
+                    report["reference"][tag], family_block(s, primary, successes, spec_for(tag)))
     # every family model against each reference model, and the planned comparisons, paired on the same items; the
     # planned ones' item-share tests are in the primary family, the rest is descriptive. Wave B's family is fixed
     # (WAVE_B_SHARE_TESTS and WAVE_B_PLANNED, 16 tests) whatever the configuration holds.
@@ -1808,14 +1951,23 @@ def run_families_analysis(cfg: dict) -> int:
     report["primary_family"] = primary_family({**report["models"], **report["reference"]}, expected,
                                               report["comparisons"], planned)
     if wave != "A":
+        # the environment check's verdict is reported (it failed, section 8); after the amendment it no longer gates.
+        # Wave B is read only when every older comparison model's serve2 rescoring passes rescore_check.
         env_run = cfg.get("envcheck", "families_envcheck")
         f = _resolve(env_run) / "metrics.json"
         env = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
         report["environment_check"] = {"run": env_run, "found": env is not None,
-                                       "pass": None if env is None else bool(env.get("pass"))}
-        if env is None:
-            report["waiting"]["environment check"] = [f"{f} missing"]
-        apply_environment_gate(report["primary_family"], report["environment_check"]["pass"])
+                                       "pass": None if env is None else bool(env.get("pass")), "gates": False}
+        report["serve2_rescoring"] = rescore_gate(cfg)
+        for t, m in report["serve2_rescoring"]["models"].items():
+            if not m["checks"]["complete"]:
+                report["waiting"][f"serve2 rescoring {t}"] = m["problems"] or ["incomplete"]
+        # descriptive: the comparisons involving a reference, with its original-environment scores instead
+        report["comparisons_original_environment"] = {
+            f"{a} vs {b}": compare_models(orig_scores.get(a, both.get(a)), orig_scores.get(b, both.get(b)), primary,
+                                          successes)
+            for a, b in pairs if (a in orig_scores or b in orig_scores)}
+        apply_environment_gate(report["primary_family"], report["serve2_rescoring"]["pass"])
     for tag, run in (cfg.get("placement") or {}).items():
         folders, problems = complete_shards(run)
         if problems or tag not in scores:
@@ -1849,12 +2001,14 @@ def run_families_analysis(cfg: dict) -> int:
     report["provenance"] = provenance(
         runs={**{s: Path(s) for s in sources}, **{k: (v[0].parent if v else Path(k)) for k, v in read.items()}},
         inputs=[Path(s) / "transitions.jsonl" for s in sources] + shard_inputs([p for fs in read.values() for p in fs]))
-    blocked = wave != "A" and not report["environment_check"]["pass"]
+    # wave B is read only when the serve2 rescorings pass (section 8 amendment), whatever the environment check said
+    blocked = wave != "A" and not report["serve2_rescoring"]["pass"]
     if wave != "A":
         report["amendments"] = {"review": "notes/families_waveb_review1.md", "pair_caveat": PAIR_CAVEAT,
                                 "qwen3_size_series": QWEN3_SIZE_SERIES, "b1_readings": B1_READINGS,
-                                "b3_fallback": B3_FALLBACK, "run_order": list(RUN_ORDER_B)}
-        report["predictions_b"] = waveb_predictions(report, bool(report["environment_check"]["pass"]))
+                                "b3_fallback": B3_FALLBACK, "run_order": list(RUN_ORDER_B),
+                                "serve2_rescoring": RESCORE_AMENDMENT}
+        report["predictions_b"] = waveb_predictions(report, bool(report["serve2_rescoring"]["pass"]))
         if blocked:  # review 1, S5: no wave B score is read, in the metrics, the report or the status lines
             withhold_waveb_readings(report, list(scores))
     write_json(d / "metrics.json", report)
@@ -1869,8 +2023,8 @@ def run_families_analysis(cfg: dict) -> int:
     if blocked:
         lines = [f"{tag}: {ENVIRONMENT_BLOCKED}; scores complete, nothing read" for tag in report["models"]]
         lines += [f"{tag} (reference): {head(m)}" for tag, m in report["reference"].items()]
-        lines += [f"primary family: every test {ENVIRONMENT_BLOCKED} (environment check "
-                  f"{'not found' if report['environment_check']['pass'] is None else 'not passed'})"]
+        lines += [f"primary family: every test {ENVIRONMENT_BLOCKED} (serve2 rescoring of the older models not "
+                  f"complete or not passed: {sorted(t for t, m in report['serve2_rescoring']['models'].items() if not m['pass']) + report['serve2_rescoring']['missing_from_config']})"]
     else:
         lines = [f"{tag}: {head(m)}; prediction holds: {report['prediction_check'][tag]['holds']}" for tag, m in report["models"].items()]
         lines += [f"{tag} (reference): {head(m)}" for tag, m in report["reference"].items()]

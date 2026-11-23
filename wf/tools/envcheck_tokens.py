@@ -10,6 +10,9 @@ successes, every arm of sizes.size_jobs), both candidates of every item, and "Ye
 list's length and SHA-256. It loads the pinned tokenizer offline, as the scoring run of that environment does: in
 transformers 5 with the environment check's tokenizer settings (mistral_format=False), in 4.x as the earlier runs
 did. `compare` says whether two dumps hold the same keys with the same ids; it exits 1 if not.
+
+`dump --rescore` (2026-11-23, wave B section 8 amendment): the same for every older comparison model of the serve2
+rescoring (wf.families.RESCORE_MODELS), with the rescoring's tokenizer settings (rescore_spec) in transformers 5.
 """
 from __future__ import annotations
 
@@ -65,6 +68,9 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--out", required=True)
     d.add_argument("--cache", default=None)
     d.add_argument("--sources", nargs="*", default=None)
+    d.add_argument("--rescore", action="store_true",
+                   help="an older comparison model of the serve2 rescoring (wave B section 8 amendment): any tag of "
+                        "wf.families.RESCORE_MODELS, with the rescoring's tokenizer settings in transformers 5")
     c = sub.add_parser("compare")
     c.add_argument("left")
     c.add_argument("right")
@@ -83,10 +89,12 @@ def main(argv: list[str] | None = None) -> int:
     from wf.scoring.logodds import transformers_major
 
     spec = families.spec_for(args.tag)
-    if args.tag not in families.ENVCHECK_MODELS:
-        print(f"the environment check covers {families.ENVCHECK_MODELS}", file=sys.stderr)
+    allowed = families.RESCORE_MODELS if args.rescore else families.ENVCHECK_MODELS
+    if args.tag not in allowed:
+        print(f"{'the serve2 rescoring' if args.rescore else 'the environment check'} covers {allowed}", file=sys.stderr)
         return 2
-    extra = families.envcheck_spec(args.tag).tokenizer_kwargs if transformers_major(transformers) >= 5 else {}
+    serve2 = (families.rescore_spec if args.rescore else families.envcheck_spec)(args.tag)
+    extra = serve2.tokenizer_kwargs if transformers_major(transformers) >= 5 else {}
     tok = transformers.AutoTokenizer.from_pretrained(spec.hf_id, revision=REVISIONS[spec.hf_id], trust_remote_code=True,
                                                      cache_dir=args.cache, local_files_only=True, **extra)
     sets = rq1x.rq1x_sets(load_items(tuple(args.sources or SOURCES)))
