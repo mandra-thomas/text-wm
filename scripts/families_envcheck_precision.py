@@ -169,7 +169,11 @@ def score(args: argparse.Namespace) -> int:
     from wf import sizes
 
     tag = args.model
-    if args.label == "old":  # as the earlier run loaded it (size_score / family_score: no strict load, default kwargs)
+    if args.label == "old" and tag in F.MODELS:  # a wave A model, as family_score_<tag> loaded it
+        spec = F.spec_for(tag)
+        scorer = F.open_scorer(spec)
+        messages = lambda t, a: F.family_messages(spec, t, a)  # noqa: E731
+    elif args.label == "old":  # as the earlier run loaded it (size_score: no strict load, default kwargs)
         spec = F.spec_for(tag)
         scorer = F.LogoddsScorer(spec.hf_id, model_tag=tag, attn_implementation=spec.attn_implementation,
                                  template_kwargs=spec.template_kwargs)
@@ -195,7 +199,7 @@ def score(args: argparse.Namespace) -> int:
         yes, no = (scorer._encode_candidate(c)[0].tolist() for c in ("Yes", "No"))
         assert len(yes) == 1 and len(no) == 1
         for t in items:
-            for arm in YN + PRED:
+            for arm in (YN if args.yes_no_only else YN + PRED):
                 msgs = messages(t, arm)
                 if msgs is None:
                     continue
@@ -362,6 +366,16 @@ def compare(args: argparse.Namespace) -> int:
         }
         block["n_scores_changed_bf16"] = n_changed
         if fmt == "yes_no":
+            # the grid rule (design note section 8 amendment): bf16 spacing at the median magnitude of the larger of
+            # the two readout logits, in the earlier environment
+            larger = [max(abs(z) for z in r["rows"][0]["z_bf16"]) for k, r in old.items() if k[1] in YN]
+            med = statistics.median(larger) if larger else float("nan")
+            block["grid_rule"] = {"n": len(larger), "median_larger_readout_logit": med,
+                                  "larger_quantiles": _quantiles(larger), "grid": bf16_spacing(med),
+                                  "share_larger_in_grid_binade": (sum(bf16_spacing(x) == bf16_spacing(med)
+                                                                      for x in larger) / len(larger)) if larger else None,
+                                  "share_larger_spacing_above_grid": (sum(bf16_spacing(x) > bf16_spacing(med)
+                                                                          for x in larger) / len(larger)) if larger else None}
             block["n_changed_exactly_predicted_by_rounding_head64"] = explained
         report[fmt] = block
     text = json.dumps(report, indent=1, default=str)
@@ -386,6 +400,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--label", choices=("old", "new"), required=True)
     s.add_argument("--model", default="qwen3-8b")
     s.add_argument("--out", required=True)
+    s.add_argument("--yes-no-only", action="store_true", help="only the yes/no prompts (readout logit magnitudes)")
     c = sub.add_parser("compare")
     c.add_argument("--old", required=True)
     c.add_argument("--new", required=True)

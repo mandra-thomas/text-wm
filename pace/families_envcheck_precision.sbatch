@@ -24,7 +24,17 @@ cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 # shellcheck disable=SC1091
 source "${SLURM_SUBMIT_DIR:-$(pwd)}/pace/_common.sh"
 
-OUT="${RUNS_DIR}/families_envcheck_precision"
+MODEL="${ENVPREC_MODEL:-qwen3-8b}"
+case "${MODEL}" in
+  qwen3-8b) OUT="${RUNS_DIR}/families_envcheck_precision"; ARCH_OLD="size_score_qwen3-8b" ;;
+  mistral-7b-v0.3) OUT="${RUNS_DIR}/families_envcheck_precision_${MODEL}"; ARCH_OLD="family_score_${MODEL}" ;;
+  *) echo "ERROR: ENVPREC_MODEL must be qwen3-8b or mistral-7b-v0.3" >&2; exit 2 ;;
+esac
+# ENVPREC_YN_ONLY=1: the yes/no prompts only (readout logit magnitudes). Mistral 7B runs on its A40:
+#   bash pace/submit.sh families_envcheck_precision.sbatch --export=ALL,ENVPREC_MODEL=mistral-7b-v0.3,ENVPREC_YN_ONLY=1 \
+#        --constraint='(gpu-a40)'
+YN=()
+if [[ "${ENVPREC_YN_ONLY:-0}" == "1" ]]; then YN=(--yes-no-only); fi
 mkdir -p "${OUT}"
 OLD_ENV="${STUDY_SERVE_ENV:-/storage/ice1/2/1/gmat3/text-wm/.envs/serve}"
 NEW_ENV="${SERVE2_ENV:-/storage/ice1/2/1/gmat3/envs/serve2}"
@@ -35,15 +45,17 @@ export HF_HUB_OFFLINE=1
 export PYTHONDONTWRITEBYTECODE=1
 
 nvidia-smi || true
-echo "=== old environment (${OLD_ENV}) $(date) ==="
+echo "=== ${MODEL}: old environment (${OLD_ENV}) $(date) ==="
 ( export SERVE_ENV="${OLD_ENV}"; activate_serve
   python -c "import transformers, torch; print('transformers', transformers.__version__, 'torch', torch.__version__)"
-  python scripts/families_envcheck_precision.py score --label old --out "${OUT}/old.jsonl" )
-echo "=== serve2 (${NEW_ENV}) $(date) ==="
+  python scripts/families_envcheck_precision.py score --label old --model "${MODEL}" ${YN[@]+"${YN[@]}"} \
+    --out "${OUT}/old.jsonl" )
+echo "=== ${MODEL}: serve2 (${NEW_ENV}) $(date) ==="
 ( export SERVE_ENV="${NEW_ENV}"; activate_serve
   python -c "import transformers, torch; print('transformers', transformers.__version__, 'torch', torch.__version__)"
-  python scripts/families_envcheck_precision.py score --label new --out "${OUT}/new.jsonl"
-  python scripts/families_envcheck_precision.py compare --old "${OUT}/old.jsonl" --new "${OUT}/new.jsonl" \
-    --archived-old "${RUNS_DIR}/size_score_qwen3-8b" --archived-new "${RUNS_DIR}/family_envcheck_qwen3-8b" \
-    --out "${OUT}/report.json" )
+  python scripts/families_envcheck_precision.py score --label new --model "${MODEL}" ${YN[@]+"${YN[@]}"} \
+    --out "${OUT}/new.jsonl"
+  python scripts/families_envcheck_precision.py compare --model "${MODEL}" --old "${OUT}/old.jsonl" \
+    --new "${OUT}/new.jsonl" --archived-old "${RUNS_DIR}/${ARCH_OLD}" \
+    --archived-new "${RUNS_DIR}/family_envcheck_${MODEL}" --out "${OUT}/report.json" )
 echo "=== END $(date) ==="
