@@ -29,6 +29,7 @@ def main() -> None:
     ap.add_argument("--src", required=True, help="runs/ folder of the checkout that produced rq2_score")
     ap.add_argument("--out", required=True)
     ap.add_argument("--n", type=int, default=200)
+    ap.add_argument("--label", default="qwen_audit_pipeline", help="seed label (followup_sizes for the size subsample)")
     args = ap.parse_args()
     src = Path(args.src)
 
@@ -46,7 +47,7 @@ def main() -> None:
                      if all(c in by.get(m, {}) for m in MODELS for c in ("aligned", "swapped")))
     if len(primary) != EXPECTED_PRIMARY:
         raise SystemExit(f"expected {EXPECTED_PRIMARY} primary items, found {len(primary)}")
-    sample = random.Random(f"{SEED}|qwen_audit_pipeline").sample(primary, args.n)
+    sample = random.Random(f"{SEED}|{args.label}").sample(primary, args.n)
     want = set(sample)
 
     items: dict[str, dict] = {}
