@@ -17,3 +17,6 @@ for spec in $SPECS; do
     --include='git_sha' --include='STATUS.md' --include='jobs.jsonl' --include='tokenization_checks.json' \
     --include='inputs.json' --exclude='*' "ice:$B/text-wm-$c/runs/$r/" "$DEST/$c/$r/"
 done
+# The confirmatory run's greedy written predictions (what Qwen writes after "You"; section 4.2 of the note)
+rsync -a --include='*/' --include='generations.jsonl' --exclude='*' \
+  "ice:$B/text-wm-fix11/runs/rq2_score/" "$DEST/fix11/rq2_score/"

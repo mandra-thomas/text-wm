@@ -24,6 +24,7 @@ import numpy as np
 from scipy import stats
 
 from wf.rq2 import load_items, primary_set
+from wf.data.transitions import history_facts
 from wf.runs import _item_hash
 
 SEED = 20261122
@@ -261,7 +262,19 @@ def two_cand_block(G: Games, A: dict, Bc: dict, N: dict | None, meta: dict, ids:
             rho = stats.spearmanr(ntp[m], d["Tp"][m]).statistic
             by[v] = {"n": int(m.sum()), "spearman_len_vs_dTp": float(rho), "mean_len": float(ntp[m].mean())}
     res["tail_vs_length"] = by
-    res["_arrays"] = {"dL": d["L"], "dF": d["F"], "dTp": d["Tp"], "La": a["L"], "Lb": b["L"], "Fa": a["F"], "Fb": b["F"]}
+    # Added during the analysis (not in the fixed list): how much of the shift happens far below any decision.
+    res["below_decision"] = {}
+    for k in ("L", "F"):
+        xa, xb = a[k], b[k]
+        row = {}
+        for c in (5, 10):
+            row[f"clipped_pm{c}_effect"] = float((np.clip(xa, -c, c) - np.clip(xb, -c, c)).mean())
+            both = (xa < -c) & (xb < -c)
+            row[f"share_items_both_below_minus{c}"] = float(both.mean())
+            row[f"share_of_summed_effect_both_below_minus{c}"] = float((xa - xb)[both].sum() / (xa - xb).sum())
+        res["below_decision"][k] = row
+    res["spearman_dF_vs_dTp"] = float(stats.spearmanr(d["F"], d["Tp"]).statistic)
+    res["_arrays"] = {"dL": d["L"],"dF": d["F"], "dTp": d["Tp"], "La": a["L"], "Lb": b["L"], "Fa": a["F"], "Fb": b["F"]}
     return res
 
 
@@ -431,6 +444,10 @@ def main() -> None:
               "share_swapped_within_mean_shift_of_boundary": float((Y["b"]["L"] > -dy.mean()).mean()),
               "share_swapped_within_5nats_of_boundary": float((Y["b"]["L"] > -5).mean())}
         sc["dz_ci"] = G.stat_ci(lambda v: v.mean() / v.std(ddof=1), dy)
+        for c in (5, 10):  # added during the analysis, as for the two-candidate block
+            both = (Y["a"]["L"] < -c) & (Y["b"]["L"] < -c)
+            sc[f"clipped_pm{c}_effect"] = float((np.clip(Y["a"]["L"], -c, c) - np.clip(Y["b"]["L"], -c, c)).mean())
+            sc[f"share_of_summed_effect_both_below_minus{c}"] = float(dy[both].sum() / dy.sum())
         if ynn is not None:
             sc["sd_neutral"] = float(ynn.std(ddof=1)); sc["median_neutral"] = float(np.median(ynn))
             sc["std_by_sd_neutral"] = float(dy.mean() / ynn.std(ddof=1))
@@ -498,6 +515,18 @@ def main() -> None:
         # the reference effect on the take items of P7/P8
         take_s = [i for i in samp if (model, "negated") in m2 and i in m2[(model, "negated")]]
         c["mech2_aligned_minus_swapped_on_take_items"] = contrast(G, m2, model, "aligned", "swapped", take_s)
+        # the battery's own P7/P8 population: take items whose history does not show the receptacle holding the
+        # object (wf/mech2.py on branch mechanism2-results, negated_status != "shown, holds it")
+        def shown_holds(i):
+            t = byid[i]
+            rec = t["action"].split(" from ", 1)[1] if " from " in t["action"] else None
+            cont = history_facts(t["history_text"]).contents.get(rec)
+            return bool(cont) and any(re.sub(r"\s+\d+$", "", o) == t["goal_object"] for o in cont)
+        p7 = [i for i in take_s if not shown_holds(i)]
+        for nm, c1, c0 in (("P7_negated", "negated", "swapped"), ("P8_negated_minus_affirmed", "negated", "affirmed"),
+                           ("placebo_negated_minus_affirmed", "placebo_negated", "placebo_affirmed"),
+                           ("aligned_minus_swapped", "aligned", "swapped")):
+            c[f"mech2_{nm}_battery_population"] = contrast(G, m2, model, c1, c0, p7)
         C[model] = c
     M["C3_contrasts"] = C
 

@@ -86,6 +86,14 @@ def main():
                   f"yesA {s['answered_yes_aligned']:.3f} flip {s['flip_no_to_yes']:.3f} dsig {s['dsigma_pp']:.1f} "
                   f"nearB {s['share_swapped_within_mean_shift_of_boundary']:.3f} near5 {s['share_swapped_within_5nats_of_boundary']:.3f} "
                   f"rho(2c,yn) {y['spearman_item_dL2c_vs_dLyn']:.2f} rho(F,yn) {y['spearman_item_dF_vs_dLyn']:.2f}")
+    if on("E"):
+        print("== below decision (added during analysis)")
+        for n, b in models.items():
+            y = b["yes_no"]["scale"]
+            print(f"{n:24s} L {json.dumps({k: round(v, 3) for k, v in b['below_decision']['L'].items()})} "
+                  f"F {json.dumps({k: round(v, 3) for k, v in b['below_decision']['F'].items()})} "
+                  f"YN clip5 {y['clipped_pm5_effect']:.2f} clip10 {y['clipped_pm10_effect']:.2f} "
+                  f"below10 {y['share_of_summed_effect_both_below_minus10']:.2f} rho(dF,dTp) {b['spearman_dF_vs_dTp']:.2f}")
     if on("F"):
         print("== F format gap, Qwen3-8B")
         for k, v in M["F_qwen_format_gap"].items():
