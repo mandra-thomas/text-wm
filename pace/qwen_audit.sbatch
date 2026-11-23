@@ -52,8 +52,9 @@ case "${STEP}" in
       --formats native --out "${D}/qwen_fp32.jsonl"
     ;;
   vllm)
-    python "${S}/vllm_score.py" --items "${ITEMS}" --model "${QWEN}" --formats native,nothink --out "${D}/qwen_vllm.jsonl"
-    python "${S}/vllm_score.py" --items "${ITEMS}" --model "${LLAMA}" --formats native --out "${D}/llama_vllm.jsonl"
+    # Llama-3.1-8B is only in the cache's top level (HF_HOME), not under hub/, so vLLM looks there.
+    HF_HUB_CACHE="${HF_HOME}" python "${S}/vllm_score.py" --items "${ITEMS}" --model "${QWEN}" --formats native,nothink --out "${D}/qwen_vllm.jsonl"
+    HF_HUB_CACHE="${HF_HOME}" python "${S}/vllm_score.py" --items "${ITEMS}" --model "${LLAMA}" --formats native --out "${D}/llama_vllm.jsonl"
     ;;
   *) echo "unknown AUDIT_STEP=${STEP}" >&2; exit 2 ;;
 esac
