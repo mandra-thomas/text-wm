@@ -73,4 +73,21 @@ All three reach "worth doing" under both the task-blind and neutral comparisons.
 - **What this licenses** (design note, lines 160–167; qualified by the analysis above): in an offline simulation over fixed candidate menus, a verifier that consults the world model with the agent's task chooses failing actions much more often than one without the task. Per the gate, a closed-loop agent study is worth running. The increase needs two things together: stating any concrete task makes the yes/no verifier reject working first moves, and naming the object ranks failing goal-object actions first in the fallback. The pre-registered attribution to naming the object holds only through that fallback ranking.
 - **What it does not license:** harm to task success, effects that compound over an episode, or rates for other agents or menus. The menus are the collector's, rich in failing goal-object actions; a real agent's own alternatives are studied in Stage 1b.
 - **Model dependence:** the result is carried by Qwen3-8B. Llama-3.1-8B's verifier is barely moved by the task (no reliable change).
-- **Step 0:** most of the harm is at the first decision of an episode, where the agent's proposal is always a "go to" or "look".
+- **Step 0:** most of the harm is at the first decision of an episode, where the agent's proposal is always a "go to" or "look". Its size depends on Qwen3's prompt format (next section).
+
+## Sensitivity of the step-0 harm to the prompt format (updated 2026-11-23, exploratory)
+
+This comes from the exploratory follow-up in [qwen_effect_audit_pipeline.md](qwen_effect_audit_pipeline.md), section 7.2 C (plan committed before scoring at `8810f24`; metrics `qwen_effect_audit_followup_metrics.json`, `C_decisionsim_step0` and `C_decisionsim_step0_plain`). It changes no frozen number or verdict above.
+
+All Qwen3-8B scores in this study were made with thinking off, where Qwen3's chat template inserts an empty `<think></think>` block right before the verifier's " Yes" or " No". The follow-up rescored the 134 step-0 states (all 1,322 candidates) under the real task, the swapped task, the neutral task and the task-blind prompt, once with the block and once in plain text (no chat template; " Yes" and " No" hold 99.9% of the first-token probability there). The with-block rescoring reproduces the rates reported above: the real-task verifier accepts 7.5% of the agent's first moves, the swapped one 5.6%, and the task-blind and neutral ones 90%.
+
+| Verifier at step 0 | Accepts the agent's first move: with the block / plain text | Chosen action fails (rule 2): with the block / plain text |
+|---|---|---|
+| Real task | 7.5% / 26.1% | 71.6% / 38.8% |
+| Swapped task (125 states) | 5.6% / 21.6% | 7.2% / 4.0% |
+| Neutral task | 89.6% / 100% | 0% / 0% |
+| Task-blind | 89.6% / 97.8% | 0% / 0% |
+
+The step-0 harm of the real-task verifier over the task-blind one is 71.6 points [64.2, 79.1] with the block and 38.8 points [30.6, 47.0] in plain text. In words: the blanket rejection of working first moves under any concrete task survives in plain text, where the format is on the model's usual path, but it is weaker. The block roughly doubles the step-0 harm; it does not create it. The real-versus-swapped difference in chosen failures also persists in plain text (39 against 4 points), so the fallback ranking that lifts goal-object failures does not depend on the block either. A third render, Qwen's template with thinking on and no reasoning written, gives 15.7 points, but there the answers are off the model's usual path (in the RQ2 items it leaves under 0.1% of the probability on the two answers), so plain text is the comparison to rely on. Later steps were not rescored.
+
+For Option C (branch `optionc`), whose Qwen3-8B verifier uses the same thinking-off format with the block, the step-0 component, about two thirds of this study's net harm, should be read as format-sensitive.
