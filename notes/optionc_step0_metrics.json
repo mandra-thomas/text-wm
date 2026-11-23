@@ -1,0 +1,737 @@
+{
+  "models": {
+    "llama3.1-8b": {
+      "blind_competence": {
+        "obs": {
+          "auc": 0.9953821066423607,
+          "checks": {
+            "auc": true,
+            "yes_failures": false,
+            "yes_successes": true
+          },
+          "passed": false,
+          "yes_failures": 1.0,
+          "yes_successes": 1.0
+        },
+        "yn": {
+          "auc": 0.9790195017280012,
+          "checks": {
+            "auc": true,
+            "yes_failures": true,
+            "yes_successes": true
+          },
+          "passed": true,
+          "yes_failures": 0.04961832061068702,
+          "yes_successes": 0.9776119402985075
+        }
+      },
+      "cells": {
+        "obs": {
+          "aware": {
+            "auc": 0.8784393870342941,
+            "median_L_working_goto": 5.25,
+            "median_L_working_proposal": 5.75,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 1.0,
+            "yes_successes": 1.0
+          },
+          "blind": {
+            "auc": 0.9953821066423607,
+            "median_L_working_goto": 6.125,
+            "median_L_working_proposal": 6.15625,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 1.0,
+            "yes_successes": 1.0
+          },
+          "neutral": {
+            "auc": 0.9993994721051233,
+            "median_L_working_goto": 6.65625,
+            "median_L_working_proposal": 6.515625,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 1.0,
+            "yes_successes": 1.0
+          },
+          "swapped": {
+            "auc": 0.9756320885200553,
+            "median_L_working_goto": 5.25,
+            "median_L_working_proposal": 5.640625,
+            "n_failing": 723,
+            "n_states": 125,
+            "n_working": 500,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 125,
+              "n_states": 490
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 125,
+              "n_states": 125
+            },
+            "yes_failures": 0.9903181189488244,
+            "yes_successes": 1.0
+          }
+        },
+        "yn": {
+          "aware": {
+            "auc": 0.7253795431240743,
+            "median_L_working_goto": 2.125,
+            "median_L_working_proposal": 3.0,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                0.8223938223938224,
+                0.88996138996139
+              ],
+              "estimate": 0.8563218390804598,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                0.8432835820895522,
+                0.9477611940298507
+              ],
+              "estimate": 0.8955223880597015,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 0.5241730279898219,
+            "yes_successes": 0.8414179104477612
+          },
+          "blind": {
+            "auc": 0.9790195017280012,
+            "median_L_working_goto": 2.5,
+            "median_L_working_proposal": 3.5,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                0.965183752417795,
+                0.988527724665392
+              ],
+              "estimate": 0.9770114942528736,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 0.04961832061068702,
+            "yes_successes": 0.9776119402985075
+          },
+          "neutral": {
+            "auc": 0.9991443070905017,
+            "median_L_working_goto": 3.5,
+            "median_L_working_proposal": 4.0625,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 0.031806615776081425,
+            "yes_successes": 1.0
+          },
+          "swapped": {
+            "auc": 0.9465988934993085,
+            "median_L_working_goto": 2.0,
+            "median_L_working_proposal": 2.75,
+            "n_failing": 723,
+            "n_states": 125,
+            "n_working": 500,
+            "states_with_no_accepted_candidate": 0.016,
+            "working_goto_accepted": {
+              "ci": [
+                0.7922606924643585,
+                0.8793456032719836
+              ],
+              "estimate": 0.8387755102040816,
+              "n_games": 125,
+              "n_states": 490
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                0.784,
+                0.904
+              ],
+              "estimate": 0.848,
+              "n_games": 125,
+              "n_states": 125
+            },
+            "yes_failures": 0.11065006915629322,
+            "yes_successes": 0.832
+          }
+        }
+      },
+      "classification": "mixed (the yes/no interval does not settle it)",
+      "gap_states": {
+        "obs": "no gap",
+        "yn": "unclear"
+      },
+      "obs_competence": {
+        "auc": 0.9953821066423607,
+        "checks": {
+          "auc": true,
+          "yes_failures": false,
+          "yes_successes": true
+        },
+        "passed": false,
+        "yes_failures": 1.0,
+        "yes_successes": 1.0
+      },
+      "proposal_gaps": {
+        "obs": {
+          "ci": [
+            0.0,
+            0.0
+          ],
+          "estimate": 0.0,
+          "n_games": 134,
+          "n_games_nonzero": 0,
+          "n_states": 134,
+          "p": 1.0,
+          "p_min_sign_flip": 1.0
+        },
+        "yn": {
+          "ci": [
+            -0.15671641791044777,
+            -0.05223880597014925
+          ],
+          "estimate": -0.1044776119402985,
+          "n_games": 134,
+          "n_games_nonzero": 14,
+          "n_states": 134,
+          "p": 0.000999000999000999,
+          "p_min_sign_flip": 0.0001220703125
+        }
+      },
+      "shifts": {
+        "obs": {
+          "anytask_drop_aware_minus_blind": {
+            "ci": [
+              -0.7957419085702788,
+              -0.619177311046182
+            ],
+            "estimate": -0.7093426802219471,
+            "n_games": 134,
+            "n_states": 522
+          },
+          "anytask_drop_swapped_minus_blind": {
+            "ci": [
+              -0.8113011178076248,
+              -0.6289726344392123
+            ],
+            "estimate": -0.71921931881985,
+            "n_games": 125,
+            "n_states": 490
+          },
+          "naming_lift_aware_minus_swapped": {
+            "ci": [
+              1.0671731748122886,
+              1.2918184774275996
+            ],
+            "estimate": 1.1793952672046712,
+            "n_games": 125,
+            "n_states": 723
+          }
+        },
+        "yn": {
+          "anytask_drop_aware_minus_blind": {
+            "ci": [
+              -1.0076335932202336,
+              -0.5544507609890637
+            ],
+            "estimate": -0.7784961775543839,
+            "n_games": 134,
+            "n_states": 522
+          },
+          "anytask_drop_swapped_minus_blind": {
+            "ci": [
+              -1.0651840569471924,
+              -0.5420918398021188
+            ],
+            "estimate": -0.8040816431190363,
+            "n_games": 125,
+            "n_states": 490
+          },
+          "naming_lift_aware_minus_swapped": {
+            "ci": [
+              3.00299202820323,
+              3.6833219613877852
+            ],
+            "estimate": 3.338001382131343,
+            "n_games": 125,
+            "n_states": 723
+          }
+        }
+      }
+    },
+    "qwen3-8b": {
+      "blind_competence": {
+        "obs": {
+          "auc": 1.0,
+          "checks": {
+            "auc": true,
+            "yes_failures": true,
+            "yes_successes": true
+          },
+          "passed": true,
+          "yes_failures": 0.18829516539440203,
+          "yes_successes": 1.0
+        },
+        "yn": {
+          "auc": 0.9997650108237439,
+          "checks": {
+            "auc": true,
+            "yes_failures": true,
+            "yes_successes": true
+          },
+          "passed": true,
+          "yes_failures": 0.0,
+          "yes_successes": 0.9720149253731343
+        }
+      },
+      "cells": {
+        "obs": {
+          "aware": {
+            "auc": 0.990054498499867,
+            "median_L_working_goto": 26.25,
+            "median_L_working_proposal": 32.25,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 0.772264631043257,
+            "yes_successes": 1.0
+          },
+          "blind": {
+            "auc": 1.0,
+            "median_L_working_goto": 34.375,
+            "median_L_working_proposal": 34.375,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 0.18829516539440203,
+            "yes_successes": 1.0
+          },
+          "neutral": {
+            "auc": 1.0,
+            "median_L_working_goto": 31.625,
+            "median_L_working_proposal": 32.125,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 0.08142493638676845,
+            "yes_successes": 1.0
+          },
+          "swapped": {
+            "auc": 0.9985961272475795,
+            "median_L_working_goto": 26.0,
+            "median_L_working_proposal": 31.875,
+            "n_failing": 723,
+            "n_states": 125,
+            "n_working": 500,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 125,
+              "n_states": 490
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 125,
+              "n_states": 125
+            },
+            "yes_failures": 0.28769017980636236,
+            "yes_successes": 1.0
+          }
+        },
+        "yn": {
+          "aware": {
+            "auc": 0.41757576620713227,
+            "median_L_working_goto": -22.5,
+            "median_L_working_proposal": -18.75,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.8955223880597015,
+            "working_goto_accepted": {
+              "ci": [
+                0.00945179584120983,
+                0.03076923076923077
+              ],
+              "estimate": 0.019157088122605363,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                0.03731343283582089,
+                0.11940298507462686
+              ],
+              "estimate": 0.07462686567164178,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 0.007633587786259542,
+            "yes_successes": 0.018656716417910446
+          },
+          "blind": {
+            "auc": 0.9997650108237439,
+            "median_L_working_goto": 19.25,
+            "median_L_working_proposal": 18.75,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                0.9941972920696325,
+                1.0
+              ],
+              "estimate": 0.9980842911877394,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                0.8432835820895522,
+                0.9477611940298507
+              ],
+              "estimate": 0.8955223880597015,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 0.0,
+            "yes_successes": 0.9720149253731343
+          },
+          "neutral": {
+            "auc": 0.9997009228665831,
+            "median_L_working_goto": 19.0,
+            "median_L_working_proposal": 18.25,
+            "n_failing": 786,
+            "n_states": 134,
+            "n_working": 536,
+            "states_with_no_accepted_candidate": 0.0,
+            "working_goto_accepted": {
+              "ci": [
+                1.0,
+                1.0
+              ],
+              "estimate": 1.0,
+              "n_games": 134,
+              "n_states": 522
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                0.8432835820895522,
+                0.9477611940298507
+              ],
+              "estimate": 0.8955223880597015,
+              "n_games": 134,
+              "n_states": 134
+            },
+            "yes_failures": 0.0,
+            "yes_successes": 0.9738805970149254
+          },
+          "swapped": {
+            "auc": 0.8763056708160443,
+            "median_L_working_goto": -23.25,
+            "median_L_working_proposal": -20.5,
+            "n_failing": 723,
+            "n_states": 125,
+            "n_working": 500,
+            "states_with_no_accepted_candidate": 0.944,
+            "working_goto_accepted": {
+              "ci": [
+                0.004106776180698152,
+                0.02631578947368421
+              ],
+              "estimate": 0.014285714285714285,
+              "n_games": 125,
+              "n_states": 490
+            },
+            "working_proposals_accepted": {
+              "ci": [
+                0.016,
+                0.104
+              ],
+              "estimate": 0.056,
+              "n_games": 125,
+              "n_states": 125
+            },
+            "yes_failures": 0.0,
+            "yes_successes": 0.014
+          }
+        }
+      },
+      "classification": "question-specific (supports the task-success reading)",
+      "gap_states": {
+        "obs": "no gap",
+        "yn": "collapse"
+      },
+      "obs_competence": {
+        "auc": 1.0,
+        "checks": {
+          "auc": true,
+          "yes_failures": true,
+          "yes_successes": true
+        },
+        "passed": true,
+        "yes_failures": 0.18829516539440203,
+        "yes_successes": 1.0
+      },
+      "proposal_gaps": {
+        "obs": {
+          "ci": [
+            0.0,
+            0.0
+          ],
+          "estimate": 0.0,
+          "n_games": 134,
+          "n_games_nonzero": 0,
+          "n_states": 134,
+          "p": 1.0,
+          "p_min_sign_flip": 1.0
+        },
+        "yn": {
+          "ci": [
+            -0.8805970149253731,
+            -0.746268656716418
+          ],
+          "estimate": -0.8208955223880597,
+          "n_games": 134,
+          "n_games_nonzero": 110,
+          "n_states": 134,
+          "p": 0.000999000999000999,
+          "p_min_sign_flip": 1.5407439555097887e-33
+        }
+      },
+      "shifts": {
+        "obs": {
+          "anytask_drop_aware_minus_blind": {
+            "ci": [
+              -8.915047633482793,
+              -8.087113294083261
+            ],
+            "estimate": -8.485152451422225,
+            "n_games": 134,
+            "n_states": 522
+          },
+          "anytask_drop_swapped_minus_blind": {
+            "ci": [
+              -9.076006793356239,
+              -8.150921853256383
+            ],
+            "estimate": -8.610712081700788,
+            "n_games": 125,
+            "n_states": 490
+          },
+          "naming_lift_aware_minus_swapped": {
+            "ci": [
+              6.450653269554395,
+              7.620234273041209
+            ],
+            "estimate": 7.04075291445853,
+            "n_games": 125,
+            "n_states": 723
+          }
+        },
+        "yn": {
+          "anytask_drop_aware_minus_blind": {
+            "ci": [
+              -39.76789121716635,
+              -38.44718991766614
+            ],
+            "estimate": -39.117816089268004,
+            "n_games": 134,
+            "n_states": 522
+          },
+          "anytask_drop_swapped_minus_blind": {
+            "ci": [
+              -40.68228105292956,
+              -39.245959578209465
+            ],
+            "estimate": -39.99183672306484,
+            "n_games": 125,
+            "n_states": 490
+          },
+          "naming_lift_aware_minus_swapped": {
+            "ci": [
+              7.097949081993748,
+              8.089045708796263
+            ],
+            "estimate": 7.6011410862644855,
+            "n_games": 125,
+            "n_states": 723
+          }
+        }
+      }
+    }
+  },
+  "n_states": 134
+}
