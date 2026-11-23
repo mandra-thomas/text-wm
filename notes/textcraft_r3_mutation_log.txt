@@ -1,4 +1,4 @@
-TextCraft round 3, official mutation run (strict named-kill rule: killed only when pytest exits 1 and names a failing test), MUTANTS_MATCHING='textcraft r3', MUTATION_TESTS_FIRST=tests/test_textcraft_r3.py, 4 shards, on the code of commit d29731a (review-1 fixes); 109 mutants: the 67 earlier ones (9 adapted to the amended code), the reviewer's 11 adapted, and 31 for the fixes.
+TextCraft round 3, official mutation run (strict named-kill rule: killed only when pytest exits 1 and names a failing test), MUTANTS_MATCHING='textcraft r3', MUTATION_TESTS_FIRST=tests/test_textcraft_r3.py, 4 shards, on the code of commit 64c1e8a (review-2 fixes and the unamended environment rule); 135 mutants: the 109 of review 1, review 2's twelve (rv2-1 to rv2-12), and 14 for the review-2 fixes. 135 of 135 killed, by 65 different tests.
 == shard 0/4
 killed    textcraft r3 OLMo default prompt allowed  [by tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading]
 killed    textcraft r3 pair of the wrong Gemma  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
@@ -27,8 +27,14 @@ killed    textcraft r3 M4 unobtainable still waits  [by tests/test_textcraft_r3.
 killed    textcraft r3 S3 underpowered flag dropped  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
 killed    textcraft r3 S10 thinking prompt ending unchecked  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
 killed    textcraft r3 S12 job start at any commit  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
+killed    textcraft r3 review2 rv2-3 model state ignores smoke gate failures  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
+killed    textcraft r3 review2 rv2-7 a failed environment check keeps round 2's scores  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
+killed    textcraft r3 review2 rv2-11 freeze commit not enforced at job start  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
+killed    textcraft r3 R2-S2 dirty shard accepted  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
+killed    textcraft r3 R2-S5 a filed gate failure can be rerun  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
+killed    textcraft r3 R2 rule read from wave B  [by tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm]
 
-27/27 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+33/33 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
 
 == shard 1/4
 killed    textcraft r3 Gemma 12B without the generation suffix  [by tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading]
@@ -55,12 +61,18 @@ killed    textcraft r3 M2 gate failures ignored  [by tests/test_textcraft_r3.py:
 killed    textcraft r3 M3 the rule never fires  [by tests/test_textcraft_r3.py::test_gemma_slot_rule]
 killed    textcraft r3 S9 only special tokens are structural  [by tests/test_textcraft_r3.py::test_structural_tokens]
 killed    textcraft r3 M4 envcheck re-partitions the seeded records  [by tests/test_textcraft_r3.py::test_envcheck_jobs_score_round_two_shards_on_the_exact_gpu]
-killed    textcraft r3 M4 per-score limit copied  [by tests/test_textcraft_r3.py::test_environment_check_per_score_criterion_is_wave_bs_live_rule]
+killed    textcraft r3 M4 per-score limit copied  [by tests/test_textcraft_r3.py::test_the_environment_rule_is_round_threes_own_and_unamended]
 killed    textcraft r3 S4 size words reversed  [by tests/test_textcraft_r3.py::test_pair_readings_say_the_direction_in_plain_words]
 killed    textcraft r3 S10 padding tolerance off  [by tests/test_textcraft_r3.py::test_thinking_start_checks]
 killed    textcraft r3 S12 any change counts as code-identical  [by tests/test_textcraft_r3.py::test_provenance_requires_the_freeze_commit_and_one_revision]
+killed    textcraft r3 review2 rv2-4 code paths omit pace  [by tests/test_textcraft_r3.py::test_freeze_commit_and_job_start_check]
+killed    textcraft r3 review2 rv2-8 envcheck records compared across GPU types  [by tests/test_textcraft_r3.py::test_environment_check_matches_gpus_record_by_record]
+killed    textcraft r3 review2 rv2-12 b_draws accepted outside mock  [by tests/test_textcraft_r3.py::test_b3_uses_twenty_thousand_resamples_outside_mock]
+killed    textcraft r3 R2-S3 not scored shown as inconclusive  [by tests/test_textcraft_r3.py::test_h3p_labels_a_model_not_scored]
+killed    textcraft r3 R2-S6 a core model can be declared not run  [by tests/test_textcraft_r3.py::test_not_run_declarations]
+killed    textcraft r3 R2 rule constant loosened  [by tests/test_textcraft_r3.py::test_mock_end_to_end]
 
-28/28 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+34/34 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
 
 == shard 2/4
 killed    textcraft r3 Gemma 12B allows unexpected tensors  [by tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading]
@@ -90,8 +102,15 @@ killed    textcraft r3 M4 exact GPU compares the first name only  [by tests/test
 killed    textcraft r3 S5 b3 source accepts any config  [by tests/test_textcraft_r3.py::test_environment_status_and_b3_source]
 killed    textcraft r3 S6 round-2 provenance skipped  [by tests/test_textcraft_r3.py::test_mock_end_to_end]
 killed    textcraft r3 S10 cap not separated from ended  [by tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point]
+killed    textcraft r3 review2 rv2-1 structural ignores the special-token flag  [by tests/test_textcraft_r3.py::test_structural_tokens]
+killed    textcraft r3 review2 rv2-5 shard typed despite mixed job GPUs  [by tests/test_textcraft_r3.py::test_envcheck_plan_from_round_two_gpu_names]
+killed    textcraft r3 review2 rv2-9 a not-scored model counts as competent  [by tests/test_textcraft_r3.py::test_a_core_model_not_scored_enters_at_p_one_and_the_readings_proceed]
+killed    textcraft r3 R2-S1 B3 ignores the newer model's provenance  [by tests/test_textcraft_r3.py::test_b3_is_refused_through_a_newer_models_provenance]
+killed    textcraft r3 R2-S4 unobtainable without the seven days  [by tests/test_textcraft_r3.py::test_gpu_unobtainable_needs_the_first_submission_and_seven_days]
+killed    textcraft r3 R2-S6 a late declaration accepted  [by tests/test_textcraft_r3.py::test_not_run_declarations]
+killed    textcraft r3 R2 rule pin never differs  [by tests/test_textcraft_r3.py::test_the_environment_rule_is_pinned]
 
-27/27 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+34/34 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
 
 == shard 3/4
 killed    textcraft r3 Gemma 12B without the attention check  [by tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading]
@@ -121,5 +140,12 @@ killed    textcraft r3 M4 token disagreement not a failure  [by tests/test_textc
 killed    textcraft r3 S2 power at the round-2 step  [by tests/test_textcraft_r3.py::test_round_three_power_uses_holm_first_step_of_thirty]
 killed    textcraft r3 S7 b_draws accepted outside mock  [by tests/test_textcraft_r3.py::test_b3_uses_twenty_thousand_resamples_outside_mock]
 killed    textcraft r3 S11 exploratory p-values kept  [by tests/test_textcraft_r3.py::test_exploratory_blocks_carry_no_p_values]
+killed    textcraft r3 review2 rv2-2 format trigger on low mass alone  [by tests/test_textcraft_r3.py::test_gemma_slot_rule]
+killed    textcraft r3 review2 rv2-6 golden-token disagreement does not fail the environment check  [by tests/test_textcraft_r3.py::test_environment_status_and_b3_source]
+killed    textcraft r3 review2 rv2-10 cap needs more than the budget  [by tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point]
+killed    textcraft r3 R2-S2 dirty checkout accepted at job start  [by tests/test_textcraft_r3.py::test_freeze_commit_and_job_start_check]
+killed    textcraft r3 R2-S4 unobtainable after three days  [by tests/test_textcraft_r3.py::test_gpu_unobtainable_needs_the_first_submission_and_seven_days]
+killed    textcraft r3 R2-S6 first core reading overwritten  [by tests/test_textcraft_r3.py::test_a_declared_extension_model_lets_a3x_proceed]
+killed    textcraft r3 R2 analysis ignores the rule pin  [by tests/test_textcraft_r3.py::test_the_analysis_refuses_a_changed_environment_rule]
 
-27/27 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+34/34 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]

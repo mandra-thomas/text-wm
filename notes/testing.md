@@ -547,8 +547,10 @@ column (S3), plain-words directions (S4), round 2's provenance check (S6), the r
 exploratory blocks (S11), and two end-to-end mock runs. `tests/test_textcraft_r3_serve2.py` runs only in serve2
 (ICE).
 
-Mutation testing, official run under the strict named-kill rule (log `notes/textcraft_r3_mutation_log.txt`): **109
-round-3 mutants, all killed, by 57 different tests**: the 67 earlier mutants (9 rewritten for the amended code), the
+Mutation testing, official run under the strict named-kill rule (log `notes/textcraft_r3_mutation_log.txt`), after
+review 2: **135 round-3 mutants, all killed, by 65 different tests**: review 2's twelve (rv2-4, which survived its
+reviewer's run, is now killed by `test_freeze_commit_and_job_start_check`) and 14 for the review-2 fixes, on top of
+the 109 below. Before review 2: 109 mutants, all killed, by 57 different tests: the 67 earlier mutants (9 rewritten for the amended code), the
 reviewer's 11 (adapted to the amended code; 8 had survived the whole suite before), and 31 for the review-1 fixes. A
 screen run (MUTATION_FAST_ONLY=1) found one survivor (the environment-check run accepting any model, which an older
 test no longer reached once Gemma 2 joined the check); its test was changed before the official run.
@@ -576,14 +578,28 @@ test no longer reached once Gemma 2 joined the check); its test was changed befo
 | M4 envcheck re-partitions the seeded records | `tests/test_textcraft_r3.py::test_envcheck_jobs_score_round_two_shards_on_the_exact_gpu` |
 | M4 exact GPU compares the first name only | `tests/test_textcraft_r3.py::test_envcheck_jobs_score_round_two_shards_on_the_exact_gpu` |
 | M4 no single-type shortcut | `tests/test_textcraft_r3.py::test_envcheck_plan_from_round_two_gpu_names` |
-| M4 per-score limit copied | `tests/test_textcraft_r3.py::test_environment_check_per_score_criterion_is_wave_bs_live_rule` |
+| M4 per-score limit copied | `tests/test_textcraft_r3.py::test_the_environment_rule_is_round_threes_own_and_unamended` |
 | M4 plan always runnable | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | M4 token disagreement not a failure | `tests/test_textcraft_r3.py::test_environment_status_and_b3_source` |
 | M4 unobtainable still waits | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | OLMo default prompt allowed | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
 | OLMo not strict | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
+| R2 analysis ignores the rule pin | `tests/test_textcraft_r3.py::test_the_analysis_refuses_a_changed_environment_rule` |
 | R2 counts incompetent models | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | R2 fires despite a confirmed penalty | `tests/test_textcraft_r3.py::test_r2_for_round_three` |
+| R2 rule constant loosened | `tests/test_textcraft_r3.py::test_mock_end_to_end` |
+| R2 rule pin never differs | `tests/test_textcraft_r3.py::test_the_environment_rule_is_pinned` |
+| R2 rule read from wave B | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| R2-S1 B3 ignores the newer model's provenance | `tests/test_textcraft_r3.py::test_b3_is_refused_through_a_newer_models_provenance` |
+| R2-S2 dirty checkout accepted at job start | `tests/test_textcraft_r3.py::test_freeze_commit_and_job_start_check` |
+| R2-S2 dirty shard accepted | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| R2-S3 not scored shown as inconclusive | `tests/test_textcraft_r3.py::test_h3p_labels_a_model_not_scored` |
+| R2-S4 unobtainable after three days | `tests/test_textcraft_r3.py::test_gpu_unobtainable_needs_the_first_submission_and_seven_days` |
+| R2-S4 unobtainable without the seven days | `tests/test_textcraft_r3.py::test_gpu_unobtainable_needs_the_first_submission_and_seven_days` |
+| R2-S5 a filed gate failure can be rerun | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| R2-S6 a core model can be declared not run | `tests/test_textcraft_r3.py::test_not_run_declarations` |
+| R2-S6 a late declaration accepted | `tests/test_textcraft_r3.py::test_not_run_declarations` |
+| R2-S6 first core reading overwritten | `tests/test_textcraft_r3.py::test_a_declared_extension_model_lets_a3x_proceed` |
 | S10 cap not separated from ended | `tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point` |
 | S10 padding tolerance off | `tests/test_textcraft_r3.py::test_thinking_start_checks` |
 | S10 thinking prompt ending unchecked | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
@@ -656,6 +672,18 @@ test no longer reached once Gemma 2 joined the check); its test was changed befo
 | review1 rev7 B3 family on 2,000 resamples | `tests/test_textcraft_r3.py::test_b3_uses_twenty_thousand_resamples_outside_mock` |
 | review1 rev8 attention agreement on one item | `tests/test_textcraft_r3.py::test_attention_agreement_rule` |
 | review1 rev9 envcheck accepts rescoring shards on mixed GPUs | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| review2 rv2-1 structural ignores the special-token flag | `tests/test_textcraft_r3.py::test_structural_tokens` |
+| review2 rv2-10 cap needs more than the budget | `tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point` |
+| review2 rv2-11 freeze commit not enforced at job start | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| review2 rv2-12 b_draws accepted outside mock | `tests/test_textcraft_r3.py::test_b3_uses_twenty_thousand_resamples_outside_mock` |
+| review2 rv2-2 format trigger on low mass alone | `tests/test_textcraft_r3.py::test_gemma_slot_rule` |
+| review2 rv2-3 model state ignores smoke gate failures | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| review2 rv2-4 code paths omit pace | `tests/test_textcraft_r3.py::test_freeze_commit_and_job_start_check` |
+| review2 rv2-5 shard typed despite mixed job GPUs | `tests/test_textcraft_r3.py::test_envcheck_plan_from_round_two_gpu_names` |
+| review2 rv2-6 golden-token disagreement does not fail the environment check | `tests/test_textcraft_r3.py::test_environment_status_and_b3_source` |
+| review2 rv2-7 a failed environment check keeps round 2's scores | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| review2 rv2-8 envcheck records compared across GPU types | `tests/test_textcraft_r3.py::test_environment_check_matches_gpus_record_by_record` |
+| review2 rv2-9 a not-scored model counts as competent | `tests/test_textcraft_r3.py::test_a_core_model_not_scored_enters_at_p_one_and_the_readings_proceed` |
 | standardized without the SD | `tests/test_textcraft_r3.py::test_stats_match_the_definitions` |
 | strict floor 0.7 | `tests/test_textcraft_r3.py::test_round3_extras_are_descriptive_and_include_the_strict_floor` |
 | think failures not sampled | `tests/test_textcraft_r3.py::test_thinking_jobs_and_procedure` |

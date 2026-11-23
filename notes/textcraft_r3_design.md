@@ -434,3 +434,9 @@ The full serve2 rescoring of the three older models (about 7 GPU-hours on L40S) 
 
 The previous budget of 60 GPU-hours covers the lower and middle of this range; at the upper end the study needs up to **6 GPU-hours more** (66 against 60). The budget is raised to 66. If the thinking arm runs near its upper estimate, it is the stage to stop at its next saved batch (it resumes per batch), so that the confirmatory stages are never short of time.
 
+### 14.T2 Checks after the review-2 fixes (2026-11-23; nothing scored, no round-2 result read)
+
+- **Tests.** `tests/test_textcraft_r3.py`: 87 tests. Full local suite at 64c1e8a, once at the end: **1,243 passed, 29 skipped**.
+- **Mutants.** Strict named-kill rule, official run at 64c1e8a (`notes/textcraft_r3_mutation_log.txt`): **135 of 135 killed, by 65 different tests**: the 109 of 14.T, review 2's twelve (rv2-4, which survived the reviewer's run, now killed by `test_freeze_commit_and_job_start_check`) and 14 for the review-2 fixes (two written for the withdrawn wave B hook were replaced by "rule read from wave B" and "rule constant loosened").
+- **Not run:** no GPU job, no environment-check job, no plan file, no tag.
+
