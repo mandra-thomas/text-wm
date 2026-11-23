@@ -187,6 +187,8 @@ Each example's goal line is its own goal. That is the goal whose tree holds the 
 
 **Yes/no question.** As in the ALFWorld validation runs (rq1v), the final "Next observation:" is replaced by `Question: Will this action succeed? Answer Yes or No.\nAnswer:`, and the single tokens "Yes" and "No" are scored.
 
+*(Correction 2026-11-23: "as in the ALFWorld validation runs" holds for the format, a question in place of the observation cue with the single tokens "Yes" and "No" scored, but not for the wording. The ALFWorld question (`wf/rq1v.py`, `YN_QUESTION`) reads "Question: will this action succeed, or will the environment reply "Nothing happens."? Answer Yes if it succeeds and No if nothing happens.", which anchors the answer to the environment's reply; the TextCraft question (`wf/textcraft/prompts.py`, `YN_QUESTION`) does not, and partly reads as a judgement of whether the action serves the task (`textcraft_qwen_robustness.md` §9; `deviations.md`, 2026-11-22, "TextCraft yes/no wording"). The frozen design and its scored question are unchanged.)*
+
 ## 6. Readouts and analysis
 
 **Scored conditions.** Per item and model:
