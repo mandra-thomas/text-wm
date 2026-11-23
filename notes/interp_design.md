@@ -475,7 +475,7 @@ $$
 
 It is computed on CPU from stage 0's residuals on the ablation's failure items, weighted, with a game-bootstrap interval (`analysis.direct_path_share`, `pilot.direct_path_report`). At the last layer it equals 1.
 
-**Pre-registered rule (one, chosen now): a profile layer whose direct-path share has a 95% upper bound at or above 0.3 is treated as a caveat layer: its removal is reported, but it is excluded from the onset, which is read on the remaining profile layers, per stratum (`analysis.direct_path_kept`, `DIRECT_PATH_MAX`).**
+**Pre-registered rule (one, chosen now): a profile layer whose direct-path share has a 95% upper bound at or above 0.3 is treated as a caveat layer: its removal is reported, but it is excluded from the onset, which is read on the remaining profile layers, per stratum (`analysis.direct_path_kept`, `DIRECT_PATH_MAX`).** (Amended by review 5, E1: a layer is excluded only if, in addition, its removal passes, with a lower bound of at least 0.6; a failing layer is never excluded, since the direct path can inflate a removal into a pass but never into a failure.)
 
 Why this rule rather than reading the onset on removal minus $\lambda$ with a paired bootstrap: the subtraction would make the 0.6 band unreachable wherever $\lambda$ exceeds 0.4, and it would also subtract the part H3 itself predicts. Under H3 the goal's signal is written in readout form at the answer position, so a large $\lambda$ is part of the hypothesis, not a nuisance to subtract. The question the onset can answer cleanly is whether one direction carries the effect *before* the effect is in readout form, and that is only answerable at layers where the direct path is small. The threshold 0.3 is the band below which a removal of at least 0.6 cannot be explained by the direct path alone. The cost: if every layer from the true onset on has a large direct-path share, the row is "not assessable". (Review 4, D1:) because an excluded layer can push the onset later, an onset after the arrival is read as "after arrival" only if no profile layer between the arrival and the onset was excluded; otherwise the row is "not assessable". `test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it` reproduces the simulation's pattern (with readout-form share 0, 0.3 and about 0.6, the removal tracks it, and the rule removes the layer where the naive onset would have been found).
 
@@ -527,7 +527,7 @@ Status: a fourth outside review read amendment 3, its code and tests, simulated 
 
 ### D1. An exclusion between arrival and onset
 
-The direct-path rule (C2) removes layers from the onset's profile, and removing a layer can only move the onset later. Review 4's simulation: with the removal's lower bound at or above 0.6 from layer 12 on and the arrival at 12, excluding only layer 12 (a direct-path upper bound of 0.32) moved the onset to 16 and turned "at or before arrival" into "after arrival" by construction. `onset_versus_arrival` now receives the whole profile; when the onset lies after the arrival and some profile layer from the arrival up to (not including) the onset was excluded, the row is "not assessable (a layer between arrival and onset excluded by the direct-path rule)". Exclusions after the onset change nothing.
+The direct-path rule (C2) removes layers from the onset's profile. Since review 5 (E1) it removes only layers whose removal passes, and removing a passing layer can only move the onset later or leave it undefined, never earlier. Review 4's simulation: with the removal's lower bound at or above 0.6 from layer 12 on and the arrival at 12, excluding only layer 12 (a direct-path upper bound of 0.32) moved the onset to 16 and turned "at or before arrival" into "after arrival" by construction. `onset_versus_arrival` now receives the whole profile; when the onset lies after the arrival and some profile layer from the arrival up to (not including) the onset was excluded, the row is "not assessable (a layer between arrival and onset excluded by the direct-path rule)". Exclusions after the onset change nothing.
 
 ### D2. Tests for the exclusion
 
@@ -568,8 +568,46 @@ Review 4's simulation: when the success feature varies within cells, the layer-s
 
 ### D10. How the per-measure sample sizes combine
 
-Pre-registered now. Per stratum, the full pilot's patching items are the largest number any patching measure needs (history share, action share, object-mention share, answer-position arrival). Its ablation failures are the largest number any ablation measure needs (removal at each profile layer, gap ratio, steering ratio, perp-over-task ratio). Each is capped at 400 per stratum (`PATCH_CAP_PER_STRATUM`, `ABLATE_CAP_PER_STRATUM`); 400 patching items cost about 11 A100-hours and 400 ablation failures about 2. If a cap binds, the full pilot runs at the cap, the analysis reports the half-width each measure reaches there, and the bands stay as they are (`analysis.plan_sizes`, reported as `sample_size.<stratum>.plan`). The stratum's availability also bounds it: fold 1 has 268 step-0 failures.
+Pre-registered now. Per stratum, the full pilot's patching items are the largest number any patching measure needs (history share, action share, answer-position arrival; the object-mention share is planned in its own items, E6). Its ablation failures are the largest number any ablation measure needs (removal at each profile layer, gap ratio, steering ratio, perp-over-task ratio). Each is capped at 400 per stratum (`PATCH_CAP_PER_STRATUM`, `ABLATE_CAP_PER_STRATUM`); 400 patching items cost about 11 A100-hours and 400 ablation failures about 2. If a cap binds, the full pilot runs at the cap, the analysis reports the half-width each measure reaches there, and the bands stay as they are (`analysis.plan_sizes`, reported as `sample_size.<stratum>.plan`). The stratum's availability also bounds it: fold 1 has 268 step-0 failures.
 
 ### D11. Tests, mutants and a comment
 
 Tests now kill review 4's 22 surviving mutants. N2 is killed by giving the end-to-end model a non-unit final-norm weight, so that the readout direction differs from the plain unembedding difference, and the direct-path test's vacuous last-layer check is replaced by an exact one (the share is 1 at the last layer). Review 4's 32 mutants (N2, N3, N4 and N31 adapted to changed lines; N18 left out as equivalent) and 15 mutants of this round's code (one more was equivalent) are in `scripts/mutation_check.py`. A mutant counts as killed only when a named test fails (pytest exit code 1). The job script's comment now says 55 edits per prompt.
+
+## Amendments after review 5, before any run (2026-11-22)
+
+Status: a fifth outside review (`notes/interp_review5.md`, a confirming review of amendment 4) found every review-4 item fixed in code with a test that fails on reversal, one must-fix item, three untested parts and five notes, and asked for them before the freeze. Everything below was decided after that review and before any activation, patching, probe or lens result existed; no interpretability job has run. `deviations.md` records it ("Interpretability pilot: amendments after review 5").
+
+### E1. A failing layer is never excluded (must-fix)
+
+The onset is the earliest kept layer from which every deeper kept layer's removal has a lower bound of at least 0.6. The direct-path rule (C2) excluded a layer whatever its removal was. When the excluded layer *fails* and sits after a run of passing layers, excluding it lets the onset jump back to that earlier run, so the exclusion can move the onset earlier and turn "after arrival" into "at or before arrival", the reading B1 maps to H3 to H6. Review 5's case: arrival at layer 12, removal lower bounds 0.10, 0.65, 0.70, 0.45, 0.70, 0.75 and 0.80 at layers 4 to 28. With no exclusions the onset is 20 ("after arrival"); excluding the failing layer 16, alone or with 20 to 28, gave onset 8 ("at or before arrival").
+
+The rule is now: a profile layer is excluded only if its direct-path share's 95% upper bound is at least 0.3 (or not finite) **and** its removal passes, with a lower bound of at least 0.6 (`analysis.direct_path_kept`, which now takes the removal profile). The exclusion exists because a large direct-path share can inflate a removal into a pass. It cannot produce a failure, so a failing layer is real evidence that one direction does not carry 60% of the effect there, and it stays in the onset's profile. With only passing layers excluded, an exclusion can move the onset later or leave it undefined, never earlier. D1's premise is then true and its "not assessable" check stays as written; D1's sentence is corrected. Tests: review 5's case with layer 16 excluded (onset stays 20, "after arrival") and with 16 to 28 excluded (16 stays, no onset, "inconclusive"), a passing layer still excluded, the 0.6 boundary, and the ablation summary keeping a failing layer with a large direct-path share.
+
+### E2. Tests for the gated second projection (T1, T2)
+
+The table-row test now gives the gated-out layers values that would move the median: the reported two-projection cosine is 0.2 over the one kept layer and would be 0.9 over every H4 layer. One layer has an answer cosine of 0.2 in fold 0 and 0.7 in fold 1 and must be gated out (the gate reads both folds), and one has exactly 0.5 and must be gated out (the gate is strictly below 0.5).
+
+### E3. Test for the ablation plan (T3)
+
+The table-row test now checks that the ablation plan's wanted n is the largest of the removal, gap-ratio, steering-ratio and perp-over-task needs, that its cap is 400, and that it binds when the steering ratio needs more.
+
+### E4. The second-projection gate needs both folds (N4)
+
+If one fold's answer cosine is missing at a layer, the layer is "not assessable" for the second projection, instead of being read on the other fold alone.
+
+### E5. NaN H4 rows read "not assessable" (N1)
+
+Every H4 quantity that is NaN (for example all of them when no profile layer lies before the arrival) is reported as "not assessable", in the main row and in the goal-role row.
+
+### E6. The object-mention share is planned in its own items (N2)
+
+The object-mention share's SE comes from the items whose history names the action's object (about 25 in the minimal pilot), so its sample size is now counted in those items, not in the stratum's items, and it is planned separately (`plan.object_mention_items`), as the full pilot's object-mention quota. It is no longer part of the stratum's patching plan, whose units are stratum items. The quota is bounded by availability: about 60 later failures with an object mention and a clear effect in the calibration fold, and a similar number expected in fold 1.
+
+### E7. No plan for the pooled stratum (N3)
+
+The full pilot draws its items per weighting stratum, so the plan is computed for step 0 and for later items only; the pooled ("all") row reports SEs and needs but no plan.
+
+### E8. Mutants
+
+Review 5's ten spot-check mutants (V1 to V10) and eight mutants of this round's code are in `scripts/mutation_check.py`. V10 (the linearity ratio against another layer's removal) is killed by a two-layer test. A kill counts only on pytest exit code 1; the harness runs pytest with `--tb=no`, so a kill means some test failed, which is what "a named test fails" means here (review 5, N5).
