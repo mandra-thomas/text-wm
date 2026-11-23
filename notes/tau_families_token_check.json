@@ -1,0 +1,278 @@
+{
+  "files": {
+    "fewshot.json": "231607f79c92580375ada0ce4267fb954e7e0bc0a743ccb9b75813610eb13119",
+    "items.jsonl": "2c8ffeac7dedd4635df5974be955d6ceff84d3f8184f88a73eca579282a578b6",
+    "natural_items.jsonl": "9bd6c3f7fda464f7cc32307e9a570da564b1bed7d4e3ab0d75dbfd00f6b83502"
+  },
+  "models": {
+    "gemma2-9b-it": {
+      "context": 8192,
+      "excluded": "excluded before data (design \u00a72.3): the prompt's fixed part, the system message and the four few-shot examples, is 9,575 Gemma tokens, more than Gemma 2's 8,192-token trained context; reported as not run, never as a null",
+      "hf_id": "google/gemma-2-9b-it",
+      "length_only": true,
+      "longest_prompt": [
+        14051,
+        "tau-g-77cc59152d73",
+        "fail",
+        "yn",
+        "aligned"
+      ],
+      "model": "gemma2-9b-it",
+      "n_at_or_above_context": 13696,
+      "n_items": 856,
+      "n_prompts": 13696,
+      "passed": null,
+      "prompt_tokens": {
+        "fail/first": {
+          "max": 14017,
+          "median": 11339.0,
+          "n": 4280,
+          "p90": 13417,
+          "share_at_or_above_context": 1.0
+        },
+        "fail/target": {
+          "max": 14042,
+          "median": 11372.5,
+          "n": 1712,
+          "p90": 13447,
+          "share_at_or_above_context": 1.0
+        },
+        "fail/yn": {
+          "max": 14051,
+          "median": 11370.0,
+          "n": 2568,
+          "p90": 13452,
+          "share_at_or_above_context": 1.0
+        },
+        "witness/first": {
+          "max": 14017,
+          "median": 11334.0,
+          "n": 2568,
+          "p90": 13418,
+          "share_at_or_above_context": 1.0
+        },
+        "witness/yn": {
+          "max": 14051,
+          "median": 11368.0,
+          "n": 2568,
+          "p90": 13452,
+          "share_at_or_above_context": 1.0
+        }
+      },
+      "revision": "11c9b309abf73637e4b6f9a3fa1e92e615547819",
+      "scored_tokens": {
+        "Error": [
+          "Error"
+        ],
+        "No": [
+          "No"
+        ],
+        "Yes": [
+          "Yes"
+        ],
+        "{\"": [
+          "{\""
+        ]
+      },
+      "system_handling": "fold",
+      "template_settings": {
+        "enable_thinking": false
+      }
+    },
+    "llama3.2-3b": {
+      "context": 131072,
+      "examples": {
+        "boundary": [],
+        "context": [],
+        "first_token": [],
+        "only_task_line": [],
+        "single_tokens": [],
+        "template": [],
+        "yes_no": []
+      },
+      "hf_id": "meta-llama/Llama-3.2-3B-Instruct",
+      "length_only": false,
+      "longest_prompt": [
+        11907,
+        "tau-g-77cc59152d73",
+        "fail",
+        "yn",
+        "aligned"
+      ],
+      "model": "llama3.2-3b",
+      "n_items": 856,
+      "n_prompts": 13696,
+      "n_replies_checked": 3424,
+      "n_yes_no_prompts_checked": 6848,
+      "passed": true,
+      "placement": null,
+      "problems": {
+        "boundary": 0,
+        "context": 0,
+        "first_token": 0,
+        "only_task_line": 0,
+        "single_tokens": 0,
+        "template": 0,
+        "yes_no": 0
+      },
+      "prompt_tokens": {
+        "fail/first": {
+          "max": 11874,
+          "median": 9762.5,
+          "n": 4280,
+          "p90": 11376,
+          "share_at_or_above_context": 0.0
+        },
+        "fail/target": {
+          "max": 11898,
+          "median": 9791.0,
+          "n": 1712,
+          "p90": 11405,
+          "share_at_or_above_context": 0.0
+        },
+        "fail/yn": {
+          "max": 11907,
+          "median": 9792.0,
+          "n": 2568,
+          "p90": 11410,
+          "share_at_or_above_context": 0.0
+        },
+        "witness/first": {
+          "max": 11874,
+          "median": 9758.0,
+          "n": 2568,
+          "p90": 11377,
+          "share_at_or_above_context": 0.0
+        },
+        "witness/yn": {
+          "max": 11907,
+          "median": 9791.0,
+          "n": 2568,
+          "p90": 11410,
+          "share_at_or_above_context": 0.0
+        }
+      },
+      "revision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+      "scored_tokens": {
+        "Error": [
+          "Error"
+        ],
+        "No": [
+          "No"
+        ],
+        "Yes": [
+          "Yes"
+        ],
+        "{\"": [
+          "{\""
+        ]
+      },
+      "system_handling": "native",
+      "template_settings": {
+        "date_string": "26 Jul 2024",
+        "enable_thinking": false
+      }
+    },
+    "mistral-7b-v0.3": {
+      "context": 32768,
+      "examples": {
+        "boundary": [],
+        "context": [],
+        "first_token": [],
+        "only_task_line": [],
+        "single_tokens": [],
+        "template": [],
+        "yes_no": []
+      },
+      "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
+      "length_only": false,
+      "longest_prompt": [
+        14642,
+        "tau-g-77cc59152d73",
+        "fail",
+        "yn",
+        "aligned"
+      ],
+      "model": "mistral-7b-v0.3",
+      "n_items": 856,
+      "n_prompts": 13696,
+      "n_replies_checked": 3424,
+      "n_yes_no_prompts_checked": 6848,
+      "passed": true,
+      "placement": {
+        "max_prompt_tokens": 14516,
+        "n_items": 300,
+        "n_problems": 0,
+        "n_prompts": 600,
+        "problems": []
+      },
+      "problems": {
+        "boundary": 0,
+        "context": 0,
+        "first_token": 0,
+        "only_task_line": 0,
+        "single_tokens": 0,
+        "template": 0,
+        "yes_no": 0
+      },
+      "prompt_tokens": {
+        "fail/first": {
+          "max": 14607,
+          "median": 11867.5,
+          "n": 4280,
+          "p90": 13992,
+          "share_at_or_above_context": 0.0
+        },
+        "fail/target": {
+          "max": 14633,
+          "median": 11895.5,
+          "n": 1712,
+          "p90": 14023,
+          "share_at_or_above_context": 0.0
+        },
+        "fail/yn": {
+          "max": 14642,
+          "median": 11894.0,
+          "n": 2568,
+          "p90": 14028,
+          "share_at_or_above_context": 0.0
+        },
+        "witness/first": {
+          "max": 14607,
+          "median": 11861.0,
+          "n": 2568,
+          "p90": 13993,
+          "share_at_or_above_context": 0.0
+        },
+        "witness/yn": {
+          "max": 14642,
+          "median": 11896.0,
+          "n": 2568,
+          "p90": 14028,
+          "share_at_or_above_context": 0.0
+        }
+      },
+      "revision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+      "scored_tokens": {
+        "Error": [
+          "\u2581Error"
+        ],
+        "No": [
+          "\u2581No"
+        ],
+        "Yes": [
+          "\u2581Yes"
+        ],
+        "{\"": [
+          "\u2581{\""
+        ]
+      },
+      "system_handling": "native",
+      "template_settings": {
+        "enable_thinking": false
+      }
+    }
+  },
+  "n_items": 856,
+  "passed": true
+}
