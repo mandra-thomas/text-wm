@@ -61,11 +61,11 @@ This comes from `mechanism2_results.md` and `mechanism2_metrics.json` (merged in
 
 ## 4. What still rests on two models, and what is being added
 
-The TextCraft and τ-bench results, and the reading of the effect as task relevance that they support, have so far been scored only on Qwen3-8B and Llama-3.1-8B. The following runs add models. *(Rows updated 2026-11-23 to match the README's status table; designs fixed at a tag are called "frozen".)*
+The TextCraft and τ-bench results, and the reading of the effect as task relevance that they support, have so far been scored only on Qwen3-8B and Llama-3.1-8B. The following runs add models. *(Updated 2026-11-23: TextCraft round 2 is now scored for all five models; its row gives the result, and `textcraft_r2_results.md` reports every contrast for every model.)* *(Rows updated 2026-11-23 to match the README's status table; designs fixed at a tag are called "frozen".)*
 
 | Study | Models added | State |
 |---|---|---|
-| TextCraft round 2 | Gemma-2-9B, Mistral-7B, Llama-3.2-3B (Qwen3-8B and Llama-3.1-8B rescored under the clean prompt) | Design frozen at tag `textcraft-r2-design-frozen-2026-11-23` (commit `4ccf84b`) after two reviews, the sign-off corrections and an independent pre-freeze audit; nothing scored; format-only smoke runs submitted |
+| TextCraft round 2 | Gemma-2-9B, Mistral-7B, Llama-3.2-3B (Qwen3-8B and Llama-3.1-8B rescored under the clean prompt) | Done (frozen at tag `textcraft-r2-design-frozen-2026-11-23`, commit `4ccf84b`). Within-item penalty confirmed below zero in all three models that discriminate on goal crafting (Qwen3-8B −1.02, Llama-3.1-8B −1.68, Gemma-2-9B −1.27 nats): "penalty general across the competent models". Lift: Qwen3-8B +0.67 confirmed above zero, Llama-3.1-8B equivalent to zero (does not discriminate on ingredients), Gemma-2-9B −0.30 confirmed below zero. Mistral-7B and Llama-3.2-3B discriminate for no contrast. Results in `textcraft_r2_results.md` |
 | τ-bench retail, model families | Mistral-7B, Llama-3.2-3B. Gemma-2-9B is not run: every prompt exceeds its 8,192-token context | Amended after its first review; tokenization check on the amended prompts passed on the cluster; not frozen and not scored |
 | ALFWorld, wave B | Qwen3.5-9B, Ministral-3-8B, Gemma 4 E4B and 31B, Qwen3.8-27B, plus a base-against-instruct comparison | Design frozen at tag `families-waveb-design-frozen-2026-11-22` (commit `f6bbffb`) after one review and its fixes; environment check running; no wave B score is read unless it passes |
 | TextCraft round 3 | Qwen3.5-9B, Ministral-3-8B, Gemma-4-12B, plus a larger-model extension and an exploratory Qwen3.5 thinking arm | Proposal and compatibility checks done; built after round 2 is frozen |
