@@ -422,3 +422,35 @@ The survivor, "A role gap on all rows", had become equivalent. After review 2 th
 | W R5 ignores the timing competence | `test_rejection_list_per_model` |
 | W central shortcut on the point estimate | `test_central_question_is_exclusive[p_ci3-True-tracking3-undecided]` |
 | W scores of other arms accepted | `test_scores_must_be_arms_of_their_record` |
+
+### TextCraft round 2, sign-off corrections (2026-11-22)
+
+The sign-off corrections (design 15.F) and the statistical audit (15.A) added tests for:
+
+- R3 labelled a descriptive diagnostic;
+- R4 descriptive, with a paired lift difference resampled over goal pairs;
+- R5's wording;
+- interpretation and reading strings that never call an AUC gate competence or understanding;
+- the neutral central-question labels;
+- the inference map, with no p-value outside the 50 family tests;
+- Holm with padding to 50;
+- TOST from one-sided bootstrap ps;
+- the margin computed once and shared by all contrasts;
+- goal-pair clusters in every resample of a model block;
+- the exact Dn + Dc identity on the 996 shared rows.
+
+The mutation list was updated: two stale mutants were replaced or removed, and ten mutants were added for the corrections. 145 round-2 mutants are now listed. The 22 new or changed ones (the 15.F mutants, the review-2 "W" mutants whose code changed, and the interpretation mutant) were run in official mode at 170db45, and all 22 were killed by named tests. Their log is appended to `notes/textcraft_r2_mutation_log.txt`. The other 123 were killed in the official run at ef73d40 and their code is unchanged.
+
+### TextCraft round 2, pre-freeze audit (2026-11-22)
+
+The independent audit (`notes/textcraft_r2_audit.md`) left three of its 12 mutants alive: X1, X4 and X12. Four tests were added:
+
+- `test_x1_r3_does_not_fire_when_both_gaps_cross_zero`;
+- `test_x4_role_gap_is_naming_plus_completion_through_contrasts`, which uses noisy scores through `contrasts` with agreement to 1e-12;
+- `test_x12_lift_difference_is_llama_minus_qwen`;
+- `test_x10_central_question_exact_tie_counts_as_inventory_consistent`.
+
+A further test, `test_analysis_requires_the_five_models`, covers the model-set check and the timing gates in the inference map.
+
+Rerun at ae8f005 with the auditor's strict script, all 12 audit mutants are killed by named tests. The two new mutants (the model-set check, the gates entry) are killed in official mode. The 12 audit mutants and the 2 new ones are now also in `scripts/mutation_check.py`, which holds 159 round-2 mutants. The log is appended to `notes/textcraft_r2_mutation_log.txt`.
+Full suite at the pre-freeze audit (run once at 0db1f7c, before the deviations entry): 1,008 passed, 7 skipped.

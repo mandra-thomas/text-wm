@@ -153,3 +153,68 @@ killed    textcraft r2 W central shortcut on the point estimate  [tests/test_tex
 killed    textcraft r2 W scores of other arms accepted  [tests/test_textcraft_r2.py::test_scores_must_be_arms_of_their_record]
 
 35/35 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]
+
+# Sign-off run (2026-11-22, at 170db45; MUTANTS_MATCHING='textcraft r2 F |textcraft r2 A interpretation|textcraft r2 W '): the new and changed mutants of design 15.F, official mode, four shards.
+
+## shard 0/4
+killed    textcraft r2 W R3 testable on P competence only  [tests/test_textcraft_r2.py::test_rejection_list_per_model]
+killed    textcraft r2 W central shortcut on the point estimate  [tests/test_textcraft_r2.py::test_central_question_is_exclusive[p_ci3-True-tracking3-undetermined]]
+killed    textcraft r2 W scores of other arms accepted  [tests/test_textcraft_r2.py::test_scores_must_be_arms_of_their_record]
+killed    textcraft r2 F reading says not competent  [tests/test_textcraft_r2.py::test_reading_says_when_a_contrast_is_not_competent]
+killed    textcraft r2 F lift difference resampled by item  [tests/test_textcraft_r2.py::test_lift_difference_is_paired]
+
+5/5 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]
+
+## shard 1/4
+killed    textcraft r2 W R5 ignores the timing competence  [tests/test_textcraft_r2.py::test_rejection_list_per_model]
+killed    textcraft r2 W tracking difference unpaired  [tests/test_textcraft_r2.py::test_tracking_differences_are_paired]
+killed    textcraft r2 F R3 not labelled a diagnostic  [tests/test_textcraft_r2.py::test_rejection_list_per_model]
+killed    textcraft r2 F central label mechanism  [tests/test_textcraft_r2.py::test_central_question_is_exclusive[p_ci0-True-tracking0-penalty with inventory-consistent tracking]]
+killed    textcraft r2 F lift difference not reported  [tests/test_textcraft_r2.py::test_audit_inference_map]
+
+5/5 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]
+
+## shard 2/4
+killed    textcraft r2 W R1 ignores the penalty competence  [tests/test_textcraft_r2.py::test_rejection_list_per_model]
+killed    textcraft r2 W central mechanism without P competence  [tests/test_textcraft_r2.py::test_central_question_is_exclusive[p_ci4-False-tracking4-undetermined]]
+killed    textcraft r2 W reading competence qualifier off  [tests/test_textcraft_r2.py::test_reading_says_when_a_contrast_is_not_competent]
+killed    textcraft r2 F R5 rejects the whole largest-early claim  [tests/test_textcraft_r2.py::test_r5_rejects_only_the_predicted_attenuation]
+killed    textcraft r2 F central label poor reasoning  [tests/test_textcraft_r2.py::test_central_question_is_exclusive[p_ci5-False-tracking5-no confirmed penalty; shortcut-consistent or non-discriminating]]
+killed    textcraft r2 F inference map missing  [tests/test_textcraft_r2.py::test_audit_inference_map]
+
+6/6 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]
+
+## shard 3/4
+killed    textcraft r2 W R3 without the matched confirmation  [tests/test_textcraft_r2.py::test_rejection_list_per_model]
+killed    textcraft r2 W central poor reasoning needs incompetence only  [tests/test_textcraft_r2.py::test_central_question_is_exclusive[p_ci6-True-tracking6-no confirmed penalty; shortcut-consistent or non-discriminating]]
+killed    textcraft r2 W two-item rows keep records without the line  [tests/test_textcraft_r2.py::test_role_gap_descriptive_equals_naming_plus_completion]
+killed    textcraft r2 F distortion called competent  [tests/test_textcraft_r2.py::test_interpretation_separates_measurable_effects_from_distortions]
+killed    textcraft r2 F lift difference reversed  [tests/test_textcraft_r2.py::test_lift_difference_is_paired]
+killed    textcraft r2 A interpretation ignores competence  [tests/test_textcraft_r2.py::test_interpretation_separates_measurable_effects_from_distortions]
+
+6/6 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]
+
+# Pre-freeze audit run (2026-11-22, at ae8f005): the auditor's 12 mutants with its own strict script (scripts/audit_textcraft_r2_mutants.py), and the two new G mutants (scripts/mutation_check.py, official mode).
+
+KILLED    X1 R3 fires without a signed unmatched gap: tests/test_textcraft_r2.py::test_x1_r3_does_not_fire_when_both_gaps_cross_zero
+KILLED    X2 R3 matched gap only needs not to be opposite: tests/test_textcraft_r2.py::test_rejection_list_per_model
+KILLED    X3 R2 counts Llama-3.1 among the others: tests/test_textcraft_r2.py::test_across_models_patterns_and_f3
+KILLED    X4 role gap on a different row set from Dn and Dc: tests/test_textcraft_r2.py::test_x4_role_gap_is_naming_plus_completion_through_contrasts
+KILLED    X5 margin SD from the ingredient failures: tests/test_textcraft_r2.py::test_margin_is_capped_at_four_tenths
+KILLED    X6 TOST takes the smaller one-sided p: tests/test_textcraft_r2.py::test_statistics_helpers
+KILLED    X7 Λ and P sign flip by item: tests/test_textcraft_r2.py::test_audit_every_resample_is_over_goal_pairs
+KILLED    X8 equivalence verdict on the unadjusted p: tests/test_textcraft_r2.py::test_verdicts_are_statistical_and_never_withheld
+KILLED    X9 lift difference over class-matched ingredients only: tests/test_textcraft_r2.py::test_lift_difference_is_paired
+KILLED    X10 H6-best needs strictly better tracking: tests/test_textcraft_r2.py::test_x10_central_question_exact_tie_counts_as_inventory_consistent
+KILLED    X11 NaN ps dropped from the family instead of entering as 1: tests/test_textcraft_r2.py::test_family_is_fixed_at_fifty_and_pads_missing
+KILLED    X12 R4 difference reported as Qwen minus Llama: tests/test_textcraft_r2.py::test_x12_lift_difference_is_llama_minus_qwen
+
+## G shard 0/2
+killed    textcraft r2 G analysis accepts any model set  [tests/test_textcraft_r2.py::test_analysis_requires_the_five_models]
+
+1/1 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]
+
+## G shard 1/2
+killed    textcraft r2 G timing gates missing from the inference map  [tests/test_textcraft_r2.py::test_analysis_requires_the_five_models]
+
+1/1 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]

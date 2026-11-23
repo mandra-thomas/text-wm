@@ -12,7 +12,9 @@ Amended before the freeze (user decisions, 2026-11-21; design section 14): each 
 competence of the model in its own action categories (`local_competence`: goal crafting for the parent penalty,
 ingredient crafting for the lift, both for naming, completion and timing), with wave A's criteria applied within each
 population; the overall gate stays reported. A failed local gate no longer hides a verdict: the statistical verdict
-stands and its interpretation is limited ("a measurable goal effect", not "a distortion in a competent predictor").
+stands and its interpretation is limited ("a measurable goal effect", not "a distortion in a model that discriminates
+successes from failures in these categories"). Competence here is predictive discrimination (an AUC gate), not
+demonstrated use of the inventory rule (design 15.F).
 The equivalence margin is min(0.3 x SD, 0.4 nats), with the power of each equivalence test reported; the mechanism
 readings need the naming contribution to be constrained before any completion-only reading.
 """
@@ -609,16 +611,24 @@ def verdict(rec: dict | None, fam: dict, tag: str, contrast: str) -> str:
     return "inconclusive"
 
 
+DISCRIMINATING_MODEL = "a model that discriminates successes from failures in these categories"
+DISCRIMINATING_DISTORTION = "distortion in " + DISCRIMINATING_MODEL
+
+
 def interpretation(v: str, competent: bool, rec: dict | None) -> str:
-    """How far a verdict can be read (design section 14): a statistically measurable goal effect, or a distortion in
-    a competent predictor; an equivalence is "no effect larger than the margin", never "no effect"."""
+    """How far a verdict can be read (design sections 14 and 15.F): a statistically measurable goal effect, or a
+    distortion in a model that discriminates successes from failures in these categories; an equivalence is "no
+    effect larger than the margin", never "no effect". Passing the competence gate means predictive discrimination
+    (AUC), not demonstrated understanding of the environment."""
     if v in ("confirmed above zero", "confirmed below zero"):
-        return ("distortion in a competent predictor" if competent else
-                "statistically measurable goal effect; the model is not competent in this contrast's populations, so "
-                "it is not read as a distortion of a working state judgement")
+        return (DISCRIMINATING_DISTORTION if competent else
+                "statistically measurable goal effect; the model does not discriminate successes from failures in "
+                "this contrast's populations (its competence gate fails), so it is not read as a distortion of a "
+                "discriminating prediction")
     if v == "equivalent to zero":
-        return ("no effect larger than the margin, in a competent predictor" if competent else
-                "no effect larger than the margin; limited interpretation (not competent in these populations)")
+        return ("no effect larger than the margin, in " + DISCRIMINATING_MODEL if competent else
+                "no effect larger than the margin; limited interpretation (does not discriminate successes from "
+                "failures in these populations)")
     if v == "inconclusive":
         return "inconclusive" + (" (equivalence underpowered)" if rec and rec.get("equivalence_underpowered") else "")
     return v
@@ -630,7 +640,8 @@ READING_CONTRASTS = {"penalty": ("parent_penalty", "naming", "completion"), "tim
 def reading(v: dict[str, str], timing_comparable: bool = False, competent: dict[str, bool] | None = None) -> dict[str, str]:
     """The design's per-model reading rules (section 8, amended in sections 14 and 15). Any combination of P, Dn and
     Dc not in the table reads "penalty present, mechanism unresolved" when P is confirmed below zero. When a contrast a
-    reading uses is not competent, the reading says so (review 2): "measurable effect only; not competent for ...".
+    reading uses is not competent, the reading says so (review 2; worded at sign-off, 15.F): "measurable effect only;
+    does not discriminate successes from failures for ...".
     """
     p, dn, dc, t = v["parent_penalty"], v["naming"], v["completion"], v["timing"]
     naming_constrained = dn in ("equivalent to zero", "confirmed above zero")
@@ -669,13 +680,16 @@ def reading(v: dict[str, str], timing_comparable: bool = False, competent: dict[
         for key, cs in READING_CONTRASTS.items():
             missing = [c for c in cs if not competent.get(c)]
             if missing:
-                out[key] += "; measurable effect only; not competent for " + ", ".join(missing)
+                out[key] += "; measurable effect only; does not discriminate successes from failures for " + ", ".join(missing)
     return out
 
 
 def _sign(lo: float, hi: float) -> int:
     """+1 when a 95% interval lies above zero, -1 below, 0 otherwise."""
     return 1 if lo > 0 else -1 if hi < 0 else 0
+
+
+DIAGNOSTIC = "descriptive consistency diagnostic (outside the Holm family; no familywise error control)"
 
 
 def rejections_for_model(v: dict[str, str], comp: dict[str, bool], block: dict[str, Any]) -> dict[str, dict]:
@@ -694,19 +708,25 @@ def rejections_for_model(v: dict[str, str], comp: dict[str, bool], block: dict[s
     testable = bool(comp["parent_penalty"] and comp["naming"] and comp["completion"])
     disagree = bool(p_sign and rg_sign and p_sign != rg_sign)
     fires = bool(testable and disagree and m_sign == rg_sign)
-    note = ("" if not (testable and disagree) else "rejects" if fires else
+    note = ("" if not (testable and disagree) else
+            "P and the role gap disagree, and the matched role gap confirms the role gap" if fires else
             "P and the unmatched role gap disagree; the matched role gap does not confirm (item-structure confound)")
-    out["R3_penalty_and_role_gap_disagree"] = {"needs": "competent for P, Dn and Dc", "testable": testable, "fires": fires,
-                                               "note": note, "rejects": "the decomposition, for this model"}
+    out["R3_penalty_and_role_gap_disagree"] = {
+        "needs": "competent for P, Dn and Dc", "testable": testable, "fires": fires, "note": note,
+        "kind": DIAGNOSTIC,
+        "rejects": "counts against the decomposition for this model (descriptive diagnostic; no familywise error control)"}
     t = v["timing"]
     out["R5_added_steps_deepen_penalty"] = {"needs": "competent for T", "testable": bool(comp["timing"]),
                                             "fires": bool(comp["timing"] and t == "confirmed below zero"),
-                                            "rejects": "the claim that the penalty is largest early (in either reading)"}
+                                            "rejects": "the predicted attenuation of the penalty with added steps (the "
+                                                       "'largest early' claim read as timing); not content-based "
+                                                       "explanations of round 1's gradient"}
     return out
 
 
 def central_question(v: dict[str, str], comp: dict[str, bool], local: dict[str, Any]) -> dict[str, Any]:
-    """The descriptive mapping of design 15.C (outside the Holm family), mutually exclusive by construction."""
+    """The descriptive mapping of design 15.C (outside the Holm family), mutually exclusive by construction. The
+    labels describe how the scores co-vary with text heuristics; they do not identify an internal mechanism (15.F)."""
     tr = local["populations"]["goal_main"]["tracking_differences"]
     # A comparison that is undefined counts for neither side: H2 and H9 calls every goal-role craft a failure, so its
     # tracking AUC (and its difference from H6) is undefined in the goal-role population (design 15.C).
@@ -716,22 +736,22 @@ def central_question(v: dict[str, str], comp: dict[str, bool], local: dict[str, 
     p_conf = v["parent_penalty"] == "confirmed below zero"
     p_comp = bool(comp["parent_penalty"])
     if p_conf and p_comp and h6_best:
-        answer = "mechanism"
+        answer = "penalty with inventory-consistent tracking"
     elif p_conf and shortcut:
-        answer = "combination"
+        answer = "penalty with shortcut-consistent tracking"
     elif not p_conf and (not p_comp or shortcut):
-        answer = "poor state reasoning"
+        answer = "no confirmed penalty; shortcut-consistent or non-discriminating"
     else:
-        answer = "undecided"
+        answer = "undetermined"
     return {"answer": answer, "P_confirmed_below_zero": p_conf, "competent_for_P": p_comp,
             "H6_tracks_at_least_as_well_as_H1_and_H2andH9": h6_best, "a_shortcut_tracks_better_than_H6": shortcut,
             "lift_null": v["lift"] == "equivalent to zero", "descriptive": True}
 
 
 def across(verdicts: dict[str, dict], competent_for_penalty: dict[str, bool | None],
-           lift: dict[str, dict] | None = None) -> dict[str, Any]:
+           lift: dict[str, dict] | None = None, lift_difference: dict[str, Any] | None = None) -> dict[str, Any]:
     """Across models, among the models competent for the penalty contrast (its two goal-crafting populations); the
-    across-model rejection criteria R2 (F3) and R4 (F2)."""
+    across-model rejection criterion R2 (F3) and the descriptive lift comparison R4 (15.F)."""
     passing = [t for t, ok_ in competent_for_penalty.items() if ok_]
     below = [t for t in passing if verdicts[t]["parent_penalty"] == "confirmed below zero"]
     equiv = [t for t in passing if verdicts[t]["parent_penalty"] == "equivalent to zero"]
@@ -762,13 +782,11 @@ def across(verdicts: dict[str, dict], competent_for_penalty: dict[str, bool | No
            "F3_penalty_not_shared": f3,
            "R2_penalty_not_shared": {"needs": "competent for P (each model counted)", "fires": f3 is True, "value": f3,
                                      "rejects": "the claim that the penalty is shared across families"}}
-    if lift is not None:  # R4 (F2): {tag: {"verdict", "estimate", "competent"}}
+    if lift is not None:  # R4 (descriptive since 15.F): {tag: {"verdict", "estimate", "competent"}}
         ll, qq = lift.get("llama3.1-8b"), lift.get("qwen3-8b")
-        testable = bool(ll and qq and ll["competent"] and qq["competent"])
-        fires = bool(testable and ll["verdict"] == "confirmed above zero" and ll["estimate"] >= qq["estimate"])
-        out["R4_lift_does_not_explain_the_difference"] = {
-            "needs": "Llama-3.1 and Qwen3 both competent for Λ", "testable": testable, "fires": fires,
-            "rejects": "the claim that the lift carries the Qwen-Llama difference"}
+        out["R4_lift_comparison"] = {
+            "kind": "descriptive (no rejection; outside the Holm family)",
+            "llama3.1-8b": ll, "qwen3-8b": qq, "difference_llama_minus_qwen": (lift_difference or {}).get("difference")}
     return out
 
 
@@ -953,22 +971,25 @@ def model_verdicts(block: dict[str, Any], fam: dict, tag: str) -> dict[str, Any]
 
 
 def analyse(records: list[dict], shots, scores_by_tag: dict[str, list[dict]], expected: list[str]) -> dict[str, Any]:
+    if sorted(expected) != sorted(R.TAGS):  # pre-freeze audit: the Holm family is always the five models' 50 tests
+        raise ValueError(f"the analysis must expect exactly the five round-2 models {list(R.TAGS)}, not {expected}")
     pops = populations(records)
     for r in records:  # fit_measures may be stored as a JSON string
         if isinstance(r.get("fit_measures"), str):
             import json
             r["fit_measures"] = json.loads(r["fit_measures"])
-    per_model, missing = {}, {}
+    per_model, missing, bys = {}, {}, {}
     for tag in expected:
         if tag not in scores_by_tag:
             continue
         by, miss = index_scores(scores_by_tag[tag], records, shots, tag)
         missing[tag] = len(miss)
+        bys[tag] = by
         per_model[tag] = model_block(by, pops)
     fam = family(per_model, expected)
     complete = len(per_model) == len(expected) and not any(missing.values())
     out: dict[str, Any] = {"models_expected": expected, "missing_scores": missing, "family": fam,
-                           "family_size": len(fam), "per_model": per_model}
+                           "family_size": len(fam), "per_model": per_model, "inference_map": INFERENCE_MAP}
     if not complete:
         out["verdicts"] = "withheld: " + ("models not scored: " + str([t for t in expected if t not in per_model])
                                          if len(per_model) < len(expected) else f"missing scores {missing}")
@@ -978,8 +999,39 @@ def analyse(records: list[dict], shots, scores_by_tag: dict[str, list[dict]], ex
                                   {t: out["verdicts"][t]["competent"]["parent_penalty"] for t in expected},
                                   {t: {"verdict": out["verdicts"][t]["contrasts"]["lift"],
                                        "estimate": per_model[t]["contrasts"]["lift"]["estimate"],
-                                       "competent": out["verdicts"][t]["competent"]["lift"]} for t in expected})
+                                       "competent": out["verdicts"][t]["competent"]["lift"]} for t in expected},
+                                  lift_difference(bys["llama3.1-8b"], bys["qwen3-8b"], pops)
+                                  if {"llama3.1-8b", "qwen3-8b"} <= set(bys) else None)
     return out
+
+
+def lift_difference(by_a: dict, by_b: dict, pops: dict[str, list[dict]], B: int | None = None) -> dict[str, Any]:
+    """Λ(model a) minus Λ(model b) on the same ingredient failures (those both models scored), with a paired
+    pair-bootstrap 95% interval: one resample of goal pairs serves both models. Descriptive (15.F, R4)."""
+    rows, cl = [], []
+    for r in pops["ingredient"]:
+        a = L(by_a, r["id"], "aligned") - L(by_a, r["id"], "swapped")
+        b = L(by_b, r["id"], "aligned") - L(by_b, r["id"], "swapped")
+        if a == a and b == b:
+            rows.append(a - b)
+            cl.append(r["pair_id"])
+    d = draws(mean, rows, cl, B=DESC_DRAWS if B is None else B)
+    return {"difference": {"estimate": mean(rows), "ci95": [pct(d, 0.025), pct(d, 0.975)], "n_items": len(rows),
+                           "n_pairs": len(set(cl)), "resampling": "paired, whole goal pairs"}}
+
+
+INFERENCE_MAP = {
+    "confirmatory": "the 50 tests of the fixed Holm family: per model, lift, parent_penalty, naming, completion, timing, "
+                    "each 'differs' and 'equivalent'",
+    "descriptive": ["R3 (descriptive consistency diagnostic)", "R4 lift comparison and its paired interval",
+                    "central question mapping", "tracking differences", "matched sensitivity analyses", "role gap",
+                    "parent subsets and their differences", "competence AUCs and classification rates",
+                    "every other readout"],
+    "decision rules from confirmed verdicts (no new test)": ["R1", "R2", "R5", "readings", "interpretations"],
+    "gates (interval-based conditions, not tests)": [
+        "timing applicability: the goal-minus-ingredient ΔL at one look-up has a 95% interval below zero",
+        "timing comparable to the one-look-up change: T's 95% interval contains the one-look-up change"],
+}
 
 
 def provenance(tags: list[str], root: Path | None = None) -> list[str]:
@@ -1023,7 +1075,8 @@ def run_textcraft_r2_analysis(cfg: dict) -> int:
         write_status(run_id, f"{metrics['verdicts']}", ok=False)
         return 1
     lines = [f"{t}: overall gate {'pass' if v['overall_gate_interpretable'] else 'fail'}; "
-             + "; ".join(f"{c} {x} ({'competent' if v['competent'][c] else 'not competent'})" for c, x in v["contrasts"].items())
+             + "; ".join(f"{c} {x} ({'discriminates' if v['competent'][c] else 'does not discriminate'})"
+                         for c, x in v["contrasts"].items())
              for t, v in metrics["verdicts"].items()]
     write_status(run_id, "\n".join(lines + [f"across: {metrics['across_models']['penalty_pattern']}"]), ok=True)
     return 0
