@@ -293,7 +293,7 @@ Review 1 ([families_waveb_review1.md](families_waveb_review1.md)) read the desig
 
 **Run on ICE during the fixes (read-only use: serve2's Python on the login node, offline, the shared cache only read, code in a temporary folder removed afterwards).** The serve2 test file passed in full (11 tests): every wave B tag scored end to end through a tiny model of its real class, the eager-SDPA check on both Gemma 4 classes, and the two check variants' gate on the golden item with the pinned templates. With the M1 fix reverted, the forward test fails for all five chat-format tags (the scorer's prompt ids are a BatchEncoding, not a tensor) and passes for the two plain-format tags, which never call the template.
 
-**Mutation check (strict rule: killed only when pytest exits 1 and names a failing test).** 63 new mutants (the review's eight findings put back, and every fix broken in turn): 63 killed, by 31 different tests. The 72 earlier wave B mutants, rerun under the strict rule on the fixed code: 72 killed. Lists in `notes/families_waveb_mutants.txt`, table in `notes/testing.md`.
+**Mutation check (strict rule: killed only when pytest exits 1 and names a failing test).** 63 new mutants (the review's eight findings put back, and every fix broken in turn): 63 killed, by 31 different tests. The 72 earlier wave B mutants, rerun under the strict rule on the fixed code: 72 killed. Lists in `notes/families_waveb_mutants.txt`, table in `notes/testing.md`. Full local suite on the fixed code: 935 passed, 77 skipped (the skips need transformers, torch or cached tokenizers; the serve2 tests among them passed on ICE).
 
 ## 19. Still to run on ICE before the freeze
 
