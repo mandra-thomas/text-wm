@@ -395,3 +395,11 @@ Tests now pin the environment check's main-failure restriction, its yes/no share
 | Thinking arm | smoke (two batches, 0.1) and 4,530 generations with scoring | about 9–22 |
 | All | | about 34–59; budget 60 |
 | If the environment check does not pass | full serve2 rescoring of the three older models on L40S | about 7 more |
+
+### 14.T Checks after the review-1 fixes (2026-11-23; nothing scored, no round-2 result read)
+
+- **Frozen code.** Round 2's files and wave B's files are byte-identical to their tags; `wf/constants.py` only adds the two round-3 pins.
+- **The round-3 gate on every record and arm, all twelve tags,** on ICE in a fresh checkout (`text-wm-fix46` at d29731a, from a git bundle; CPU job 7248427, serve2, offline): every tag 32,942 candidate checks, 9,272 yes/no prompts and 17,057 arm pairs isolated, **0 problems**; longest inputs as in section 13. The golden renderings remade from this job are byte-identical to the committed `r3_chat_golden.json`.
+- **Tests.** `tests/test_textcraft_r3.py`: 78 tests. Full local suite at d29731a, once at the end: **1,234 passed, 29 skipped**.
+- **Mutants.** Strict named-kill rule, official run at d29731a (`notes/textcraft_r3_mutation_log.txt`): **109 of 109 killed, by 57 different tests**: the 67 earlier round-3 mutants (9 rewritten for the amended code), the reviewer's 11 (adapted; 8 had survived the whole suite), and 31 for the fixes. The screen run's single survivor got its test before the official run.
+- **Not run:** no GPU job, no smoke run, no environment-check job, no plan file (it is written from round 2's recorded GPU names once round 2's scoring has filed them, then committed before any environment-check job).

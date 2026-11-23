@@ -532,63 +532,91 @@ Review 1 of the wave B design ([families_waveb_review1.md](families_waveb_review
 
 All 63 killed under the strict rule, by 31 different tests; none survived, timed out or left the suite unrunnable. The 72 earlier wave B mutants were rerun under the strict rule on the same code: 72 of 72 killed (both lists, with the killing test of each, are in `notes/families_waveb_mutants.txt`).
 
+## TextCraft round 3 (2026-11-23, before any round-3 score; amended after review 1)
 
-## TextCraft round 3 (2026-11-23, before any round-3 score)
+`tests/test_textcraft_r3.py` (78 tests) covers round 3 (`notes/textcraft_r3_design.md`, sections 1 to 14) without a
+model or a real tokenizer: the model specs and pins, the GPU classes, the seeded subsets, the round-3 gate on a
+stand-in chat tokenizer with a thinking switch, the scoring runs in mock mode, the attention-agreement rule, the
+thinking arm (its jobs, per-batch seeds, record-and-arm order, budget forcing split into cap and ended unclosed, the
+prompt and padding checks at job start, resume), and every decision rule of the analysis, including the review-1
+amendments: provenance per job with two-L40S shards and the freeze-tag commit (M1, S12), "not scored" from filed
+gate records (M2), the Gemma fallback rule on the filed smoke record with its format-mismatch trigger (M3, S9), the
+environment-check plan mirroring round 2's shards, the record-by-record GPU match, the outcomes and B3's older scores
+(M4, S5, S8), H3-P with one competent model (S1), power at 0.05/30 (S2), B3's power, flag and fixed-denominator
+column (S3), plain-words directions (S4), round 2's provenance check (S6), the resample count (S7), no p-values in
+exploratory blocks (S11), and two end-to-end mock runs. `tests/test_textcraft_r3_serve2.py` runs only in serve2
+(ICE).
 
-`tests/test_textcraft_r3.py` covers round 3 (`notes/textcraft_r3_design.md`) without a model or a real tokenizer: the
-model specs and pins, the GPU classes, the seeded subsets, the round-3 gate on a stand-in chat tokenizer with a thinking
-switch (every check, including arm isolation, the declared generation suffix, forbidden text and mistral-common), the
-scoring runs in mock mode (score, smoke, envcheck, format, resume, the gate stopping a run), the attention-agreement
-rule, the thinking arm (its 4,530 jobs, budget forcing, the readout point, resume), and every decision rule of the
-analysis: the standardized contrast and the paired goal-pair bootstrap of its difference (a pure change of logit scale
-moves nothing), item shares, the first-token / tail split, R2 for round 3, H3-P, round 2's general finding, the
-replication rule with "partial" never counted, family sizes, the pair readings, the environment check, the golden
-token check, the one-fifth rule, provenance, and two end-to-end mock runs. `tests/test_textcraft_r3_serve2.py` runs
-only in serve2 (ICE): the tiny random-weight Gemma 4 12B and OLMo 3 models score end to end through the pinned
-tokenizers, the Gemma 4 12B checkpoint's stored vision-embedder names load under the strict check, and the attention
-agreement runs on the real class.
-
-Mutation testing, official run under the strict named-kill rule (log `notes/textcraft_r3_mutation_log.txt`): 67
-round-3 mutants, all killed, by 38 different tests. A screen run first (MUTATION_FAST_ONLY=1, and an earlier run
-stopped once its first survivors were seen) found nine survivors; tests for each were added before the official run:
-the right-hand side of the isolation check, the pin of the 27B model, a template that ignores the thinking switch, one
-bootstrap resample serving both models of a pair, a candidate that is not the template's reply, resuming the thinking
-arm on changed records, records that only one model of a pair scored, the Holm-adjusted (not raw) equivalence p of a
-pair, and the one-fifth rule's threshold.
+Mutation testing, official run under the strict named-kill rule (log `notes/textcraft_r3_mutation_log.txt`): **109
+round-3 mutants, all killed, by 57 different tests**: the 67 earlier mutants (9 rewritten for the amended code), the
+reviewer's 11 (adapted to the amended code; 8 had survived the whole suite before), and 31 for the review-1 fixes. A
+screen run (MUTATION_FAST_ONLY=1) found one survivor (the environment-check run accepting any model, which an older
+test no longer reached once Gemma 2 joined the check); its test was changed before the official run.
 
 | Mutant | Killed by |
 |---|---|
 | B3 NaN dropped | `tests/test_textcraft_r3.py::test_b3_family_and_pair_readings` |
 | B3 margin 0.5 | `tests/test_textcraft_r3.py::test_b3_family_and_pair_readings` |
-| B3 read when the environment fails | `tests/test_textcraft_r3.py::test_b3_is_not_read_when_the_environment_check_fails` |
+| B3 read when the environment fails | `tests/test_textcraft_r3.py::test_environment_status_and_b3_source` |
 | Gemma 12B allows unexpected tensors | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
 | Gemma 12B without the attention check | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
 | Gemma 12B without the generation suffix | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
 | H3-P ignores R2 | `tests/test_textcraft_r3.py::test_h3p_reading` |
 | H3-P partial counted as support | `tests/test_textcraft_r3.py::test_h3p_reading` |
 | H3-P supported with one competent model | `tests/test_textcraft_r3.py::test_h3p_reading` |
+| M1 job GPUs collapsed to a set | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| M1 provenance accepts jobs on different GPU lists | `tests/test_textcraft_r3.py::test_provenance_accepts_two_l40s_per_job_and_checks_each_job` |
+| M2 B3 pair with a model not scored | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| M2 gate failures ignored | `tests/test_textcraft_r3.py::test_model_state_from_filed_gate_records` |
+| M2 loading failure not filed | `tests/test_textcraft_r3.py::test_a_loading_failure_is_filed_and_stops_the_model` |
+| M2 not scored counted as waiting | `tests/test_textcraft_r3.py::test_a_core_model_not_scored_enters_at_p_one_and_the_readings_proceed` |
+| M3 analysis accepts any gemma_core | `tests/test_textcraft_r3.py::test_the_analysis_refuses_a_gemma_core_the_rule_does_not_give` |
+| M3 fallback runs without the rule | `tests/test_textcraft_r3.py::test_the_fallback_model_runs_only_when_the_rule_fired` |
+| M3 the rule never fires | `tests/test_textcraft_r3.py::test_gemma_slot_rule` |
+| M4 envcheck re-partitions the seeded records | `tests/test_textcraft_r3.py::test_envcheck_jobs_score_round_two_shards_on_the_exact_gpu` |
+| M4 exact GPU compares the first name only | `tests/test_textcraft_r3.py::test_envcheck_jobs_score_round_two_shards_on_the_exact_gpu` |
+| M4 no single-type shortcut | `tests/test_textcraft_r3.py::test_envcheck_plan_from_round_two_gpu_names` |
+| M4 per-score limit copied | `tests/test_textcraft_r3.py::test_environment_check_per_score_criterion_is_wave_bs_live_rule` |
+| M4 plan always runnable | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| M4 token disagreement not a failure | `tests/test_textcraft_r3.py::test_environment_status_and_b3_source` |
+| M4 unobtainable still waits | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | OLMo default prompt allowed | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
 | OLMo not strict | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
-| R2 counts incompetent models | `tests/test_textcraft_r3.py::test_r2_for_round_three` |
+| R2 counts incompetent models | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | R2 fires despite a confirmed penalty | `tests/test_textcraft_r3.py::test_r2_for_round_three` |
+| S10 cap not separated from ended | `tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point` |
+| S10 padding tolerance off | `tests/test_textcraft_r3.py::test_thinking_start_checks` |
+| S10 thinking prompt ending unchecked | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| S11 exploratory p-values kept | `tests/test_textcraft_r3.py::test_exploratory_blocks_carry_no_p_values` |
+| S12 any change counts as code-identical | `tests/test_textcraft_r3.py::test_provenance_requires_the_freeze_commit_and_one_revision` |
+| S12 job start at any commit | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| S2 power at the round-2 step | `tests/test_textcraft_r3.py::test_round_three_power_uses_holm_first_step_of_thirty` |
+| S3 underpowered flag dropped | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| S4 size words reversed | `tests/test_textcraft_r3.py::test_pair_readings_say_the_direction_in_plain_words` |
+| S5 b3 source accepts any config | `tests/test_textcraft_r3.py::test_environment_status_and_b3_source` |
+| S6 round-2 provenance skipped | `tests/test_textcraft_r3.py::test_mock_end_to_end` |
+| S7 b_draws accepted outside mock | `tests/test_textcraft_r3.py::test_b3_uses_twenty_thousand_resamples_outside_mock` |
+| S9 mass alone fires the fallback | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| S9 only special tokens are structural | `tests/test_textcraft_r3.py::test_structural_tokens` |
+| S9 smoke diagnostic not recorded | `tests/test_textcraft_r3.py::test_smoke_runs_record_the_format_diagnostic` |
 | an A100 of 40 GB counts as 80 | `tests/test_textcraft_r3.py::test_gpu_classes_and_pins` |
-| attention disagreement ignored | `tests/test_textcraft_r3.py::test_run_gate_requires_the_golden_and_records_the_loading` |
+| attention disagreement ignored | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | attention tolerance loosened | `tests/test_textcraft_r3.py::test_attention_agreement_rule` |
 | attention without SDPA loaded | `tests/test_textcraft_r3.py::test_attention_agreement_rule` |
 | base tag keeps the suffix | `tests/test_textcraft_r3.py::test_spec_for_variants_and_base_tags` |
-| envcheck completeness off | `tests/test_textcraft_r3.py::test_environment_check_rule` |
+| envcheck completeness off | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | envcheck of any model | `tests/test_textcraft_r3.py::test_runs_refuse_unknown_models_and_unverified_records` |
-| envcheck on any GPU | `tests/test_textcraft_r3.py::test_environment_check_rule` |
-| envcheck tolerance loosened | `tests/test_textcraft_r3.py::test_environment_check_rule` |
+| envcheck on any GPU | `tests/test_textcraft_r3.py::test_environment_check_matches_gpus_record_by_record` |
+| envcheck tolerance loosened | `tests/test_textcraft_r3.py::test_environment_check_criteria` |
 | fallback slot unchecked | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | family B3 size 20 | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | finding counts incompetent models | `tests/test_textcraft_r3.py::test_round2_finding` |
-| finding needs one competent model | `tests/test_textcraft_r3.py::test_h3p_reading` |
+| finding needs one competent model | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | first-token split on the whole L | `tests/test_textcraft_r3.py::test_first_token_tail_split_adds_up` |
 | format check on all records | `tests/test_textcraft_r3.py::test_seeded_subsets_are_fixed` |
-| gate candidate check off | `tests/test_textcraft_r3.py::test_gate_catches_a_candidate_that_is_not_the_templates_reply` |
+| gate candidate check off | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | gate ending check off | `tests/test_textcraft_r3.py::test_gate_catches_a_wrong_ending_a_forbidden_text_and_an_unread_switch` |
-| gate failure ignored | `tests/test_textcraft_r3.py::test_gate_failure_stops_before_any_score` |
+| gate failure ignored | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | gate first-token check off | `tests/test_textcraft_r3.py::test_gate_catches_a_multi_token_yes_and_shared_first_tokens` |
 | gate forbidden text off | `tests/test_textcraft_r3.py::test_gate_catches_a_wrong_ending_a_forbidden_text_and_an_unread_switch` |
 | gate ignores the suffix | `tests/test_textcraft_r3.py::test_gate_passes_and_counts_every_record_and_arm` |
@@ -599,29 +627,40 @@ pair, and the one-fifth rule's threshold.
 | golden problems ignored | `tests/test_textcraft_r3.py::test_run_gate_requires_the_golden_and_records_the_loading` |
 | golden tokens ignore the id hash | `tests/test_textcraft_r3.py::test_golden_tokens_check` |
 | gpu check off | `tests/test_textcraft_r3.py::test_gpu_classes_and_pins` |
-| isolation ignores the right side | `tests/test_textcraft_r3.py::test_isolation_check` |
+| isolation ignores the right side | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | large models on any card | `tests/test_textcraft_r3.py::test_gpu_classes_and_pins` |
 | lift values from the class-matched rows | `tests/test_textcraft_r3.py::test_record_values_agree_with_round_twos_contrast_inputs` |
-| null replication tolerates a confirmed effect | `tests/test_textcraft_r3.py::test_replication_rule` |
+| null replication tolerates a confirmed effect | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | one-fifth rule halved | `tests/test_textcraft_r3.py::test_format_check_one_fifth_rule` |
-| pair difference reversed | `tests/test_textcraft_r3.py::test_paired_difference_detects_a_real_difference_and_uses_common_records_only` |
-| pair differs without the interval | `tests/test_textcraft_r3.py::test_b3_family_and_pair_readings` |
+| pair difference reversed | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| pair differs without the interval | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | pair equivalence unadjusted | `tests/test_textcraft_r3.py::test_b3_family_and_pair_readings` |
 | pair of the wrong Gemma | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | pair on records of one model only | `tests/test_textcraft_r3.py::test_paired_difference_detects_a_real_difference_and_uses_common_records_only` |
 | pair resamples differ between models | `tests/test_textcraft_r3.py::test_paired_difference_is_scale_free_and_zero_for_the_same_model` |
 | pooled SD unweighted | `tests/test_textcraft_r3.py::test_stats_match_the_definitions` |
-| provenance GPU check off | `tests/test_textcraft_r3.py::test_provenance_problems` |
-| provenance commit check off | `tests/test_textcraft_r3.py::test_provenance_problems` |
+| provenance GPU check off | `tests/test_textcraft_r3.py::test_provenance_accepts_two_l40s_per_job_and_checks_each_job` |
+| provenance commit check off | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | replication counts incompetent models | `tests/test_textcraft_r3.py::test_replication_rule` |
 | replication ignores the opposite sign | `tests/test_textcraft_r3.py::test_replication_rule` |
 | replication partial counted | `tests/test_textcraft_r3.py::test_replication_rule` |
 | resume ignores record hashes | `tests/test_textcraft_r3.py::test_score_run_scores_every_record_and_arm_then_resumes` |
+| review1 rev1 standardized SD with n instead of n-1 | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| review1 rev10 thinking keeps text after the closing marker | `tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point` |
+| review1 rev11 thinking jobs not in record-and-arm order | `tests/test_textcraft_r3.py::test_thinking_batches_have_their_own_seeds_in_record_and_arm_order` |
+| review1 rev2 envcheck goal effect over every chosen record | `tests/test_textcraft_r3.py::test_environment_check_criteria` |
+| review1 rev3 envcheck yes/no share criterion off | `tests/test_textcraft_r3.py::test_environment_check_share_criterion` |
+| review1 rev4 thinking unforced subset keeps forced traces | `tests/test_textcraft_r3.py::test_thinking_unforced_subset_and_forced_reasons` |
+| review1 rev5 thinking batch seed constant | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| review1 rev6 provenance accepts mixed revisions | `tests/test_textcraft_r3.py::test_provenance_requires_the_freeze_commit_and_one_revision` |
+| review1 rev7 B3 family on 2,000 resamples | `tests/test_textcraft_r3.py::test_b3_uses_twenty_thousand_resamples_outside_mock` |
+| review1 rev8 attention agreement on one item | `tests/test_textcraft_r3.py::test_attention_agreement_rule` |
+| review1 rev9 envcheck accepts rescoring shards on mixed GPUs | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | standardized without the SD | `tests/test_textcraft_r3.py::test_stats_match_the_definitions` |
 | strict floor 0.7 | `tests/test_textcraft_r3.py::test_round3_extras_are_descriptive_and_include_the_strict_floor` |
 | think failures not sampled | `tests/test_textcraft_r3.py::test_thinking_jobs_and_procedure` |
-| think forced not flagged | `tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point` |
+| think forced not flagged | `tests/test_textcraft_r3.py::test_thinking_run_mock_generates_scores_and_resumes` |
 | think readout before the blank line | `tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point` |
-| think reasoning cap 4096 | `tests/test_textcraft_r3.py::test_thinking_jobs_and_procedure` |
-| think resume ignores hashes | `tests/test_textcraft_r3.py::test_thinking_run_mock_generates_scores_and_resumes` |
+| think reasoning cap 4096 | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| think resume ignores hashes | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
 | thinking arm with thinking off | `tests/test_textcraft_r3.py::test_every_model_is_pinned_at_the_design_revision` |
