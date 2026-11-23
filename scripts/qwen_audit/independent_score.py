@@ -170,7 +170,7 @@ class Scorer:
         lp = torch.log_softmax(logits[p - 1: p - 1 + n].float(), dim=-1)
         tok_lp = lp[torch.arange(n, device="cuda"), torch.tensor(c_ids, device="cuda")].double().cpu().tolist()
         return {"logp": math.fsum(tok_lp), "tok_lp": tok_lp, "n": n, "n_prompt": p,
-                "first_tok": self.tok.decode(c_ids[:1]),
+                "first_tok": self.tok.decode(c_ids[:1]), "toks": [self.tok.decode([c]) for c in c_ids],
                 "alone_ok": self.ids(sep + cand) == c_ids, "prefix_ok": prefix_ok,
                 "logits_dtype": str(logits.dtype)}
 
@@ -266,7 +266,7 @@ def main() -> None:
                     "n_prompt": plus["n_prompt"], "first_plus": plus["first_tok"], "first_minus": minus["first_tok"],
                     "alone_ok": plus["alone_ok"] and minus["alone_ok"],
                     "prefix_ok": plus["prefix_ok"] and minus["prefix_ok"], "logits_dtype": plus["logits_dtype"],
-                    "tok_lp_minus": minus["tok_lp"]}
+                    "tok_lp_minus": minus["tok_lp"], "tok_lp_plus": plus["tok_lp"], "toks_plus": plus["toks"]}
                 if k == 0:
                     print(f"--- {fmt}/{cond} prompt tail ---\n{prompt[-400:]!r}\n+ {sep + cands['o_plus']!r}", flush=True)
         with out.open("a") as f:
