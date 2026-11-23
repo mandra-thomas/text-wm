@@ -1601,6 +1601,9 @@ def test_dt1_the_run_checks_on_float32_before_loading_bf16(mock_runs, small, mon
     monkeypatch.setattr(FAM, "require_resources", lambda spec: {})
     monkeypatch.setattr(S, "gpu_check", lambda tag, **kw: {"ok": True})
     monkeypatch.setattr(G, "require_freeze_commit", lambda **kw: {"checked": "test"})
+    import wf.runs as WR
+
+    monkeypatch.setattr(WR, "git_sha", lambda: "c1")  # a real run needs a commit; the mutation copy has no .git
     cfg = {"run_id": "textcraft_r3_think_smoke_qwen3.5-9b", "manifest": man, "max_jobs": 8}
     Fake.problems = ["padded and alone differ"]
     assert K.run_textcraft_r3_think(cfg) == 1
