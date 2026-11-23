@@ -208,7 +208,7 @@ The design logged eight predictions before any data. They were written when yes/
 | 3. Verifier value: blind raises success over none by 0 to 8 points (central +3) and lowers invalid actions (central −1) | Observation: +1.7 points, −1.08 invalid; yes/no: +6.7 points, −1.73 invalid; neither success gain reliable | Yes on point estimates (success gains not distinguishable from zero) |
 | 4. Primary: aware minus blind between −8 and +2 points (central −2), most likely "no reliable difference"; invalid actions between 0 and +1 (central +0.3) | Observation (primary after reallocation): −1.2 points, "no reliable difference", invalid +0.08. Yes/no: −4.5 points, "no reliable difference", invalid +1.12 ("harm") | Yes for the primary run; for yes/no, success yes, invalid actions slightly above the predicted range |
 | 5. Attribution: the obstruction check fires, so success-level attribution "not identifiable"; at matched states aware accepts more failing goal-object proposals than swapped, and both concrete-task prompts reject more working proposals than blind | Fires under yes/no (19.0-point gap), clear under observation (7.3); matched states as predicted under yes/no; under observation the naming shift holds but the aware prompt rejects fewer working proposals | Yes for yes/no; partly for observation |
-| 6. Argmax rule more negative (−10 to −2 points) | Not run (section 11) | Not tested |
+| 6. Argmax rule more negative (−10 to −2 points) | Running (Tier 2, submitted 2026-11-23; section 11) | Not yet tested |
 | 7. Llama-3.1-8B in the loop: within 3 points, "no reliable difference" | Not run (optional Tier 3) | Not tested |
 | 8. Observation readout: smaller aware-minus-blind difference than yes/no in success and invalid actions | −1.2 against −4.5 points; +0.08 against +1.12 invalid actions (separate runs and seed counts, so a description, not a test) | Yes, descriptively |
 
@@ -243,7 +243,7 @@ A different agent would: one whose candidate lists put determined goal-object fa
 
 ## 11. What was not run, and what the metrics do not carry
 
-- **The argmax rule (Tier 2, `optionc_qwen3-8b_yn_argmax`)** was part of the committed plan at one seed, as the continuity check with Stage 1a's rule 2. It has not been submitted, and the decision log records no decision about it. Prediction 6 is untested.
+- **The argmax rule (Tier 2, `optionc_qwen3-8b_yn_argmax`)** was part of the committed plan at one seed, as the continuity check with Stage 1a's rule 2. The plan runs it after Tier 1, so it had not been submitted when this note was written. It was submitted on 2026-11-23 at the same commit, `2a86683` (jobs 7253142–7253145), and its result will be added here when the analysis has run. Until then, prediction 6 is untested.
 - **Llama-3.1-8B in the loop (Tier 3, optional)** was not run. Its step-0 classification is "mixed" and its observation readout not competent.
 - **Stage 1a score agreement at step 0** was promised by the design but skipped by the analysis because Stage 1a's scoring runs are not in this checkout (section 3).
 - **How often the swap object is later named by an executed action** was to be reported according to the design; it is not in the metrics.
