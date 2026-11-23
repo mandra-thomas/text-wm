@@ -779,3 +779,36 @@ All 163 are caught (`MUTANTS_MATCHING=decisionsim`, six shards, 2026-11-21).
 | run order skips the label hashes | `test_run_order_check_compares_the_label_hashes` |
 | scorer passes no label files | `test_scoring_refuses_labels_changed_after_the_model_free_analysis` |
 | inert rank-1 share counts fallbacks only | `test_model_report_parts_add_up_and_readouts` |
+
+## τ-bench wave-A families extension (2026-11-22)
+
+`tests/test_tau_families.py` covers `wf/tau/families.py` (`notes/tau_families_design.md`): the 16-job protocol and its
+cues, each model's template handling (Mistral native, the first-turn spec for the placement check, Gemma refused), the
+per-model token check on stand-in tokenizers built to fail one way each (a reply opening with another token, `Yes`
+written differently after one question, a boundary merge, prompts differing outside the task line, a prompt at the
+context limit), the token-check gate and the scoring gates (pins, excluded models, the in-job length guard and readout
+report), mock scoring end to end with resume and user sharding, the analysis end to end against a mock reference run
+(reference commit, item-hash and published-results checks; a missing shard), the smoke projection, the competence rule
+at its bounds, the Holm family of the two scored models (on the run path too), the paired comparison bootstrap, the
+placement rule, and golden prompts (messages everywhere; rendered prompts where the pinned tokenizers are cached).
+
+After review 1 (`notes/tau_families_review1.md`) it also covers the amended descriptive layer: the cross-model label
+rule at each of its three conditions and boundaries, the Llama-3.1-8B-like and Qwen3-8B-like profiles, the reviewer's
+scenario end to end (a shift shared by working and failing calls with fail minus witness just above 0 and class effects
+of opposite sign is not called failure-specific), class-mix and minority qualifiers, comparison entries of gated
+models marked "not read", the neutral-anchored and per-class controls, the yes/no task judgement, and a test for each of
+the reviewer's ten surviving mutants (placement threshold at 0.42 and 0.38, label without discrimination, mass median,
+inclusive competence bounds, the comparison bootstrap's width, user clustering of the item share, the Llama-line row,
+the in-job witness check).
+
+`scripts/mutation_check.py` holds the tau-fam mutants (`MUTANTS_MATCHING=tau-fam`); its runner records the first
+failing test of every kill, and a kill counts only with a named failing test. First round (before review 1): 58
+mutants, 58 killed; one (the comparison bootstrap resampling the models separately) first survived and its test was
+strengthened. After review 1: 93 mutants (the 58, two of them re-anchored to the amended code, plus 35 new: the
+reviewer's ten survivors R1-R7 and R11-R13 written from the review's descriptions, and 25 for the amended logic), 93
+killed, every kill by a named test in `tests/test_tau_families.py`; each of the reviewer's ten is killed by the test
+written for it. Four new mutants first survived the targeted tests, each a gap closed by a test: the task judgement's
++3 threshold made strict (no constructed score sat at exactly +3), its line intercepts without the common slope (only
+differences were checked), class mix judged on estimates instead of intervals, and the analysis not marking gated
+comparisons (the end-to-end test did not look). The runners stopped in their full-suite fallback were killed and only
+the nine mutants not yet completed were rerun (2026-11-22).

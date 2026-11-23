@@ -1,0 +1,4829 @@
+{
+  "comparisons": {
+    "llama3.2-3b vs llama3.1-8b-fewshot": {
+      "first": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            0.4301514253996406,
+            0.6028676433149068
+          ],
+          "estimate": 0.5175963770473054,
+          "noise_floor": 0.3,
+          "reading": "differs"
+        },
+        "item_share_difference": {
+          "ci90": [
+            0.1978021978021978,
+            0.2565266742338252
+          ],
+          "ci95": [
+            0.19221698113207547,
+            0.2620192307692308
+          ],
+          "differs": true,
+          "estimate": 0.2266355140186916,
+          "margin": 0.05,
+          "matches": false,
+          "reading": "differs"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [],
+        "read": true,
+        "readout": "first"
+      },
+      "yn": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            0.30382147103834944,
+            0.3958834197300558
+          ],
+          "estimate": 0.35105140812294644,
+          "noise_floor": 0.3,
+          "reading": "not read: llama3.2-3b: fails the competence rule on the yn readout",
+          "reading_unread": "differs"
+        },
+        "item_share_difference": {
+          "ci90": [
+            0.2652370203160271,
+            0.33641618497109826
+          ],
+          "ci95": [
+            0.25942857142857145,
+            0.34545454545454546
+          ],
+          "differs": true,
+          "estimate": 0.3014018691588785,
+          "margin": 0.05,
+          "matches": false,
+          "reading": "not read: llama3.2-3b: fails the competence rule on the yn readout",
+          "reading_unread": "differs"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [
+          "llama3.2-3b: fails the competence rule on the yn readout"
+        ],
+        "read": false,
+        "readout": "yn"
+      }
+    },
+    "llama3.2-3b vs qwen3-8b-fewshot": {
+      "first": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            -3.362603917246289,
+            -2.6273309837704137
+          ],
+          "estimate": -2.9919684434705203,
+          "noise_floor": 0.3,
+          "reading": "differs"
+        },
+        "item_share_difference": {
+          "ci90": [
+            0.005780346820809248,
+            0.07032181168057211
+          ],
+          "ci95": [
+            -0.00228310502283105,
+            0.07631874298540965
+          ],
+          "differs": false,
+          "estimate": 0.038551401869158876,
+          "margin": 0.05,
+          "matches": false,
+          "reading": "no difference detected"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [],
+        "read": true,
+        "readout": "first"
+      },
+      "yn": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            -7.787042651569283,
+            -6.895691566679153
+          ],
+          "estimate": -7.349006974693859,
+          "noise_floor": 0.3,
+          "reading": "not read: llama3.2-3b: fails the competence rule on the yn readout",
+          "reading_unread": "differs"
+        },
+        "item_share_difference": {
+          "ci90": [
+            -0.27398843930635836,
+            -0.20823529411764705
+          ],
+          "ci95": [
+            -0.2798053527980535,
+            -0.20166073546856464
+          ],
+          "differs": true,
+          "estimate": -0.24065420560747663,
+          "margin": 0.05,
+          "matches": false,
+          "reading": "not read: llama3.2-3b: fails the competence rule on the yn readout",
+          "reading_unread": "differs"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [
+          "llama3.2-3b: fails the competence rule on the yn readout"
+        ],
+        "read": false,
+        "readout": "yn"
+      }
+    },
+    "mistral-7b-v0.3 vs llama3.1-8b-fewshot": {
+      "first": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            -0.30757492179563733,
+            -0.18125753131528102
+          ],
+          "estimate": -0.244523955608618,
+          "noise_floor": 0.3,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "no difference detected"
+        },
+        "item_share_difference": {
+          "ci90": [
+            0.032520325203252036,
+            0.10046189376443418
+          ],
+          "ci95": [
+            0.02677532013969732,
+            0.10756501182033097
+          ],
+          "differs": true,
+          "estimate": 0.06542056074766354,
+          "margin": 0.05,
+          "matches": false,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "differs"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [
+          "mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)"
+        ],
+        "read": false,
+        "readout": "first"
+      },
+      "yn": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            0.6406078956588217,
+            0.7064181691183888
+          ],
+          "estimate": 0.6733352810761317,
+          "noise_floor": 0.3,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "differs"
+        },
+        "item_share_difference": {
+          "ci90": [
+            0.5165876777251185,
+            0.5757225433526012
+          ],
+          "ci95": [
+            0.5108932461873639,
+            0.5813953488372093
+          ],
+          "differs": true,
+          "estimate": 0.5455607476635514,
+          "margin": 0.05,
+          "matches": false,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "differs"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [
+          "mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)"
+        ],
+        "read": false,
+        "readout": "yn"
+      }
+    },
+    "mistral-7b-v0.3 vs llama3.2-3b": {
+      "first": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            -0.8419117679709898,
+            -0.6775534392473888
+          ],
+          "estimate": -0.7621203326559234,
+          "noise_floor": 0.3,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "differs"
+        },
+        "item_share_difference": {
+          "ci90": [
+            -0.19402985074626866,
+            -0.12844036697247707
+          ],
+          "ci95": [
+            -0.20069204152249134,
+            -0.1214622641509434
+          ],
+          "differs": true,
+          "estimate": -0.16121495327102803,
+          "margin": 0.05,
+          "matches": false,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "differs"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [
+          "mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)"
+        ],
+        "read": false,
+        "readout": "first"
+      },
+      "yn": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            0.26771427864927266,
+            0.3773446604549439
+          ],
+          "estimate": 0.3222838729531852,
+          "noise_floor": 0.3,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout); llama3.2-3b: fails the competence rule on the yn readout",
+          "reading_unread": "differs"
+        },
+        "item_share_difference": {
+          "ci90": [
+            0.2148859543817527,
+            0.2743972445464983
+          ],
+          "ci95": [
+            0.20898876404494382,
+            0.27958236658932717
+          ],
+          "differs": true,
+          "estimate": 0.2441588785046729,
+          "margin": 0.05,
+          "matches": false,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout); llama3.2-3b: fails the competence rule on the yn readout",
+          "reading_unread": "differs"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [
+          "mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "llama3.2-3b: fails the competence rule on the yn readout"
+        ],
+        "read": false,
+        "readout": "yn"
+      }
+    },
+    "mistral-7b-v0.3 vs qwen3-8b-fewshot": {
+      "first": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            -4.136013199187756,
+            -3.382545549277996
+          ],
+          "estimate": -3.7540887761264425,
+          "noise_floor": 0.3,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "differs"
+        },
+        "item_share_difference": {
+          "ci90": [
+            -0.16225165562913907,
+            -0.08185053380782918
+          ],
+          "ci95": [
+            -0.16965352449223417,
+            -0.07411764705882352
+          ],
+          "differs": true,
+          "estimate": -0.12266355140186916,
+          "margin": 0.05,
+          "matches": false,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "differs"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [
+          "mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)"
+        ],
+        "read": false,
+        "readout": "first"
+      },
+      "yn": {
+        "delta_L_difference_nats": {
+          "ci95": [
+            -7.455830355656601,
+            -6.589803002599043
+          ],
+          "estimate": -7.026723101740674,
+          "noise_floor": 0.3,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "differs"
+        },
+        "item_share_difference": {
+          "ci90": [
+            -0.01954022988505747,
+            0.026018099547511313
+          ],
+          "ci95": [
+            -0.023127753303964757,
+            0.029055690072639227
+          ],
+          "differs": false,
+          "estimate": 0.0035046728971962616,
+          "margin": 0.05,
+          "matches": true,
+          "reading": "not read: mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)",
+          "reading_unread": "matches"
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "not_read_because": [
+          "mistral-7b-v0.3: not interpretable (fails the families competence rule on the first-token readout)"
+        ],
+        "read": false,
+        "readout": "yn"
+      }
+    }
+  },
+  "comparisons_note": "descriptive; a model not interpretable or gated to inconclusive is left out of every cross-model reading (design \u00a77.5); the yes/no comparison is read only for models interpretable on the yes/no readout",
+  "design": "notes/tau_families_design.md",
+  "excluded": {
+    "gemma2-9b-it": "excluded before data (design \u00a72.3): the prompt's fixed part, the system message and the four few-shot examples, is 9,575 Gemma tokens, more than Gemma 2's 8,192-token trained context; reported as not run, never as a null"
+  },
+  "items": {
+    "primary": 856,
+    "primary_users": 175
+  },
+  "missing_scores": {
+    "llama3.2-3b": 0,
+    "mistral-7b-v0.3": 0
+  },
+  "models": {
+    "llama3.2-3b": {
+      "checks": {
+        "discrimination_holds": true,
+        "fail_minus_witness": {
+          "ci": [
+            -0.12190518933145897,
+            -0.034126740296619086
+          ],
+          "estimate": -0.07892815691906367,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999
+        },
+        "manipulation_check_passed": true,
+        "witness_effect": {
+          "ci": [
+            0.9796798066924248,
+            1.1586302225764027
+          ],
+          "cluster": "user",
+          "estimate": 1.0695823635318464,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.8434579439252337
+        },
+        "write_minus_mention": {
+          "ci": [
+            0.41434625290068133,
+            0.5335279097971517
+          ],
+          "estimate": 0.47444510337500617,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999
+        }
+      },
+      "competence": {
+        "first": {
+          "checks": {
+            "auc_neutral": {
+              "pass": true,
+              "value": 0.7750526753049162
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9706610272782812
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.21700223713646533
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.5906040268456376
+            }
+          },
+          "interpretable": true,
+          "n_failures": 447,
+          "n_successes": 447,
+          "population": "discrimination",
+          "readout": "first",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        },
+        "first_all_items": {
+          "checks": {
+            "auc_neutral": {
+              "pass": false,
+              "value": 0.6487855107432964
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9705263037798394
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.16004672897196262
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.3317757009345794
+            }
+          },
+          "interpretable": false,
+          "n_failures": 856,
+          "n_successes": 856,
+          "population": "all",
+          "readout": "first",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        },
+        "yn": {
+          "checks": {
+            "auc_neutral": {
+              "pass": false,
+              "value": 0.6764309915969751
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9908123691458148
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.011185682326621925
+            },
+            "yes_share_neutral_successes": {
+              "pass": false,
+              "value": 0.020134228187919462
+            }
+          },
+          "interpretable": false,
+          "n_failures": 447,
+          "n_successes": 447,
+          "population": "discrimination",
+          "readout": "yn",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        }
+      },
+      "description": {
+        "by_class": {
+          "status": {
+            "fail_minus_witness": {
+              "ci": [
+                -0.054802974878714,
+                0.06693153682649865
+              ],
+              "estimate": 0.004889968318140594,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.8841158841158842
+            },
+            "failing": {
+              "ci": [
+                1.2125589591275268,
+                1.446029779799375
+              ],
+              "cluster": "user",
+              "estimate": 1.3294621016238166,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8606356968215159
+            }
+          },
+          "unavailable": {
+            "fail_minus_witness": {
+              "ci": [
+                -0.2286729937843025,
+                -0.09575688090055771
+              ],
+              "estimate": -0.16157407162274107,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                0.46923077201996094,
+                0.6450058446291869
+              ],
+              "cluster": "user",
+              "estimate": 0.556172842072484,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7555555555555555
+            }
+          }
+        },
+        "class_mix": false,
+        "class_mix_reading": null,
+        "classes_with_fail_minus_witness_below_0": [
+          "unavailable"
+        ],
+        "fail_minus_witness": {
+          "ci": [
+            -0.12190518933145897,
+            -0.034126740296619086
+          ],
+          "estimate": -0.07892815691906367,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999
+        },
+        "failing_effect": {
+          "ci": [
+            0.899734983415956,
+            1.0838276841125245
+          ],
+          "cluster": "user",
+          "estimate": 0.9906542066127828,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.8165887850467289
+        },
+        "failure_specific": false,
+        "item_share_first": 0.8165887850467289,
+        "item_share_first_ci": [
+          0.7879518072289157,
+          0.8429951690821256
+        ],
+        "label": "a shift shared by working and failing calls (working calls move more)",
+        "median_item_effect": 0.7500000298023224,
+        "minority": false,
+        "minority_reading": null,
+        "row": "fail minus witness not above 0",
+        "witness_effect": {
+          "ci": [
+            0.9796798066924248,
+            1.1586302225764027
+          ],
+          "cluster": "user",
+          "estimate": 1.0695823635318464,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.8434579439252337
+        },
+        "witness_share_of_failing_effect": 1.079672762092166
+      },
+      "format": {
+        "first_mass_below_0.5_share": 0.0,
+        "first_mass_median": 0.9680521043717831,
+        "prompt_tokens": {
+          "max": 11907,
+          "median": 9771.0,
+          "n": 13696
+        },
+        "seconds_mean_by_readout": {
+          "first": 0.6046312207943916,
+          "target": 0.6057994158878509,
+          "yn": 0.6057379283489094
+        },
+        "seconds_median_by_readout": {
+          "first": 0.5687,
+          "target": 0.5716,
+          "yn": 0.5717
+        },
+        "seconds_total": 8288.713199999993,
+        "target_mass_below_0.5_share": 0.0,
+        "target_mass_median": 0.9962598570421737,
+        "yn_mass_below_0.5_share": 0.0,
+        "yn_mass_median": 0.9944444487066271
+      },
+      "primary": {
+        "by_class": {
+          "status": {
+            "aligned_minus_neutral": {
+              "ci": [
+                2.127531648332937,
+                2.3085443072068164
+              ],
+              "cluster": "user",
+              "estimate": 2.2163814209529122,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 1.0
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                1.2125589591275268,
+                1.446029779799375
+              ],
+              "cluster": "user",
+              "estimate": 1.3294621016238166,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8606356968215159
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.7648948632119763,
+                1.0108267737752965
+              ],
+              "cluster": "user",
+              "estimate": 0.8869193193290956,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7432762836185819
+            }
+          },
+          "unavailable": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.8082212793952752,
+                1.9812030120423638
+              ],
+              "cluster": "user",
+              "estimate": 1.8958333386085284,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9901234567901235
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.46923077201996094,
+                0.6450058446291869
+              ],
+              "cluster": "user",
+              "estimate": 0.556172842072484,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7555555555555555
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                1.2652202105448809,
+                1.4139669961307408
+              ],
+              "cluster": "user",
+              "estimate": 1.3396604965360444,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9629629629629629
+            }
+          }
+        },
+        "by_class_descriptive": {
+          "gc_balance": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 0.14583327621221542,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.5
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 1.2083332973221939,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 1.0
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -1.0625000211099784,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.0
+            }
+          },
+          "wrong_return_pm": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 1.2118055798734229,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.9722222222222222
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 1.993055568697552,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.9722222222222222
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.7812499888241291,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.3333333333333333
+            }
+          }
+        },
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              1.9395467867039973,
+              2.0797965131136915
+            ],
+            "cluster": "user",
+            "estimate": 2.007958532522093,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9906542056074766
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.899734983415956,
+              1.0838276841125245
+            ],
+            "cluster": "user",
+            "estimate": 0.9906542066127828,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8165887850467289
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.9265363153861055,
+              1.1085567345745173
+            ],
+            "cluster": "user",
+            "estimate": 1.0173043259093102,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8247663551401869
+          }
+        },
+        "first_flips": {
+          "either": 0.3002336448598131,
+          "n": 856,
+          "toward_failure": 0.016355140186915886,
+          "toward_success": 0.2838785046728972
+        },
+        "first_probability_shift": {
+          "ci": [
+            0.16696865337112776,
+            0.2005059739509221
+          ],
+          "cluster": "user",
+          "estimate": 0.1833544479812902,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.8165887850467289
+        },
+        "first_product_clustered": {
+          "ci": [
+            0.9013888895642339,
+            1.0850587145313713
+          ],
+          "cluster": "product",
+          "estimate": 0.9906542066127828,
+          "n_clusters": 56,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.8165887850467289
+        },
+        "first_without_fewshot_tool_classes": {
+          "aligned_minus_neutral": {
+            "ci": [
+              1.9922546060790132,
+              2.1232743121612043
+            ],
+            "cluster": "user",
+            "estimate": 2.056894967206628,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.995085995085995
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.8617256638486829,
+              1.0277521525215252
+            ],
+            "cluster": "user",
+            "estimate": 0.9447174454588415,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8083538083538083
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              1.0350609833919784,
+              1.1908958648291705
+            ],
+            "cluster": "user",
+            "estimate": 1.1121775217477863,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8525798525798526
+          }
+        },
+        "item_share": {
+          "first": {
+            "ci": [
+              0.7879518072289157,
+              0.8429951690821256
+            ],
+            "estimate": 0.8165887850467289,
+            "median_item_effect": 0.7500000298023224,
+            "n_items": 856,
+            "null": 0.5,
+            "perm_p": 0.000999000999000999,
+            "tie_share": 0.015186915887850467
+          },
+          "yn": {
+            "ci": [
+              0.6545893719806763,
+              0.7174418604651163
+            ],
+            "estimate": 0.6857476635514018,
+            "median_item_effect": 0.12500012665987015,
+            "n_items": 856,
+            "null": 0.5,
+            "perm_p": 0.000999000999000999,
+            "tie_share": 0.02570093457943925
+          }
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.3784596868572145,
+              0.45534665221797105
+            ],
+            "cluster": "user",
+            "estimate": 0.41603387841328143,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7908878504672897
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.2867561309047417,
+              0.37365431092126944
+            ],
+            "cluster": "user",
+            "estimate": 0.3291472003917062,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6857476635514018
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.04142271441819727,
+              0.13036151581407324
+            ],
+            "cluster": "user",
+            "estimate": 0.08688667802157525,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5887850467289719
+          }
+        }
+      },
+      "primary_controls": {
+        "by_class": {
+          "status": {
+            "fail_minus_witness": {
+              "ci": [
+                -0.054802974878714,
+                0.06693153682649865
+              ],
+              "estimate": 0.004889968318140594,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.8841158841158842
+            },
+            "failing": {
+              "ci": [
+                1.2125589591275268,
+                1.446029779799375
+              ],
+              "cluster": "user",
+              "estimate": 1.3294621016238166,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8606356968215159
+            },
+            "witness": {
+              "ci": [
+                1.206521743989509,
+                1.445544563021769
+              ],
+              "cluster": "user",
+              "estimate": 1.3245721333056761,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8508557457212714
+            }
+          },
+          "unavailable": {
+            "fail_minus_witness": {
+              "ci": [
+                -0.2286729937843025,
+                -0.09575688090055771
+              ],
+              "estimate": -0.16157407162274107,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                0.46923077201996094,
+                0.6450058446291869
+              ],
+              "cluster": "user",
+              "estimate": 0.556172842072484,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7555555555555555
+            },
+            "witness": {
+              "ci": [
+                0.6455399005066061,
+                0.7928615905149397
+              ],
+              "cluster": "user",
+              "estimate": 0.717746913695225,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8320987654320988
+            }
+          }
+        },
+        "discrimination": {
+          "first": {
+            "ci": [
+              1.4300847491288904,
+              1.6675995036366567
+            ],
+            "cluster": "user",
+            "estimate": 1.55285235264774,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8993288590604027
+          },
+          "yn": {
+            "ci": [
+              0.383630286678174,
+              0.47145232425263345
+            ],
+            "cluster": "user",
+            "estimate": 0.4275727050599769,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8657718120805369
+          }
+        },
+        "discrimination_all_witnesses": {
+          "first": {
+            "ci": [
+              0.7309782665875022,
+              0.8618421090426798
+            ],
+            "cluster": "user",
+            "estimate": 0.7962908904072524,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6950934579439252
+          }
+        },
+        "discrimination_by_class": {
+          "status": {
+            "evidence": false,
+            "holds": null,
+            "n_items": 0,
+            "note": "no witness of this class is determined by its history"
+          },
+          "unavailable": {
+            "evidence": true,
+            "first": {
+              "ci": [
+                1.5903125008800998,
+                1.7962287112327242
+              ],
+              "cluster": "user",
+              "estimate": 1.6956790163147228,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9382716049382716
+            },
+            "holds": true,
+            "n_items": 405
+          }
+        },
+        "fail_minus_witness_effect": {
+          "first": {
+            "ci": [
+              -0.12190518933145897,
+              -0.034126740296619086
+            ],
+            "estimate": -0.07892815691906367,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          },
+          "yn": {
+            "ci": [
+              -0.032110091106573105,
+              0.011463570883544397
+            ],
+            "estimate": -0.010221960292867968,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.37162837162837165
+          }
+        },
+        "fail_minus_witness_vs_neutral": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.14154200029524067,
+                -0.05231700260785915
+              ],
+              "estimate": -0.0968896019137595,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.06879339855664444,
+                0.027463198490736168
+              ],
+              "estimate": -0.017961444994695833,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.4855144855144855
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.0571868003552292,
+                0.018266906408404095
+              ],
+              "estimate": -0.020443922544124526,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.3176823176823177
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.04635300244804148,
+                0.026576021925646384
+              ],
+              "estimate": -0.01022196225125656,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.5724275724275725
+            }
+          }
+        },
+        "manipulation": {
+          "ci": [
+            1.110926154148528,
+            1.2249715635341096
+          ],
+          "cluster": "user",
+          "estimate": 1.1669100483065629,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.9742990654205608
+        },
+        "mention": {
+          "first": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                2.249858597093325,
+                2.368885869698842
+              ],
+              "cluster": "user",
+              "estimate": 2.3111127366673063,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9976635514018691
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                0.4535472856190576,
+                0.5805714165046811
+              ],
+              "cluster": "user",
+              "estimate": 0.5162091032377766,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7161214953271028
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -0.3570368169428617,
+                -0.24985763124892477
+              ],
+              "cluster": "user",
+              "estimate": -0.30315420414521316,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.3294392523364486
+            }
+          }
+        },
+        "witness": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                2.0334715676555737,
+                2.176841089891833
+              ],
+              "cluster": "user",
+              "estimate": 2.1048481344358527,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.985981308411215
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.9796798066924248,
+                1.1586302225764027
+              ],
+              "cluster": "user",
+              "estimate": 1.0695823635318464,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8434579439252337
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.938913690646933,
+                1.135902031648597
+              ],
+              "cluster": "user",
+              "estimate": 1.035265770904006,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.822429906542056
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.4022189317149876,
+                0.4720873780394859
+              ],
+              "cluster": "user",
+              "estimate": 0.43647780095740596,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8317757009345794
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.294335707027823,
+                0.3855403831998448
+              ],
+              "cluster": "user",
+              "estimate": 0.3393691606845742,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7009345794392523
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.04947915865911865,
+                0.14646771487334106
+              ],
+              "cluster": "user",
+              "estimate": 0.09710864027283181,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6144859813084113
+            }
+          }
+        },
+        "write_minus_mention_effect": {
+          "first": {
+            "ci": [
+              0.41434625290068133,
+              0.5335279097971517
+            ],
+            "estimate": 0.47444510337500617,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          }
+        }
+      },
+      "task_judgement_yes_no": {
+        "confident_json_threshold": 3.0,
+        "fail": {
+          "fit": {
+            "intercept_aligned": -1.5585761197581762,
+            "intercept_neutral": -1.457367679127055,
+            "intercept_swapped": -1.632534644238394,
+            "slope": 0.2575961159888702
+          },
+          "intercept_differences": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.16468647594905805,
+                -0.031639088572708696
+              ],
+              "estimate": -0.10120844063112133
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.03887514842267081,
+                0.11237616124417715
+              ],
+              "estimate": 0.07395852448021767
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.22321492839950707,
+                -0.12595835213449003
+              ],
+              "estimate": -0.175166965111339
+            }
+          },
+          "share_no_when_first_token_confident_json": {
+            "aligned": {
+              "n_confident_json": 21,
+              "share_no": 0.8571428571428571
+            },
+            "neutral": {
+              "n_confident_json": 2,
+              "share_no": 0.5
+            },
+            "swapped": {
+              "n_confident_json": 6,
+              "share_no": 0.8333333333333334
+            }
+          }
+        },
+        "witness": {
+          "fit": {
+            "intercept_aligned": -1.3188775224144151,
+            "intercept_neutral": -1.5315787610905454,
+            "intercept_swapped": -1.5445342206785169,
+            "slope": 0.10631482557826108
+          },
+          "intercept_differences": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.1571351568979129,
+                0.26672430292955207
+              ],
+              "estimate": 0.21270123867613022
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.19250404362124862,
+                0.2626108979024384
+              ],
+              "estimate": 0.22565669826410173
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.0651777820770385,
+                0.04146396861149215
+              ],
+              "estimate": -0.012955459587971507
+            }
+          },
+          "share_no_when_first_token_confident_json": {
+            "aligned": {
+              "n_confident_json": 111,
+              "share_no": 0.990990990990991
+            },
+            "neutral": {
+              "n_confident_json": 6,
+              "share_no": 1.0
+            },
+            "swapped": {
+              "n_confident_json": 47,
+              "share_no": 1.0
+            }
+          }
+        }
+      }
+    },
+    "mistral-7b-v0.3": {
+      "checks": {
+        "discrimination_holds": false,
+        "fail_minus_witness": {
+          "ci": [
+            -0.043778805363674386,
+            -0.001547766275009808
+          ],
+          "estimate": -0.022634348343561674,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.03596403596403597
+        },
+        "manipulation_check_passed": true,
+        "witness_effect": {
+          "ci": [
+            0.2026933697160354,
+            0.2990640110768162
+          ],
+          "cluster": "user",
+          "estimate": 0.2511682223004211,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.6647196261682243
+        },
+        "write_minus_mention": {
+          "ci": [
+            -0.13414993932208985,
+            -0.007662262916430616
+          ],
+          "estimate": -0.07191880940781714,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.03596403596403597
+        }
+      },
+      "competence": {
+        "first": {
+          "checks": {
+            "auc_neutral": {
+              "pass": false,
+              "value": 0.5822310306342557
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9605499286641376
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.5324384787472036
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.6286353467561522
+            }
+          },
+          "interpretable": false,
+          "n_failures": 447,
+          "n_successes": 447,
+          "population": "discrimination",
+          "readout": "first",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        },
+        "first_all_items": {
+          "checks": {
+            "auc_neutral": {
+              "pass": false,
+              "value": 0.698645897021574
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9524830014596812
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.3679906542056075
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.6308411214953271
+            }
+          },
+          "interpretable": false,
+          "n_failures": 856,
+          "n_successes": 856,
+          "population": "all",
+          "readout": "first",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        },
+        "yn": {
+          "checks": {
+            "auc_neutral": {
+              "pass": false,
+              "value": 0.634030499126666
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9859030922890613
+            },
+            "yes_share_neutral_failures": {
+              "pass": false,
+              "value": 1.0
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 1.0
+            }
+          },
+          "interpretable": false,
+          "n_failures": 447,
+          "n_successes": 447,
+          "population": "discrimination",
+          "readout": "yn",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        }
+      },
+      "description": {
+        "by_class": {
+          "status": {
+            "fail_minus_witness": {
+              "ci": [
+                0.013627829912461732,
+                0.07982818921807253
+              ],
+              "estimate": 0.04630195716518936,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.01098901098901099
+            },
+            "failing": {
+              "ci": [
+                0.12194376171072421,
+                0.22163341337457262
+              ],
+              "cluster": "user",
+              "estimate": 0.17130195415034563,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6332518337408313
+            }
+          },
+          "unavailable": {
+            "fail_minus_witness": {
+              "ci": [
+                -0.10365852602280495,
+                -0.05006546531048121
+              ],
+              "estimate": -0.07669753837916586,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                0.2163109697810397,
+                0.3332808537347716
+              ],
+              "cluster": "user",
+              "estimate": 0.2746913523263769,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6666666666666666
+            }
+          }
+        },
+        "class_mix": false,
+        "class_mix_reading": null,
+        "classes_with_fail_minus_witness_below_0": [
+          "unavailable"
+        ],
+        "fail_minus_witness": {
+          "ci": [
+            -0.043778805363674386,
+            -0.001547766275009808
+          ],
+          "estimate": -0.022634348343561674,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.03596403596403597
+        },
+        "failing_effect": {
+          "ci": [
+            0.18356590898986241,
+            0.272780366566154
+          ],
+          "cluster": "user",
+          "estimate": 0.2285338739568594,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.655373831775701
+        },
+        "failure_specific": false,
+        "item_share_first": 0.655373831775701,
+        "item_share_first_ci": [
+          0.618663594470046,
+          0.6910179640718563
+        ],
+        "label": "a shift shared by working and failing calls (working calls move more)",
+        "median_item_effect": 0.24999994039535522,
+        "minority": false,
+        "minority_reading": null,
+        "row": "fail minus witness not above 0",
+        "witness_effect": {
+          "ci": [
+            0.2026933697160354,
+            0.2990640110768162
+          ],
+          "cluster": "user",
+          "estimate": 0.2511682223004211,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.6647196261682243
+        },
+        "witness_share_of_failing_effect": 1.0990415466716956
+      },
+      "format": {
+        "first_mass_below_0.5_share": 0.0,
+        "first_mass_median": 0.9590904551819576,
+        "prompt_tokens": {
+          "max": 14642,
+          "median": 11872.0,
+          "n": 13696
+        },
+        "seconds_mean_by_readout": {
+          "first": 1.4267935163551368,
+          "target": 1.4289088785046717,
+          "yn": 1.429145658099692
+        },
+        "seconds_median_by_readout": {
+          "first": 1.33825,
+          "target": 1.33875,
+          "yn": 1.34185
+        },
+        "seconds_total": 19557.066099999993,
+        "target_mass_below_0.5_share": 0.0,
+        "target_mass_median": 0.9990533982564209,
+        "yn_mass_below_0.5_share": 0.0,
+        "yn_mass_median": 0.9964600510982099
+      },
+      "primary": {
+        "by_class": {
+          "status": {
+            "aligned_minus_neutral": {
+              "ci": [
+                2.1226023002468106,
+                2.2666766793968587
+              ],
+              "cluster": "user",
+              "estimate": 2.194834963051935,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 1.0
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.12194376171072421,
+                0.22163341337457262
+              ],
+              "cluster": "user",
+              "estimate": 0.17130195415034563,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6332518337408313
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                1.9519589538894482,
+                2.0928353737221985
+              ],
+              "cluster": "user",
+              "estimate": 2.0235330089015893,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 1.0
+            }
+          },
+          "unavailable": {
+            "aligned_minus_neutral": {
+              "ci": [
+                2.034825864498184,
+                2.1699074013411632
+              ],
+              "cluster": "user",
+              "estimate": 2.1015432029042715,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 1.0
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.2163109697810397,
+                0.3332808537347716
+              ],
+              "cluster": "user",
+              "estimate": 0.2746913523263769,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6666666666666666
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                1.7479603735291527,
+                1.9066985685770448
+              ],
+              "cluster": "user",
+              "estimate": 1.8268518505778946,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9975308641975309
+            }
+          }
+        },
+        "by_class_descriptive": {
+          "gc_balance": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 0.4375000298023224,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 1.0
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.1562500298023224,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.6666666666666666
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": 0.28125,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.8333333333333334
+            }
+          },
+          "wrong_return_pm": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 1.6076388728494446,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.9722222222222222
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.3715277496828801,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.7777777777777778
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": 1.2361111231665645,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.9444444444444444
+            }
+          }
+        },
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              2.0669988870686735,
+              2.1616030056223585
+            ],
+            "cluster": "user",
+            "estimate": 2.113682823207786,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9988317757009346
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.18356590898986241,
+              0.272780366566154
+            ],
+            "cluster": "user",
+            "estimate": 0.2285338739568594,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.655373831775701
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              1.8269284896821052,
+              1.9451819804823804
+            ],
+            "cluster": "user",
+            "estimate": 1.885148949250927,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9953271028037384
+          }
+        },
+        "first_flips": {
+          "either": 0.015186915887850467,
+          "n": 856,
+          "toward_failure": 0.0,
+          "toward_success": 0.015186915887850467
+        },
+        "first_probability_shift": {
+          "ci": [
+            0.01995013889272887,
+            0.03221414748613199
+          ],
+          "cluster": "user",
+          "estimate": 0.026217974159343245,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.655373831775701
+        },
+        "first_product_clustered": {
+          "ci": [
+            0.1793376837060115,
+            0.28547704734070145
+          ],
+          "cluster": "product",
+          "estimate": 0.2285338739568594,
+          "n_clusters": 56,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.655373831775701
+        },
+        "first_without_fewshot_tool_classes": {
+          "aligned_minus_neutral": {
+            "ci": [
+              2.1025152362973953,
+              2.1963289940667416
+            ],
+            "cluster": "user",
+            "estimate": 2.148418301062004,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 1.0
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.17929058082983396,
+              0.26693499086476763
+            ],
+            "cluster": "user",
+            "estimate": 0.22274262523301477,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6498771498771498
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              1.8667213620822476,
+              1.9844936715250339
+            ],
+            "cluster": "user",
+            "estimate": 1.9256756758289892,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9987714987714987
+          }
+        },
+        "item_share": {
+          "first": {
+            "ci": [
+              0.618663594470046,
+              0.6910179640718563
+            ],
+            "estimate": 0.655373831775701,
+            "median_item_effect": 0.24999994039535522,
+            "n_items": 856,
+            "null": 0.5,
+            "perm_p": 0.000999000999000999,
+            "tie_share": 0.008177570093457943
+          },
+          "yn": {
+            "ci": [
+              0.9120750293083235,
+              0.9478054567022538
+            ],
+            "estimate": 0.9299065420560748,
+            "median_item_effect": 0.6249999175779521,
+            "n_items": 856,
+            "null": 0.5,
+            "perm_p": 0.000999000999000999,
+            "tie_share": 0.0011682242990654205
+          }
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              1.858119424467077,
+              1.9369199492986446
+            ],
+            "cluster": "user",
+            "estimate": 1.8982184562248952,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 1.0
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.620067634686183,
+              0.6825060530894912
+            ],
+            "cluster": "user",
+            "estimate": 0.6514310733448915,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9299065420560748
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              1.205543356968047,
+              1.2863285862343565
+            ],
+            "cluster": "user",
+            "estimate": 1.2467873828800038,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9789719626168224
+          }
+        }
+      },
+      "primary_controls": {
+        "by_class": {
+          "status": {
+            "fail_minus_witness": {
+              "ci": [
+                0.013627829912461732,
+                0.07982818921807253
+              ],
+              "estimate": 0.04630195716518936,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.01098901098901099
+            },
+            "failing": {
+              "ci": [
+                0.12194376171072421,
+                0.22163341337457262
+              ],
+              "cluster": "user",
+              "estimate": 0.17130195415034563,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6332518337408313
+            },
+            "witness": {
+              "ci": [
+                0.07062647724193884,
+                0.1793893074223407
+              ],
+              "cluster": "user",
+              "estimate": 0.12499999698515626,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.58679706601467
+            }
+          },
+          "unavailable": {
+            "fail_minus_witness": {
+              "ci": [
+                -0.10365852602280495,
+                -0.05006546531048121
+              ],
+              "estimate": -0.07669753837916586,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                0.2163109697810397,
+                0.3332808537347716
+              ],
+              "cluster": "user",
+              "estimate": 0.2746913523263769,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6666666666666666
+            },
+            "witness": {
+              "ci": [
+                0.2940035921906017,
+                0.4095812230536402
+              ],
+              "cluster": "user",
+              "estimate": 0.3513888907055428,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.725925925925926
+            }
+          }
+        },
+        "discrimination": {
+          "first": {
+            "ci": [
+              0.3169745959720077,
+              0.40618161403490494
+            ],
+            "cluster": "user",
+            "estimate": 0.36087807387496934,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8187919463087249
+          },
+          "yn": {
+            "ci": [
+              0.2909142304302254,
+              0.3642241448376745
+            ],
+            "cluster": "user",
+            "estimate": 0.32774050031649055,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8523489932885906
+          }
+        },
+        "discrimination_all_witnesses": {
+          "first": {
+            "ci": [
+              0.7044910173305494,
+              0.7740778654674177
+            ],
+            "cluster": "user",
+            "estimate": 0.7378796707973685,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9030373831775701
+          }
+        },
+        "discrimination_by_class": {
+          "status": {
+            "evidence": false,
+            "holds": null,
+            "n_items": 0,
+            "note": "no witness of this class is determined by its history"
+          },
+          "unavailable": {
+            "evidence": true,
+            "first": {
+              "ci": [
+                0.2548437518812716,
+                0.3259860756623358
+              ],
+              "cluster": "user",
+              "estimate": 0.29089505971397883,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8098765432098766
+            },
+            "holds": false,
+            "n_items": 405
+          }
+        },
+        "fail_minus_witness_effect": {
+          "first": {
+            "ci": [
+              -0.043778805363674386,
+              -0.001547766275009808
+            ],
+            "estimate": -0.022634348343561674,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.03596403596403597
+          },
+          "yn": {
+            "ci": [
+              -0.00939686313414803,
+              0.034480330701446515
+            ],
+            "estimate": 0.01306951006903818,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.26673326673326675
+          }
+        },
+        "fail_minus_witness_vs_neutral": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.045670130510097474,
+                0.12308597887424122
+              ],
+              "estimate": 0.08571845629235085,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.06802526232706282,
+                0.14590644351157703
+              ],
+              "estimate": 0.10835280463591253,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.2935345087932348,
+                0.36504492046503895
+              ],
+              "estimate": 0.3308265300559546,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.29265053633742316,
+                0.3430266253023917
+              ],
+              "estimate": 0.3177570199869164,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            }
+          }
+        },
+        "manipulation": {
+          "ci": [
+            3.656846218226107,
+            3.8633304723535593
+          ],
+          "cluster": "user",
+          "estimate": 3.762850460880383,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 1.0
+        },
+        "mention": {
+          "first": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                3.0245403290890853,
+                3.1660610483721072
+              ],
+              "cluster": "user",
+              "estimate": 3.093530955306629,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 1.0
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                0.22379032062787202,
+                0.3797429534942915
+              ],
+              "cluster": "user",
+              "estimate": 0.30045268336467656,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6063084112149533
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -1.0366803304378778,
+                -0.9231909858449533
+              ],
+              "cluster": "user",
+              "estimate": -0.9798481320988421,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.05023364485981308
+            }
+          }
+        },
+        "witness": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.9781853804670742,
+                2.0797921829018047
+              ],
+              "cluster": "user",
+              "estimate": 2.0279643669154357,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 1.0
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.2026933697160354,
+                0.2990640110768162
+              ],
+              "cluster": "user",
+              "estimate": 0.2511682223004211,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6647196261682243
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                1.7138459352522508,
+                1.8431886246126747
+              ],
+              "cluster": "user",
+              "estimate": 1.7767961446150144,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9929906542056075
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.5254443671128184,
+                1.6101562315209594
+              ],
+              "cluster": "user",
+              "estimate": 1.5673919261689406,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 1.0
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.6097417928281452,
+                0.6673816539034435
+              ],
+              "cluster": "user",
+              "estimate": 0.6383615632758532,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9532710280373832
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.8871151570880099,
+                0.971059789089486
+              ],
+              "cluster": "user",
+              "estimate": 0.9290303628930874,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9649532710280374
+            }
+          }
+        },
+        "write_minus_mention_effect": {
+          "first": {
+            "ci": [
+              -0.13414993932208985,
+              -0.007662262916430616
+            ],
+            "estimate": -0.07191880940781714,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.03596403596403597
+          }
+        }
+      },
+      "task_judgement_yes_no": {
+        "confident_json_threshold": 3.0,
+        "fail": {
+          "fit": {
+            "intercept_aligned": 4.654506930958097,
+            "intercept_neutral": 2.7369924942454182,
+            "intercept_swapped": 4.000989553497824,
+            "slope": -0.009129080425841513
+          },
+          "intercept_differences": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.8503331467426438,
+                1.9904046383984406
+              ],
+              "estimate": 1.9175144367126786
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.624264620418308,
+                0.6833745766226631
+              ],
+              "estimate": 0.6535173774602727
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                1.1948902306551412,
+                1.339850865699614
+              ],
+              "estimate": 1.263997059252406
+            }
+          },
+          "share_no_when_first_token_confident_json": {
+            "aligned": {
+              "n_confident_json": 206,
+              "share_no": 0.0
+            },
+            "neutral": {
+              "n_confident_json": 7,
+              "share_no": 0.0
+            },
+            "swapped": {
+              "n_confident_json": 142,
+              "share_no": 0.0
+            }
+          }
+        },
+        "witness": {
+          "fit": {
+            "intercept_aligned": 5.2922232353818055,
+            "intercept_neutral": 3.6434192484224632,
+            "intercept_swapped": 4.643778594258958,
+            "slope": -0.04014471956143438
+          },
+          "intercept_differences": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.5521045741202117,
+                1.7342214646681153
+              ],
+              "estimate": 1.6488039869593423
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.6179061033219018,
+                0.6799879011039511
+              ],
+              "estimate": 0.6484446411228477
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.9139775949380393,
+                1.0783359276973021
+              ],
+              "estimate": 1.0003593458364946
+            }
+          },
+          "share_no_when_first_token_confident_json": {
+            "aligned": {
+              "n_confident_json": 355,
+              "share_no": 0.0
+            },
+            "neutral": {
+              "n_confident_json": 23,
+              "share_no": 0.0
+            },
+            "swapped": {
+              "n_confident_json": 281,
+              "share_no": 0.0
+            }
+          }
+        }
+      }
+    }
+  },
+  "patterns": {
+    "labels": {
+      "llama3.2-3b": "shared"
+    },
+    "left_out": {
+      "mistral-7b-v0.3": "not interpretable (fails the families competence rule on the first-token readout)"
+    },
+    "readings": [],
+    "reference_labels": {
+      "llama3.1-8b-fewshot": "a shift shared by working and failing calls",
+      "qwen3-8b-fewshot": "a shift shared by working and failing calls (working calls move more)"
+    }
+  },
+  "placement": {
+    "first_turn": {
+      "ci": [
+        0.46036073899259106,
+        0.5959506916065871
+      ],
+      "cluster": "user",
+      "estimate": 0.5287499936297536,
+      "n_clusters": 141,
+      "n_items": 300,
+      "n_users": 141,
+      "perm_p": 0.000999000999000999,
+      "share_positive": 0.84
+    },
+    "first_turn_minus_native": {
+      "ci": [
+        0.2193877476894734,
+        0.3787020791049411
+      ],
+      "estimate": 0.29812499656031527,
+      "n_items": 300,
+      "n_users": 141,
+      "perm_p": 0.000999000999000999
+    },
+    "format_dependent": true,
+    "n_items": 300,
+    "native": {
+      "ci": [
+        0.1664518849136903,
+        0.29458190874536694
+      ],
+      "cluster": "user",
+      "estimate": 0.2306249970694383,
+      "n_clusters": 141,
+      "n_items": 300,
+      "n_users": 141,
+      "perm_p": 0.000999000999000999,
+      "share_positive": 0.62
+    },
+    "reading": "Mistral's \u03c4 result depends on prompt format: both numbers are reported in every comparison",
+    "run": "tau_family_placement_mistral-7b-v0.3"
+  },
+  "reference": {
+    "llama3.1-8b-fewshot": {
+      "checks": {
+        "discrimination_holds": true,
+        "fail_minus_witness": {
+          "ci": [
+            0.03558238399246792,
+            0.13810364974213454
+          ],
+          "estimate": 0.08929614660019494,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.003996003996003996
+        },
+        "manipulation_check_passed": true,
+        "witness_effect": {
+          "ci": [
+            0.32064573364114385,
+            0.44605869378345847
+          ],
+          "cluster": "user",
+          "estimate": 0.38376168296528246,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.6226635514018691
+        },
+        "write_minus_mention": {
+          "ci": [
+            0.45495034685705477,
+            0.541336351560375
+          ],
+          "estimate": 0.49810163842086574,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999
+        }
+      },
+      "competence": {
+        "first": {
+          "checks": {
+            "auc_neutral": {
+              "pass": true,
+              "value": 0.7169046439349579
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9973383105613614
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.07158836689038031
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.23042505592841164
+            }
+          },
+          "interpretable": true,
+          "n_failures": 447,
+          "n_successes": 447,
+          "population": "discrimination",
+          "readout": "first",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        },
+        "first_all_items": {
+          "checks": {
+            "auc_neutral": {
+              "pass": true,
+              "value": 0.795091956721111
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9974851620215899
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.037383177570093455
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.20794392523364486
+            }
+          },
+          "interpretable": true,
+          "n_failures": 856,
+          "n_successes": 856,
+          "population": "all",
+          "readout": "first",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        },
+        "yn": {
+          "checks": {
+            "auc_neutral": {
+              "pass": true,
+              "value": 0.7364758344218729
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9769142154431936
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.37360178970917224
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.70917225950783
+            }
+          },
+          "interpretable": true,
+          "n_failures": 447,
+          "n_successes": 447,
+          "population": "discrimination",
+          "readout": "yn",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        }
+      },
+      "description": {
+        "by_class": {
+          "status": {
+            "fail_minus_witness": {
+              "ci": [
+                0.27577158448999217,
+                0.44750615503648156
+              ],
+              "estimate": 0.36415036325855293,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                1.1073170882337386,
+                1.335093891823625
+              ],
+              "cluster": "user",
+              "estimate": 1.2257029360574658,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8704156479217604
+            }
+          },
+          "unavailable": {
+            "fail_minus_witness": {
+              "ci": [
+                -0.3229166566855227,
+                -0.21768292275643567
+              ],
+              "estimate": -0.2688271549403851,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                -0.3885802433262637,
+                -0.26781542205565095
+              ],
+              "cluster": "user",
+              "estimate": -0.32716049139192444,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.28888888888888886
+            }
+          }
+        },
+        "class_mix": true,
+        "class_mix_reading": "the pooled effect depends on the class mix; reported per class",
+        "classes_with_fail_minus_witness_below_0": [
+          "unavailable"
+        ],
+        "fail_minus_witness": {
+          "ci": [
+            0.03558238399246792,
+            0.13810364974213454
+          ],
+          "estimate": 0.08929614660019494,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.003996003996003996
+        },
+        "failing_effect": {
+          "ci": [
+            0.40632813070260454,
+            0.5391824072982276
+          ],
+          "cluster": "user",
+          "estimate": 0.4730578295654774,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.5899532710280374
+        },
+        "failure_specific": false,
+        "item_share_first": 0.5899532710280374,
+        "item_share_first_ci": [
+          0.5631901840490797,
+          0.6167800453514739
+        ],
+        "label": "a shift shared by working and failing calls",
+        "median_item_effect": 0.24999992456287146,
+        "minority": false,
+        "minority_reading": null,
+        "row": "fail minus witness above 0",
+        "witness_effect": {
+          "ci": [
+            0.32064573364114385,
+            0.44605869378345847
+          ],
+          "cluster": "user",
+          "estimate": 0.38376168296528246,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.6226635514018691
+        },
+        "witness_share_of_failing_effect": 0.8112362992021145
+      },
+      "format": {
+        "first_mass_below_0.5_share": 0.0,
+        "first_mass_median": 0.9970266774797274,
+        "prompt_tokens": null,
+        "seconds_mean_by_readout": {
+          "first": 1.3507312353971968,
+          "target": 1.3544607476635524,
+          "yn": 1.3543746105918986
+        },
+        "seconds_median_by_readout": {
+          "first": 1.1761,
+          "target": 1.1771500000000001,
+          "yn": 1.17755
+        },
+        "seconds_total": 18524.712299999996,
+        "target_mass_below_0.5_share": 0.0,
+        "target_mass_median": 0.99968482322828,
+        "yn_mass_below_0.5_share": 0.0,
+        "yn_mass_median": 0.9779834020020889
+      },
+      "primary": {
+        "by_class": {
+          "status": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.389722885378458,
+                1.6523809621709267
+              ],
+              "cluster": "user",
+              "estimate": 1.516198052011412,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8850855745721271
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                1.1073170882337386,
+                1.335093891823625
+              ],
+              "cluster": "user",
+              "estimate": 1.2257029360574658,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8704156479217604
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.1290277918539424,
+                0.4606311469028964
+              ],
+              "cluster": "user",
+              "estimate": 0.29049511595394617,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6014669926650367
+            }
+          },
+          "unavailable": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.17258883178645396,
+                0.34277108242533294
+              ],
+              "cluster": "user",
+              "estimate": 0.2598765453381211,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6790123456790124
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.3885802433262637,
+                -0.26781542205565095
+              ],
+              "cluster": "user",
+              "estimate": -0.32716049139192444,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.28888888888888886
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.5172839431759017,
+                0.6558679722859764
+              ],
+              "cluster": "user",
+              "estimate": 0.5870370367300455,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8296296296296296
+            }
+          }
+        },
+        "by_class_descriptive": {
+          "gc_balance": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.45833332153658074,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.3333333333333333
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.7083332963908712,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.8333333333333334
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -1.1666666179274519,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.16666666666666666
+            }
+          },
+          "wrong_return_pm": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 1.770833350536931,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.9444444444444444
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.8854166804424798,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.75
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": 0.8854166700944511,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.7777777777777778
+            }
+          }
+        },
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.8456307972492477,
+              0.9860311159092884
+            ],
+            "cluster": "user",
+            "estimate": 0.9186623888139213,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7862149532710281
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.40632813070260454,
+              0.5391824072982276
+            ],
+            "cluster": "user",
+            "estimate": 0.4730578295654774,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.5899532710280374
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.3637354736497929,
+              0.5257985241727158
+            ],
+            "cluster": "user",
+            "estimate": 0.4456045592484439,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7137850467289719
+          }
+        },
+        "first_flips": {
+          "either": 0.02686915887850467,
+          "n": 856,
+          "toward_failure": 0.016355140186915886,
+          "toward_success": 0.010514018691588784
+        },
+        "first_probability_shift": {
+          "ci": [
+            0.0007946451948418874,
+            0.011982006867155268
+          ],
+          "cluster": "user",
+          "estimate": 0.00650226880037135,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.030969030969030968,
+          "share_positive": 0.5899532710280374
+        },
+        "first_product_clustered": {
+          "ci": [
+            0.3925083835833253,
+            0.5585443129272295
+          ],
+          "cluster": "product",
+          "estimate": 0.4730578295654774,
+          "n_clusters": 56,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.5899532710280374
+        },
+        "first_without_fewshot_tool_classes": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.8219987267463577,
+              0.9645140802212622
+            ],
+            "cluster": "user",
+            "estimate": 0.8911240837034479,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7825552825552825
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              0.3826768027798206,
+              0.5237145436367342
+            ],
+            "cluster": "user",
+            "estimate": 0.4530866115894031,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.581081081081081
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              0.3605953903894731,
+              0.5199814087049424
+            ],
+            "cluster": "user",
+            "estimate": 0.43803747211404476,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.714987714987715
+          }
+        },
+        "item_share": {
+          "first": {
+            "ci": [
+              0.5631901840490797,
+              0.6167800453514739
+            ],
+            "estimate": 0.5899532710280374,
+            "median_item_effect": 0.24999992456287146,
+            "n_items": 856,
+            "null": 0.5,
+            "perm_p": 0.000999000999000999,
+            "tie_share": 0.004672897196261682
+          },
+          "yn": {
+            "ci": [
+              0.35308343409915355,
+              0.41511627906976745
+            ],
+            "estimate": 0.38434579439252337,
+            "median_item_effect": -5.960464477539063e-08,
+            "n_items": 856,
+            "null": 0.5,
+            "perm_p": 0.000999000999000999,
+            "tie_share": 0.08878504672897196
+          }
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              -0.12571674530659246,
+              -0.07592378915061714
+            ],
+            "cluster": "user",
+            "estimate": -0.10017523564241618,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.3411214953271028
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              -0.042896680790486516,
+              -0.001836159555925488
+            ],
+            "cluster": "user",
+            "estimate": -0.021904207731240265,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.03296703296703297,
+            "share_positive": 0.38434579439252337
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -0.1079288940397396,
+              -0.0489329274198631
+            ],
+            "cluster": "user",
+            "estimate": -0.07827102791117592,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.37383177570093457
+          }
+        }
+      },
+      "primary_controls": {
+        "by_class": {
+          "status": {
+            "fail_minus_witness": {
+              "ci": [
+                0.27577158448999217,
+                0.44750615503648156
+              ],
+              "estimate": 0.36415036325855293,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                1.1073170882337386,
+                1.335093891823625
+              ],
+              "cluster": "user",
+              "estimate": 1.2257029360574658,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8704156479217604
+            },
+            "witness": {
+              "ci": [
+                0.7657019713643498,
+                0.9567073200522672
+              ],
+              "cluster": "user",
+              "estimate": 0.861552572798913,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8068459657701712
+            }
+          },
+          "unavailable": {
+            "fail_minus_witness": {
+              "ci": [
+                -0.3229166566855227,
+                -0.21768292275643567
+              ],
+              "estimate": -0.2688271549403851,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                -0.3885802433262637,
+                -0.26781542205565095
+              ],
+              "cluster": "user",
+              "estimate": -0.32716049139192444,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.28888888888888886
+            },
+            "witness": {
+              "ci": [
+                -0.126948057734347,
+                0.011056511807060944
+              ],
+              "cluster": "user",
+              "estimate": -0.058333336451539285,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.0999000999000999,
+              "share_positive": 0.43950617283950616
+            }
+          }
+        },
+        "discrimination": {
+          "first": {
+            "ci": [
+              0.9921511666740962,
+              1.205813957915403
+            ],
+            "cluster": "user",
+            "estimate": 1.0989932930649111,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9776286353467561
+          },
+          "yn": {
+            "ci": [
+              0.27731092217840064,
+              0.32726269197253466
+            ],
+            "cluster": "user",
+            "estimate": 0.3014541384357734,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.8881431767337807
+          }
+        },
+        "discrimination_all_witnesses": {
+          "first": {
+            "ci": [
+              1.6679322521960325,
+              2.006453429028004
+            ],
+            "cluster": "user",
+            "estimate": 1.831775706004086,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9614485981308412
+          }
+        },
+        "discrimination_by_class": {
+          "status": {
+            "evidence": false,
+            "holds": null,
+            "n_items": 0,
+            "note": "no witness of this class is determined by its history"
+          },
+          "unavailable": {
+            "evidence": true,
+            "first": {
+              "ci": [
+                0.9335038422325821,
+                1.1065375361248815
+              ],
+              "cluster": "user",
+              "estimate": 1.0197530917443887,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.980246913580247
+            },
+            "holds": true,
+            "n_items": 405
+          }
+        },
+        "fail_minus_witness_effect": {
+          "first": {
+            "ci": [
+              0.03558238399246792,
+              0.13810364974213454
+            ],
+            "estimate": 0.08929614660019494,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.003996003996003996
+          },
+          "yn": {
+            "ci": [
+              0.002518888009285146,
+              0.043915196457295164
+            ],
+            "estimate": 0.023364483961992175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.029970029970029972
+          }
+        },
+        "fail_minus_witness_vs_neutral": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.02354651949270953,
+                0.2269861268892257
+              ],
+              "estimate": 0.12018108074324832,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.025974025974025976
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.0876524421825753,
+                0.15890717726454562
+              ],
+              "estimate": 0.030884934143053377,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.6573426573426573
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.009999999526668997,
+                0.04077380592713044
+              ],
+              "estimate": 0.015332941736190398,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.26073926073926074
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.04342105181245079,
+                0.029970759292792158
+              ],
+              "estimate": -0.008031542225801777,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.7022977022977023
+            }
+          }
+        },
+        "manipulation": {
+          "ci": [
+            4.264134280551731,
+            4.482654805543453
+          ],
+          "cluster": "user",
+          "estimate": 4.369889015565052,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 1.0
+        },
+        "mention": {
+          "first": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                1.405953795117794,
+                1.5190377835821527
+              ],
+              "cluster": "user",
+              "estimate": 1.462762854206452,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9147196261682243
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                -0.07456006496032537,
+                0.023773922817642314
+              ],
+              "cluster": "user",
+              "estimate": -0.025043808855388365,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.3356643356643357,
+              "share_positive": 0.4053738317757009
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -0.5849514508487665,
+                -0.5019625638759805
+              ],
+              "cluster": "user",
+              "estimate": -0.5441004653925307,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.16355140186915887
+            }
+          }
+        },
+        "witness": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                0.696718932338206,
+                0.889648442406594
+              ],
+              "cluster": "user",
+              "estimate": 0.798481308070673,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7838785046728972
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                0.32064573364114385,
+                0.44605869378345847
+              ],
+              "cluster": "user",
+              "estimate": 0.38376168296528246,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6226635514018691
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.3175714248323015,
+                0.5034168562497827
+              ],
+              "cluster": "user",
+              "estimate": 0.4147196251053905,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.7114485981308412
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.14259259244542064,
+                -0.08964646404439752
+              ],
+              "cluster": "user",
+              "estimate": -0.11550817737860658,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.27453271028037385
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.062047101089343935,
+                -0.028158522334229535
+              ],
+              "cluster": "user",
+              "estimate": -0.045268691693232437,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.3317757009345794
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.0988649939550721,
+                -0.04262013907290705
+              ],
+              "cluster": "user",
+              "estimate": -0.07023948568537414,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.3469626168224299
+            }
+          }
+        },
+        "write_minus_mention_effect": {
+          "first": {
+            "ci": [
+              0.45495034685705477,
+              0.541336351560375
+            ],
+            "estimate": 0.49810163842086574,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          }
+        }
+      },
+      "task_judgement_yes_no": {
+        "confident_json_threshold": 3.0,
+        "fail": {
+          "fit": {
+            "intercept_aligned": 0.06899971436013153,
+            "intercept_neutral": 0.43903154760021446,
+            "intercept_swapped": 0.22986441280907144,
+            "slope": 0.293749478463004
+          },
+          "intercept_differences": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.3958699426056401,
+                -0.34727845911455124
+              ],
+              "estimate": -0.37003183324008293
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.1806385534997479,
+                -0.14357996050769917
+              ],
+              "estimate": -0.1608646984489399
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.2324017487635488,
+                -0.18522234771971913
+              ],
+              "estimate": -0.20916713479114302
+            }
+          },
+          "share_no_when_first_token_confident_json": {
+            "aligned": {
+              "n_confident_json": 7,
+              "share_no": 0.0
+            },
+            "neutral": {
+              "n_confident_json": 1,
+              "share_no": 0.0
+            },
+            "swapped": {
+              "n_confident_json": 4,
+              "share_no": 0.0
+            }
+          }
+        },
+        "witness": {
+          "fit": {
+            "intercept_aligned": -0.04687053623655146,
+            "intercept_neutral": 0.203713078551204,
+            "intercept_swapped": 0.06331736729478527,
+            "slope": 0.16916543448653082
+          },
+          "intercept_differences": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.2715161073285306,
+                -0.22922622572816692
+              ],
+              "estimate": -0.2505836147877555
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                -0.12927586595969517,
+                -0.09121179037370561
+              ],
+              "estimate": -0.11018790353133673
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.16042400470566415,
+                -0.12132134801366767
+              ],
+              "estimate": -0.14039571125641873
+            }
+          },
+          "share_no_when_first_token_confident_json": {
+            "aligned": {
+              "n_confident_json": 19,
+              "share_no": 0.0
+            },
+            "neutral": {
+              "n_confident_json": 11,
+              "share_no": 0.0
+            },
+            "swapped": {
+              "n_confident_json": 18,
+              "share_no": 0.05555555555555555
+            }
+          }
+        }
+      }
+    },
+    "qwen3-8b-fewshot": {
+      "checks": {
+        "discrimination_holds": true,
+        "fail_minus_witness": {
+          "ci": [
+            -5.877205779117177,
+            -5.054228956500992
+          ],
+          "estimate": -5.466121445779516,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999
+        },
+        "manipulation_check_passed": true,
+        "witness_effect": {
+          "ci": [
+            8.962662312983449,
+            9.928993179955242
+          ],
+          "cluster": "user",
+          "estimate": 9.448744095862818,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.9591121495327103
+        },
+        "write_minus_mention": {
+          "ci": [
+            1.9150413368292682,
+            2.4488304052053946
+          ],
+          "estimate": 2.174503494974792,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999
+        }
+      },
+      "competence": {
+        "first": {
+          "checks": {
+            "auc_neutral": {
+              "pass": true,
+              "value": 0.8598561626353167
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9997870088887133
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.6331096196868009
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.9865771812080537
+            }
+          },
+          "interpretable": true,
+          "n_failures": 447,
+          "n_successes": 447,
+          "population": "discrimination",
+          "readout": "first",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        },
+        "first_all_items": {
+          "checks": {
+            "auc_neutral": {
+              "pass": true,
+              "value": 0.8037942724255394
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9998414920683858
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.3820093457943925
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.8352803738317757
+            }
+          },
+          "interpretable": true,
+          "n_failures": 856,
+          "n_successes": 856,
+          "population": "all",
+          "readout": "first",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        },
+        "yn": {
+          "checks": {
+            "auc_neutral": {
+              "pass": true,
+              "value": 0.8374197358477345
+            },
+            "median_two_way_mass_neutral": {
+              "pass": true,
+              "value": 0.9996895288852601
+            },
+            "yes_share_neutral_failures": {
+              "pass": true,
+              "value": 0.1297539149888143
+            },
+            "yes_share_neutral_successes": {
+              "pass": true,
+              "value": 0.6040268456375839
+            }
+          },
+          "interpretable": true,
+          "n_failures": 447,
+          "n_successes": 447,
+          "population": "discrimination",
+          "readout": "yn",
+          "rule": {
+            "auc_neutral_min": 0.7,
+            "median_yes_no_mass_neutral_min": 0.5,
+            "yes_share_neutral_failures_max": 0.95,
+            "yes_share_neutral_successes_min": 0.05
+          }
+        }
+      },
+      "description": {
+        "by_class": {
+          "status": {
+            "fail_minus_witness": {
+              "ci": [
+                -5.979368929423891,
+                -5.090745183952499
+              ],
+              "estimate": -5.514669898706291,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                1.6999999875675196,
+                2.525903587912949
+              ],
+              "cluster": "user",
+              "estimate": 2.1179706509213636,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6601466992665037
+            }
+          },
+          "unavailable": {
+            "fail_minus_witness": {
+              "ci": [
+                -6.3664214888463,
+                -5.113916199724431
+              ],
+              "estimate": -5.7493826363608065,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                4.852666649037881,
+                5.858231667521158
+              ],
+              "cluster": "user",
+              "estimate": 5.3373456654103695,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8814814814814815
+            }
+          }
+        },
+        "class_mix": false,
+        "class_mix_reading": null,
+        "classes_with_fail_minus_witness_below_0": [
+          "status",
+          "unavailable"
+        ],
+        "fail_minus_witness": {
+          "ci": [
+            -5.877205779117177,
+            -5.054228956500992
+          ],
+          "estimate": -5.466121445779516,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999
+        },
+        "failing_effect": {
+          "ci": [
+            3.607482155974199,
+            4.347222217042251
+          ],
+          "cluster": "user",
+          "estimate": 3.982622650083302,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.7780373831775701
+        },
+        "failure_specific": false,
+        "item_share_first": 0.7780373831775701,
+        "item_share_first_ci": [
+          0.7453271028037384,
+          0.8078651685393259
+        ],
+        "label": "a shift shared by working and failing calls (working calls move more)",
+        "median_item_effect": 3.249999952424332,
+        "minority": false,
+        "minority_reading": null,
+        "row": "fail minus witness not above 0",
+        "witness_effect": {
+          "ci": [
+            8.962662312983449,
+            9.928993179955242
+          ],
+          "cluster": "user",
+          "estimate": 9.448744095862818,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.9591121495327103
+        },
+        "witness_share_of_failing_effect": 2.3724929339376866
+      },
+      "format": {
+        "first_mass_below_0.5_share": 0.0,
+        "first_mass_median": 0.999957063267902,
+        "prompt_tokens": null,
+        "seconds_mean_by_readout": {
+          "first": 1.6610164135514083,
+          "target": 1.6615578271028038,
+          "yn": 1.6613961059190085
+        },
+        "seconds_median_by_readout": {
+          "first": 1.4422,
+          "target": 1.4441,
+          "yn": 1.4471500000000002
+        },
+        "seconds_total": 22752.157800000074,
+        "target_mass_below_0.5_share": 0.0,
+        "target_mass_median": 0.9999996591214497,
+        "yn_mass_below_0.5_share": 0.0,
+        "yn_mass_median": 0.9999977435018089
+      },
+      "primary": {
+        "by_class": {
+          "status": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -0.9962686454551043,
+                -0.19027093905249678
+              ],
+              "cluster": "user",
+              "estimate": -0.5831295820140809,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.004995004995004995,
+              "share_positive": 0.4572127139364303
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                1.6999999875675196,
+                2.525903587912949
+              ],
+              "cluster": "user",
+              "estimate": 2.1179706509213636,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6601466992665037
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -3.0858823042205863,
+                -2.332107811128175
+              ],
+              "cluster": "user",
+              "estimate": -2.701100232935444,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.21026894865525672
+            }
+          },
+          "unavailable": {
+            "aligned_minus_neutral": {
+              "ci": [
+                2.8551682540595964,
+                3.6562499748638815
+              ],
+              "cluster": "user",
+              "estimate": 3.2370370091545952,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                4.852666649037881,
+                5.858231667521158
+              ],
+              "cluster": "user",
+              "estimate": 5.3373456654103695,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8814814814814815
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -2.3993589753997875,
+                -1.792085453451217
+              ],
+              "cluster": "user",
+              "estimate": -2.100308656255775,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.20987654320987653
+            }
+          }
+        },
+        "by_class_descriptive": {
+          "gc_balance": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.4166667351188759,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.3333333333333333
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 0.08333327861813207,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.5
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -0.500000013737008,
+              "n_clusters": 3,
+              "n_items": 6,
+              "n_users": 3,
+              "share_positive": 0.3333333333333333
+            }
+          },
+          "wrong_return_pm": {
+            "aligned_minus_neutral": {
+              "cluster": "user",
+              "estimate": 4.083333337129787,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.8888888888888888
+            },
+            "aligned_minus_swapped": {
+              "cluster": "user",
+              "estimate": 10.576388835598898,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 1.0
+            },
+            "swapped_minus_neutral": {
+              "cluster": "user",
+              "estimate": -6.493055498469112,
+              "n_clusters": 19,
+              "n_items": 36,
+              "n_users": 19,
+              "share_positive": 0.0
+            }
+          }
+        },
+        "first": {
+          "aligned_minus_neutral": {
+            "ci": [
+              1.0994285535419188,
+              1.7395833262212377
+            ],
+            "cluster": "user",
+            "estimate": 1.4217289595675362,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6366822429906542
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              3.607482155974199,
+              4.347222217042251
+            ],
+            "cluster": "user",
+            "estimate": 3.982622650083302,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7780373831775701
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -2.8155120383238788,
+              -2.2837957399683693
+            ],
+            "cluster": "user",
+            "estimate": -2.560893690515766,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.20210280373831777
+          }
+        },
+        "first_flips": {
+          "either": 0.2266355140186916,
+          "n": 856,
+          "toward_failure": 0.017523364485981307,
+          "toward_success": 0.2091121495327103
+        },
+        "first_probability_shift": {
+          "ci": [
+            0.17147535301112884,
+            0.22121652440120662
+          ],
+          "cluster": "user",
+          "estimate": 0.19632550630693762,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.7780373831775701
+        },
+        "first_product_clustered": {
+          "ci": [
+            3.587289012841334,
+            4.388871750627017
+          ],
+          "cluster": "product",
+          "estimate": 3.982622650083302,
+          "n_clusters": 56,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 0.7780373831775701
+        },
+        "first_without_fewshot_tool_classes": {
+          "aligned_minus_neutral": {
+            "ci": [
+              0.9585889470905316,
+              1.6660493791412807
+            ],
+            "cluster": "user",
+            "estimate": 1.3175675548695969,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.6277641277641277
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              3.3401773715870418,
+              4.1127666096714455
+            ],
+            "cluster": "user",
+            "estimate": 3.7197481458452546,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.7702702702702703
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -2.6856249961772063,
+              -2.1499364712888447
+            ],
+            "cluster": "user",
+            "estimate": -2.402180590975658,
+            "n_clusters": 175,
+            "n_items": 814,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.21007371007371006
+          }
+        },
+        "item_share": {
+          "first": {
+            "ci": [
+              0.7453271028037384,
+              0.8078651685393259
+            ],
+            "estimate": 0.7780373831775701,
+            "median_item_effect": 3.249999952424332,
+            "n_items": 856,
+            "null": 0.5,
+            "perm_p": 0.000999000999000999,
+            "tie_share": 0.0035046728971962616
+          },
+          "yn": {
+            "ci": [
+              0.9068923821039904,
+              0.9443813847900113
+            ],
+            "estimate": 0.9264018691588785,
+            "median_item_effect": 6.749999861858697,
+            "n_items": 856,
+            "null": 0.5,
+            "perm_p": 0.000999000999000999,
+            "tie_share": 0.005841121495327103
+          }
+        },
+        "n_items": 856,
+        "n_users": 175,
+        "yn": {
+          "aligned_minus_neutral": {
+            "ci": [
+              4.845410627783443,
+              5.566483178866961
+            ],
+            "cluster": "user",
+            "estimate": 5.220064247622243,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9205607476635514
+          },
+          "aligned_minus_swapped": {
+            "ci": [
+              7.210322160559636,
+              8.099117612999606
+            ],
+            "cluster": "user",
+            "estimate": 7.678154175085566,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9264018691588785
+          },
+          "swapped_minus_neutral": {
+            "ci": [
+              -2.754512610052751,
+              -2.151259183891866
+            ],
+            "cluster": "user",
+            "estimate": -2.458089927463324,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.39602803738317754
+          }
+        }
+      },
+      "primary_controls": {
+        "by_class": {
+          "status": {
+            "fail_minus_witness": {
+              "ci": [
+                -5.979368929423891,
+                -5.090745183952499
+              ],
+              "estimate": -5.514669898706291,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                1.6999999875675196,
+                2.525903587912949
+              ],
+              "cluster": "user",
+              "estimate": 2.1179706509213636,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6601466992665037
+            },
+            "witness": {
+              "ci": [
+                7.196473516770429,
+                8.054004814959619
+              ],
+              "cluster": "user",
+              "estimate": 7.632640549627653,
+              "n_clusters": 175,
+              "n_items": 409,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9731051344743277
+            }
+          },
+          "unavailable": {
+            "fail_minus_witness": {
+              "ci": [
+                -6.3664214888463,
+                -5.113916199724431
+              ],
+              "estimate": -5.7493826363608065,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "failing": {
+              "ci": [
+                4.852666649037881,
+                5.858231667521158
+              ],
+              "cluster": "user",
+              "estimate": 5.3373456654103695,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.8814814814814815
+            },
+            "witness": {
+              "ci": [
+                10.318094554895918,
+                11.819273312744242
+              ],
+              "cluster": "user",
+              "estimate": 11.086728301771178,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9432098765432099
+            }
+          }
+        },
+        "discrimination": {
+          "first": {
+            "ci": [
+              7.086315775922291,
+              8.135150823513925
+            ],
+            "cluster": "user",
+            "estimate": 7.600671129077435,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9530201342281879
+          },
+          "yn": {
+            "ci": [
+              4.430997869161461,
+              5.118801640966843
+            ],
+            "cluster": "user",
+            "estimate": 4.760067101308552,
+            "n_clusters": 175,
+            "n_items": 447,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9507829977628636
+          }
+        },
+        "discrimination_all_witnesses": {
+          "first": {
+            "ci": [
+              6.115106763397239,
+              6.953995156925949
+            ],
+            "cluster": "user",
+            "estimate": 6.531542041815993,
+            "n_clusters": 175,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999,
+            "share_positive": 0.9252336448598131
+          }
+        },
+        "discrimination_by_class": {
+          "status": {
+            "evidence": false,
+            "holds": null,
+            "n_items": 0,
+            "note": "no witness of this class is determined by its history"
+          },
+          "unavailable": {
+            "evidence": true,
+            "first": {
+              "ci": [
+                7.361793610288169,
+                8.421874985306166
+              ],
+              "cluster": "user",
+              "estimate": 7.904938266501921,
+              "n_clusters": 175,
+              "n_items": 405,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9629629629629629
+            },
+            "holds": true,
+            "n_items": 405
+          }
+        },
+        "fail_minus_witness_effect": {
+          "first": {
+            "ci": [
+              -5.877205779117177,
+              -5.054228956500992
+            ],
+            "estimate": -5.466121445779516,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          },
+          "yn": {
+            "ci": [
+              -5.3020348308118175,
+              -4.651551265875937
+            ],
+            "estimate": -4.968165848122606,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          }
+        },
+        "fail_minus_witness_vs_neutral": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -5.207333634147499,
+                -4.513590154322565
+              ],
+              "estimate": -4.85178148999886,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                0.32142855305122175,
+                0.9306831390217783
+              ],
+              "estimate": 0.6143399557806563,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                -1.4515059772345327,
+                -1.0157514044329503
+              ],
+              "estimate": -1.2343749737415397,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                3.368287562187956,
+                4.12102003534595
+              ],
+              "estimate": 3.7337908743810706,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999
+            }
+          }
+        },
+        "manipulation": {
+          "ci": [
+            18.395161188372324,
+            19.47644113528677
+          ],
+          "cluster": "user",
+          "estimate": 18.96699756136956,
+          "n_clusters": 175,
+          "n_items": 856,
+          "n_users": 175,
+          "perm_p": 0.000999000999000999,
+          "share_positive": 1.0
+        },
+        "mention": {
+          "first": {
+            "aligned_minus_mention_aligned": {
+              "ci": [
+                1.3594879386183343,
+                1.8321349371975526
+              ],
+              "cluster": "user",
+              "estimate": 1.594042038689347,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6635514018691588
+            },
+            "mention_aligned_minus_mention_swapped": {
+              "ci": [
+                1.5889929601180768,
+                2.0212014094166033
+              ],
+              "cluster": "user",
+              "estimate": 1.8081191551085098,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.6845794392523364
+            },
+            "mention_aligned_minus_neutral": {
+              "ci": [
+                -0.35293246523577765,
+                0.013517635414057884
+              ],
+              "cluster": "user",
+              "estimate": -0.17231307912181043,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.07492507492507493,
+              "share_positive": 0.4392523364485981
+            }
+          }
+        },
+        "witness": {
+          "first": {
+            "aligned_minus_neutral": {
+              "ci": [
+                5.926593881239364,
+                6.608682876774517
+              ],
+              "cluster": "user",
+              "estimate": 6.273510449566393,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9228971962616822
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                8.962662312983449,
+                9.928993179955242
+              ],
+              "cluster": "user",
+              "estimate": 9.448744095862818,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9591121495327103
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -3.5627847458683544,
+                -2.7855941588213953
+              ],
+              "cluster": "user",
+              "estimate": -3.1752336462964226,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.2441588785046729
+            }
+          },
+          "yn": {
+            "aligned_minus_neutral": {
+              "ci": [
+                6.169976602792496,
+                6.713284724657127
+              ],
+              "cluster": "user",
+              "estimate": 6.454439221363778,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.977803738317757
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                12.035756787980777,
+                13.240603588578624
+              ],
+              "cluster": "user",
+              "estimate": 12.646320023208174,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.9929906542056075
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -6.666169401487483,
+                -5.716121455956615
+              ],
+              "cluster": "user",
+              "estimate": -6.191880801844392,
+              "n_clusters": 175,
+              "n_items": 856,
+              "n_users": 175,
+              "perm_p": 0.000999000999000999,
+              "share_positive": 0.10163551401869159
+            }
+          }
+        },
+        "write_minus_mention_effect": {
+          "first": {
+            "ci": [
+              1.9150413368292682,
+              2.4488304052053946
+            ],
+            "estimate": 2.174503494974792,
+            "n_items": 856,
+            "n_users": 175,
+            "perm_p": 0.000999000999000999
+          }
+        }
+      },
+      "task_judgement_yes_no": {
+        "confident_json_threshold": 3.0,
+        "fail": {
+          "fit": {
+            "intercept_aligned": -6.729079796372259,
+            "intercept_neutral": -10.614596953804869,
+            "intercept_swapped": -10.668829802910299,
+            "slope": 0.938678980412398
+          },
+          "intercept_differences": {
+            "aligned_minus_neutral": {
+              "ci": [
+                3.641642985543978,
+                4.1144333611679835
+              ],
+              "estimate": 3.8855171574326093
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                3.6367697151279827,
+                4.214433260526879
+              ],
+              "estimate": 3.9397500065380395
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -0.29366355973021463,
+                0.1995488929001379
+              ],
+              "estimate": -0.05423284910543025
+            }
+          },
+          "share_no_when_first_token_confident_json": {
+            "aligned": {
+              "n_confident_json": 277,
+              "share_no": 0.16967509025270758
+            },
+            "neutral": {
+              "n_confident_json": 189,
+              "share_no": 0.671957671957672
+            },
+            "swapped": {
+              "n_confident_json": 116,
+              "share_no": 0.9310344827586207
+            }
+          }
+        },
+        "witness": {
+          "fit": {
+            "intercept_aligned": -7.477549143862795,
+            "intercept_neutral": -9.098049019026963,
+            "intercept_swapped": -12.843311300092441,
+            "slope": 0.7705318075199392
+          },
+          "intercept_differences": {
+            "aligned_minus_neutral": {
+              "ci": [
+                1.3356084584208539,
+                1.8979901424027226
+              ],
+              "estimate": 1.6204998751641675
+            },
+            "aligned_minus_swapped": {
+              "ci": [
+                4.8584225808466055,
+                5.859839581778505
+              ],
+              "estimate": 5.365762156229646
+            },
+            "swapped_minus_neutral": {
+              "ci": [
+                -4.077118932887055,
+                -3.4325589023448053
+              ],
+              "estimate": -3.7452622810654788
+            }
+          },
+          "share_no_when_first_token_confident_json": {
+            "aligned": {
+              "n_confident_json": 779,
+              "share_no": 0.32349165596919127
+            },
+            "neutral": {
+              "n_confident_json": 573,
+              "share_no": 0.506108202443281
+            },
+            "swapped": {
+              "n_confident_json": 389,
+              "share_no": 0.9048843187660668
+            }
+          }
+        }
+      }
+    }
+  },
+  "reference_check": {
+    "all_equal": true,
+    "checked": true,
+    "models": {
+      "llama3.1-8b-fewshot": {
+        "equal": true,
+        "published": [
+          0.4730578295654774,
+          [
+            0.40632813070260454,
+            0.5391824072982276
+          ]
+        ],
+        "recomputed": [
+          0.4730578295654774,
+          [
+            0.40632813070260454,
+            0.5391824072982276
+          ]
+        ]
+      },
+      "qwen3-8b-fewshot": {
+        "equal": true,
+        "published": [
+          3.982622650083302,
+          [
+            3.607482155974199,
+            4.347222217042251
+          ]
+        ],
+        "recomputed": [
+          3.982622650083302,
+          [
+            3.607482155974199,
+            4.347222217042251
+          ]
+        ]
+      }
+    },
+    "path": "/storage/ice1/2/1/gmat3/text-wm-fix44/notes/tau_metrics.json"
+  },
+  "reference_run": {
+    "folders": [
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_00_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_01_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_02_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_03_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_04_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_05_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_06_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_07_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_08_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_09_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_10_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_11_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_12_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_13_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_14_of_16",
+      "/storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_score_reference/shard_15_of_16"
+    ],
+    "git_sha": [
+      "c737cd6571d0c381a205106589bab0523d55d9a0"
+    ],
+    "missing": 0,
+    "problems": [],
+    "run": "tau_score_reference",
+    "stale": 0
+  },
+  "sensitivity_without_fewshot_tool_classes": {
+    "llama3.2-3b": {
+      "primary_ungated_verdict": "replicates (ALFWorld direction)",
+      "same_category": true,
+      "verdict": "replicates (ALFWorld direction)"
+    },
+    "mistral-7b-v0.3": {
+      "primary_ungated_verdict": "small effect, direction positive",
+      "same_category": true,
+      "verdict": "small effect, direction positive"
+    }
+  },
+  "stale_scores": {
+    "llama3.2-3b": 0,
+    "mistral-7b-v0.3": 0
+  },
+  "token_reports": {
+    "llama3.2-3b": {
+      "alone": {
+        "Error": [
+          1480
+        ],
+        "No": [
+          2822
+        ],
+        "Yes": [
+          9642
+        ],
+        "{\"": [
+          5018
+        ]
+      },
+      "attn_implementation_loaded": "sdpa",
+      "ok": true,
+      "reply_starts": {
+        "failure": [
+          1480
+        ],
+        "twin": [
+          5018
+        ],
+        "witness": [
+          5018
+        ]
+      },
+      "yes_no_replies": {
+        "No": [
+          2822
+        ],
+        "Yes": [
+          9642
+        ]
+      }
+    },
+    "mistral-7b-v0.3": {
+      "alone": {
+        "Error": [
+          8187
+        ],
+        "No": [
+          2538
+        ],
+        "Yes": [
+          6360
+        ],
+        "{\"": [
+          10598
+        ]
+      },
+      "attn_implementation_loaded": "sdpa",
+      "ok": true,
+      "reply_starts": {
+        "failure": [
+          8187
+        ],
+        "twin": [
+          10598
+        ],
+        "witness": [
+          10598
+        ]
+      },
+      "yes_no_replies": {
+        "No": [
+          2538
+        ],
+        "Yes": [
+          6360
+        ]
+      }
+    }
+  },
+  "verdicts": {
+    "alpha_holm": 0.01,
+    "correction": "Holm over the scored models at a fixed size (a missing model enters with p = 1)",
+    "family": [
+      "mistral-7b-v0.3",
+      "llama3.2-3b"
+    ],
+    "per_model": {
+      "llama3.2-3b": {
+        "ci_above_0": true,
+        "competence_first_token_interpretable": true,
+        "competence_yes_no_interpretable": false,
+        "discrimination_holds": true,
+        "holm_p": 0.001998001998001998,
+        "manipulation_check_passed": true,
+        "outcome_table": {
+          "discrimination_holds": true,
+          "mention": "the request to act adds to naming the order (write minus mention above 0; an authorization reading predicts this too)",
+          "reading": "A general task-consistency bias, or a belief that the backend checks calls against the request: naming the order raises the success belief of calls on it whether they fail or not; reported as goal leakage, not as an override specific to failures",
+          "specificity": "not specific to failing calls (fail minus witness about 0, negative or uncertain)",
+          "witness": "the task shifts predictions for the working call toward success (witness aligned minus swapped, CI above 0)"
+        },
+        "qualifiers": [],
+        "reading": "A general task-consistency bias, or a belief that the backend checks calls against the request: naming the order raises the success belief of calls on it whether they fail or not; reported as goal leakage, not as an override specific to failures",
+        "verdict": "replicates (ALFWorld direction)"
+      },
+      "mistral-7b-v0.3": {
+        "ci_above_0": true,
+        "competence_first_token_interpretable": false,
+        "competence_yes_no_interpretable": false,
+        "discrimination_holds": false,
+        "holm_p": 0.001998001998001998,
+        "manipulation_check_passed": true,
+        "outcome_table": {
+          "discrimination_holds": false,
+          "mention": "naming the order is enough; the request to act adds nothing (write minus mention inside \u00b10.5)",
+          "reading": "The task shifts predictions, but the model is not shown to use the visible record: not read as the task overriding visible evidence (below the 0.5-nat size)",
+          "specificity": "not specific to failing calls (fail minus witness about 0, negative or uncertain)",
+          "witness": "the task shifts predictions for the working call toward success (witness aligned minus swapped, CI above 0)"
+        },
+        "qualifiers": [],
+        "reading": "Not interpretable: on these prompts the model is not shown to tell working calls from failing ones, or answers one way to everything; no statement about goal sensitivity",
+        "verdict": "not interpretable (fails the families competence rule on the first-token readout)",
+        "verdict_before_competence": "small effect, direction positive"
+      }
+    }
+  }
+}
