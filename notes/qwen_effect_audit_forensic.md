@@ -317,3 +317,8 @@ python scripts/qwen_audit/report.py notes/qwen_effect_audit_forensic_metrics.jso
 ```
 
 The analysis takes about two minutes on a laptop CPU, with 2,000 game-clustered bootstrap resamples (seed 20261122; 500 for medians, trimmed means and standardized effects). Every number in this note is in `notes/qwen_effect_audit_forensic_metrics.json`, except the means of the four other families quoted in section 7, which are averages of that file's per-model values. No model was run, and no ICE checkout or run was modified; the only ICE writes are in the new checkout `text-wm-qwenaudit`.
+
+
+## Follow-up: the pipeline audit (2026-11-23)
+
+The second, independent audit (`notes/qwen_effect_audit_pipeline.md`, 2026-11-23) re-implemented the Qwen scoring on GPU: a scorer written from scratch reproduces the stored scores exactly on the same GPU type, and vLLM and float32 weights agree, so no bug produced the number. About half of the effect's size depends on one prompt-format detail, the empty thinking-off block that Qwen3's chat template places before the answer: on 200 sampled items the effect is 7.34 nats with it and 3.87 without it. In every format tried it stays positive and 2 to 5 times Llama-3.1-8B's. The confirmatory result is not re-verdicted.
