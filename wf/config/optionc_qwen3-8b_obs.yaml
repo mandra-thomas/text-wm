@@ -5,12 +5,15 @@ run_id: optionc_qwen3-8b_obs
 # (or obs_gate_override is set, with a reason). Pre-declared reallocation (design note): if the step-0 check is
 # "question-specific" and this readout is competent, Tier 1's three seeds may move here (set aware and blind to
 # [1, 2, 3]) and this run becomes the primary run of optionc_analysis; the analysis checks that condition.
+# EXERCISED 2026-11-22 (design note, 'Reallocation exercised'): the step-0 check found Qwen3-8B 'question-specific'
+# with a competent observation readout, so this run carries Tier 1's seeds and the seed-free no-verifier arm, which
+# moved here from optionc_qwen3-8b_yn because the analysis takes the reference episodes from the primary run.
 tier: 2
 model: qwen3-8b
 readout: obs
 rules: [accepted_only]
-arms: [blind, aware, swapped]
-seeds_by_arm: {blind: [1], aware: [1], swapped: [1]}
+arms: [none, blind, aware, swapped]
+seeds_by_arm: {blind: [1, 2, 3], aware: [1, 2, 3], swapped: [1]}
 shadow_arms: [blind, swapped]
 split: valid_unseen
 n_games: 134
@@ -20,4 +23,4 @@ k_max: 8
 n_shards: 4
 max_episodes_per_job: 40
 step0_analysis: optionc_step0_analysis
-cost_upper_gpu_hours: 28
+cost_upper_gpu_hours: 58

@@ -4,8 +4,10 @@ run_id: optionc_analysis
 # Tier 2 or 3 run here only once it is complete. rq3_source: the archived RQ3 episodes (commit ddeabc2) for the drift
 # check, under runs/ or by absolute path (a missing archive is recorded, not fatal). The primary run must be Qwen3-8B,
 # accepted-only, yes/no; or the observation readout under the pre-declared reallocation (checked against step0_analysis).
+# Reallocation exercised 2026-11-22 (design note): the observation readout is the primary run, yes/no the secondary.
 runs:
+  optionc_qwen3-8b_obs: optionc_qwen3-8b_obs
   optionc_qwen3-8b_yn: optionc_qwen3-8b_yn
-primary_run: optionc_qwen3-8b_yn
+primary_run: optionc_qwen3-8b_obs
 rq3_source: rq3
 step0_analysis: optionc_step0_analysis

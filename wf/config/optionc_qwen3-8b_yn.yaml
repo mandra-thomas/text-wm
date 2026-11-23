@@ -7,12 +7,15 @@ run_id: optionc_qwen3-8b_yn
 # Primary outcome: success, aware minus blind. Starts only after a passed smoke, a reported step-0 analysis and the
 # cost rule (the smoke's projection at most 1.5 x cost_upper_gpu_hours), unless order_override is set with a reason.
 # Allocation is config-only: seeds_by_arm (and the arms list) is all the user changes.
+# REALLOCATED 2026-11-22 (design note, 'Reallocation exercised'): the step-0 check was 'question-specific' with a
+# competent observation readout, so this run is now the pre-registered yes/no secondary at one seed per arm; its
+# no-verifier arm moved to optionc_qwen3-8b_obs, the primary run, whose no-verifier episodes the analysis uses.
 tier: 1
 model: qwen3-8b
 readout: yn
 rules: [accepted_only]
-arms: [none, blind, aware, swapped]
-seeds_by_arm: {blind: [1, 2, 3], aware: [1, 2, 3], swapped: [1]}
+arms: [blind, aware, swapped]
+seeds_by_arm: {blind: [1], aware: [1], swapped: [1]}
 shadow_arms: [blind, swapped]
 split: valid_unseen
 n_games: 134
@@ -21,4 +24,4 @@ n_samples: 20
 k_max: 8
 n_shards: 4
 max_episodes_per_job: 40
-cost_upper_gpu_hours: 58
+cost_upper_gpu_hours: 28

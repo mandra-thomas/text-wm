@@ -1016,16 +1016,29 @@ def test_registry_and_configs():
                  "optionc_qwen3-8b_obs", "optionc_gemma2-9b-it_yn", "optionc_step0_qwen3-8b",
                  "optionc_step0_llama3.1-8b", "optionc_step0_analysis", "optionc_analysis", "optionc_smoke_analysis"):
         assert name in RUNNERS
-    tier1 = load_config("optionc_qwen3-8b_yn")
-    assert (tier1["model"], tier1["readout"], tier1["rules"]) == ("qwen3-8b", "yn", ["accepted_only"])
+    # Reallocation exercised 2026-11-22 (design note): the observation readout carries Tier 1's seeds and the
+    # no-verifier arm and is the primary run; yes/no is the secondary at one seed per arm.
+    tier1 = load_config("optionc_qwen3-8b_obs")
+    assert (tier1["model"], tier1["readout"], tier1["rules"]) == ("qwen3-8b", "obs", ["accepted_only"])
     assert tier1["arms"] == ["none", "blind", "aware", "swapped"]
     assert tier1["seeds_by_arm"] == {"blind": [1, 2, 3], "aware": [1, 2, 3], "swapped": [1]}
     assert tier1["shadow_arms"] == ["blind", "swapped"] and tier1["cost_upper_gpu_hours"] == 58
+    yn = load_config("optionc_qwen3-8b_yn")
+    assert (yn["model"], yn["readout"], yn["rules"]) == ("qwen3-8b", "yn", ["accepted_only"])
+    assert yn["arms"] == ["blind", "aware", "swapped"] and yn["cost_upper_gpu_hours"] == 28
+    assert yn["seeds_by_arm"] == {"blind": [1], "aware": [1], "swapped": [1]} and yn["shadow_arms"] == ["blind", "swapped"]
+    assert yn["n_games"] == 134 and yn["step_cap"] == 30 and yn["split"] == "valid_unseen"
     assert load_config("optionc_llama3.1-8b_yn")["tier"] == 3 and load_config("optionc_smoke")["smoke"] is True
     assert "optionc_memsmoke_gemma2-9b-it" in RUNNERS
     assert tier1["n_games"] == 134 and tier1["step_cap"] == 30 and tier1["split"] == "valid_unseen"
     assert load_config("optionc_qwen3-8b_yn_argmax")["rules"] == ["argmax"]
-    assert load_config("optionc_analysis")["primary_run"] == "optionc_qwen3-8b_yn"
+    an = load_config("optionc_analysis")
+    assert an["primary_run"] == "optionc_qwen3-8b_obs"
+    assert an["runs"] == {"optionc_qwen3-8b_obs": "optionc_qwen3-8b_obs", "optionc_qwen3-8b_yn": "optionc_qwen3-8b_yn"}
+    step0 = {"models": {"qwen3-8b": {"classification": "question-specific (supports the task-success reading)",
+                                     "obs_competence": {"passed": True}}}}
+    assert O.primary_problems(tier1, step0) == []
+    assert O.primary_problems(tier1, {"models": {"qwen3-8b": {"classification": "mixed", "obs_competence": {"passed": True}}}})
     assert O.PRIMARY == {"model": "qwen3-8b", "readout": "yn", "rule": "accepted_only"}
 
 
