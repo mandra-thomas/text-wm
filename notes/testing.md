@@ -531,3 +531,97 @@ Review 1 of the wave B design ([families_waveb_review1.md](families_waveb_review
 | pair readings without the size caveat | `tests/test_families_waveb.py::test_b2_generation_pairs_carry_the_size_caveat` |
 
 All 63 killed under the strict rule, by 31 different tests; none survived, timed out or left the suite unrunnable. The 72 earlier wave B mutants were rerun under the strict rule on the same code: 72 of 72 killed (both lists, with the killing test of each, are in `notes/families_waveb_mutants.txt`).
+
+
+## TextCraft round 3 (2026-11-23, before any round-3 score)
+
+`tests/test_textcraft_r3.py` covers round 3 (`notes/textcraft_r3_design.md`) without a model or a real tokenizer: the
+model specs and pins, the GPU classes, the seeded subsets, the round-3 gate on a stand-in chat tokenizer with a thinking
+switch (every check, including arm isolation, the declared generation suffix, forbidden text and mistral-common), the
+scoring runs in mock mode (score, smoke, envcheck, format, resume, the gate stopping a run), the attention-agreement
+rule, the thinking arm (its 4,530 jobs, budget forcing, the readout point, resume), and every decision rule of the
+analysis: the standardized contrast and the paired goal-pair bootstrap of its difference (a pure change of logit scale
+moves nothing), item shares, the first-token / tail split, R2 for round 3, H3-P, round 2's general finding, the
+replication rule with "partial" never counted, family sizes, the pair readings, the environment check, the golden
+token check, the one-fifth rule, provenance, and two end-to-end mock runs. `tests/test_textcraft_r3_serve2.py` runs
+only in serve2 (ICE): the tiny random-weight Gemma 4 12B and OLMo 3 models score end to end through the pinned
+tokenizers, the Gemma 4 12B checkpoint's stored vision-embedder names load under the strict check, and the attention
+agreement runs on the real class.
+
+Mutation testing, official run under the strict named-kill rule (log `notes/textcraft_r3_mutation_log.txt`): 67
+round-3 mutants, all killed, by 38 different tests. A screen run first (MUTATION_FAST_ONLY=1, and an earlier run
+stopped once its first survivors were seen) found nine survivors; tests for each were added before the official run:
+the right-hand side of the isolation check, the pin of the 27B model, a template that ignores the thinking switch, one
+bootstrap resample serving both models of a pair, a candidate that is not the template's reply, resuming the thinking
+arm on changed records, records that only one model of a pair scored, the Holm-adjusted (not raw) equivalence p of a
+pair, and the one-fifth rule's threshold.
+
+| Mutant | Killed by |
+|---|---|
+| B3 NaN dropped | `tests/test_textcraft_r3.py::test_b3_family_and_pair_readings` |
+| B3 margin 0.5 | `tests/test_textcraft_r3.py::test_b3_family_and_pair_readings` |
+| B3 read when the environment fails | `tests/test_textcraft_r3.py::test_b3_is_not_read_when_the_environment_check_fails` |
+| Gemma 12B allows unexpected tensors | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
+| Gemma 12B without the attention check | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
+| Gemma 12B without the generation suffix | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
+| H3-P ignores R2 | `tests/test_textcraft_r3.py::test_h3p_reading` |
+| H3-P partial counted as support | `tests/test_textcraft_r3.py::test_h3p_reading` |
+| H3-P supported with one competent model | `tests/test_textcraft_r3.py::test_h3p_reading` |
+| OLMo default prompt allowed | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
+| OLMo not strict | `tests/test_textcraft_r3.py::test_new_specs_take_the_31b_template_handling_and_strict_loading` |
+| R2 counts incompetent models | `tests/test_textcraft_r3.py::test_r2_for_round_three` |
+| R2 fires despite a confirmed penalty | `tests/test_textcraft_r3.py::test_r2_for_round_three` |
+| an A100 of 40 GB counts as 80 | `tests/test_textcraft_r3.py::test_gpu_classes_and_pins` |
+| attention disagreement ignored | `tests/test_textcraft_r3.py::test_run_gate_requires_the_golden_and_records_the_loading` |
+| attention tolerance loosened | `tests/test_textcraft_r3.py::test_attention_agreement_rule` |
+| attention without SDPA loaded | `tests/test_textcraft_r3.py::test_attention_agreement_rule` |
+| base tag keeps the suffix | `tests/test_textcraft_r3.py::test_spec_for_variants_and_base_tags` |
+| envcheck completeness off | `tests/test_textcraft_r3.py::test_environment_check_rule` |
+| envcheck of any model | `tests/test_textcraft_r3.py::test_runs_refuse_unknown_models_and_unverified_records` |
+| envcheck on any GPU | `tests/test_textcraft_r3.py::test_environment_check_rule` |
+| envcheck tolerance loosened | `tests/test_textcraft_r3.py::test_environment_check_rule` |
+| fallback slot unchecked | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| family B3 size 20 | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| finding counts incompetent models | `tests/test_textcraft_r3.py::test_round2_finding` |
+| finding needs one competent model | `tests/test_textcraft_r3.py::test_h3p_reading` |
+| first-token split on the whole L | `tests/test_textcraft_r3.py::test_first_token_tail_split_adds_up` |
+| format check on all records | `tests/test_textcraft_r3.py::test_seeded_subsets_are_fixed` |
+| gate candidate check off | `tests/test_textcraft_r3.py::test_gate_catches_a_candidate_that_is_not_the_templates_reply` |
+| gate ending check off | `tests/test_textcraft_r3.py::test_gate_catches_a_wrong_ending_a_forbidden_text_and_an_unread_switch` |
+| gate failure ignored | `tests/test_textcraft_r3.py::test_gate_failure_stops_before_any_score` |
+| gate first-token check off | `tests/test_textcraft_r3.py::test_gate_catches_a_multi_token_yes_and_shared_first_tokens` |
+| gate forbidden text off | `tests/test_textcraft_r3.py::test_gate_catches_a_wrong_ending_a_forbidden_text_and_an_unread_switch` |
+| gate ignores the suffix | `tests/test_textcraft_r3.py::test_gate_passes_and_counts_every_record_and_arm` |
+| gate isolation check off | `tests/test_textcraft_r3.py::test_gate_catches_tokens_changed_outside_the_goal_line` |
+| gate mistral-common optional | `tests/test_textcraft_r3.py::test_gate_requires_mistral_common_when_declared` |
+| gate single-token check off | `tests/test_textcraft_r3.py::test_gate_catches_a_multi_token_yes_and_shared_first_tokens` |
+| gate switch check off | `tests/test_textcraft_r3.py::test_gate_catches_a_template_that_ignores_the_thinking_switch` |
+| golden problems ignored | `tests/test_textcraft_r3.py::test_run_gate_requires_the_golden_and_records_the_loading` |
+| golden tokens ignore the id hash | `tests/test_textcraft_r3.py::test_golden_tokens_check` |
+| gpu check off | `tests/test_textcraft_r3.py::test_gpu_classes_and_pins` |
+| isolation ignores the right side | `tests/test_textcraft_r3.py::test_isolation_check` |
+| large models on any card | `tests/test_textcraft_r3.py::test_gpu_classes_and_pins` |
+| lift values from the class-matched rows | `tests/test_textcraft_r3.py::test_record_values_agree_with_round_twos_contrast_inputs` |
+| null replication tolerates a confirmed effect | `tests/test_textcraft_r3.py::test_replication_rule` |
+| one-fifth rule halved | `tests/test_textcraft_r3.py::test_format_check_one_fifth_rule` |
+| pair difference reversed | `tests/test_textcraft_r3.py::test_paired_difference_detects_a_real_difference_and_uses_common_records_only` |
+| pair differs without the interval | `tests/test_textcraft_r3.py::test_b3_family_and_pair_readings` |
+| pair equivalence unadjusted | `tests/test_textcraft_r3.py::test_b3_family_and_pair_readings` |
+| pair of the wrong Gemma | `tests/test_textcraft_r3.py::test_core_extension_fallback_and_thinking_arm` |
+| pair on records of one model only | `tests/test_textcraft_r3.py::test_paired_difference_detects_a_real_difference_and_uses_common_records_only` |
+| pair resamples differ between models | `tests/test_textcraft_r3.py::test_paired_difference_is_scale_free_and_zero_for_the_same_model` |
+| pooled SD unweighted | `tests/test_textcraft_r3.py::test_stats_match_the_definitions` |
+| provenance GPU check off | `tests/test_textcraft_r3.py::test_provenance_problems` |
+| provenance commit check off | `tests/test_textcraft_r3.py::test_provenance_problems` |
+| replication counts incompetent models | `tests/test_textcraft_r3.py::test_replication_rule` |
+| replication ignores the opposite sign | `tests/test_textcraft_r3.py::test_replication_rule` |
+| replication partial counted | `tests/test_textcraft_r3.py::test_replication_rule` |
+| resume ignores record hashes | `tests/test_textcraft_r3.py::test_score_run_scores_every_record_and_arm_then_resumes` |
+| standardized without the SD | `tests/test_textcraft_r3.py::test_stats_match_the_definitions` |
+| strict floor 0.7 | `tests/test_textcraft_r3.py::test_round3_extras_are_descriptive_and_include_the_strict_floor` |
+| think failures not sampled | `tests/test_textcraft_r3.py::test_thinking_jobs_and_procedure` |
+| think forced not flagged | `tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point` |
+| think readout before the blank line | `tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point` |
+| think reasoning cap 4096 | `tests/test_textcraft_r3.py::test_thinking_jobs_and_procedure` |
+| think resume ignores hashes | `tests/test_textcraft_r3.py::test_thinking_run_mock_generates_scores_and_resumes` |
+| thinking arm with thinking off | `tests/test_textcraft_r3.py::test_every_model_is_pinned_at_the_design_revision` |

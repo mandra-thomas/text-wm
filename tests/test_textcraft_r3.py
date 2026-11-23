@@ -123,7 +123,10 @@ def test_gpu_classes_and_pins():
     assert not R3.gpu_type_ok("qwen3.5-9b", ["NVIDIA L40S", "NVIDIA L40S"])
     assert R3.gpu_type_ok("qwen3.8-27b", ["NVIDIA A100-SXM4-80GB"])
     assert R3.gpu_type_ok("gemma4-31b-it", ["NVIDIA L40S", "NVIDIA L40S"])
-    assert not R3.gpu_type_ok("gemma4-31b-it", ["NVIDIA L40S"])
+    assert not R3.gpu_type_ok("gemma4-31b-it", ["NVIDIA L40S"]) and not R3.gpu_type_ok("qwen3.8-27b", ["NVIDIA L40S"])
+    assert R3.GPU_PIN["qwen3.8-27b"] == R3.GPU_PIN["gemma4-31b-it"] == (R3.A100_80, "2x NVIDIA L40S")
+    assert all(R3.GPU_PIN[t] == (R3.L40S,) for t in ("qwen3.5-9b", "ministral3-8b-it", "gemma4-12b-it", "gemma4-e4b-it",
+                                                      "olmo3-7b-it", R3.THINK_TAG))
     with pytest.raises(SystemExit):
         S.gpu_check("qwen3.5-9b", ["NVIDIA A40"])
     assert S.gpu_check("qwen3.5-9b", ["NVIDIA L40S"])["checked"] is True
@@ -244,6 +247,29 @@ def test_gate_catches_a_wrong_ending_a_forbidden_text_and_an_unread_switch(small
     assert any("thinking on does not end" in p for p in rep["problems"])
 
 
+class NoSwitch(FakeTok):
+    def apply_chat_template(self, messages, tokenize=True, add_generation_prompt=False, enable_thinking=False, **kw):
+        return super().apply_chat_template(messages, tokenize, add_generation_prompt, enable_thinking=False, **kw)
+
+
+def test_gate_catches_a_template_that_ignores_the_thinking_switch(small):
+    rep = T.gate(_scorer(NoSwitch()), replace(FAKE_SPEC, thinking_on_ending="", thinking_on_markers=()), small[:2], SHOTS)
+    assert not rep["ok"] and any("renders like thinking off" in p for p in rep["problems"])
+
+
+class Prefixed(FakeTok):
+    """A template that writes a marker word before every reply, so a candidate tokenized alone is not the reply."""
+
+    def apply_chat_template(self, messages, tokenize=True, add_generation_prompt=False, enable_thinking=False, **kw):
+        messages = [{**m, "content": "~ " + m["content"]} if m["role"] == "assistant" else m for m in messages]
+        return super().apply_chat_template(messages, tokenize, add_generation_prompt, enable_thinking, **kw)
+
+
+def test_gate_catches_a_candidate_that_is_not_the_templates_reply(small):
+    rep = T.gate(_scorer(Prefixed()), FAKE_SPEC, small[:2], SHOTS)
+    assert not rep["ok"] and any("vs template" in p and ("o_plus" in p or "o_minus" in p) for p in rep["problems"])
+
+
 def test_gate_requires_mistral_common_when_declared(small):
     rep = T.gate(_scorer(FakeTok()), replace(FAKE_SPEC, mistral_common_check=True), small[:2], SHOTS)
     assert not rep["ok"] and any("mistral-common" in p for p in rep["problems"])
@@ -264,6 +290,9 @@ def test_isolation_check():
     assert T.isolated(tok, a, b, "Goal: craft stick.", "Goal: craft torch.")
     c = tok("<s> z Goal: craft torch. y").input_ids
     assert not T.isolated(tok, a, c, "Goal: craft stick.", "Goal: craft torch.")
+    d = tok("<s> x Goal: craft torch. Q y").input_ids  # only the second prompt changes a token after its line
+    assert not T.isolated(tok, a, d, "Goal: craft stick.", "Goal: craft torch.")
+    assert not T.isolated(tok, d, a, "Goal: craft torch.", "Goal: craft stick.")
 
 
 def test_gate_catches_a_multi_token_yes_and_shared_first_tokens(small, monkeypatch):
@@ -445,6 +474,12 @@ def test_thinking_run_mock_generates_scores_and_resumes(mock_runs, records):
     assert all(s["L"] == pytest.approx(s["logp_plus"] - s["logp_minus"]) for s in sc)
     assert K.run_textcraft_r3_think({**cfg, "resume": True}) == 0
     assert len((d / "generations.jsonl").read_text().splitlines()) == 20
+    lines = (d / "generations.jsonl").read_text().splitlines()
+    bad = json.loads(lines[0])
+    bad["item_hash"] = "0" * 16
+    (d / "generations.jsonl").write_text("\n".join([json.dumps(bad)] + lines[1:]) + "\n")
+    with pytest.raises(SystemExit):
+        K.run_textcraft_r3_think({**cfg, "resume": True})
 
 
 # ---------------- analysis: building blocks ----------------
@@ -476,6 +511,7 @@ def _values(n_pairs=30, per=6, gap=False, shift=0.4, scale=1.0, seed=0):
 def test_paired_difference_is_scale_free_and_zero_for_the_same_model():
     old = _values()
     same = Z.paired_difference(old, old, False, B=200)
+    assert same["standardized"]["ci95"] == [0.0, 0.0]  # one resample serves both models, so every draw is zero
     assert same["standardized"]["estimate"] == pytest.approx(0) and same["raw_nats_descriptive"]["estimate"] == pytest.approx(0)
     triple = {k: (r, 3 * x, p) for k, (r, x, p) in old.items()}
     d = Z.paired_difference(old, triple, False, B=200)
@@ -493,6 +529,10 @@ def test_paired_difference_detects_a_real_difference_and_uses_common_records_onl
     assert d["standardized"]["p_differs"] < 0.01 and d["standardized"]["p_equivalent"] > 0.5
     new_less = dict(list(new.items())[:-12])
     assert Z.paired_difference(old, new_less, False, B=50)["n_items"] == len(new_less)
+    extreme = {**old, **{f"x{k}": (None, 50.0, "p0") for k in range(10)}}  # records only the older model scored
+    a = Z.paired_difference(extreme, new, False, B=50)
+    b = Z.paired_difference(old, new, False, B=50)
+    assert a["standardized"]["estimate"] == pytest.approx(b["standardized"]["estimate"])
 
 
 def test_paired_difference_resamples_whole_goal_pairs():
@@ -658,6 +698,8 @@ def test_b3_family_and_pair_readings():
     assert Z.pair_reading(diffs[k]["naming"], fam, f"{k}:naming") == "similar within the margin"
     assert Z.pair_reading(diffs[k]["completion"], fam, f"{k}:completion") == "not distinguishable"
     assert Z.pair_reading(None, fam, f"{k}:timing") == "waiting"
+    unadj = {f"{k}:{c}:{t}": {"p_in_family": 0.01, "p_holm": 0.3} for c in A.CONTRASTS for t in A.TESTS}
+    assert Z.pair_reading(diffs[k]["naming"], unadj, f"{k}:naming") == "not distinguishable"  # Holm, not the raw p
     off = rec(0.5, -0.1, 0.9, 1e-5, 0.9)  # p small but the interval crosses zero
     fam2 = Z.b3_family({k: {"lift": off}}, pairs)
     assert Z.pair_reading(off, fam2, f"{k}:lift") == "not distinguishable"
@@ -747,6 +789,10 @@ def test_format_check_one_fifth_rule(records):
     assert out["two_candidate"]["format_dependent"] and not out["yes_no"]["format_dependent"]
     small_move = {k: {"L": v["L"] + (0.05 if k[1] == "aligned" else 0.0)} for k, v in native.items()}
     assert not Z.format_block(native, small_move, records)["two_candidate"]["above_one_fifth"]
+    mean_native = Z.format_block(native, dict(native), records)["two_candidate"]["native_effect"]
+    sixth = {k: {"L": v["L"] + (mean_native * 0.15 if k[1] == "aligned" else 0.0)} for k, v in native.items()}
+    out = Z.format_block(native, sixth, records)["two_candidate"]
+    assert out["ci_excludes_zero"] and not out["above_one_fifth"] and not out["format_dependent"]
 
 
 def test_provenance_problems(tmp_path):
@@ -836,3 +882,24 @@ def test_the_fallback_slot_moves_every_core_role(small, fast):
     out = Z.analyse(small, SHOTS, scores, {"gemma_core": "gemma4-e4b-it"}, None, None, {"pass": False})
     assert out["A3"]["tags"] == ["qwen3.5-9b", "ministral3-8b-it", "gemma4-e4b-it"] and out["fallback_used"]
     assert "gemma2-9b-it->gemma4-e4b-it" in out["B3"]["readings"]
+
+
+def test_golden_file_covers_every_tag_and_matches_round_two_for_the_earlier_models():
+    """The golden renderings made on ICE in serve2 (job 7246224): every round-3 tag and check variant, round 2's five
+    cases each; the earlier models' renderings equal round 2's (made in transformers 4.51.3), text and ids: part 1 of
+    the environment check."""
+    g3 = json.loads(T.GOLDEN.read_text())
+    g2 = json.loads((T.GOLDEN.parent / "r2_chat_golden.json").read_text())
+    want = set(R3.MODELS) | {"gemma4-12b-it-firstturn", "qwen3.8-27b-nopreserve"} | {f"{t}-serve2" for t in R3.RESCORE_MODELS}
+    assert set(g3["models"]) == want
+    assert [(c["id"], c["arm"]) for c in g3["cases"]] == [(c["id"], c["arm"]) for c in g2["cases"]]
+    for tag, rend in g3["models"].items():
+        assert rend["revision"] == R3.spec_for(tag).revision
+        assert len([k for k in rend if k != "revision"]) == 5
+    for t in R3.RESCORE_MODELS:
+        assert Z.golden_tokens_check(g3, g2, t)["ok"]
+        assert all(g3["models"][t + "-serve2"][k]["text"] == g2["models"][t][k]["text"] for k in g2["models"][t] if k != "revision")
+    q = next(v for k, v in g3["models"]["qwen3.5-9b"].items() if k.endswith("|aligned"))
+    assert q["text"].endswith("<|im_start|>assistant\n<think>\n\n</think>\n\n") and R.SYSTEM in q["text"]
+    g = next(v for k, v in g3["models"]["gemma4-12b-it"].items() if k.endswith("|aligned"))
+    assert g["text"].endswith("<|turn>model\n<|channel>thought\n<channel|>")

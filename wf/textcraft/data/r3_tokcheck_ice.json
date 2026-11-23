@@ -1,0 +1,757 @@
+{
+ "job": 7246224,
+ "checkout": "text-wm-fix43",
+ "commit": "799f8c313b3f1347f01067aa9d5704d8f1680832",
+ "reports": {
+  "gemma2-9b-it-serve2": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 0,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 0,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     3553
+    ],
+    "No": [
+     1294
+    ]
+   },
+   "first_token_pairs": {
+    "'C' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1706,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "",
+   "thinking_off_ending": "",
+   "system_handling": "fold",
+   "tag": "gemma2-9b-it-serve2",
+   "hf_id": "google/gemma-2-9b-it",
+   "revision": "11c9b309abf73637e4b6f9a3fa1e92e615547819",
+   "seconds": 466.0,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "gemma2-9b-it-serve2",
+    "hf_id": "google/gemma-2-9b-it",
+    "family": "gemma",
+    "generation": "Gemma 2",
+    "release": "2024-06-27",
+    "params_b": 9.24,
+    "system": "fold",
+    "attn_implementation": "eager",
+    "template_kwargs": {},
+    "template_notes": "Environment check: gemma2-9b-it rescored in serve2.",
+    "wave": "envcheck",
+    "env": "serve2",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "strict_load": true,
+    "revision": "11c9b309abf73637e4b6f9a3fa1e92e615547819"
+   }
+  },
+  "gemma4-12b-it-firstturn": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 25743,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 8,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     10784
+    ],
+    "No": [
+     3771
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1713,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "<|channel>thought\n<channel|>",
+   "thinking_off_ending": "<|turn>model\n<|channel>thought\n<channel|>",
+   "system_handling": "fold",
+   "tag": "gemma4-12b-it-firstturn",
+   "hf_id": "google/gemma-4-12B-it",
+   "revision": "43c9d014b231474fa7212dbb48a762566c2b255d",
+   "seconds": 745.1,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "gemma4-12b-it-firstturn",
+    "hf_id": "google/gemma-4-12B-it",
+    "family": "gemma",
+    "generation": "Gemma 4",
+    "release": "2026-06-03",
+    "params_b": 11.96,
+    "system": "fold",
+    "attn_implementation": null,
+    "template_kwargs": {},
+    "template_notes": "Placement check: the system text opens the first user turn instead of the template's own system turn.",
+    "wave": "B",
+    "env": "serve2",
+    "model_class": "image_text_to_text",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "generation_suffix": "<|channel>thought\n<channel|>",
+    "thinking_switch": true,
+    "thinking_on_markers": [
+     "<|think|>"
+    ],
+    "thinking_off_ending": "<|turn>model\n<|channel>thought\n<channel|>",
+    "strict_load": true,
+    "gpu_min_gb": 40,
+    "hub_created": "2026-05-23",
+    "attn_agreement_check": true,
+    "revision": "43c9d014b231474fa7212dbb48a762566c2b255d"
+   }
+  },
+  "gemma4-12b-it": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 25743,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 8,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     10784
+    ],
+    "No": [
+     3771
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1717,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "<|channel>thought\n<channel|>",
+   "thinking_off_ending": "<|turn>model\n<|channel>thought\n<channel|>",
+   "system_handling": "native",
+   "tag": "gemma4-12b-it",
+   "hf_id": "google/gemma-4-12B-it",
+   "revision": "43c9d014b231474fa7212dbb48a762566c2b255d",
+   "seconds": 705.6,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "gemma4-12b-it",
+    "hf_id": "google/gemma-4-12B-it",
+    "family": "gemma",
+    "generation": "Gemma 4",
+    "release": "2026-06-03",
+    "params_b": 11.96,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {},
+    "template_notes": "Gemma 4 12B Unified (encoder-free). Template identical to Gemma 4 31B-it's: system turn; with thinking off the generation prompt ends with an empty thought channel that a rendered reply does not contain; the score is read after it. Sliding window 1,024 on 40 of 48 layers.",
+    "wave": "B",
+    "env": "serve2",
+    "model_class": "image_text_to_text",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "generation_suffix": "<|channel>thought\n<channel|>",
+    "thinking_switch": true,
+    "thinking_on_markers": [
+     "<|think|>"
+    ],
+    "thinking_off_ending": "<|turn>model\n<|channel>thought\n<channel|>",
+    "strict_load": true,
+    "gpu_min_gb": 40,
+    "hub_created": "2026-05-23",
+    "attn_agreement_check": true,
+    "revision": "43c9d014b231474fa7212dbb48a762566c2b255d"
+   }
+  },
+  "gemma4-31b-it": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 25743,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 8,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     10784
+    ],
+    "No": [
+     3771
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1717,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "<|channel>thought\n<channel|>",
+   "thinking_off_ending": "<|turn>model\n<|channel>thought\n<channel|>",
+   "system_handling": "native",
+   "tag": "gemma4-31b-it",
+   "hf_id": "google/gemma-4-31B-it",
+   "revision": "842da3794eaa0b77d5f08bae87a17459d91ff475",
+   "seconds": 710.2,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "gemma4-31b-it",
+    "hf_id": "google/gemma-4-31B-it",
+    "family": "gemma",
+    "generation": "Gemma 4",
+    "release": "2026-03",
+    "params_b": 31.27,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {},
+    "template_notes": "As Gemma 4 E4B, plus: with thinking off the generation prompt ends with an empty thought channel ('<|channel>thought\\n<channel|>') that a rendered reply does not contain; the score is read after it.",
+    "wave": "B",
+    "env": "serve2",
+    "model_class": "image_text_to_text",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "generation_suffix": "<|channel>thought\n<channel|>",
+    "thinking_switch": true,
+    "thinking_on_markers": [
+     "<|think|>"
+    ],
+    "thinking_off_ending": "<|turn>model\n<|channel>thought\n<channel|>",
+    "strict_load": true,
+    "gpu_min_gb": 80,
+    "hub_created": "2026-03-11",
+    "host_mem_min_gb": 128,
+    "attn_agreement_check": true,
+    "revision": "842da3794eaa0b77d5f08bae87a17459d91ff475"
+   }
+  },
+  "gemma4-e4b-it": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 25743,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 8,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     10784
+    ],
+    "No": [
+     3771
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1713,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "",
+   "thinking_off_ending": "<|turn>model\n",
+   "system_handling": "native",
+   "tag": "gemma4-e4b-it",
+   "hf_id": "google/gemma-4-E4B-it",
+   "revision": "4ecc2ba63bcac23ba4a767fc87025b1450f84c9c",
+   "seconds": 703.1,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "gemma4-e4b-it",
+    "hf_id": "google/gemma-4-E4B-it",
+    "family": "gemma",
+    "generation": "Gemma 4",
+    "release": "2026-03",
+    "params_b": 7.94,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {},
+    "template_notes": "System turn supported (Gemma 2 had none). Thinking off by default; on, the template writes '<|think|>'. No attention soft-capping (query-key norms), final logits tanh-capped at 30. The last 18 layers share keys and values with earlier ones, so their own k/v projections and k norms in the checkpoint are unused.",
+    "wave": "B",
+    "env": "serve2",
+    "model_class": "image_text_to_text",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "thinking_switch": true,
+    "thinking_on_markers": [
+     "<|think|>"
+    ],
+    "thinking_off_ending": "<|turn>model\n",
+    "strict_load": true,
+    "unexpected_keys_allowed": "language_model\\.layers\\.(2[4-9]|3[0-9]|4[01])\\.self_attn\\.(k_proj|v_proj|k_norm)\\.",
+    "gpu_min_gb": 24,
+    "hub_created": "2026-03-02",
+    "attn_agreement_check": true,
+    "revision": "4ecc2ba63bcac23ba4a767fc87025b1450f84c9c"
+   }
+  },
+  "ministral3-8b-it": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 25743,
+   "n_prompts_checked_mistral_common": 25743,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 0,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     16860
+    ],
+    "No": [
+     4753
+    ]
+   },
+   "first_token_pairs": {
+    "'C' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1848,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "",
+   "thinking_off_ending": "[/INST]",
+   "system_handling": "native",
+   "tag": "ministral3-8b-it",
+   "hf_id": "mistralai/Ministral-3-8B-Instruct-2512-BF16",
+   "revision": "f6fae9795746f63c9be8344932f01275f3c63734",
+   "seconds": 1023.1,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "ministral3-8b-it",
+    "hf_id": "mistralai/Ministral-3-8B-Instruct-2512-BF16",
+    "family": "mistral",
+    "generation": "Ministral 3",
+    "release": "2025-12",
+    "params_b": 8.92,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {},
+    "template_notes": "System text first ('[SYSTEM_PROMPT]...[/SYSTEM_PROMPT]'); without a system message the template inserts Mistral's default prompt with today's date, so the gate checks that it never appears. A reply follows '[/INST]' with no space. No thinking mode. The bf16 release; the default repository's language model is FP8.",
+    "wave": "B",
+    "env": "serve2",
+    "model_class": "image_text_to_text",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "thinking_off_ending": "[/INST]",
+    "forbidden_in_prompt": [
+     "Le Chat",
+     "The current date"
+    ],
+    "mistral_common_check": true,
+    "strict_load": true,
+    "gpu_min_gb": 24,
+    "hub_created": "2025-10-31",
+    "revision": "f6fae9795746f63c9be8344932f01275f3c63734"
+   }
+  },
+  "mistral-7b-v0.3-serve2": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 0,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 0,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     6360
+    ],
+    "No": [
+     2538
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 2054,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "",
+   "thinking_off_ending": "",
+   "system_handling": "native",
+   "tag": "mistral-7b-v0.3-serve2",
+   "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
+   "revision": "c170c708c41dac9275d15a8fff4eca08d52bab71",
+   "seconds": 546.7,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "mistral-7b-v0.3-serve2",
+    "hf_id": "mistralai/Mistral-7B-Instruct-v0.3",
+    "family": "mistral",
+    "generation": "Mistral 7B v0.3",
+    "release": "2024-05-22",
+    "params_b": 7.25,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {},
+    "template_notes": "Environment check: mistral-7b-v0.3 rescored in serve2.",
+    "wave": "envcheck",
+    "env": "serve2",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "strict_load": true,
+    "revision": "c170c708c41dac9275d15a8fff4eca08d52bab71"
+   }
+  },
+  "olmo3-7b-it": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 25743,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 0,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     9642
+    ],
+    "No": [
+     2822
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1815,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "",
+   "thinking_off_ending": "<|im_start|>assistant\n",
+   "system_handling": "native",
+   "tag": "olmo3-7b-it",
+   "hf_id": "allenai/Olmo-3-7B-Instruct",
+   "revision": "6e5971d9eba42665f5bd5a0fcf047f299ce1dccc",
+   "seconds": 696.9,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "olmo3-7b-it",
+    "hf_id": "allenai/Olmo-3-7B-Instruct",
+    "family": "olmo",
+    "generation": "OLMo 3",
+    "release": "2025-11-20",
+    "params_b": 7.3,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {},
+    "template_notes": "ChatML; native system role; no thinking mode; the reply follows '<|im_start|>assistant\\n'. Sliding window 4,096 on 24 of 32 layers (no TextCraft input reaches it). Fully open training data.",
+    "wave": "B",
+    "env": "serve2",
+    "thinking_off_ending": "<|im_start|>assistant\n",
+    "forbidden_in_prompt": [
+     "function-calling"
+    ],
+    "strict_load": true,
+    "gpu_min_gb": 24,
+    "hub_created": "2025-11-19",
+    "revision": "6e5971d9eba42665f5bd5a0fcf047f299ce1dccc"
+   }
+  },
+  "qwen3-8b-serve2": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 0,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 0,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     9454
+    ],
+    "No": [
+     2753
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1819,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "",
+   "thinking_off_ending": "",
+   "system_handling": "native",
+   "tag": "qwen3-8b-serve2",
+   "hf_id": "Qwen/Qwen3-8B",
+   "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+   "seconds": 658.2,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "qwen3-8b-serve2",
+    "hf_id": "Qwen/Qwen3-8B",
+    "family": "qwen",
+    "generation": "Qwen3",
+    "release": "2025-04-29",
+    "params_b": 8.19,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {
+     "enable_thinking": false
+    },
+    "template_notes": "Environment check: qwen3-8b rescored in serve2.",
+    "wave": "envcheck",
+    "env": "serve2",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "strict_load": true,
+    "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+   }
+  },
+  "qwen3.5-9b": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 25743,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 8,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     9175
+    ],
+    "No": [
+     2665
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1832,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "",
+   "thinking_off_ending": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+   "system_handling": "native",
+   "tag": "qwen3.5-9b",
+   "hf_id": "Qwen/Qwen3.5-9B",
+   "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+   "seconds": 694.4,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "qwen3.5-9b",
+    "hf_id": "Qwen/Qwen3.5-9B",
+    "family": "qwen",
+    "generation": "Qwen3.5",
+    "release": "2026-02",
+    "params_b": 9.41,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {},
+    "template_notes": "ChatML. Thinking is on by default (the generation prompt ends '<think>\\n'); enable_thinking=False writes an empty think block, as for Qwen3-8B. Linear-attention layers run in PyTorch (no kernels package).",
+    "wave": "B",
+    "env": "serve2",
+    "model_class": "image_text_to_text",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "thinking_switch": true,
+    "thinking_on_ending": "<|im_start|>assistant\n<think>\n",
+    "thinking_off_ending": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+    "strict_load": true,
+    "unexpected_keys_allowed": "^mtp\\.",
+    "gpu_min_gb": 24,
+    "hub_created": "2026-02-27",
+    "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+   }
+  },
+  "qwen3.8-27b-nopreserve": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 25743,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 8,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     9175
+    ],
+    "No": [
+     2665
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1832,
+   "template_kwargs": {
+    "enable_thinking": false,
+    "preserve_thinking": false
+   },
+   "generation_suffix": "",
+   "thinking_off_ending": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+   "system_handling": "native",
+   "tag": "qwen3.8-27b-nopreserve",
+   "hf_id": "Qwen/Qwen3.8-27B",
+   "revision": "37561816e66b5b9153b1b64c10968c18c1e6f4a0",
+   "seconds": 706.3,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "qwen3.8-27b-nopreserve",
+    "hf_id": "Qwen/Qwen3.8-27B",
+    "family": "qwen",
+    "generation": "Qwen3.8",
+    "release": "2026-08",
+    "params_b": 27.36,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {
+     "preserve_thinking": false
+    },
+    "template_notes": "preserve_thinking=False: no empty think block in the few-shot replies (review 1, S8).",
+    "wave": "B",
+    "env": "serve2",
+    "model_class": "image_text_to_text",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "thinking_switch": true,
+    "thinking_on_markers": [
+     "Reasoning effort"
+    ],
+    "thinking_on_ending": "<|im_start|>assistant\n<think>\n",
+    "thinking_off_ending": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+    "strict_load": true,
+    "unexpected_keys_allowed": "^mtp\\.",
+    "gpu_min_gb": 80,
+    "hub_created": "2026-08-05",
+    "host_mem_min_gb": 128,
+    "forbidden_before_ending": [
+     "<think>"
+    ],
+    "revision": "37561816e66b5b9153b1b64c10968c18c1e6f4a0"
+   }
+  },
+  "qwen3.8-27b": {
+   "ok": true,
+   "n_records": 2982,
+   "n_candidates_checked": 32942,
+   "n_yes_no_prompts_checked": 9272,
+   "n_prompts_checked_ending": 25743,
+   "n_prompts_checked_mistral_common": 0,
+   "n_arm_pairs_checked": 17057,
+   "n_arm_pairs_not_isolated": 0,
+   "n_switch_renders": 8,
+   "n_problems": 0,
+   "problems": [],
+   "yes_no_ids": {
+    "Yes": [
+     9175
+    ],
+    "No": [
+     2665
+    ]
+   },
+   "first_token_pairs": {
+    "'Craft' vs 'Could'": 16471
+   },
+   "max_input_tokens": 1844,
+   "template_kwargs": {
+    "enable_thinking": false
+   },
+   "generation_suffix": "",
+   "thinking_off_ending": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+   "system_handling": "native",
+   "tag": "qwen3.8-27b",
+   "hf_id": "Qwen/Qwen3.8-27B",
+   "revision": "37561816e66b5b9153b1b64c10968c18c1e6f4a0",
+   "seconds": 703.6,
+   "transformers": "5.23.0",
+   "spec": {
+    "tag": "qwen3.8-27b",
+    "hf_id": "Qwen/Qwen3.8-27B",
+    "family": "qwen",
+    "generation": "Qwen3.8",
+    "release": "2026-08",
+    "params_b": 27.36,
+    "system": "native",
+    "attn_implementation": null,
+    "template_kwargs": {},
+    "template_notes": "As Qwen3.5, plus: with thinking on the template writes a reasoning-effort instruction into the system message (none with thinking off), and by default it writes an empty think block into every earlier assistant turn (the few-shot replies).",
+    "wave": "B",
+    "env": "serve2",
+    "model_class": "image_text_to_text",
+    "tokenizer_kwargs": {
+     "mistral_format": false
+    },
+    "thinking_switch": true,
+    "thinking_on_markers": [
+     "Reasoning effort"
+    ],
+    "thinking_on_ending": "<|im_start|>assistant\n<think>\n",
+    "thinking_off_ending": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+    "strict_load": true,
+    "unexpected_keys_allowed": "^mtp\\.",
+    "gpu_min_gb": 80,
+    "hub_created": "2026-08-05",
+    "host_mem_min_gb": 128,
+    "revision": "37561816e66b5b9153b1b64c10968c18c1e6f4a0"
+   }
+  }
+ }
+}

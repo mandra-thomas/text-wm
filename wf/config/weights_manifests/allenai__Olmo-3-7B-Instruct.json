@@ -1,0 +1,93 @@
+{
+ "hf_id": "allenai/Olmo-3-7B-Instruct",
+ "revision": "6e5971d9eba42665f5bd5a0fcf047f299ce1dccc",
+ "allow_patterns": [
+  "*.json",
+  "*.safetensors",
+  "*.model",
+  "*.model.v3",
+  "*.jinja",
+  "merges.txt"
+ ],
+ "ignore_patterns": [
+  "original/*",
+  "consolidated*",
+  "*.pth",
+  "*.bin",
+  "*.gguf",
+  "*.msgpack",
+  "*.h5"
+ ],
+ "files": [
+  {
+   "name": "chat_template.jinja",
+   "size": 2613,
+   "git_sha1": "a21396285102846aa0787dd598623e7b8dbb2b67"
+  },
+  {
+   "name": "config.json",
+   "size": 1625,
+   "git_sha1": "9c118c14e7871ec96335dc859995b4ef554bb097"
+  },
+  {
+   "name": "generation_config.json",
+   "size": 204,
+   "git_sha1": "0739fd213b7634f1c4b2273bec0d4eb87a552de2"
+  },
+  {
+   "name": "merges.txt",
+   "size": 916646,
+   "git_sha1": "354558edcdbd64ca7abd407b8be3d5d09d39d781"
+  },
+  {
+   "name": "model-00001-of-00003.safetensors",
+   "size": 4969984976,
+   "sha256": "e7bd4c8ba52177a815aee5929cb458a116a65799688d3e51402500a1cb77023c"
+  },
+  {
+   "name": "model-00002-of-00003.safetensors",
+   "size": 4981161496,
+   "sha256": "ea92aa0499a2ca02400e5d87324009e172bdbfb9809f2ac501485d8224382328"
+  },
+  {
+   "name": "model-00003-of-00003.safetensors",
+   "size": 4644917240,
+   "sha256": "d50f95e4f2ec5fc4fbce6217cbf54fd1d700928b05e5550c8ee08bf4ba948925"
+  },
+  {
+   "name": "model.safetensors.index.json",
+   "size": 29630,
+   "git_sha1": "421a80b181a130ccbc579a328fb349d8792a32ce"
+  },
+  {
+   "name": "special_tokens_map.json",
+   "size": 581,
+   "git_sha1": "9d133a8f4995ff315a8a3e68dbba03409d214a8e"
+  },
+  {
+   "name": "tokenizer.json",
+   "size": 7137175,
+   "git_sha1": "54b3f7c465454c7878d6e955e44064d23c5a4052"
+  },
+  {
+   "name": "tokenizer_config.json",
+   "size": 4318,
+   "git_sha1": "277b816675b12d22c3ca0e2b4af1b9dc88e30043"
+  },
+  {
+   "name": "vocab.json",
+   "size": 1611055,
+   "git_sha1": "9c2954b1c94c5267dc84a5d0214efbc79ff8c3bd"
+  }
+ ],
+ "n_files": 12,
+ "total_bytes": 14605767559,
+ "source": "HfApi.model_info(files_metadata=True), no token",
+ "dry_run_cross_check": {
+  "available": true,
+  "same_files_and_sizes": true,
+  "only_in_dry_run": [],
+  "only_in_metadata": [],
+  "size_differs": []
+ }
+}

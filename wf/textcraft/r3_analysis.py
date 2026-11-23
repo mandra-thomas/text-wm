@@ -729,7 +729,15 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
             scores[model + suffix] = [s for _p, ss in shards for s in ss]
             folders[model + suffix] = [p for p, _s in shards]
             formats[name] = (model, model + suffix)
-    bad = provenance_problems(folders, scores)
+    import os
+
+    from wf.provenance import run_record
+
+    mock = os.environ.get("WF_MOCK_SCORE", "0") == "1"
+    # A mock dry run records no GPU: each shard is given its model's pinned type, so the rest of the check still runs.
+    mock_record = lambda p: {**run_record(p), "gpu": ["NVIDIA A100-SXM4-80GB"] if ("27b" in str(p) or "31b" in str(p))  # noqa: E731
+                             else ["NVIDIA L40S"]}
+    bad = provenance_problems(folders, scores, mock_record if mock else None)
     if bad:
         write_status(run_id, f"provenance: {bad}", ok=False)
         return 1
@@ -737,9 +745,7 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
     r2 = read_round2(r2_root / "textcraft_r2_analysis" / "metrics.json")
     # the environment check (needs round 2's scores of the two models and their serve2 rescores)
     environment: dict[str, Any] = {"models": {}, "tokens": {}}
-    from wf.provenance import run_record
-
-    gpu_of = lambda p: (lambda g: g if isinstance(g, list) else None)(run_record(p)["gpu"])  # noqa: E731
+    gpu_of = (lambda p: ["mock"]) if mock else (lambda p: (lambda g: g if isinstance(g, list) else None)(run_record(p)["gpu"]))  # noqa: E731
     r3_golden_path = Path(__file__).resolve().parent / "data" / "r3_chat_golden.json"
     r2_golden_path = Path(__file__).resolve().parent / "data" / "r2_chat_golden.json"
     for t in R3.ENVCHECK_MODELS:
