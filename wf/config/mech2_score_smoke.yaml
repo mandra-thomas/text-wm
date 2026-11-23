@@ -1,0 +1,12 @@
+run_id: mech2_score_smoke
+# Format, gate and throughput check for mech2_score on real items: one shard of 125 (about one game), all three models (Mistral on the
+# arms the primary contrasts read).
+# Read for format only (prompts, tokenization gate, timing), never for results.
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+models: [qwen3-8b-fewshot, llama3.1-8b-fewshot, mistral-7b-v0.3]
+sample_n: 1000
+n_shards: 125
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

@@ -51,3 +51,6 @@ logs/
 
 # TextCraft recipe database: Minecraft game data, rebuilt by python -m wf.textcraft.freeze, never committed
 wf/textcraft/data/recipes_frozen.json
+
+# Local copies of cluster data for re-analysis (never committed)
+data_local/

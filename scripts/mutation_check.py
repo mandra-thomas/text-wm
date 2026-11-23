@@ -248,6 +248,240 @@ MUTANTS = [
     ("submit.sh overrides a script's GPU request", "pace/submit.sh",
      'if [[ -n "${PACE_GRES:-}" ]] && ! script_sets gres && ! script_sets partition; then',
      'if [[ -n "${PACE_GRES:-}" ]]; then'),
+    # Mechanism battery (wf/mech2.py, 2026-11-20): templates, positions, items, contrasts, categories, gate, resume.
+    ('mech2 desire_keep not reversed', 'wf/mech2.py', 'DESIRE_KEEP = "Your task is to: make sure that the {obj} is not {pp}', 'DESIRE_KEEP = "Your task is to: make sure that the {obj} is {pp}'),
+    ('mech2 desire_check presupposes the object', 'wf/mech2.py', 'DESIRE_CHECK = "Your task is to: find out whether {a} {obj} can be', 'DESIRE_CHECK = "Your task is to: find out whether the {obj} can be'),
+    ('mech2 ignore sentence on the real task', 'wf/mech2.py', 'MENTION_IGNORE.format(swapped=t["swapped_task_line"], obj=obj)', 'MENTION_IGNORE.format(swapped=t["task_line"], obj=obj)'),
+    ('mech2 done quotes the swapped task', 'wf/mech2.py', 'return DONE.format(task=_task_text(t["task_line"]))', 'return DONE.format(task=_task_text(t["swapped_task_line"]))'),
+    ('mech2 described arm keeps the name', 'wf/mech2.py', 'return rq1x.describe_line(t["task_line"], obj) if rq1x.desc_ok(t) else None', 'return t["task_line"] if rq1x.desc_ok(t) else None'),
+    ('mech2 start puts the task line last', 'wf/mech2.py', 'return "\\n".join([line] + lines)', 'return "\\n".join(lines + [line])'),
+    ('mech2 position arms after step 0', 'wf/mech2.py', '    if arm in POSITION_ARMS and t.get("history_len", 0) > 0:\n        return None', '    if False:\n        return None'),
+    ('mech2 position arms dropped at step 0 too', 'wf/mech2.py', '    if arm in POSITION_ARMS and t.get("history_len", 0) > 0:\n        return None', '    if arm in POSITION_ARMS and t.get("history_len", 0) >= 0:\n        return None'),
+    ('mech2 missing score read from another arm', 'wf/mech2.py', '    rec = by.get((t["id"], condition(arm, fmt)))\n    if rec is None:\n        return None', '    rec = by.get((t["id"], condition(arm, fmt))) or by.get((t["id"], condition("aligned", fmt)))\n    if rec is None:\n        return None'),
+    ('mech2 yes/no keeps the observation cue', 'wf/mech2.py', 'last["content"][: -len("Next observation:")] + rq1v.YN_QUESTION', 'last["content"] + "\\n" + rq1v.YN_QUESTION'),
+    ('mech2 sample allocated equally', 'wf/mech2.py', 'exact = {k: len(v) * n / total for k, v in strata.items()}', 'exact = {k: n / len(strata) for k, v in strata.items()}'),
+    ('mech2 sample follows input order', 'wf/mech2.py', 'chosen |= {t["id"] for t in sorted(ts, key=lambda t: _rank(t["id"]))[:quota[k]]}', 'chosen |= {t["id"] for t in ts[:quota[k]]}'),
+    ('mech2 step-0 items not added', 'wf/mech2.py', '"union": [t for t in primary if t["id"] in sample | step0]', '"union": [t for t in primary if t["id"] in sample]'),
+    ('mech2 contrast sign flipped', 'wf/mech2.py', 'return sum(c * v for (c, _), v in zip(terms, vals))', 'return -sum(c * v for (c, _), v in zip(terms, vals))'),
+    ('mech2 ratio over its own size', 'wf/mech2.py', '    den = _mean([r for _, r in xs])\n', '    den = _mean([abs(d) for d, _ in xs])\n'),
+    ('mech2 Holm skipped', 'wf/mech2.py', 'r["holm_p"] = adj[name]', 'r["holm_p"] = r["p"]'),
+    ('mech2 null band widened', 'wf/mech2.py', 'TRIVIAL_BAND = 0.25', 'TRIVIAL_BAND = 0.5'),
+    ('mech2 large threshold lowered', 'wf/mech2.py', 'LARGE = 0.5\n', 'LARGE = 0.3\n'),
+    ('mech2 P5 against swapped', 'wf/mech2.py', '"terms": ((1, "done"), (-1, "cancelled")), "population": "p5"', '"terms": ((1, "done"), (-1, "swapped")), "population": "p5"'),
+    ('mech2 P5 includes examine tasks', 'wf/mech2.py', '    return (task_type(t["task_line"]) in PLACEMENT_TYPES and not takes_from_target_type(t)', '    return (not takes_from_target_type(t)'),
+    ('mech2 item share counts ties toward Yes', 'wf/mech2.py', 'lambda xs: sum(x > 0 for x in xs) / len(xs)', 'lambda xs: sum(x >= 0 for x in xs) / len(xs)'),
+    ('mech2 gate failure ignored', 'wf/mech2.py', '    if not rec["ok"]:\n        raise TokenizationMismatch', '    if False:\n        raise TokenizationMismatch'),
+    ('mech2 gate accepts any revision', 'wf/mech2.py', 'if not scorer.revision or scorer.revision != C.REVISIONS.get(model_name):', 'if not scorer.revision:'),
+    ('mech2 gate accepts a multi-token answer', 'wf/mech2.py', '        if len(ids) != 1:\n', '        if len(ids) < 1:\n'),
+    ('mech2 resume rescores saved work', 'wf/mech2.py', 'todo = [(t, a, f) for t, a, f in work[tag] if (tag, t["id"], condition(a, f)) not in done]', 'todo = list(work[tag])'),
+    ('mech2 done contradicted with a target unseen', 'wf/mech2.py', 'if not targets or any(r not in facts.contents for r in targets):', 'if not targets or all(r not in facts.contents for r in targets):'),
+    ('mech2 overlap read against set 1 only', 'wf/mech2.py', 'kind = ("aligned" if t["task_line"].strip() in lines[k] else', 'kind = ("aligned" if t["task_line"].strip() in lines[1] else'),
+    ('mech2 knowledge split reversed', 'wf/mech2.py', 'return None if a is None or b is None else a < 0 < b', 'return None if a is None or b is None else a > 0'),
+    # Mechanism battery, review 1 (2026-11-20): the review's twenty mutants R1-R20, adapted to the amended code where
+    # their text moved (R1, R11, R14, R15, R17, R20), and mutants of the amendment (zones, joint rule, P5/P7 items,
+    # the negated arm, Mistral).
+    ('mech2 R1 non-trivial zones read without significance', 'wf/mech2.py', '    if "Z" not in zs and not significant:\n        return "INCONCLUSIVE", None', '    if False:\n        return "INCONCLUSIVE", None'),
+    ('mech2 R2 P6 on the sample', 'wf/mech2.py', '"population": "step0", "reference"', '"population": "sample", "reference"'),
+    ('mech2 R3 desire participle always taken', 'wf/mech2.py', 'pp=PARTICIPLE[verb], prep=', 'pp="taken", prep='),
+    ('mech2 R4 move preposition from', 'wf/mech2.py', '"move": "to", "heat": "with"', '"move": "from", "heat": "with"'),
+    ('mech2 R5 yes/no family read on cand', 'wf/mech2.py', '"primary_yes_no": primary_family(by, pops, "yn", **kw)', '"primary_yes_no": primary_family(by, pops, "cand", **kw)'),
+    ('mech2 R6 r denominator always cand', 'wf/mech2.py', 'ref = _combo(by, t, reference, fmt, field) if reference else 0.0', 'ref = _combo(by, t, reference, "cand", field) if reference else 0.0'),
+    ('mech2 R7 sigma read as L', 'wf/mech2.py', 'v = sigmoid(rec["L"]) if field == "s" else rec.get(field)', 'v = rec["L"] if field == "s" else rec.get(field)'),
+    ('mech2 R8 knowledge: either answer right', 'wf/mech2.py', 'return None if a is None or b is None else a < 0 < b', 'return None if a is None or b is None else (a < 0 or 0 < b)'),
+    ('mech2 R9 done contradicted with one target seen', 'wf/mech2.py', 'if not targets or any(r not in facts.contents for r in targets):', 'if not targets or all(r not in facts.contents for r in targets):'),
+    ('mech2 R10 smallest remainder gets the extra seat', 'wf/mech2.py', 'key=lambda k: (-(exact[k] - quota[k]), _rank', 'key=lambda k: ((exact[k] - quota[k]), _rank'),
+    ('mech2 R11 any overlap read as consistent', 'wf/mech2.py', '    if set(zs) <= predicted:\n        return "consistent"', '    if set(zs) & predicted:\n        return "consistent"'),
+    ('mech2 R12 permutation flips items, not games', 'wf/mech2.py', '"p": pair_permutation([d for _, d, _ in rows], n=perms, seed=C.RNG_SEED, cluster_ids=games)', '"p": pair_permutation([d for _, d, _ in rows], n=perms, seed=C.RNG_SEED)'),
+    ('mech2 R13 later includes step 0', 'wf/mech2.py', '"later": [t for t in s if t.get("history_len", 0) > 0]', '"later": [t for t in s if t.get("history_len", 0) >= 0]'),
+    ('mech2 R14 gate checks only the first item', 'wf/mech2.py', '    for t in items.values():\n        msgs = prompt(arm_messages(t, "aligned"))', '    for t in list(items.values())[:1]:\n        msgs = prompt(arm_messages(t, "aligned"))'),
+    ('mech2 R15 gate skips yes/no prompts', 'wf/mech2.py', '        if fmt != "yn":\n            continue\n        msgs = prompt(arm_messages(t, arm, "yn"))', '        if fmt != "cand":\n            continue\n        msgs = prompt(arm_messages(t, arm, "yn"))'),
+    ('mech2 R16 resume ignores item hashes', 'wf/mech2.py', 'if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):', 'if False:'),
+    ('mech2 R17 ratio accepts negative denominators', 'wf/mech2.py', 'return _mean([d for d, _ in xs]) / den if den > 0 else float("nan")', 'return _mean([d for d, _ in xs]) / den if den != 0 else float("nan")'),
+    ('mech2 R18 mention_ignore on neutral line', 'wf/mech2.py', 'return MENTION_IGNORE.format(swapped=t["swapped_task_line"], obj=obj)', 'return MENTION_IGNORE.format(swapped=rq1.ABSENT_LINE, obj=obj)'),
+    ('mech2 R19 cancelled same as done', 'wf/mech2.py', 'CANCELLED = "Your task was to: {task} The user has cancelled it; nothing is left to do."', 'CANCELLED = "Your task was to: {task} It is already done; nothing is left to do."'),
+    ('mech2 R20 Holm over six (P6 dropped)', 'wf/mech2.py', '    adj = holm({name: (r["p"] if r["p"] == r["p"] else 1.0) for name, r in res.items()})',
+     '    adj = holm({name: r["p"] for name, r in res.items() if not name.startswith("P6")})\n    adj.setdefault("P6_position_step0", res["P6_position_step0"]["p"])'),
+    ('mech2 trivial band read as a contradiction of 0', 'wf/mech2.py', '    if x <= TRIVIAL_BAND:\n        return "Z"', '    if x <= 0:\n        return "Z"'),
+    ('mech2 dropped draws ignored', 'wf/mech2.py', 'dropped <= DROPPED_DRAWS_MAX * B)', 'True)'),
+    ('mech2 P6 counts for evidence', 'wf/mech2.py', '"P8_negated_vs_affirmed": _N},\n    "H3_salience"', '"P8_negated_vs_affirmed": _N, "P6_position_step0": _Z},\n    "H3_salience"'),
+    ('mech2 untested read as consistent', 'wf/mech2.py', '    return "consistent" if _risky(h, rows) else "untested"', '    return "consistent"'),
+    ('mech2 one format decides', 'wf/mech2.py', '    if a == b and a in ("consistent", "contradicted"):\n        return a', '    if a in ("consistent", "contradicted"):\n        return a'),
+    ('mech2 mixture never named', 'wf/mech2.py', 'text = ("no single account; mixture or an account not on the list (each content account is contradicted, so "', 'text = ("accounts not contradicted: none (each content account is contradicted, so "'),
+    ('mech2 P5 keeps takes from a target-type receptacle', 'wf/mech2.py', '    return re.sub(r"\\s+\\d+$", "", p[2]) == parse_task_line(t["task_line"]).receptacle\n\n\ndef p5_eligible', '    return False\n\n\ndef p5_eligible'),
+    ('mech2 P5 keeps contradicted items', 'wf/mech2.py', '            and not done_contradicted(t))', '            and True)'),
+    ('mech2 P7 keeps contradicted claims', 'wf/mech2.py', 'return is_take(t) and negated_status(t)[1] != "shown, holds it"', 'return is_take(t)'),
+    ('mech2 negated built for every verb', 'wf/mech2.py', '        if not p or p[0] != "take" or p[1] != obj:\n            return None\n        sw = t["swapped_task_line"]', '        if not p or p[1] != obj:\n            return None\n        sw = t["swapped_task_line"]'),
+    ('mech2 negated drops the user', 'wf/mech2.py', 'NEGATED = "{swapped} The user says there is no {obj} in the {rec}."', 'NEGATED = "{swapped} There is no {obj} in the {rec}."'),
+    ('mech2 Mistral without its template settings', 'wf/mech2.py', 'kw = {"attn_implementation": spec.attn_implementation, "template_kwargs": dict(spec.template_kwargs)}', 'kw = {}'),
+    ('mech2 folding model not folded', 'wf/mech2.py', 'return spec.hf_id, kw, (families.fold_system if spec.system == "fold" else (lambda msgs: msgs))', 'return spec.hf_id, kw, (lambda msgs: msgs)'),
+    ('mech2 scoring skips the template handling', 'wf/mech2.py', '            msgs = prompt(arm_messages(t, arm, fmt))', '            msgs = arm_messages(t, arm, fmt)'),
+    # Mechanism battery, review 2 (2026-11-20, before any score): the review's 22 mutants Q1-Q22, adapted where the
+    # amended code moved their text (Q4 and Q10 now remove an allowed zone, since the amended cells allow what the
+    # original mutants added; Q5-Q8 follow the one-line-per-account table; Q13 the two-format rule's helper; Q19 the
+    # shared desire_check template), and mutants of the amendment (minimal pairs, P8, verdicts, summary, integrity,
+    # Mistral's arms, secondary readouts).
+    ('mech2 Q1 NaN p not replaced by 1 (family shrinks)', 'wf/mech2.py', 'adj = holm({name: (r["p"] if r["p"] == r["p"] else 1.0) for name, r in res.items()})', 'adj = holm({name: r["p"] for name, r in res.items()})'),
+    ('mech2 Q2 P6 on sample step-0 only', 'wf/mech2.py', '"step0": [t for t in union if t["id"] in step0],', '"step0": [t for t in s if t["id"] in step0],'),
+    ('mech2 Q3 strata by game only', 'wf/mech2.py', 'strata[(t["game_id"], t.get("determination_reason") or "")].append(t)', 'strata[(t["game_id"], "")].append(t)'),
+    ('mech2 Q4 H2 P1 without L', 'wf/mech2.py', '"H2_evidence": {"P1_keep_vs_ignore": _ZSL,', '"H2_evidence": {"P1_keep_vs_ignore": _ZS,'),
+    ('mech2 Q5 H3 P5 allows N', 'wf/mech2.py', '"P4_need_without_name": _P, "P5_done_vs_cancelled": _Z, "P7_negated_existence": _P, "P8_negated_vs_affirmed": _Z},\n    "H4_wishful"', '"P4_need_without_name": _P, "P5_done_vs_cancelled": _NZ, "P7_negated_existence": _P, "P8_negated_vs_affirmed": _Z},\n    "H4_wishful"'),
+    ('mech2 Q6 H4 P7 allows N', 'wf/mech2.py', '"P7_negated_existence": _Z, "P8_negated_vs_affirmed": _Z},\n    "H5_policy_blend"', '"P7_negated_existence": _NZ, "P8_negated_vs_affirmed": _Z},\n    "H5_policy_blend"'),
+    ('mech2 Q7 H5 P3 only Z', 'wf/mech2.py', '"H5_policy_blend": {"P1_keep_vs_ignore": _NZ, "P2_hope_polarity": _Z, "P3_mention_without_need": _NZ,', '"H5_policy_blend": {"P1_keep_vs_ignore": _NZ, "P2_hope_polarity": _Z, "P3_mention_without_need": _Z,'),
+    ('mech2 Q8 H6_lexical P4 allows S', 'wf/mech2.py', '"P4_need_without_name": _Z, "P5_done_vs_cancelled": _Z, "P7_negated_existence": _P, "P8_negated_vs_affirmed": _Z},\n    "H6_position"', '"P4_need_without_name": _ZS, "P5_done_vs_cancelled": _Z, "P7_negated_existence": _P, "P8_negated_vs_affirmed": _Z},\n    "H6_position"'),
+    ('mech2 Q9 H6_position allows only N', 'wf/mech2.py', '"H6_position": {"P6_position_step0": frozenset({"N", "S", "L"})}', '"H6_position": {"P6_position_step0": frozenset({"N"})}'),
+    ('mech2 Q10 H2 P2 allows S', 'wf/mech2.py', '"H2_evidence": {"P1_keep_vs_ignore": _ZSL, "P2_hope_polarity": _Z,', '"H2_evidence": {"P1_keep_vs_ignore": _ZSL, "P2_hope_polarity": _ZS,'),
+    ('mech2 Q11 dropped-draw rule uses 2% of n_items', 'wf/mech2.py', 'dropped <= DROPPED_DRAWS_MAX * B)', 'dropped <= DROPPED_DRAWS_MAX * len(rows))'),
+    ('mech2 Q12 r interval from mean bootstrap', 'wf/mech2.py', '"ratio"] = {"estimate": rb["estimate"], "ci": [rb["ci_low"], rb["ci_high"]]', '"ratio"] = {"estimate": rb["estimate"], "ci": [boot["ci_low"] / out["reference_effect"], boot["ci_high"] / out["reference_effect"]]'),
+    ('mech2 Q13 contradicted only needs one format', 'wf/mech2.py', '    if {a, b} == {"consistent", "contradicted"}:\n        return "format_dependent"', '    if "contradicted" in (a, b) and "consistent" not in (a, b):\n        return "contradicted"\n    if {a, b} == {"consistent", "contradicted"}:\n        return "format_dependent"'),
+    ('mech2 Q14 negated_status reads exact instances', 'wf/mech2.py', 'seen = "shown, holds it" if any(re.sub(r"\\s+\\d+$", "", o) == obj for o in facts.contents[rec]) else "shown, without it"', 'seen = "shown, holds it" if any(o == obj for o in facts.contents[rec]) else "shown, without it"'),
+    ('mech2 Q15 all-placement done against swapped', 'wf/mech2.py', '"done_vs_cancelled_all_placement": contrast(by, pops["sample_placement"], ((1, "done"), (-1, "cancelled"))', '"done_vs_cancelled_all_placement": contrast(by, pops["sample_placement"], ((1, "done"), (-1, "swapped"))'),
+    ('mech2 Q16 analysis default models omit mistral', 'wf/mech2.py', 'tags = list(cfg.get("models", PRIMARY_MODELS + SECONDARY_MODELS))', 'tags = list(cfg.get("models", PRIMARY_MODELS))'),
+    ('mech2 Q17 zones_of returns only endpoints', 'wf/mech2.py', '    return ZONES[min(a, b):max(a, b) + 1]', '    return tuple(sorted({ZONES[a], ZONES[b]}, key=ZONES.index))'),
+    ('mech2 Q18 categorize ignores estimable', 'wf/mech2.py', 'if est != est or lo != lo or hi != hi or not r.get("estimable", False):', 'if est != est or lo != lo or hi != hi:'),
+    ('mech2 Q19 desire_check article always a', 'wf/mech2.py', 'return hope.format(a=rq1._article(obj), obj=obj', 'return hope.format(a="a", obj=obj'),
+    ('mech2 Q20 knowledge split on step-0 terms too', 'wf/mech2.py', '**{n: s["terms"] for n, s in PRIMARY.items() if s["population"] != "step0"},', '**{n: s["terms"] for n, s in PRIMARY.items()},'),
+    ('mech2 Q21 P7 by history on takes of any object', 'wf/mech2.py', 'if is_take(t) and negated_status(t)[1] == k]', 'if t["action"].startswith("take ") and negated_status(t)[1] == k]'),
+    ('mech2 Q22 TRIVIAL label replaced by POS_SMALL when significant', 'wf/mech2.py', '        return ("TRIVIAL" if significant else "NULL"), zs', '        return ("POS_SMALL" if significant else "NULL"), ("S",) if significant else zs'),
+    ('mech2 N1 P1 against swapped', 'wf/mech2.py', '"P1_keep_vs_ignore": {"terms": ((1, "desire_keep_sw"), (-1, "mention_ignore"))', '"P1_keep_vs_ignore": {"terms": ((1, "desire_keep_sw"), (-1, "swapped"))'),
+    ('mech2 N2 P2 against swapped', 'wf/mech2.py', '"P2_hope_polarity": {"terms": ((1, "desire_check"), (-1, "desire_check_can"))', '"P2_hope_polarity": {"terms": ((1, "desire_check"), (-1, "swapped"))'),
+    ('mech2 N3 P8 against swapped', 'wf/mech2.py', '"P8_negated_vs_affirmed": {"terms": ((1, "negated"), (-1, "affirmed"))', '"P8_negated_vs_affirmed": {"terms": ((1, "negated"), (-1, "swapped"))'),
+    ('mech2 N4 desire_check_can hopes it cannot', 'wf/mech2.py', 'the user hopes it can."', 'the user hopes it cannot."'),
+    ('mech2 N5 desire_keep_sw without the swapped task', 'wf/mech2.py', 'DESIRE_KEEP_SW = "{swapped} Make sure', 'DESIRE_KEEP_SW = "Your task is to: Make sure'),
+    ('mech2 N6 affirmed denies too', 'wf/mech2.py', 'AFFIRMED = "{swapped} The user says there is {a} {obj} in the {rec}."', 'AFFIRMED = "{swapped} The user says there is no {obj} in the {rec}."'),
+    ('mech2 N7 Mistral scored on every arm', 'wf/mech2.py', 'return ARMS if tag in PRIMARY_MODELS else PRIMARY_ARMS', 'return ARMS'),
+    ('mech2 N8 rival readings left out', 'wf/mech2.py', '            for h, preds in {**PREDICTIONS, **RIVAL_READINGS}.items()}\n    return _account_rows(rows)', '            for h, preds in PREDICTIONS.items()}\n    return _account_rows({**rows, **{r: {} for r in RIVAL_READINGS}})'),
+    ('mech2 N9 consistent without a rival contradicted', 'wf/mech2.py', 'and any(rows[o].get(c) == "contradicted" for o in rows if o != h)]', 'and any(rows[o].get(c) != "undecided" for o in rows)]'),
+    ('mech2 N10 untested listed as nothing', 'wf/mech2.py', '"content_accounts_untested": by["untested"],', '"content_accounts_untested": [],'),
+    ('mech2 N11 contradicted read as rejected', 'wf/mech2.py', "' (cannot be the sole account)' if v == 'contradicted'", "' (rejected)' if v == 'contradicted'"),
+    ('mech2 N12 integrity ignores item hashes', 'wf/mech2.py', 'x["transition_id"] in items and x.get("item_hash") != hashes[x["transition_id"]] for x in mine', 'x["transition_id"] in items and False for x in mine'),
+    ('mech2 N13 integrity mismatch never refuses', 'wf/mech2.py', '    out["refuse"] = any(out[t]["status"] == "mismatch" or', '    out["refuse"] = any(False or'),
+    ('mech2 N14 analysis ignores the integrity check', 'wf/mech2.py', '    if integrity["refuse"]:', '    if False:'),
+    ('mech2 N15 item files not recorded', 'wf/mech2.py', 'd = _init_run(run_id, cfg, inputs=tuple(runs_root() / s / "transitions.jsonl" for s in sources))', 'd = _init_run(run_id, cfg, inputs=())'),
+    ('mech2 N16 duplicates not counted', 'wf/mech2.py', '"n_duplicates": sum(n - 1 for n in keys.values() if n > 1),', '"n_duplicates": 0,'),
+    ('mech2 N17 missing scores not counted', 'wf/mech2.py', '"n_missing": len(expected - set(keys)),', '"n_missing": 0,'),
+    ('mech2 N18 P5 against the aligned effect, not cancelled', 'wf/mech2.py', 'reference=((1, "cancelled"), (-1, "swapped")), **kw) for f in both},', 'reference=ref, **kw) for f in both},'),
+    ('mech2 N19 contents-not-shown reads every take item', 'wf/mech2.py', 'not_shown = [t for t in pops["sample_take"] if negated_status(t)[1] == "contents not shown"]', 'not_shown = pops["sample_take"]'),
+    ('mech2 N20 first-token split flagged on agreement', 'wf/mech2.py', 'ft["estimate"] * full < 0)', 'ft["estimate"] * full > 0)'),
+    ('mech2 N21 mixture readout reads cand for yes/no', 'wf/mech2.py', '(("cand", "primary"), ("yn", "primary_yes_no"))', '(("cand", "primary"), ("yn", "primary"))'),
+    ('mech2 N22 status line without yes/no categories', 'wf/mech2.py', "({v['category']}; yes/no {yn[k]['category']})", "({v['category']})"),
+    ('mech2 N23 old P1 reads the new keep line', 'wf/mech2.py', '"old_P1_desire_keep_vs_ignore": {f: contrast(by, pops["sample"], ((1, "desire_keep"), (-1, "mention_ignore"))', '"old_P1_desire_keep_vs_ignore": {f: contrast(by, pops["sample"], ((1, "desire_keep_sw"), (-1, "mention_ignore"))'),
+    ('mech2 N24 separations read overlap as separation', 'wf/mech2.py', '"separate": [c for c in both if not PREDICTIONS[a][c] & PREDICTIONS[b][c]],', '"separate": [c for c in both if PREDICTIONS[a][c] != PREDICTIONS[b][c]],'),
+    ('mech2 N25 affirmed with "a" for every object', 'wf/mech2.py', 'return AFFIRMED.format(swapped=sw, a=rq1._article(obj)', 'return AFFIRMED.format(swapped=sw, a="a"'),
+    ('mech2 N26 H4 P2 allows Z', 'wf/mech2.py', '"H4_wishful": {"P1_keep_vs_ignore": _N, "P2_hope_polarity": _N,', '"H4_wishful": {"P1_keep_vs_ignore": _N, "P2_hope_polarity": _NZ,'),
+    # Mechanism battery, review 3 (2026-11-21, before any score): the review's mutants A1-A22, adapted where the amended
+    # code moved their text (A4: the refusal list now ends with the primary-arm NaN count; A13: the mixture readout is
+    # followed by M; A16: the affirmed line reads the swapped line from `sw`; A18: the NaN count goes through
+    # `_undefined`). A15 (analysis reads a mismatched secondary model) and A19 (H6_position consistent without a rival)
+    # are equivalent and left out: a mismatch of any model refuses the analysis before `scored` is read, and an
+    # H6_position consistent on P6 (zones within N, S, L) always contradicts the rival "no position effect" (Z).
+    ('mech2 A1 rival contradicted on any contrast counts', 'wf/mech2.py', 'and any(rows[o].get(c) == "contradicted" for o in rows if o != h)]', 'and any("contradicted" in rows[o].values() for o in rows if o != h)]'),
+    ('mech2 A2 category from raw p, not Holm', 'wf/mech2.py', 'r["category"], zs = categorize(r, adj[name])', 'r["category"], zs = categorize(r, r["p"])'),
+    ('mech2 A3 P8 on the whole sample', 'wf/mech2.py', '"P8_negated_vs_affirmed": {"terms": ((1, "negated"), (-1, "affirmed")), "population": "sample_take"', '"P8_negated_vs_affirmed": {"terms": ((1, "negated"), (-1, "affirmed")), "population": "sample"'),
+    ('mech2 A4 integrity ignores unexpected scores', 'wf/mech2.py', '"n_missing", "n_unexpected",\n', '"n_missing",\n'),
+    ('mech2 A5 integrity ignores unknown items', 'wf/mech2.py', 'for k in ("n_unknown_items", "n_hash_mismatch",', 'for k in ("n_hash_mismatch",'),
+    ('mech2 A6 untested accounts not counted as fitting', 'wf/mech2.py', 'fitting = by["consistent"] + by["untested"]', 'fitting = by["consistent"]'),
+    ('mech2 A7 rival reading taken from H6_position row', 'wf/mech2.py', 'return ro["rivals"][h] if h in RIVAL_READINGS else ro[h]["per_contrast"]', 'return ro["H6_position"]["per_contrast"] if h in RIVAL_READINGS else ro[h]["per_contrast"]'),
+    ('mech2 A8 first-token split against yes/no full L', 'wf/mech2.py', 'full = block["primary"]["contrasts"][name]["estimate"]', 'full = block["primary_yes_no"]["contrasts"][name]["estimate"]'),
+    ('mech2 A9 P1 reference is aligned minus mention_ignore', 'wf/mech2.py', '"P1_keep_vs_ignore": {"terms": ((1, "desire_keep_sw"), (-1, "mention_ignore")), "population": "sample", "reference": _REF}', '"P1_keep_vs_ignore": {"terms": ((1, "desire_keep_sw"), (-1, "mention_ignore")), "population": "sample", "reference": ((1, "aligned"), (-1, "mention_ignore"))}'),
+    ('mech2 A10 rival P6 band includes N', 'wf/mech2.py', 'RIVAL_READINGS: dict[str, dict[str, frozenset[str]]] = {"no_position_effect": {"P6_position_step0": _Z}}', 'RIVAL_READINGS: dict[str, dict[str, frozenset[str]]] = {"no_position_effect": {"P6_position_step0": _NZ}}'),
+    ('mech2 A11 joint position verdict from cand only', 'wf/mech2.py', '"position": out["H6_position"]["verdict"],', '"position": cand["H6_position"]["verdict"],'),
+    ('mech2 A12 contents-not-shown keeps shown-without', 'wf/mech2.py', 'not_shown = [t for t in pops["sample_take"] if negated_status(t)[1] == "contents not shown"]', 'not_shown = [t for t in pops["sample_take"] if negated_status(t)[1] != "shown, holds it"]'),
+    ('mech2 A13 mixture readout drops P5', 'wf/mech2.py', 'for name in ("P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed")}', 'for name in ("P7_negated_existence", "P8_negated_vs_affirmed")}'),
+    ('mech2 A14 secondary not-scored refuses', 'wf/mech2.py', 'or (t in PRIMARY_MODELS and out[t]["status"] == "not scored")', 'or (out[t]["status"] == "not scored")'),
+    ('mech2 A16 negated/affirmed receptacle without its number', 'wf/mech2.py', 'return AFFIRMED.format(swapped=sw, a=rq1._article(obj), obj=obj, rec=p[2])', 'return AFFIRMED.format(swapped=sw, a=rq1._article(obj), obj=obj, rec=p[2].split()[0])'),
+    ('mech2 A17 desire_keep_sw lower-case sentence', 'wf/mech2.py', 'DESIRE_KEEP_SW = "{swapped} Make sure that', 'DESIRE_KEEP_SW = "{swapped} make sure that'),
+    ('mech2 A18 undefined L never counted', 'wf/mech2.py', '"n_undefined_L": sum(_undefined(x) for x in mine),', '"n_undefined_L": 0,'),
+    ('mech2 A20 old P2 secondary against can', 'wf/mech2.py', '"old_P2_desire_check_vs_swapped": {f: contrast(by, pops["sample"], ((1, "desire_check"), (-1, "swapped"))', '"old_P2_desire_check_vs_swapped": {f: contrast(by, pops["sample"], ((1, "desire_check"), (-1, "desire_check_can"))'),
+    ('mech2 A21 P5 lift ratio on all placement items', 'wf/mech2.py', 'f: contrast(by, pops["p5"], PRIMARY["P5_done_vs_cancelled"]["terms"], f,', 'f: contrast(by, pops["sample_placement"], PRIMARY["P5_done_vs_cancelled"]["terms"], f,'),
+    ('mech2 A22 mixture text when any account is contradicted', 'wf/mech2.py', '    if not fitting:\n', '    if by["contradicted"]:\n'),
+    # Mutants of the amendment after review 3: M and the two summary sentences, the risky rule and the labels, H2 on
+    # P3, the placebo pair and the named secondaries, Mistral's jobs, the integrity changes, H7_check's readouts.
+    ('mech2 T1 M is P7', 'wf/mech2.py', 'MENTION_TERMS = ((0.5, "negated"), (0.5, "affirmed"), (-1, "swapped"))', 'MENTION_TERMS = ((1, "negated"), (-1, "swapped"))'),
+    ('mech2 T2 M above the band in one format suffices', 'wf/mech2.py', '    for f in FORMATS:\n        r = (res_by_format.get(f) or {}).get("ratio") or {}', '    for f in FORMATS[:1]:\n        r = (res_by_format.get(f) or {}).get("ratio") or {}'),
+    ('mech2 T3 M read above zero, not above the band', 'wf/mech2.py', 'lambda lo, hi: lo > TRIVIAL_BAND)', 'lambda lo, hi: lo > 0)'),
+    ('mech2 T4 salience sentence without the claims-only condition', 'wf/mech2.py', 'mention_remains = claims_only and _mention_above_band(mention)', 'mention_remains = bool(h3_against) and _mention_above_band(mention)'),
+    ('mech2 T5 claims-only allows other contrasts', 'wf/mech2.py', 'set(h3_against) <= set(CLAIM_CONTRASTS)', 'bool(set(h3_against) & set(CLAIM_CONTRASTS))'),
+    ('mech2 T6 claims sentence without H2 consistent', 'wf/mech2.py', 'claims_read = claims_only and out["H2_evidence"]["verdict"] == "consistent"', 'claims_read = claims_only'),
+    ('mech2 T7 risky rule dropped', 'wf/mech2.py', '    return "consistent" if _risky(h, rows) else "untested"', '    return "consistent" if _discriminating(h, rows) else "untested"'),
+    ('mech2 T8 risky read as excluding N', 'wf/mech2.py', 'if "Z" not in _allowed(h, c)]', 'if "N" not in _allowed(h, c)]'),
+    ('mech2 T9 label hides the contrasts that allow zero', 'wf/mech2.py', 'rest = [c for c in disc if c not in risky]', 'rest = []'),
+    ('mech2 T10 untested reason from risky contrasts', 'wf/mech2.py', '"consistent only where it allows zero" if disc else', '"consistent only where it allows zero" if risky else'),
+    ('mech2 T11 H2 P3 back to positive only', 'wf/mech2.py', '"P2_hope_polarity": _Z, "P3_mention_without_need": _ZSL,', '"P2_hope_polarity": _Z, "P3_mention_without_need": _P,'),
+    ('mech2 T12 placebo denies the action object', 'wf/mech2.py', 'return PLACEBO_NEGATED.format(swapped=sw, swobj=swobj, rec=p[2])', 'return PLACEBO_NEGATED.format(swapped=sw, swobj=obj, rec=p[2])'),
+    ('mech2 T13 placebo article of the action object', 'wf/mech2.py', 'a=rq1._article(swobj)', 'a=rq1._article(obj)'),
+    ('mech2 T14 placebo readout reversed', 'wf/mech2.py', 'PLACEBO_TERMS = ((1, "placebo_negated"), (-1, "placebo_affirmed"))', 'PLACEBO_TERMS = ((-1, "placebo_negated"), (1, "placebo_affirmed"))'),
+    ('mech2 T15 P8 net adds the placebo', 'wf/mech2.py', 'P8_NET_TERMS = ((1, "negated"), (-1, "affirmed"), (-1, "placebo_negated"), (1, "placebo_affirmed"))', 'P8_NET_TERMS = ((1, "negated"), (-1, "affirmed"), (1, "placebo_negated"), (-1, "placebo_affirmed"))'),
+    ('mech2 T16 S1 read in the two-candidate format only', 'wf/mech2.py', '((1, "desire_check"), (-1, "desire_keep")), f, reference=ref, **kw) for f in FORMATS}', '((1, "desire_check"), (-1, "desire_keep")), "cand", reference=ref, **kw) for f in FORMATS}'),
+    ('mech2 T17 Mistral on every item', 'wf/mech2.py', 'return [(t, a, f) for t, a, f in out if t["id"] in sample or a in P6_ARMS]', 'return out'),
+    ('mech2 T18 Mistral without P6 arms outside the sample', 'wf/mech2.py', 'if t["id"] in sample or a in P6_ARMS]', 'if t["id"] in sample]'),
+    ('mech2 T19 P6 arms are the position arms only', 'wf/mech2.py', 'P6_ARMS = tuple(arm for _, arm in PRIMARY["P6_position_step0"]["terms"])', 'P6_ARMS = POSITION_ARMS'),
+    ('mech2 T20 integrity expects every job of the arms', 'wf/mech2.py', 'for t, a, f in model_jobs(tag, union, sample)}', 'for t, a, f in jobs(union, model_arms(tag))}'),
+    ('mech2 T21 analysis checks integrity without the sample', 'wf/mech2.py', 'integrity = score_integrity(scores, sets["union"], tags, sets["sample"])', 'integrity = score_integrity(scores, sets["union"], tags)'),
+    ('mech2 T22 runner gives Mistral every job', 'wf/mech2.py', 'work = {tag: model_jobs(tag, shard, sets["sample"]) for tag in tags}', 'work = {tag: jobs(shard, model_arms(tag)) for tag in tags}'),
+    ('mech2 T23 undefined L on a primary arm does not refuse', 'wf/mech2.py', '"n_unexpected",\n                                   "n_undefined_L_primary_arms"))', '"n_unexpected"))'),
+    ('mech2 T24 undefined L on any arm counted as primary', 'wf/mech2.py', '_undefined(x) and split_condition(x.get("condition", ""))[0] in PRIMARY_ARMS', '_undefined(x)'),
+    ('mech2 T25 unknown items counted as unexpected too', 'wf/mech2.py', '"n_unexpected": len({k for k in keys if k[0] in items} - expected),', '"n_unexpected": len(set(keys) - expected),'),
+    ('mech2 T26 status line hides undefined scores', 'wf/mech2.py', '+ (f"; undefined L on {undefined} scores of secondary arms" if undefined else ""))', '+ "")'),
+    ('mech2 T27 every move completes the task', 'wf/mech2.py', '    return re.sub(r"\\s+\\d+$", "", p[2]) == parse_task_line(t["task_line"]).receptacle\n\n\ndef swapped_target_at_rec', '    return True\n\n\ndef swapped_target_at_rec'),
+    ('mech2 T28 group difference reversed', 'wf/mech2.py', 'return _mean(a) - _mean(b) if a and b else float("nan")', 'return _mean(b) - _mean(a) if a and b else float("nan")'),
+    ('mech2 T29 group r over group a reference only', 'wf/mech2.py', '        den = _mean([r for _, _, r in xs])\n        return diff(xs) / den', '        den = _mean([r for g, _, r in xs if g])\n        return diff(xs) / den'),
+    ('mech2 T30 H7a groups swapped', 'wf/mech2.py', '"H7a_desire_check_shown_vs_not": {f: group_difference(by, shown, not_shown,', '"H7a_desire_check_shown_vs_not": {f: group_difference(by, not_shown, shown,'),
+    ('mech2 T31 H7c against every item', 'wf/mech2.py', 'other = [t for t in pops["sample"] if not completes_task(t)]', 'other = pops["sample"]'),
+    ('mech2 T32 known minus unknown reversed', 'wf/mech2.py', 'return _mean(kn) - _mean(un) if kn and un else float("nan")', 'return _mean(un) - _mean(kn) if kn and un else float("nan")'),
+    ('mech2 T33 knowledge split without desire_check', 'wf/mech2.py', ',\n             "desire_check_vs_swapped": ((1, "desire_check"), (-1, "swapped"))}', '}'),
+    ('mech2 T34 secondary joint reading from one format', 'wf/mech2.py', 'per[h]["joint"] = _joint(per[h]["cand"], per[h]["yn"])', 'per[h]["joint"] = per[h]["cand"]'),
+    ('mech2 T35 secondary zones ignore estimable', 'wf/mech2.py', '    if not r.get("estimable") or lo != lo or hi != hi:\n        return None\n    return zones_of(lo, hi)', '    if lo != lo or hi != hi:\n        return None\n    return zones_of(lo, hi)'),
+    ('mech2 T36 placebo predicted below zero under H2', 'wf/mech2.py', '"S2_negation_placebo": {"H2_evidence": _Z,', '"S2_negation_placebo": {"H2_evidence": _N,'),
+    ('mech2 T37 summary not given M', 'wf/mech2.py', 'block["primary_yes_no"]["readout"], mention,', 'block["primary_yes_no"]["readout"], None,'),
+    ('mech2 T38 M on every sample item', 'wf/mech2.py', 'mention = {f: contrast(by, take, MENTION_TERMS', 'mention = {f: contrast(by, pops["sample"], MENTION_TERMS'),
+    # Mechanism battery, review 4 (2026-11-21, before any score): the review's mutants R1-R20, adapted where the
+    # amended code moved their text (R6, R20: the interval tests now go through `_r_interval_in`; R7, R15: S2 and S3
+    # are computed before the joint readout; R8: M reads `take`; R17: the flag is `mention_remains`). R10 (the risky
+    # rule reads PREDICTIONS only) and R19 (a comment added) are equivalent and left out: `_risky` is only called for
+    # accounts, whose cells are PREDICTIONS' own.
+    ('mech2 R1 salience contradictions read from the two-candidate format', 'wf/mech2.py', 'h3_against = [c for c, v in out["H3_salience"]["per_contrast"].items() if v == "contradicted"]', 'h3_against = [c for c, v in cand["H3_salience"]["per_contrast"].items() if v == "contradicted"]'),
+    ('mech2 R2 claims sentence from the two-candidate H2 verdict', 'wf/mech2.py', 'claims_read = claims_only and out["H2_evidence"]["verdict"] == "consistent"', 'claims_read = claims_only and cand["H2_evidence"]["verdict"] == "consistent"'),
+    ('mech2 R3 claims-only true when salience is not contradicted', 'wf/mech2.py', 'claims_only = bool(h3_against) and set(h3_against) <= set(CLAIM_CONTRASTS)', 'claims_only = set(h3_against) <= set(CLAIM_CONTRASTS)'),
+    ('mech2 R4 claim contrasts include P3', 'wf/mech2.py', 'CLAIM_CONTRASTS = ("P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed")', 'CLAIM_CONTRASTS = ("P3_mention_without_need", "P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed")'),
+    ('mech2 R5 claim contrasts drop P7', 'wf/mech2.py', 'CLAIM_CONTRASTS = ("P5_done_vs_cancelled", "P7_negated_existence", "P8_negated_vs_affirmed")', 'CLAIM_CONTRASTS = ("P5_done_vs_cancelled", "P8_negated_vs_affirmed")'),
+    ('mech2 R6 M above the band from its edge', 'wf/mech2.py', 'lambda lo, hi: lo > TRIVIAL_BAND)', 'lambda lo, hi: lo >= TRIVIAL_BAND)'),
+    ('mech2 R7 placebo on every sample item', 'wf/mech2.py', 'placebo = {f: contrast(by, take, PLACEBO_TERMS', 'placebo = {f: contrast(by, pops["sample"], PLACEBO_TERMS'),
+    ('mech2 R8 M over the affirmed lift', 'wf/mech2.py', 'mention = {f: contrast(by, take, MENTION_TERMS, f, reference=ref, **kw) for f in FORMATS}', 'mention = {f: contrast(by, take, MENTION_TERMS, f, reference=((1, "affirmed"), (-1, "swapped")), **kw) for f in FORMATS}'),
+    ('mech2 R9 M zones from the two-candidate format only', 'wf/mech2.py', '"zones": secondary_zones(mention[f])}', '"zones": secondary_zones(mention["cand"])}'),
+    ('mech2 R11 discriminating only against content rivals', 'wf/mech2.py', 'and any(rows[o].get(c) == "contradicted" for o in rows if o != h)]', 'and any(rows[o].get(c) == "contradicted" for o in rows if o != h and o in PREDICTIONS)]'),
+    ('mech2 R12 Mistral outside the sample on the start arms only', 'wf/mech2.py', 'return [(t, a, f) for t, a, f in out if t["id"] in sample or a in P6_ARMS]', 'return [(t, a, f) for t, a, f in out if t["id"] in sample or (a in P6_ARMS and t.get("history_len", 0) == 0 and a.endswith("_start"))]'),
+    ('mech2 R13 placebo on takes of another object', 'wf/mech2.py', '        if not p or p[0] != "take" or p[1] != obj:\n            return None\n        sw = t["swapped_task_line"]', '        if not p or p[0] != "take":\n            return None\n        sw = t["swapped_task_line"]'),
+    ('mech2 R14 undefined L on yes/no primary arms not counted', 'wf/mech2.py', '_undefined(x) and split_condition(x.get("condition", ""))[0] in PRIMARY_ARMS', '_undefined(x) and x.get("condition", "") in PRIMARY_ARMS'),
+    ('mech2 R15 P8 net read in the two-candidate format only', 'wf/mech2.py', 'p8_net = {f: contrast(by, take, P8_NET_TERMS, f, reference=ref', 'p8_net = {f: contrast(by, take, P8_NET_TERMS, "cand", reference=ref'),
+    ('mech2 R16 H7a within groups reversed', 'wf/mech2.py', 'group_difference(by, [t for t in within if t["id"] in shown_ids], [t for t in within if t["id"] not in shown_ids],', 'group_difference(by, [t for t in within if t["id"] not in shown_ids], [t for t in within if t["id"] in shown_ids],'),
+    ('mech2 R17 mention sentence needs H2 consistent too', 'wf/mech2.py', 'mention_remains = claims_only and _mention_above_band(mention)', 'mention_remains = claims_only and _mention_above_band(mention) and out["H2_evidence"]["verdict"] == "consistent"'),
+    ('mech2 R18 hash check skipped for the secondary model', 'wf/mech2.py', '"n_hash_mismatch": sum(x["transition_id"] in items and x.get("item_hash") != hashes[x["transition_id"]] for x in mine),', '"n_hash_mismatch": sum(tag in PRIMARY_MODELS and x["transition_id"] in items and x.get("item_hash") != hashes[x["transition_id"]] for x in mine),'),
+    ('mech2 R20 estimable ignored in the interval tests', 'wf/mech2.py', 'if not r.get("estimable") or lo != lo or hi != hi or not test(lo, hi):', 'if lo != lo or hi != hi or not test(lo, hi):'),
+    # Mutants of the amendment after review 4: M's halves, the absent-M sentence, the placebo sentence, S2 without
+    # the swapped-target items, the S1 line.
+    ('mech2 U1 affirmed half reads the denial', 'wf/mech2.py', '"M_half_affirmed_minus_swapped": ((1, "affirmed"), (-1, "swapped")),', '"M_half_affirmed_minus_swapped": ((1, "negated"), (-1, "swapped")),'),
+    ('mech2 U2 denied half reversed', 'wf/mech2.py', '"M_half_swapped_minus_negated": ((1, "swapped"), (-1, "negated"))}', '"M_half_swapped_minus_negated": ((1, "negated"), (-1, "swapped"))}'),
+    ('mech2 U3 absent M checks the upper edge only', 'wf/mech2.py', 'lambda lo, hi: -TRIVIAL_BAND <= lo and hi <= TRIVIAL_BAND)', 'lambda lo, hi: hi <= TRIVIAL_BAND)'),
+    ('mech2 U4 absent M without the claims-only condition', 'wf/mech2.py', 'mention_absent = claims_only and _mention_inside_band(mention)', 'mention_absent = _mention_inside_band(mention)'),
+    ('mech2 U5 placebo read below zero, not below the band', 'wf/mech2.py', '    return _r_interval_in(placebo, lambda lo, hi: hi < -TRIVIAL_BAND)', '    return _r_interval_in(placebo, lambda lo, hi: hi < 0)'),
+    ('mech2 U6 verdicts on P8 omit consistent accounts', 'wf/mech2.py', 'or (out[h]["verdict"] == "consistent" and contrast_name in out[h]["consistent_where_a_rival_fails"])]', 'or False]'),
+    ('mech2 U7 placebo sentence names the verdicts on P5', 'wf/mech2.py', 'on_p8 = _resting_on(out, "P8_negated_vs_affirmed")', 'on_p8 = _resting_on(out, "P5_done_vs_cancelled")'),
+    ('mech2 U8 summary not given the placebo', 'wf/mech2.py', 'mention,\n                                                  placebo, p8_net)', 'mention)'),
+    ('mech2 U9 placebo subset keeps only the left-out items', 'wf/mech2.py', 'kept = [t for t in take if not swapped_target_at_rec(t)]', 'kept = [t for t in take if swapped_target_at_rec(t)]'),
+    ('mech2 U10 swapped target read from the real task', 'wf/mech2.py', 'return re.sub(r"\\s+\\d+$", "", p[2]) == parse_task_line(t["swapped_task_line"]).receptacle', 'return re.sub(r"\\s+\\d+$", "", p[2]) == parse_task_line(t["task_line"]).receptacle'),
+    ('mech2 U11 S1 line whatever the verdicts', 'wf/mech2.py', '    if not all(ro[h]["verdict"] in ("consistent", "untested") for h in ("H4_wishful", "H5_policy_blend")):\n        return ""', '    if False:\n        return ""'),
+    ('mech2 U12 status line drops S1', 'wf/mech2.py', '+ (f"; {s1}" if (s1 := s1_line(report[tag])) else "")', '+ ""'),
+    # The adversarial check of M (2026-11-21): the summary must never attribute the residual, or its absence, to salience.
+    ('mech2 W1 residual sentence attributes the effect to salience', 'wf/mech2.py', '"that salience contributes. Word overlap with the action would give the same.")', '"that salience is likely part of the effect.")'),
+    ('mech2 W2 absent residual read as no salience', 'wf/mech2.py', '"the same, so it does not show that salience is absent.")', '"the same, so salience is absent.")'),
+    # Mechanism battery, review 5 (2026-11-22, before any score): the review's surviving mutants X1, X2, X8, X9, and
+    # mutants of the M-below-band sentence (Y1, Y2).
+    ('mech2 X1 attribution appended after the residual sentence', 'wf/mech2.py', '"that salience contributes. Word overlap with the action would give the same.")', '"that salience contributes. Word overlap with the action would give the same. Salience therefore explains the residual.")'),
+    ('mech2 X2 claims sentence says M indicates salience', 'wf/mech2.py', '"than salience; see M.")', '"than salience; see M. M indicates salience.")'),
+    ('mech2 X8 S1 line only when both accounts are consistent', 'wf/mech2.py', 'in ("consistent", "untested") for h in ("H4_wishful", "H5_policy_blend")', 'in ("consistent",) for h in ("H4_wishful", "H5_policy_blend")'),
+    ('mech2 X9 P8 net quoted without an interval in both formats', 'wf/mech2.py', 'if p8_net and all(\n            (p8_net.get(f) or {}).get("ratio", {}).get("ci") for f in FORMATS) else ""', 'if p8_net else ""'),
+    ('mech2 Y1 below-band sentence without the claims-only condition', 'wf/mech2.py', 'mention_below = claims_only and _mention_below_band(mention)', 'mention_below = _mention_below_band(mention)'),
+    ('mech2 Y2 below-band read below zero, not below the band', 'wf/mech2.py', '    return _r_interval_in(mention, lambda lo, hi: hi < -TRIVIAL_BAND)', '    return _r_interval_in(mention, lambda lo, hi: hi < 0)'),
     # Model families, wave A (2026-11-20, wf/families.py, the scorer settings and the prefetch tool).
     ("families fold drops the system text", "wf/families.py",
      'first = {"role": "user", "content": messages[0]["content"] + FOLD_SEPARATOR + messages[1]["content"]}',
@@ -787,12 +1021,17 @@ def _covering_tests(work: Path, rel: str) -> list[str]:
     return found or ["tests"]
 
 
+KILLERS: dict[str, str] = {}  # mutant -> the first test that failed on it, printed with the outcome
+
+
 def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900) -> str:
     try:
-        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", *targets],
+        result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=no", "-rf", *targets],
                                 cwd=work, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return "timeout"
+    failed = [ln.split(" ", 1)[1].split(" - ", 1)[0] for ln in result.stdout.splitlines() if ln.startswith("FAILED ")]
+    KILLERS["last"] = failed[0] if failed else ""
     return "killed" if result.returncode != 0 else "survived"
 
 
@@ -832,7 +1071,8 @@ def main() -> int:
                 outcome = _run_tests(python, work, ["tests"], timeout)
             path.write_text(source, encoding="utf-8")
             label = {"killed": "killed  ", "survived": "SURVIVED", "timeout": "TIMEOUT "}[outcome]
-            print(f"{label}  {name}", flush=True)
+            killer = KILLERS.get("last", "") if outcome == "killed" else ""
+            print(f"{label}  {name}" + (f"  [{killer}]" if killer else ""), flush=True)
             if outcome == "survived":
                 survivors.append(name)
             elif outcome == "timeout":

@@ -262,11 +262,12 @@ def cluster_bootstrap(
             sample.extend(by[g])
         boots.append(stat_fn(sample))
     boots = sorted(b for b in boots if b == b)  # a resample can lack a class entirely
+    dropped = B - len(boots)  # resamples whose statistic is undefined (NaN), left out of the interval
     if not boots:
-        return {"estimate": point, "ci_low": float("nan"), "ci_high": float("nan")}
+        return {"estimate": point, "ci_low": float("nan"), "ci_high": float("nan"), "n_dropped": dropped}
     lo = boots[int(0.025 * len(boots))]
     hi = boots[min(len(boots) - 1, int(0.975 * len(boots)))]
-    return {"estimate": point, "ci_low": lo, "ci_high": hi}
+    return {"estimate": point, "ci_low": lo, "ci_high": hi, "n_dropped": dropped}
 
 
 def pair_permutation(
