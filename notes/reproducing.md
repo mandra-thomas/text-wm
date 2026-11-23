@@ -34,6 +34,22 @@ Recorded on 2026-11-20 from the environments installed on ICE, which every run u
 
 The CUDA driver version was not recorded. `pace/fix_env.sbatch` is the script that pinned vLLM 0.8.5 and alfworld 0.3.3 in these environments; `pace/SETUP_ICE.md` has the rest of the setup.
 
+### A second model environment: `serve2` (added 2026-11-23)
+
+Models that need transformers 5 cannot run in the serve environment above (transformers 4.51.3). Families wave B (Qwen3.5, Ministral 3, Gemma 4, Qwen3.8; branch `families-waveb`) is scored in a second environment, `serve2`, and later TextCraft rounds that use such models (the round 3 proposal on branch `textcraft-r3`) plan to use it too. Everything earlier, including the confirmatory runs and wave A, keeps the serve environment above. The facts below are from `notes/families_waveb_design.md` on branch `families-waveb`.
+
+| Component | Version |
+| --- | --- |
+| Location on ICE | `<storage root>/envs/serve2` (on ICE, `/storage/ice1/2/1/gmat3/envs/serve2`), built 2026-11-20 with uv by `envs/build_serve2.sbatch` |
+| Python | 3.11.18 |
+| torch | 2.14.1 (built for CUDA 12.6) |
+| transformers | 5.23.0 |
+| tokenizers, huggingface-hub, accelerate | 0.23.3, 2.4.0, 1.16.0 |
+| jinja2, mistral-common, sentencepiece, protobuf, safetensors | 3.1.6, 1.13.1, 0.2.3, 7.36.2, 0.8.0 |
+| numpy, scipy | 2.3.5, 1.17.1 |
+
+The full list (80 packages) is `envs/serve2_freeze.txt`; it pins exact versions but not hashes. A scoring job selects `serve2` explicitly (`pace/family_score_serve2.sbatch` on that branch) and refuses to start if its Python has transformers below 5. transformers 5 reads the model cache from `HF_HUB_CACHE`, not `TRANSFORMERS_CACHE`, and returns a `BatchEncoding` from `apply_chat_template`, which the wave B scorer unwraps; the wave B design note lists the six differences that matter. No wave B score is read unless an environment check (two wave A models rescored in `serve2` and compared with their earlier scores) passes.
+
 ### The environment and its data
 
 "ALFWorld" here is the AgentGym ALFWorld server shipped with Word2World, not the original ALFWorld release. Its game data come from Word2World's `scripts/download_data/download_data.py`. That data renames `put` to `move` and adds a `help` action, so the stock ALFWorld download does not work with this code. No version or checksum of the downloaded data was recorded. The fine-tuned models' prompts, and the full-state condition's starting layouts, come from Word2World's `data/init_contexts/alfworld/wm_instruct_*.json` in the same download. The Hugging Face dataset `X1AOX1A/LLMasWorldModels` is used only by the Tier 0 parser check.
@@ -59,6 +75,19 @@ The runs did not pin revisions. These snapshots were read from the ICE model cac
 ## 2. Where the data are
 
 Each batch of runs was made in its own checkout on ICE, under `/storage/ice1/2/1/gmat3/text-wm-fix<N>/`, so that a resume never mixed commits. Each run's output is in that checkout's `runs/<run>/`, or `runs/<run>/shard_<i>_of_<n>/` for runs split by game. Every run folder holds `git_sha` (the commit), `config.json`, `inputs.json` (hashes of the files it read) and its saved work. Later checkouts hold copies of the collection so they could score it. All 19 checkouts' `runs/` folders together are a little under 2 GB.
+
+*(Updated 2026-11-23: the count of 19 was the count on 2026-11-20. Since then the rule has stayed the same, one fresh numbered checkout per frozen study or batch of runs, so the count has grown. The size above is for those 19 and was not remeasured.)* The checkouts the notes name, with what they hold:
+
+- `text-wm-fix4`, `fix5`: the first jobs of 2026-11-17, made from git bundles (README);
+- `fix8`: the stopped first collection's partial data (`deviations.md`);
+- `fix9`: the item collection; `fix11` to `fix20`: the confirmatory and exploratory runs in the table below;
+- `fix21`: the wave A family scores (`family_score_*`); `fix23`: the wave A analysis, the placement check and the copies of its inputs;
+- `fix24`: TextCraft round 1's scoring; `fix26`, `fix27`: its exploratory diagnostic runs;
+- `fix29`: Stage 1b's census labelling (its freeze tag); `fix30`: Stage 1a's decision-simulation scores; `fix36`: the mechanism battery's scoring and analysis; `fix37`: Stage 1b's model-free analysis, scoring and analysis;
+- `fix39`: wave B's checks at its freeze (tag message);
+- `text-wm-qwenaudit`: the forensic audit's prompt check (`qwen_effect_audit_forensic.md`), which modified no other checkout.
+
+Some numbers in between (for example τ-bench's and Option C's checkouts) are not named in the notes. The RQ3 episodes are also archived as `text-wm-runs-archive/text-wm-fix11/runs/rq3` (`decisionsim_agent_design.md`).
 
 ICE course storage is not permanent. The owner keeps a full copy outside this repository, with a SHA-256 manifest; it is not public. A public archive of the items, scores, generations and episodes is planned, and this note will link it.
 
