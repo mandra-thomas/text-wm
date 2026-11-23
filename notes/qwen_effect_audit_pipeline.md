@@ -142,3 +142,33 @@ What would change these conclusions: a different sample (this one runs high on Q
 - Per-item outputs are in `runs/qwen_audit/` of the ICE checkout `/storage/ice1/2/1/gmat3/text-wm-qwenaudit2` (outside git, like all run data).
 
 Software: transformers 4.51.3, torch 2.6.0 and vLLM 0.8.5 (V1 engine, FlashAttention) from the study's serve environment; models at the pinned snapshots in `wf/constants.py`, loaded offline from the shared cache.
+
+## 7. Follow-up on all items: the effect without the empty think block (exploratory; plan committed 2026-11-23, before any score)
+
+Section 4 found, on 200 items, that removing Qwen3's empty thinking-off block from the answer position roughly halves the effect. This follow-up measures that on the full population and on two related results. It is exploratory and is reported beside the confirmatory 6.12 nats, never in place of it. No confirmatory verdict is revisited.
+
+### 7.1 Plan
+
+**What is scored.** The study's own scorer and prompt builder (`LogoddsScorer.score_pair` with `build_messages`, exactly as `rq2_score`) with one change: the chat template is rendered with `enable_thinking=True` and no reasoning written, so the scored answer follows a bare `<|im_start|>assistant\n` header, as the three example answers do (the "no think block" format of section 4). It is set through the scorer's existing `template_kwargs`. Everything else (example set 1, history only, aligned and swapped task lines, both candidates, bf16 weights, float32 log-softmax) is unchanged. Script: `scripts/qwen_audit/followup_score.py`; job: `pace/qwen_followup.sbatch`.
+
+**A. Qwen3-8B, all 4,666 primary items.** The with-block scores are the stored `rq2_score` values. The without-block scores are computed on the GPU type of the stored shard each item came from (shards 0 to 2 on A40s, shard 3 on an L40S), so the comparison is same-GPU; section 3 showed that the same scorer on the same GPU type reproduces the stored values exactly. As a check, the first 20 items of each job are also rescored with the block and must equal the stored values.
+
+**B. Qwen3-4B, 14B and 32B** (8B from A) on a seeded subsample of 300 primary items (`random.Random("20260924|followup_sizes")` over the sorted item ids), both formats scored in the same job, so with and without the block are same-GPU. 32B runs on an 80 GB A100.
+
+**C. The decision simulation at step 0** (the source of the Option C step-0 collapse): its 134 step-0 states with all 1,322 candidates (the same states as the stored run, sample digest `5b6fa14d3ff20383`), the yes/no score under the real task, the swapped task, the neutral task and the task-blind prompt, built by `wf.decisionsim.messages_for("qwen3-8b")`, scored with and without the block in the same job.
+
+**Estimands.** For each item, the effect is the aligned-minus-swapped log-odds defined in section 1. For A, under each format:
+
+- the mean effect with the block and without it;
+- their paired difference, and the ratio of the without-block mean to the with-block mean;
+- the same on the step-0 subset (items whose history has no actions yet; 514 items);
+- the standardized effect, the mean effect divided by the SD of the item effects;
+- the share of items with a positive effect.
+
+For B, the mean effect, standardized effect and share positive per size and format, and whether the standardized series across sizes stays flat (earlier, with the block: 0.90, 1.02, 0.96, 0.86 for 4B, 8B, 14B, 32B). For C, under each arm and format: the share of the agent's own first moves that the verifier accepts (score above zero), the mean score of the working candidates, and the step-0 chosen-failure rate under the verification rule (`rule2_verification`, scores rounded to 1/64 nat as in the decision simulation); the with-block values are checked against the stored decision-simulation scores.
+
+Intervals are 95% percentile bootstraps over games (2,000 resamples, seed 20260924); the ratio's interval resamples games and recomputes the ratio of means.
+
+**How the numbers are read.** A shows how much of the reported effect size belongs to the answer-position format on the full population, as a descriptive sensitivity. B shows whether the format changes the size comparison. C shows whether the step-0 collapse in the yes/no verifier depends on the block. None of these changes the confirmatory result; each is quoted beside it.
+
+**Budget.** About 1.75 GPU-hours planned: A about 50 minutes over four jobs, B about 35 minutes over two, C about 20 minutes in one.
