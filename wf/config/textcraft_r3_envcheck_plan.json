@@ -1,0 +1,143 @@
+{
+ "rule": "design 14.M4",
+ "models": {
+  "qwen3-8b": {
+   "tag": "qwen3-8b",
+   "status": "planned",
+   "n_r2_shards": 4,
+   "shards": [
+    {
+     "shard": 0,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 75
+    },
+    {
+     "shard": 1,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 55
+    },
+    {
+     "shard": 2,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 68
+    },
+    {
+     "shard": 3,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 102
+    }
+   ],
+   "jobs": [
+    {
+     "job": 0,
+     "gpu": "NVIDIA L40S",
+     "r2_shards": [
+      0,
+      1,
+      2,
+      3
+     ]
+    }
+   ],
+   "single_type": true,
+   "n_comparable_planned": 300,
+   "runnable": true
+  },
+  "mistral-7b-v0.3": {
+   "tag": "mistral-7b-v0.3",
+   "status": "planned",
+   "n_r2_shards": 4,
+   "shards": [
+    {
+     "shard": 0,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 75
+    },
+    {
+     "shard": 1,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 55
+    },
+    {
+     "shard": 2,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 68
+    },
+    {
+     "shard": 3,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 102
+    }
+   ],
+   "jobs": [
+    {
+     "job": 0,
+     "gpu": "NVIDIA L40S",
+     "r2_shards": [
+      0,
+      1,
+      2,
+      3
+     ]
+    }
+   ],
+   "single_type": true,
+   "n_comparable_planned": 300,
+   "runnable": true
+  },
+  "gemma2-9b-it": {
+   "tag": "gemma2-9b-it",
+   "status": "planned",
+   "n_r2_shards": 4,
+   "shards": [
+    {
+     "shard": 0,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 75
+    },
+    {
+     "shard": 1,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 55
+    },
+    {
+     "shard": 2,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 68
+    },
+    {
+     "shard": 3,
+     "gpu": "NVIDIA L40S",
+     "typed": true,
+     "n_records": 102
+    }
+   ],
+   "jobs": [
+    {
+     "job": 0,
+     "gpu": "NVIDIA L40S",
+     "r2_shards": [
+      0,
+      1,
+      2,
+      3
+     ]
+    }
+   ],
+   "single_type": true,
+   "n_comparable_planned": 300,
+   "runnable": true
+  }
+ }
+}
