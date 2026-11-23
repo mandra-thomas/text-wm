@@ -686,6 +686,28 @@ def provenance_problems(folders: dict[str, list[Path]], scores: dict[str, list[d
     return dict(out)
 
 
+def other_commit_problems(other: dict[str, list[Path]], tag_commit: str | None, dev: dict[str, Any],
+                          commits_of: Callable[[Path], list[str]] | None = None,
+                          run_git: Callable[[list[str]], str] | None = None) -> dict[str, list[str]]:
+    """S12 for the runs outside the families (environment check, rescoring, thinking arm): every job at the freeze tag's
+    commit; the thinking arm's (key "think") also at D-T1's deviation commit `dev["commit"]`, and only those."""
+    commits_of = commits_of or G.shard_commits
+    kw = {"run_git": run_git} if run_git else {}
+    cs = {k: [c for p in ps for c in commits_of(p)] for k, ps in other.items()}
+    cp = G.commit_problems({k: v for k, v in cs.items() if k != "think"}, tag_commit, **kw)
+    if "think" in cs:  # D-T1
+        cp.update(G.commit_problems({"think": cs["think"]}, tag_commit, also=dev.get("commit"), **kw))
+        if dev.get("problems"):
+            cp.setdefault("think", []).extend(dev["problems"])
+    return cp
+
+
+def think_shard_commits(folders: list[Path], commits_of: Callable[[Path], list[str]] | None = None) -> dict[str, list[str]]:
+    """D-T1: the commits each thinking-arm shard's jobs ran at, recorded in the metrics."""
+    commits_of = commits_of or G.shard_commits
+    return {f"{p.parent.name}/{p.name}": sorted(set(commits_of(p))) for p in folders}
+
+
 # ---------------- the analysis ----------------
 
 
@@ -933,6 +955,8 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
     if tps:
         other["think"] = tps
     tag_commit = None if mock_run else G.freeze_commit()
+    # D-T1: the thinking arm's shards may also run at the deviation commit; every other run only at the freeze tag's
+    dev = {"commit": None, "problems": []} if mock_run else G.deviation_commit(tag_commit=tag_commit)
     probs = provenance_problems(folders, scores, tag_commit, mock_run)
     for k, ps in (other.items() if not mock_run else ()):  # review 2, S2
         bad = [p.name for p in ps if G.shard_dirty(p)]
@@ -942,7 +966,7 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
         if not dec["valid"]:
             probs.setdefault(t, []).extend(dec["problems"])
     if not mock_run:
-        cp = G.commit_problems({k: [c for p in ps for c in G.shard_commits(p)] for k, ps in other.items()}, tag_commit)
+        cp = other_commit_problems(other, tag_commit, dev)
         for k, v in cp.items():
             probs.setdefault(k, []).extend(v)
         for k, ps in other.items():  # the fallback rescoring runs on exactly one L40S per job (design 14.M4)
@@ -1022,6 +1046,8 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
     metrics["round2_analysis_read"] = {"metrics_sha256": _sha(r2_metrics), "status_line":
                                        r2_status.read_text(encoding="utf-8").splitlines()[0] if r2_status.exists() else None}
     metrics["freeze_commit"] = tag_commit
+    metrics["deviation_t1"] = {"commit": dev["commit"], "problems": dev["problems"],  # which commit each thinking shard ran at
+                               "think_shard_commits": think_shard_commits(other.get("think", []))}
     write_json(d / "metrics.json", metrics)
     lines = [f"Gemma slot: {gemma} (triggers {slot.get('triggers')})"]
     for fam in ("A3", "A3x"):

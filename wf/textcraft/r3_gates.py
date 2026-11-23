@@ -27,6 +27,13 @@ from typing import Any, Callable
 from wf.textcraft import r3 as R3
 
 FREEZE_TAG_PREFIX = "textcraft-r3-design-frozen-"
+# Deviation D-T1 (2026-11-23, notes/textcraft_r3_deviation_thinking_padding.md): only the thinking arm's runs may start
+# at the commit of this annotated tag, and only if that commit changes no code outside D-T1's files. Every other run
+# still refuses anything but the freeze tag's commit.
+DEVIATION_TAG_PREFIX = "textcraft-r3-deviation-t1-"
+DEVIATION_RUNS = "textcraft_r3_think"  # run ids textcraft_r3_think_qwen3.5-9b and textcraft_r3_think_smoke_qwen3.5-9b
+DEVIATION_FILES = ("wf/textcraft/r3_think.py", "wf/textcraft/r3_gates.py", "wf/textcraft/r3_analysis.py",
+                   "scripts/mutation_check.py")
 CODE_PATHS = ("wf/", "scripts/", "pace/")  # a commit that differs from the tag only outside these is code-identical
 PLAN_FILE = Path(__file__).resolve().parents[1] / "config" / "textcraft_r3_envcheck_plan.json"
 UNOBTAINABLE = "gpu_unobtainable.json"  # filed in an envcheck run folder when a planned GPU type was not obtainable
@@ -105,17 +112,42 @@ def code_identical(commit: str, tag_commit: str, run_git: Callable[[list[str]], 
 
 
 def commit_problems(commits: dict[str, list[str]], tag_commit: str | None,
-                    run_git: Callable[[list[str]], str] = _git) -> dict[str, list[str]]:
-    """{tag: problems}: every job of every shard at the freeze tag's commit (or a code-identical one)."""
+                    run_git: Callable[[list[str]], str] = _git, also: str | None = None) -> dict[str, list[str]]:
+    """{tag: problems}: every job of every shard at the freeze tag's commit (or a code-identical one). `also`: one
+    more accepted commit (D-T1's deviation commit, passed for the thinking arm's shards only)."""
     out: dict[str, list[str]] = {}
     for tag, cs in commits.items():
         if tag_commit is None:
             out[tag] = ["no round-3 freeze tag in this checkout"]
             continue
-        bad = sorted({c for c in cs if not code_identical(c, tag_commit, run_git)})
+        bad = sorted({c for c in cs if not code_identical(c, tag_commit, run_git)
+                      and not (also is not None and code_identical(c, also, run_git))})
         if bad or not cs:
             out[tag] = [f"jobs at commits {bad or 'none recorded'}, not the freeze tag's {tag_commit[:12]}"]
     return out
+
+
+def deviation_commit(run_git: Callable[[list[str]], str] = _git, tag_commit: str | None = None) -> dict[str, Any]:
+    """D-T1's deviation commit: {"commit": the one textcraft-r3-deviation-t1-* tag's commit or None, "problems"}. None
+    with a problem when there is more than one such tag, or when the commit changes code (wf/, scripts/, pace/)
+    outside DEVIATION_FILES relative to the freeze tag's commit."""
+    try:
+        tags = [t for t in run_git(["tag", "-l", DEVIATION_TAG_PREFIX + "*"]).splitlines() if t.strip()]
+    except Exception:  # noqa: BLE001 - no git: no deviation
+        return {"commit": None, "problems": []}
+    if not tags:
+        return {"commit": None, "problems": []}
+    if len(tags) > 1:
+        return {"commit": None, "problems": [f"more than one D-T1 deviation tag: {tags}"]}
+    tag_commit = tag_commit or freeze_commit(run_git)
+    if tag_commit is None:
+        return {"commit": None, "problems": ["a deviation tag but no freeze tag"]}
+    commit = run_git(["rev-parse", f"{tags[0]}^{{commit}}"])
+    changed = [p for p in run_git(["diff", "--name-only", tag_commit, commit]).splitlines() if p.strip()]
+    outside = sorted(p for p in changed if p.startswith(CODE_PATHS) and p not in DEVIATION_FILES)
+    if outside:
+        return {"commit": None, "problems": [f"deviation tag {tags[0]} changes code outside D-T1's files: {outside}"]}
+    return {"commit": commit, "tag": tags[0], "problems": []}
 
 
 def _dirty() -> bool:
@@ -124,20 +156,28 @@ def _dirty() -> bool:
     return git_dirty()
 
 
-def require_freeze_commit(run_git: Callable[[list[str]], str] = _git, dirty: Callable[[], bool] = _dirty) -> dict[str, Any]:
+def require_freeze_commit(run_git: Callable[[list[str]], str] = _git, dirty: Callable[[], bool] = _dirty,
+                          run_id: str = "") -> dict[str, Any]:
     """At job start: this checkout's HEAD is the freeze tag's commit, or code-identical to it, and its tracked files
-    carry no uncommitted change (review 2, S2). Mock runs are not checked."""
+    carry no uncommitted change (review 2, S2). The one exemption (D-T1): a thinking-arm run (`run_id` starting
+    textcraft_r3_think) may start at D-T1's deviation commit (or a code-identical one). Mock runs are not checked."""
     if mock():
         return {"checked": "mock"}
     tag = freeze_commit(run_git)
     if tag is None:
         raise SystemExit("no round-3 freeze tag in this checkout: round-3 jobs run only from the freeze tag")
     head = run_git(["rev-parse", "HEAD"])
+    out: dict[str, Any] = {"checked": True, "head": head, "tag_commit": tag}
     if not code_identical(head, tag, run_git):
-        raise SystemExit(f"this checkout is at {head[:12]}, not the freeze tag's {tag[:12]} (or a code-identical commit)")
+        dev = deviation_commit(run_git, tag) if run_id.startswith(DEVIATION_RUNS) else None
+        if dev is None or dev["commit"] is None or not code_identical(head, dev["commit"], run_git):
+            why = f"; {dev['problems']}" if dev and dev["problems"] else ""
+            raise SystemExit(f"this checkout is at {head[:12]}, not the freeze tag's {tag[:12]} (or a code-identical "
+                             f"commit){why}")
+        out.update({"deviation": "D-T1", "deviation_commit": dev["commit"], "deviation_tag": dev["tag"]})
     if dirty():
         raise SystemExit("this checkout has uncommitted changes to tracked files: round-3 jobs run from a clean checkout")
-    return {"checked": True, "head": head, "tag_commit": tag}
+    return out
 
 
 def shard_dirty(folder: Path) -> bool:

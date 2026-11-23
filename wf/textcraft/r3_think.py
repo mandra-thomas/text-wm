@@ -96,7 +96,11 @@ def prompt_problems(texts: list[str], spec=None) -> list[str]:
     return out
 
 
-PAD_RULE = {"top_k": 20, "mean_abs_max": 0.10, "any_abs_max": 1.0}  # attention-agreement tolerances (wave B)
+# Deviation D-T1 (2026-11-23, notes/textcraft_r3_deviation_thinking_padding.md): the padded-against-alone check runs
+# on a float32 copy of the model, where the bf16 batch-shape noise (about 0.08 nats, up to 0.17, with no padding at
+# all) vanishes (at most 0.0001 nats measured); the frozen rule (wave B's bf16 attention tolerances, 0.10 and 1.0)
+# sat inside that noise.
+PAD_RULE = {"top_k": 20, "mean_abs_max": 0.01, "any_abs_max": 0.05, "dtype": "float32"}
 
 
 def padding_problems(alone: list[float], padded: list[float]) -> list[str]:
@@ -123,8 +127,19 @@ def mentions(text: str, rec: dict) -> dict[str, bool]:
 class _Engine:
     """The real model: Qwen3.5-9B loaded as the instruction runs load it, generating with thinking on."""
 
-    def __init__(self):
-        self.scorer = FAM.open_scorer(R3.THINK_SPEC, R3.THINK_TAG)
+    def __init__(self, dtype: str = "bfloat16"):
+        if dtype == "bfloat16":  # generation and scoring: loaded exactly as before D-T1
+            self.scorer = FAM.open_scorer(R3.THINK_SPEC, R3.THINK_TAG)
+        else:  # D-T1: the start checks' copy, from the same verified node-local snapshot, in `dtype`
+            from wf.scoring.logodds import LogoddsScorer
+
+            s = R3.THINK_SPEC
+            self.scorer = LogoddsScorer(s.hf_id, model_tag=R3.THINK_TAG, dtype=dtype,
+                                        attn_implementation=s.attn_implementation, template_kwargs=s.template_kwargs,
+                                        model_class=s.model_class, tokenizer_kwargs=s.tokenizer_kwargs,
+                                        prompt_format=s.prompt_format, strict_load=s.strict_load,
+                                        unexpected_keys_allowed=s.unexpected_keys_allowed)
+        self.dtype = dtype
         self.tok = self.scorer._tok
         self.model = self.scorer._model
         self.revision = self.scorer.revision
@@ -157,11 +172,11 @@ class _Engine:
         self.tok.padding_side = "left"
         if self.tok.pad_token is None:
             self.tok.pad_token = self.tok.eos_token
-        with torch.no_grad():
+        with torch.no_grad():  # the last position's logits only (a float32 copy has no room for a batch's full logits)
             one = self.tok(texts[:1], return_tensors="pt", add_special_tokens=False).to(self.model.device)
-            la = torch.log_softmax(self.model(**one).logits[0, -1].float(), dim=-1)
+            la = torch.log_softmax(self.model(**one, logits_to_keep=1).logits[0, -1].float(), dim=-1)
             batch = self.tok(texts, return_tensors="pt", padding=True, add_special_tokens=False).to(self.model.device)
-            lb = torch.log_softmax(self.model(**batch).logits[0, -1].float(), dim=-1)
+            lb = torch.log_softmax(self.model(**batch, logits_to_keep=1).logits[0, -1].float(), dim=-1)
         top = torch.topk(la, PAD_RULE["top_k"]).indices
         alone, padded = la[top].tolist(), lb[top].tolist()
         return {"alone": alone, "padded": padded, "n_padded": int((batch["attention_mask"][0] == 0).sum()),
@@ -169,6 +184,9 @@ class _Engine:
 
     def ids(self, text: str) -> list[int]:
         return self.tok(text, add_special_tokens=False).input_ids
+
+    def close(self) -> None:
+        self.scorer.close()
 
     def logprobs(self, context: str, candidates: tuple[str, str]) -> dict[str, Any]:
         """Each candidate's log-probability (whole, and its first token) teacher-forced after `context`, and whether
@@ -207,6 +225,22 @@ class _MockEngine:
                 "logp_first_minus": -1 - (1 - h), "n_tokens_plus": 5, "n_tokens_minus": 7}
 
 
+def start_checks(jobs: list[tuple[dict, str]], spec, shots, engine=None) -> dict[str, Any]:
+    """The start checks (review 1, S10c and S10b; D-T1): every prompt checked, and the shortest prompt of the first
+    batch run alone and left-padded inside that batch, on a PAD_RULE["dtype"] copy of the model that is closed before
+    this returns (the bf16 model for generation is then loaded as before, never cast back)."""
+    eng = (engine or _Engine)(dtype=PAD_RULE["dtype"])
+    try:
+        bad = prompt_problems([eng.prompt_text(R3.model_messages(spec, r, a, shots)) for r, a in jobs])
+        # the shortest prompt of the first batch goes first, so it is the one left-padded inside the batch
+        first = sorted((eng.prompt_text(R3.model_messages(spec, r, a, shots)) for r, a in jobs[:BATCH]), key=len)
+        pad = eng.padded_check(first) if len(first) > 1 else {"problems": []}
+    finally:
+        eng.close()
+    return {"prompt_problems": bad[:50], "n_prompt_problems": len(bad),
+            "padding": {**pad, "dtype": PAD_RULE["dtype"], "rule": dict(PAD_RULE)}, "deviation": "D-T1"}
+
+
 def run_textcraft_r3_think(cfg: dict) -> int:
     """`textcraft_r3_think_qwen3.5-9b` (and `textcraft_r3_think_smoke_qwen3.5-9b`, cfg max_jobs): generate, then score."""
     run_id = cfg["run_id"]
@@ -225,7 +259,7 @@ def run_textcraft_r3_think(cfg: dict) -> int:
     env["gpu"] = gpu_check(R3.THINK_TAG)
     from wf.textcraft import r3_gates as G
 
-    env["freeze_commit"] = G.require_freeze_commit()
+    env["freeze_commit"] = G.require_freeze_commit(run_id=run_id)  # D-T1: may be the deviation commit
     i = int(os.environ.get("WF_SHARD") or cfg.get("shard", 0))
     n = int(os.environ.get("WF_N_SHARDS") or cfg.get("n_shards", 1))
     run_id = f"{run_id}/shard_{i:02d}_of_{n:02d}"
@@ -244,17 +278,15 @@ def run_textcraft_r3_think(cfg: dict) -> int:
     gens = {(g["transition_id"], g["condition"]): g for g in read_jsonl(d / "generations.jsonl")} if cfg.get("resume") else {}
     if any(hashes.get(k[0]) != g.get("item_hash") for k, g in gens.items()):
         raise SystemExit(f"{run_id}: saved generations belong to different records or prompts; rerun without --resume.")
+    if not mock:  # review 1, S10c and S10b: every prompt checked, and padding in a batch checked, before generating
+        checks = start_checks(jobs, spec, shots)  # D-T1: on a float32 copy, closed before the bf16 model loads
+        write_json(d / "start_checks.json", checks)
+        if checks["n_prompt_problems"] or checks["padding"]["problems"]:
+            why = checks["prompt_problems"][:3] or checks["padding"]["problems"]
+            write_status(run_id, f"stopped before generating: {why}", ok=False)
+            return 1
     eng = _MockEngine() if mock else _Engine()
     todo = [(r, a) for r, a in jobs if (r["id"], a) not in gens]
-    if not mock:  # review 1, S10c and S10b: every prompt checked, and padding in a batch checked, before generating
-        bad = prompt_problems([eng.prompt_text(R3.model_messages(spec, r, a, shots)) for r, a in jobs])
-        # the shortest prompt of the first batch goes first, so it is the one left-padded inside the batch
-        first = sorted((eng.prompt_text(R3.model_messages(spec, r, a, shots)) for r, a in jobs[:BATCH]), key=len)
-        pad = eng.padded_check(first) if len(first) > 1 else {"problems": []}
-        write_json(d / "start_checks.json", {"prompt_problems": bad[:50], "n_prompt_problems": len(bad), "padding": pad})
-        if bad or pad["problems"]:
-            write_status(run_id, f"stopped before generating: {bad[:3] or pad['problems']}", ok=False)
-            return 1
     for b in range(0, len(todo), BATCH):  # saved per batch: a cut-off job loses at most one batch
         part = todo[b:b + BATCH]
         key = f"{part[0][0]['id']}|{part[0][1]}"

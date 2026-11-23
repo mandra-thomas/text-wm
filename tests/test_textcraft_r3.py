@@ -1296,8 +1296,8 @@ def test_thinking_start_checks():
     assert any("does not end" in p for p in K.prompt_problems([good + "z"]))
     assert any("system text" in p for p in K.prompt_problems(["x" + spec.thinking_on_ending]))
     assert any("contains" in p for p in K.prompt_problems([good], replace(spec, forbidden_in_prompt=("y",))))
-    assert K.padding_problems([-1.0, -2.0], [-1.02, -2.01]) == []
-    assert K.padding_problems([-1.0, -2.0], [-1.5, -2.0])  # mean 0.25 above 0.10
+    assert K.padding_problems([-1.0, -2.0], [-1.002, -2.001]) == []  # D-T1: float32 tolerances, 0.01 and 0.05
+    assert K.padding_problems([-1.0, -2.0], [-1.5, -2.0])  # mean 0.25 above 0.01
     assert K.padding_problems([-1.0] * 20, [-1.0] * 19 + [-2.5])  # one token 1.5 apart
     assert K.padding_problems([], [])
 
@@ -1496,4 +1496,196 @@ def test_the_analysis_refuses_a_changed_environment_rule(mock_runs, small, monke
     monkeypatch.setitem(R3.ENVCHECK_RULE, "two_candidate_mean_abs_max", 1.0)
     assert Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man}) == 1
     assert "environment-check rule" in (mock_runs / "runs" / "textcraft_r3_analysis" / "STATUS.md").read_text()
+
+
+# ---------------- deviation D-T1 (2026-11-23, notes/textcraft_r3_deviation_thinking_padding.md) ----------------
+
+
+def _git_dev(head="dev", dev_diff="wf/textcraft/r3_think.py\nwf/textcraft/r3_gates.py\nnotes/x.md", n_dev=1):
+    """A checkout with the freeze tag at c1 and D-T1's deviation tag(s) at dev; HEAD at `head`."""
+    def run(args):
+        if args[:2] == ["tag", "-l"]:
+            if args[2].startswith(G.DEVIATION_TAG_PREFIX):
+                return "\n".join(f"{G.DEVIATION_TAG_PREFIX}2026-11-2{k}" for k in range(3, 3 + n_dev))
+            return "textcraft-r3-design-frozen-2026-11-23"
+        if args[0] == "rev-parse":
+            return "c1" if "frozen" in args[1] else "dev" if "deviation" in args[1] else head
+        if args[0] == "diff":
+            x, y = args[2], args[3]
+            if x == y:
+                return ""
+            return dev_diff if {x, y} == {"c1", "dev"} else "wf/x.py"
+        raise AssertionError(args)
+    return run
+
+
+def test_dt1_padding_rule_and_the_float32_start_check(small, monkeypatch):
+    assert K.PAD_RULE == {"top_k": 20, "mean_abs_max": 0.01, "any_abs_max": 0.05, "dtype": "float32"}
+    assert K.padding_problems([-1.0] * 20, [-1.009] * 20) == []
+    assert K.padding_problems([-1.0] * 20, [-1.011] * 20)
+    assert K.padding_problems([-1.0] * 20, [-1.0] * 19 + [-1.04]) == []
+    assert K.padding_problems([-1.0] * 20, [-1.0] * 19 + [-1.06])  # mean 0.003, one token 0.06
+    events = []
+
+    class Fake(K._MockEngine):
+        def __init__(self, dtype="bfloat16"):
+            events.append(("open", dtype))
+
+        def prompt_text(self, msgs):
+            return repr(msgs) + R.SYSTEM + R3.THINK_SPEC.thinking_on_ending
+
+        def padded_check(self, texts):
+            events.append(("padded", len(texts), texts == sorted(texts, key=len)))
+            return {"alone": [-1.0], "padded": [-1.0], "problems": []}
+
+        def close(self):
+            events.append(("close",))
+
+    jobs = K.think_jobs(small)[:12]
+    shots = P.fewshot_examples(P.FEWSHOT)
+    rec = K.start_checks(jobs, R3.THINK_SPEC, shots, engine=Fake)
+    assert events == [("open", "float32"), ("padded", K.BATCH, True), ("close",)]
+    assert rec["padding"]["dtype"] == "float32" and rec["padding"]["rule"] == K.PAD_RULE and rec["n_prompt_problems"] == 0
+
+    class Boom(Fake):
+        def padded_check(self, texts):
+            raise RuntimeError("out of memory")
+
+    with pytest.raises(RuntimeError):
+        K.start_checks(jobs, R3.THINK_SPEC, shots, engine=Boom)
+    assert events[-1] == ("close",)  # closed even when the check fails
+    # the two engines: bf16 exactly as before (families.open_scorer); the check's copy from the same snapshot in float32
+    calls = {}
+    stub = types.SimpleNamespace(_tok="tok", _model="model", revision="rev", close=lambda: calls.setdefault("closed", 1))
+    monkeypatch.setattr(FAM, "open_scorer", lambda spec, tag: calls.setdefault("bf16", (spec, tag)) and stub)
+    from wf.scoring import logodds as LO
+
+    monkeypatch.setattr(LO, "LogoddsScorer", lambda name, **kw: calls.setdefault("f32", (name, kw)) and stub)
+    e = K._Engine()
+    assert calls["bf16"] == (R3.THINK_SPEC, R3.THINK_TAG) and "f32" not in calls and e.dtype == "bfloat16"
+    e = K._Engine(dtype="float32")
+    name, kw = calls["f32"]
+    spec = R3.THINK_SPEC
+    assert name == spec.hf_id and kw["dtype"] == "float32" and kw["model_tag"] == R3.THINK_TAG
+    assert (kw["template_kwargs"], kw["model_class"], kw["tokenizer_kwargs"], kw["strict_load"], kw["attn_implementation"],
+            kw["prompt_format"], kw["unexpected_keys_allowed"]) \
+        == (spec.template_kwargs, spec.model_class, spec.tokenizer_kwargs, spec.strict_load, spec.attn_implementation,
+            spec.prompt_format, spec.unexpected_keys_allowed)
+    e.close()
+    assert calls["closed"]
+
+
+def test_dt1_the_run_checks_on_float32_before_loading_bf16(mock_runs, small, monkeypatch):
+    man = _manifest(mock_runs, small)
+    events = []
+
+    class Fake(K._MockEngine):
+        problems: list = []
+
+        def __init__(self, dtype="bfloat16"):
+            events.append(dtype)
+
+        def prompt_text(self, msgs):
+            return repr(msgs) + R.SYSTEM + R3.THINK_SPEC.thinking_on_ending
+
+        def padded_check(self, texts):
+            events.append("padded")
+            return {"alone": [-1.0], "padded": [-1.0], "problems": list(Fake.problems)}
+
+        def close(self):
+            events.append("close")
+
+    monkeypatch.setenv("WF_MOCK_SCORE", "0")
+    monkeypatch.setattr(K, "_Engine", Fake)
+    monkeypatch.setattr(FAM, "require_environment", lambda spec, **kw: {})
+    monkeypatch.setattr(FAM, "require_resources", lambda spec: {})
+    monkeypatch.setattr(S, "gpu_check", lambda tag, **kw: {"ok": True})
+    monkeypatch.setattr(G, "require_freeze_commit", lambda **kw: {"checked": "test"})
+    cfg = {"run_id": "textcraft_r3_think_smoke_qwen3.5-9b", "manifest": man, "max_jobs": 8}
+    Fake.problems = ["padded and alone differ"]
+    assert K.run_textcraft_r3_think(cfg) == 1
+    assert events == ["float32", "padded", "close"]  # stopped before the bf16 model loaded
+    d = mock_runs / "runs" / "textcraft_r3_think_smoke_qwen3.5-9b" / "shard_00_of_01"
+    assert json.loads((d / "start_checks.json").read_text())["padding"]["dtype"] == "float32"
+    events.clear()
+    Fake.problems = []
+    assert K.run_textcraft_r3_think({**cfg, "run_id": "textcraft_r3_think_qwen3.5-9b"}) == 0
+    assert events == ["float32", "padded", "close", "bfloat16"]
+
+
+def test_dt1_only_thinking_runs_start_at_the_deviation_commit(monkeypatch):
+    monkeypatch.setenv("WF_MOCK_SCORE", "0")
+    clean = lambda: False  # noqa: E731
+    think = "textcraft_r3_think_smoke_qwen3.5-9b"
+    out = G.require_freeze_commit(_git_dev(), clean, run_id=think)
+    assert (out["deviation"], out["deviation_commit"], out["tag_commit"], out["head"]) == ("D-T1", "dev", "c1", "dev")
+    assert G.require_freeze_commit(_git_dev(), clean, run_id="textcraft_r3_think_qwen3.5-9b")["deviation"] == "D-T1"
+    for rid in ("", "textcraft_r3_score_qwen3.5-9b", "textcraft_r3_smoke_qwen3.5-9b", "textcraft_r3_envcheck_qwen3-8b",
+                "textcraft_r3_rescore_qwen3-8b", "textcraft_r3_placement_gemma4-12b-it", "textcraft_r3_analysis"):
+        with pytest.raises(SystemExit, match="not the freeze tag"):
+            G.require_freeze_commit(_git_dev(), clean, run_id=rid)
+    assert "deviation" not in G.require_freeze_commit(_git_dev(head="c1"), clean, run_id=think)
+    # refused for the thinking arm too: a deviation commit changing other code, two deviation tags, HEAD elsewhere, dirty
+    for g in (_git_dev(dev_diff="wf/textcraft/r3_think.py\nwf/textcraft/r3_score.py"), _git_dev(n_dev=2),
+              _git_dev(head="other"), _git_dev(dev_diff="pace/textcraft_r3_score.sbatch")):
+        with pytest.raises(SystemExit):
+            G.require_freeze_commit(g, clean, run_id=think)
+    with pytest.raises(SystemExit):
+        G.require_freeze_commit(_git_dev(), lambda: True, run_id=think)
+    assert G.deviation_commit(_git_dev())["commit"] == "dev"
+    assert G.deviation_commit(_git_dev(dev_diff="notes/a.md\ntests/t.py\nscripts/mutation_check.py"))["commit"] == "dev"
+    assert G.deviation_commit(_git_dev(dev_diff="wf/textcraft/r3.py"))["commit"] is None
+    assert G.deviation_commit(_git_dev(n_dev=0)) == {"commit": None, "problems": []}
+
+
+def test_dt1_a_core_run_at_the_deviation_commit_is_refused(mock_runs, small, monkeypatch):
+    """At job start: the scoring, smoke and environment-check runs refuse a checkout at the deviation commit; the
+    thinking arm starts there and records it."""
+    man = _manifest(mock_runs, small)
+    real = G.require_freeze_commit
+
+    def at_deviation(run_git=None, dirty=None, run_id=""):
+        with monkeypatch.context() as m:
+            m.setattr(G, "mock", lambda: False)
+            return real(_git_dev(), lambda: False, run_id=run_id)
+
+    monkeypatch.setattr(G, "require_freeze_commit", at_deviation)
+    for run in ("score", "smoke"):
+        with pytest.raises(SystemExit, match="not the freeze tag"):
+            S.run_textcraft_r3_score({"run_id": f"textcraft_r3_{run}_qwen3.5-9b", "model": "qwen3.5-9b",
+                                      "manifest": man, "smoke": run == "smoke"})
+    plan = {"models": {"qwen3-8b": {"runnable": True, "n_r2_shards": 1,
+                                    "jobs": [{"job": 0, "gpu": "mock", "r2_shards": [0]}]}}}
+    with pytest.raises(SystemExit, match="not the freeze tag"):
+        S.run_textcraft_r3_envcheck({"run_id": "textcraft_r3_envcheck_qwen3-8b", "model": "qwen3-8b", "manifest": man,
+                                     "plan": plan})
+    assert K.run_textcraft_r3_think({"run_id": "textcraft_r3_think_smoke_qwen3.5-9b", "manifest": man, "max_jobs": 8}) == 0
+    d = mock_runs / "runs" / "textcraft_r3_think_smoke_qwen3.5-9b" / "shard_00_of_01"
+    env = json.loads((d / "config.json").read_text())["environment"]
+    assert env["freeze_commit"]["deviation_commit"] == "dev"
+
+
+def test_dt1_the_analysis_accepts_thinking_shards_at_the_deviation_commit_only(tmp_path):
+    l40 = ["NVIDIA L40S"]
+    g = _git_dev()
+    t_dev = _shard(tmp_path, "think/shard_00_of_02", [{"gpu": l40, "git_sha": "dev"}])
+    t_frz = _shard(tmp_path, "think/shard_01_of_02", [{"gpu": l40, "git_sha": "c1"}])
+    e_dev = _shard(tmp_path, "env/shard_00_of_01", [{"gpu": l40, "git_sha": "dev"}])
+    r_dev = _shard(tmp_path, "rescore/shard_00_of_01", [{"gpu": l40, "git_sha": "dev"}])
+    dev = G.deviation_commit(g)
+    cp = Z.other_commit_problems({"think": [t_dev, t_frz], "envcheck:qwen3-8b": [e_dev], "rescore:qwen3-8b": [r_dev]},
+                                 "c1", dev, run_git=g)
+    assert "think" not in cp and set(cp) == {"envcheck:qwen3-8b", "rescore:qwen3-8b"}
+    # with no valid deviation tag the thinking shard at the deviation commit is refused as well
+    bad = {"commit": None, "problems": ["deviation tag changes code outside D-T1's files"]}
+    cp = Z.other_commit_problems({"think": [t_dev]}, "c1", bad, run_git=g)
+    assert len(cp["think"]) == 2
+    assert Z.other_commit_problems({"think": [t_frz]}, "c1", {"commit": None, "problems": []}, run_git=g) == {}
+    # a core shard at the deviation commit is refused by the families' provenance check
+    core = _shard(tmp_path, "core/shard_00_of_02", [{"gpu": l40, "git_sha": "dev"}])
+    rev = R3.spec_for("qwen3.5-9b").revision
+    probs = Z.provenance_problems({"qwen3.5-9b": [core]}, {"qwen3.5-9b": [{"model_revision": rev}]}, "c1", run_git=g,
+                                  dirty_of=lambda p: False)
+    assert any("not the freeze tag" in x for x in probs["qwen3.5-9b"])
+    assert Z.think_shard_commits([t_dev, t_frz]) == {"think/shard_00_of_02": ["dev"], "think/shard_01_of_02": ["c1"]}
 
