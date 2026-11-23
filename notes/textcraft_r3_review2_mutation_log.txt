@@ -1,0 +1,40 @@
+killed    rv2-1 structural ignores the special-token flag  [by tests/test_textcraft_r3.py::test_structural_tokens]
+killed    rv2-5 shard typed despite mixed job GPUs  [by tests/test_textcraft_r3.py::test_envcheck_plan_from_round_two_gpu_names]
+killed    rv2-9 a not-scored model counts as competent  [by tests/test_textcraft_r3.py::test_a_core_model_not_scored_enters_at_p_one_and_the_readings_proceed]
+
+3/3 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+killed    rv2-2 format trigger on low mass alone  [by tests/test_textcraft_r3.py::test_gemma_slot_rule]
+killed    rv2-6 golden-token disagreement does not fail the environment check  [by tests/test_textcraft_r3.py::test_environment_status_and_b3_source]
+killed    rv2-10 cap needs more than the budget  [by tests/test_textcraft_r3.py::test_budget_forcing_and_the_readout_point]
+
+3/3 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+killed    rv2-3 model state ignores smoke gate failures  [by tests/test_textcraft_r3.py::test_model_state_from_filed_gate_records]
+killed    rv2-7 a failed environment check keeps round 2's scores  [by tests/test_textcraft_r3.py::test_environment_status_and_b3_source]
+killed    rv2-11 freeze commit not enforced at job start  [by tests/test_textcraft_r3.py::test_freeze_commit_and_job_start_check]
+
+3/3 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+SURVIVED  rv2-4 code paths omit pace
+killed    rv2-8 envcheck records compared across GPU types  [by tests/test_textcraft_r3.py::test_environment_check_matches_gpus_record_by_record]
+killed    rv2-12 b_draws accepted outside mock  [by tests/test_textcraft_r3.py::test_b3_uses_twenty_thousand_resamples_outside_mock]
+
+2/3 killed; survivors=['rv2-4 code paths omit pace']; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+SURVIVED  rv2-4 code paths omit pace
+
+0/1 killed; survivors=['rv2-4 code paths omit pace']; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+killed    rev1 standardized SD with n instead of n-1  [by tests/test_textcraft_r3.py::test_stats_match_the_definitions]
+killed    rev4 thinking unforced subset keeps forced traces  [by tests/test_textcraft_r3.py::test_thinking_unforced_subset_and_forced_reasons]
+killed    rev7 B3 family on 2,000 resamples  [by tests/test_textcraft_r3.py::test_b3_uses_twenty_thousand_resamples_outside_mock]
+NOT APPLIED  rev10 thinking keeps text after the closing marker
+
+3/4 killed; survivors=[]; inconclusive (timeout)=[]; not applied=['rev10 thinking keeps text after the closing marker']; suite unrunnable (not counted as killed)=[]
+killed    rev2 envcheck goal effect over every chosen record  [by tests/test_textcraft_r3.py::test_environment_check_criteria]
+killed    rev5 thinking batch seed constant  [by tests/test_textcraft_r3.py::test_thinking_batches_have_their_own_seeds_in_record_and_arm_order]
+killed    rev8 attention agreement on one item  [by tests/test_textcraft_r3.py::test_attention_agreement_rule]
+killed    rev11 thinking jobs not in record-and-arm order  [by tests/test_textcraft_r3.py::test_thinking_batches_have_their_own_seeds_in_record_and_arm_order]
+
+4/4 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]; suite unrunnable (not counted as killed)=[]
+NOT APPLIED  rev3 envcheck yes/no share criterion off
+killed    rev6 provenance accepts mixed revisions  [by tests/test_textcraft_r3.py::test_provenance_requires_the_freeze_commit_and_one_revision]
+NOT APPLIED  rev9 envcheck accepts rescoring shards on mixed GPUs
+
+1/3 killed; survivors=[]; inconclusive (timeout)=[]; not applied=['rev3 envcheck yes/no share criterion off', 'rev9 envcheck accepts rescoring shards on mixed GPUs']; suite unrunnable (not counted as killed)=[]
