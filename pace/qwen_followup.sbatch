@@ -15,7 +15,7 @@
 # scorer with and without Qwen3's empty think block. FU_TASK picks the work:
 #   rq2    Qwen3-8B without the block on the items of stored rq2_score shards FU_SHARDS (pin the GPU type those shards
 #          ran on: 0-2 A40, 3 L40S), the first 20 also with the block. Reads runs/qwen_audit/items_all.jsonl.
-#   sizes  FU_MODELS (comma-separated Hugging Face ids) on runs/qwen_audit/items_sizes.jsonl, both formats.
+#   sizes  FU_MODELS (colon-separated Hugging Face ids; sbatch --export splits on commas) on runs/qwen_audit/items_sizes.jsonl, both formats.
 #   dsim   Qwen3-8B, the decision simulation's step-0 states, four arms, both formats.
 # Example:
 #   bash pace/submit.sh qwen_followup.sbatch --export=ALL,FU_TASK=rq2,FU_SHARDS=0 --constraint=gpu-a40
@@ -41,7 +41,7 @@ case "${TASK}" in
       --check-block 20 --out "${D}/fu_8b_shard${SH//,/_}.jsonl"
     ;;
   sizes)
-    for M in ${FU_MODELS//,/ }; do
+    for M in ${FU_MODELS//:/ }; do
       tag="$(basename "${M}" | tr 'A-Z' 'a-z')"
       echo "${GPU}" >"${D}/fu_sizes_${tag}_gpu.txt"
       python "${S}" rq2 --items "${D}/items_sizes.jsonl" --model "${M}" --formats block,noblock \
