@@ -82,7 +82,7 @@ What this shows:
 Each format below was scored on the same 200 items, aligned against swapped, with the independent scorer in bf16 (Qwen on the A40, Llama on the L40S). The formats are:
 
 - **Native**: the study's prompt (system message, three examples, query; Qwen's empty think block before the scored answer).
-- **No think block**: Qwen's template rendered with thinking on, so the scored answer follows a bare assistant header, like the example answers. This is how Qwen2.5-style templates and most other chat models format the answer.
+- **No think block**: Qwen's template rendered with thinking on, so the scored answer follows a bare assistant header, like the example answers. This is how Qwen2.5-style templates and most other chat models format the answer. *(For Qwen3 this render is off the model's usual path; see the correction below the table.)*
 - **Think block everywhere**: the empty think block also opens each of the three example answers, so the examples show the same format as the scored answer.
 - **System folded**: no system message; the system text opens the first user turn.
 - **Zero-shot**: system message and the query only, without the three examples.
