@@ -77,6 +77,10 @@ REVISIONS = {
     "google/gemma-4-E4B-it": "4ecc2ba63bcac23ba4a767fc87025b1450f84c9c",
     "Qwen/Qwen3.8-27B": "37561816e66b5b9153b1b64c10968c18c1e6f4a0",
     "google/gemma-4-31B-it": "842da3794eaa0b77d5f08bae87a17459d91ff475",
+    # TextCraft round 3 (2026-11-23, notes/textcraft_r3_design.md): the Hub's commit read 2026-11-22 and re-read
+    # 2026-11-23 (unchanged), before any weight was downloaded. Additions only; no earlier pin changes.
+    "google/gemma-4-12B-it": "43c9d014b231474fa7212dbb48a762566c2b255d",
+    "allenai/Olmo-3-7B-Instruct": "6e5971d9eba42665f5bd5a0fcf047f299ce1dccc",
 }
 
 

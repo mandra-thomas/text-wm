@@ -1,0 +1,6 @@
+run_id: textcraft_r3_rescore_mistral-7b-v0.3
+# TextCraft round 3 (notes/textcraft_r3_design.md). Fallback only if the environment check fails (design 8.1): mistral-7b-v0.3 rescored in serve2 on every
+# record, for analysis (b) serve2 against serve2. Not submitted otherwise.
+manifest: wf/textcraft/data/r2_manifest.json
+model: mistral-7b-v0.3
+n_shards: 2

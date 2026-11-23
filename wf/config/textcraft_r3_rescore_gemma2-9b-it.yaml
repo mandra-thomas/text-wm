@@ -1,0 +1,6 @@
+run_id: textcraft_r3_rescore_gemma2-9b-it
+# TextCraft round 3 (notes/textcraft_r3_design.md). Fallback only if the environment check fails (design 8.1): gemma2-9b-it rescored in serve2 on every
+# record, for analysis (b) serve2 against serve2. Not submitted otherwise.
+manifest: wf/textcraft/data/r2_manifest.json
+model: gemma2-9b-it
+n_shards: 2

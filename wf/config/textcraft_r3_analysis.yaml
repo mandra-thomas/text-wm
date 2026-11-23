@@ -1,0 +1,8 @@
+run_id: textcraft_r3_analysis
+# TextCraft round 3 (notes/textcraft_r3_design.md). The analysis: families A3, A3x and B3 (30 tests each), H3-P, the replication rule, the
+# environment check, the format checks and the thinking arm. Round 2's filed analysis and scores are read from
+# r2_runs_root (default: this checkout's runs folder), only after round 2 is scored and filed.
+manifest: wf/textcraft/data/r2_manifest.json
+gemma_core: gemma4-12b-it  # gemma4-e4b-it only if the fallback rule fired at the smoke run (a deviation)
+b3_old_scores: round2  # rescore only if the environment check failed and textcraft_r3_rescore_* were run
+r2_runs_root: null

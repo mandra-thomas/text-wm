@@ -1,0 +1,6 @@
+run_id: textcraft_r3_rescore_qwen3-8b
+# TextCraft round 3 (notes/textcraft_r3_design.md). Fallback only if the environment check fails (design 8.1): qwen3-8b rescored in serve2 on every
+# record, for analysis (b) serve2 against serve2. Not submitted otherwise.
+manifest: wf/textcraft/data/r2_manifest.json
+model: qwen3-8b
+n_shards: 2

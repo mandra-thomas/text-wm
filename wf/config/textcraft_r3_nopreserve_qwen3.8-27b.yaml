@@ -1,0 +1,7 @@
+run_id: textcraft_r3_nopreserve_qwen3.8-27b
+# TextCraft round 3 (notes/textcraft_r3_design.md). Format check (design 8.3): Qwen3.8 27B with preserve_thinking=False (no empty think blocks in the
+# example replies), 300 seeded main failures, aligned and swapped in both formats. Exploratory.
+manifest: wf/textcraft/data/r2_manifest.json
+model: qwen3.8-27b
+check: nopreserve
+n_shards: 1

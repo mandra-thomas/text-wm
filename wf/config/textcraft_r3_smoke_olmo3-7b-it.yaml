@@ -1,0 +1,7 @@
+run_id: textcraft_r3_smoke_olmo3-7b-it
+# TextCraft round 3 (notes/textcraft_r3_design.md). Smoke run of olmo3-7b-it: 20 seeded records, every arm, one shard, the same gates. Read for the loading
+# record, the attention agreement, timing and the median yes/no mass only (design section 5); never analysed.
+manifest: wf/textcraft/data/r2_manifest.json
+model: olmo3-7b-it
+smoke: true
+n_shards: 1

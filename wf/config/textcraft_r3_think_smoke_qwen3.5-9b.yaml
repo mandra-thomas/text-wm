@@ -1,0 +1,5 @@
+run_id: textcraft_r3_think_smoke_qwen3.5-9b
+# TextCraft round 3 (notes/textcraft_r3_design.md). Smoke run of the thinking arm: the first 16 generations, for format and timing only.
+manifest: wf/textcraft/data/r2_manifest.json
+n_shards: 1
+max_jobs: 16

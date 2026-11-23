@@ -1,0 +1,5 @@
+run_id: textcraft_r3_think_qwen3.5-9b
+# TextCraft round 3 (notes/textcraft_r3_design.md). Thinking arm (design 8.2, exploratory, outside every family): Qwen3.5-9B with thinking on, 4,530
+# generations with HF generate, then the replies scored after the reasoning. Saved per batch; resumable.
+manifest: wf/textcraft/data/r2_manifest.json
+n_shards: 2

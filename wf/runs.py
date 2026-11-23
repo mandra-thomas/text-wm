@@ -1455,6 +1455,19 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
        for tag in ("mistral-7b-v0.3", "qwen3-8b")},
     "families_envcheck": lambda cfg: _lazy("families", "run_families_envcheck")(cfg),
     "families_waveb_analysis": lambda cfg: _lazy("families", "run_families_analysis")(cfg),
+    # 2026-11-23, TextCraft round 3 (notes/textcraft_r3_design.md), before any round-3 score.
+    **{f"textcraft_r3_{kind}_{tag}": (lambda cfg: _lazy("textcraft.r3_score", "run_textcraft_r3_score")(cfg))
+       for kind in ("score", "smoke") for tag in ("qwen3.5-9b", "ministral3-8b-it", "gemma4-12b-it", "gemma4-e4b-it",
+                                                  "qwen3.8-27b", "gemma4-31b-it", "olmo3-7b-it")},
+    **{f"textcraft_r3_envcheck_{tag}": (lambda cfg: _lazy("textcraft.r3_score", "run_textcraft_r3_envcheck")(cfg))
+       for tag in ("qwen3-8b", "mistral-7b-v0.3")},
+    **{f"textcraft_r3_rescore_{tag}": (lambda cfg: _lazy("textcraft.r3_score", "run_textcraft_r3_rescore")(cfg))
+       for tag in ("qwen3-8b", "mistral-7b-v0.3", "gemma2-9b-it")},
+    "textcraft_r3_placement_gemma4-12b-it": lambda cfg: _lazy("textcraft.r3_score", "run_textcraft_r3_format")(cfg),
+    "textcraft_r3_nopreserve_qwen3.8-27b": lambda cfg: _lazy("textcraft.r3_score", "run_textcraft_r3_format")(cfg),
+    "textcraft_r3_think_qwen3.5-9b": lambda cfg: _lazy("textcraft.r3_think", "run_textcraft_r3_think")(cfg),
+    "textcraft_r3_think_smoke_qwen3.5-9b": lambda cfg: _lazy("textcraft.r3_think", "run_textcraft_r3_think")(cfg),
+    "textcraft_r3_analysis": lambda cfg: _lazy("textcraft.r3_analysis", "run_textcraft_r3_analysis")(cfg),
 }
 
 

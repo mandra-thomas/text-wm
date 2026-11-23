@@ -1,0 +1,6 @@
+run_id: textcraft_r3_score_qwen3.5-9b
+# TextCraft round 3 (notes/textcraft_r3_design.md). Every record and arm of round 2's records, model qwen3.5-9b (wf/textcraft/r3.py), in serve2 with
+# node-local weights; the gates of design section 4 before any score. Sharded by goal pair (WF_SHARD / WF_N_SHARDS).
+manifest: wf/textcraft/data/r2_manifest.json
+model: qwen3.5-9b
+n_shards: 2

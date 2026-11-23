@@ -1,0 +1,7 @@
+run_id: textcraft_r3_placement_gemma4-12b-it
+# TextCraft round 3 (notes/textcraft_r3_design.md). Format check (design 8.3): Gemma 4 12B with the system text folded into the first user turn, on 300
+# seeded main failures, aligned and swapped in both formats, tag gemma4-12b-it-firstturn. Exploratory.
+manifest: wf/textcraft/data/r2_manifest.json
+model: gemma4-12b-it
+check: placement
+n_shards: 1
