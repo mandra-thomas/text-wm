@@ -1035,6 +1035,12 @@ def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900) 
     return "killed" if result.returncode != 0 else "survived"
 
 
+# Stage 1b mutants (2026-11-20) are in their own file, so the Stage 1a and Stage 1b branches merge cleanly.
+from mutants_decisionsim_agent import MUTANTS as _DSA_MUTANTS  # noqa: E402
+
+MUTANTS += _DSA_MUTANTS
+
+
 def main() -> int:
     python = sys.executable
     # `mutation_check.py 2/4` runs the third of four shards, so the check can use several cores.

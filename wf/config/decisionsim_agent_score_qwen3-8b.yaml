@@ -1,0 +1,10 @@
+run_id: decisionsim_agent_score_qwen3-8b
+# Stage 1b (notes/decisionsim_agent_design.md, amended after review 1; wf/decisionsim_agent.py). Yes/no scores of every distinct labelled candidate (both
+# lists share one cache) under the task-aware, task-blind (query task line deleted) and swapped (only where a swap
+# object exists) prompts; at states with a single distinct candidate only the blind arm. Qwen3-8B is the contrast: no neutral arm.
+# Pinned revision in wf.constants.REVISIONS. Refuses to start until model_free_analysis has finished on these labels.
+model: qwen3-8b
+label_source: decisionsim_agent_label
+arms: [yn_aligned, yn_blind, yn_swapped]
+n_shards: 2
+model_free_analysis: decisionsim_agent_encounter

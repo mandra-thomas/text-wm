@@ -1,0 +1,17 @@
+run_id: decisionsim_agent_sample
+# Stage 1b (notes/decisionsim_agent_design.md, amended after review 1; wf/decisionsim_agent.py). The agent's frozen candidate lists at every decision point
+# of the 134 RQ3 no-foresight episodes (2,973 states), two lists per state in one job: primary (Qwen's non-thinking
+# settings) and the temperature-1 sensitivity list, 20 replies each; rank 1 the archived greedy action, the others by
+# count, ties by a seeded hash; one fresh greedy completion per state as a drift diagnostic. GPU (vLLM, the pinned
+# Qwen3-8B, --generation-config vllm) and the ALFWorld server; WF_SHARD / WF_N_SHARDS split it by game.
+# episodes_source is a run under runs/ or an absolute path to the RQ3 run (commit ddeabc2).
+episodes_source: rq3
+split: valid_unseen
+n_samples: 20
+samplings:
+  primary: {temperature: 0.7, top_p: 0.8, top_k: 20, min_p: 0.0}
+  t1: {temperature: 1.0, top_p: 1.0, top_k: -1, min_p: 0.0}
+max_tokens: 256
+k_max: 8
+seed: 20260924
+n_shards: 4

@@ -563,3 +563,193 @@ All 163 are caught (`MUTANTS_MATCHING=decisionsim`, six shards, 2026-11-21).
 ## Model families, wave A (2026-11-20)
 
 `tests/test_families.py` covers the family runs: golden renders of one real item from each pinned chat template, the tokenization gate on stand-in tokenizers built to fail in one item or one prompt (a late success's candidate, one item's swapped yes/no prompt, a template that writes "Yes" as another token than the scorer reads), the gate's scope in the shard runner (every item, on a resume too, with the scorer's template settings), the analysis (flip definitions by name, the yes/no arms in the standardised effect, records filtered by model and by population), the pre-data primary metrics (the item share toward Yes and the goal-to-evidence ratio R, including their invariance to rescaled logits), the competence gate at each of its bounds, the TOST equivalence of R on paired items, the Holm-corrected primary family, and the Mistral placement run. Fix round 2 (third amendment) adds: the R comparison's fallback to the paired difference when the ratio is not estimable (review 2's synthetic models with R near zero, slightly positive and negative), the 2% cap on dropped draws, the item-share comparison (difference by game sign flips, TOST within ±0.05 as the larger one-sided p), the 90% and 95% interval rules for both comparisons on hand-set bootstrap draws, pairing across noisy games, the primary family padded with p = 1 for missing or NaN tests, the planned comparisons including Gemma 2 against Mistral, the two-sided noise floor, ties at log-odds zero, NaN scores, and game-clustered p-values on games that move together. With transformers, torch and the tokenizers cached (`WF_TEST_HF_CACHE`), the real templates run too. `scripts/mutation_check.py` holds 75 families mutants (`MUTANTS_MATCHING=families`), including the ten a review found surviving, seventeen for the primary metrics, gate, equivalence and family, review 2's M1 to M14 (two each for M6 and M7, R and share) and nine for fix round 2. All 75 are caught (2026-11-20). Two survived the first run and were killed by added tests: the TOST p taken from the smaller side (the test's draws had been symmetric) and R kept when the evidence effect is negative (the test had used an evidence effect of exactly zero). The refactored gate was also run against the earlier one on every real item with the pinned tokenizers, with identical results (`notes/families_design.md`).
+
+
+
+
+## Stage 1b: the agent's own ranked candidates (2026-11-20; rebuilt after review 1 and amended after review 2, 2026-11-21)
+
+`tests/test_decisionsim_agent.py` (93 tests) covers `wf/decisionsim_agent.py`. On synthetic data: the candidate lists (rank 1 is the recorded greedy action even when never sampled, its sampled variants merged into it, the rest by count with the seeded hash for ties and independent of reply order, format errors counted and never turned into `look`, the cut at `k_max`, normalisation and its per-list count, the action key shared by both lists), the sampling settings of both lists, the greedy diagnostic and its comparison of normalised actions, a pinned seed value, bookkeeping (identical replies, truncation, greedy agreement and the 90% drift rule at its boundary), the seed check (primary settings, sequences not multisets, the same-seed repeat) and the smoke gate (format errors, replay mismatches, a non-degenerate seed-check state, the required truncation and agreement readouts); the verifier prompts (for each model the aware, blind, swapped and neutral prompts differ only in the query's task line, examples keep theirs, the aware, swapped and neutral prompts equal the earlier `yn_*` prompts), the blind deletion's guards, the blind-only rule at single-candidate states; list views (each list's order over shared labels, runnable candidates only, the sampled-twice and first-occurrence filters); the selection rules; regime, encounter, strict encounter, reachability, step bands (encounters, not reachable ones); the futility rule after review 2 (games with an encounter state that also lists a working candidate, the 6- and 7-game boundary, review 2's 8-game counterexample that is significant with no reachable encounter); harm and help with the identity and the kinds of harm counted on harm states only; the sign-flip floor; leave-one-game-out; the decomposition and the attribution rule; whole-game bootstrap and permutation; Holm; the verdict reading the Holm p; the verdict boundaries (a lower bound of exactly zero; a regime share of exactly one half carries no suffix, below it the "not evidence for the main finding" suffix); a failed gate entering Holm with p = 1; the overall and conditional blocks each reading their own p, decomposition and states; the AUC and the competence thresholds; the model report and every sensitivity, the temperature-1 readouts reading the temperature-1 lists; shards with different settings refused; the run-order check (nothing written, another label run, an analysis with models, an unfinished one, a logged override); progress events; the swap object, which excludes every candidate of both lists. On the simulator, with the mock agent and scorer: everything listed for review 1, plus scoring refusing to start before the model-free analysis of the same labels, the logged override, the model-free analysis reporting the temperature-1 encounters from the temperature-1 lists, the labelling budget counting the next state, and the request settings and normalisation counts recorded by a sampling shard.
+
+
+**After review 3 (2026-11-22).** Eight more tests (101 in all) cover the additions: one changed state per path (a abstained, b abstained, a accepted what b rejected, a rejected what b chose) counted by outcome cell and step band, with unchanged states in no path; each decomposition part with its own paths; the hybrid verifiers (their arms, choices, fallbacks and differences against blind); acceptance by rank 1 against alternatives, outcome and step band, the aware-minus-swapped and swapped-minus-blind shifts and the step-0 headline; inert readouts by step band (step 1 counts as later); a "not attributable" toward-failure verdict with mostly non-regime harm getting the suffix; and the run-order check comparing the label hashes the model-free analysis read with those the scorer reads, also end to end (labels edited after the analysis are refused).
+
+`scripts/mutants_decisionsim_agent.py` holds 175 Stage 1b mutants (`MUTANTS_MATCHING="dsa "`): the review-1 list, review 2's 42 (adapted), the mutants of the code added after review 2, and 19 mutants of the code added after review 3 (two earlier mutants re-adapted to the changed `choose` and `inert`). All 175 are caught; the table below is from the per-mutant run on the final code (2026-11-22). Four review-3 mutants first survived: three were killed by sharpened tests (step 1 in the later band; the swapped-minus-blind paths; the swapped-minus-blind shift), and one ("acceptance rank 1 by its greedy flag") is equivalent, because in a usable state the first runnable candidate is always the agent's own rank-1 action, so it was left out. R30 (review 1) is also equivalent. The table gives, for each, the first test in `tests/test_decisionsim_agent.py` that fails with the mutant in place (run with `-x`).
+
+| Mutant | First test that fails |
+|---|---|
+| greedy action also listed again below rank 1 | `test_greedy_samples_merge_into_rank1_and_keep_the_recorded_string` |
+| ties by order of appearance | `test_ranked_by_count_then_seeded_hash_not_order_of_appearance` |
+| rarest action ranked first | `test_ranked_by_count_then_seeded_hash_not_order_of_appearance` |
+| list one longer than k_max | `test_list_is_cut_at_k_max_and_the_cut_is_recorded` |
+| actions not normalised | `test_normalize_collapses_space_case_and_final_stop` |
+| thinking on | `test_real_sampler_sends_the_designed_payload` |
+| agent prompt without admissible actions | `test_sampling_prompt_is_the_rq3_agent_prompt_and_request_settings` |
+| history turn shows the next observation | `test_sampling_prompt_is_the_rq3_agent_prompt_and_request_settings` |
+| replay mismatch ignored | `test_replay_mismatch_stops_the_game_there` |
+| resume trusts lists from another prompt | `test_sample_resume_draws_nothing_new_and_refuses_another_prompt` |
+| fresh sample run appends to old lists | `test_a_fresh_sample_run_does_not_append_to_old_lists` |
+| lists saved at the end of each game | `test_sample_resume_draws_nothing_new_and_refuses_another_prompt` |
+| rank 1 not checked against the episode | `test_rank1_mismatch_makes_the_state_unusable` |
+| every failure determined | `test_label_state_marks_determination_and_goal_agnostic_history` |
+| fresh label run appends to old labels | `test_label_stops_partial_and_resumes_to_the_same_labels` |
+| label does not wait for sampling | `test_label_waits_for_every_sampling_shard` |
+| swap may be named by a candidate | `test_swap_object_excludes_named_interacted_and_co_located_types` |
+| swap may be acted on in the history | `test_swap_object_excludes_named_interacted_and_co_located_types` |
+| swap may sit at a candidate's receptacle | `test_swap_object_excludes_named_interacted_and_co_located_types` |
+| progress from any goal mention | `test_progress_events` |
+| progress from a move anywhere | `test_progress_events` |
+| blind prompt strips the examples too | `test_each_arm_differs_only_in_the_query_task_line[llama3.1-8b]` |
+| swapped arm shows the real task | `test_each_arm_differs_only_in_the_query_task_line[llama3.1-8b]` |
+| a score of zero accepted | `test_selection_rules` |
+| fallback to the last candidate | `test_selection_rules` |
+| oracle picks a failure | `test_selection_rules` |
+| scores not rounded | `test_scores_are_rounded_to_a_64th_before_the_threshold` |
+| coarser grid | `test_scores_are_rounded_to_a_64th_before_the_threshold` |
+| server-error candidates kept | `test_arms_at_a_single_candidate_state_is_blind_only` |
+| regime ignores shared spots | `test_regime_needs_failure_goal_object_determination_and_no_shared_spot` |
+| regime without determination | `test_regime_needs_failure_goal_object_determination_and_no_shared_spot` |
+| regime without the goal object | `test_regime_needs_failure_goal_object_determination_and_no_shared_spot` |
+| strict encounter ignores the history | `test_encounter_strict_and_reachable` |
+| reachable past a success | `test_encounter_strict_and_reachable` |
+| bootstrap resamples states | `test_inference_resamples_and_flips_whole_games` |
+| permutation flips states | `test_inference_resamples_and_flips_whole_games` |
+| Holm not monotone | `test_holm_and_verdicts` |
+| missing p counts as zero | `test_holm_and_verdicts` |
+| Holm over the models that are in | `test_a_failed_gate_enters_holm_with_p_one` |
+| toward failure read from the upper bound | `test_holm_and_verdicts` |
+| analysis reads another label run's scores | `test_analysis_waits_and_refuses_scores_of_another_label_run` |
+| harm and help swapped | `test_reviewer_counterexample_eight_unreachable_games_can_be_significant` |
+| decomposition part reversed | `test_decomposition_on_states_with_a_swap_and_its_identity` |
+| score resume trusts saved scores | `test_score_resume_and_refusal_of_other_prompts` |
+| family gate skipped | `test_a_failed_gate_scores_nothing_and_enters_holm_with_p_one` |
+| shards overlap | `test_end_to_end_every_decision_point_once` |
+| archived history without action marks | `test_sampling_history_text_is_the_world_model_history` |
+| tempered t1 list | `test_sampling_settings_after_review_1` |
+| primary list untruncated | `test_sampling_settings_after_review_1` |
+| one seed for every state | `test_sampling_prompt_is_the_rq3_agent_prompt_and_request_settings` |
+| label replay budget ignored | `test_label_stops_partial_and_resumes_to_the_same_labels` |
+| blind prompt keeps the task line | `test_each_arm_differs_only_in_the_query_task_line[llama3.1-8b]` |
+| incompetent verifier interpreted | `test_incompetent_models_stay_in_holm_and_harm_from_loops_is_flagged` |
+| swapped scores not required | `test_complete_labs_need_every_arm_where_defined` |
+| swapped arm never scored | `test_arms_at_a_single_candidate_state_is_blind_only` |
+| scores saved at the end | `test_scores_are_saved_one_at_a_time` |
+| R3 first 12 steps includes step 12 | `test_first_12_steps_means_steps_0_to_11` |
+| R4 by_encounter uses strict | `test_by_encounter_uses_the_main_not_the_strict_label` |
+| R5 goal-agnostic inverted | `test_label_state_marks_determination_and_goal_agnostic_history` |
+| R10 verifier value sign flipped | `test_verifier_value_sign_and_progress_direction` |
+| R11 game weighted sums states | `test_game_weighted_delta_weighs_games_equally` |
+| R13 progress transforms any object | `test_progress_needs_the_task_transformation_no_repeats_and_the_object_in_hand_for_the_lamp` |
+| R15 analysis keeps unusable states | `test_rank1_mismatch_makes_the_state_unusable` |
+| R17 k cut before dropping server errors | `test_server_error_candidates_are_skipped_before_the_k_cut` |
+| R23 step bands off by one | `test_encounter_bands_and_the_futility_rule` |
+| R24 competence needs more than the threshold | `test_auc_and_competence` |
+| R26 acceptance counts zero as Yes | `test_acceptance_counts_zero_as_no` |
+| R28 progress difference reversed | `test_verifier_value_sign_and_progress_direction` |
+| R29 replayed history not checked | `test_a_history_that_does_not_replay_makes_the_state_unusable` |
+| R8 verdict reads the raw p | `test_the_verdict_reads_the_holm_p_not_the_raw_p` |
+| gate failure not p = 1 | `test_a_failed_gate_enters_holm_with_p_one` |
+| gate failure ignored by the analysis | `test_a_failed_gate_scores_nothing_and_enters_holm_with_p_one` |
+| attribution ignores the half | `test_attribution_rule` |
+| attribution ignores the sign | `test_attribution_rule` |
+| conditional on all states | `test_model_report_parts_add_up_and_readouts` |
+| conditional verdict without its own Holm | `test_end_to_end_every_decision_point_once` |
+| blind guard: any task line | `test_blind_history_deletes_only_the_real_task_line_in_the_first_observation` |
+| sampling history not saved | `test_end_to_end_every_decision_point_once` |
+| history mismatch still usable | `test_a_history_that_does_not_replay_makes_the_state_unusable` |
+| union labels only the primary list | `test_label_state_marks_determination_and_goal_agnostic_history` |
+| views key by rank not action | `test_views_follow_each_list_and_share_labels` |
+| single-candidate states score every arm | `test_arms_at_a_single_candidate_state_is_blind_only` |
+| single-candidate states need aware scores | `test_complete_labs_need_every_arm_where_defined` |
+| twice keeps singletons | `test_sampled_twice_and_first_occurrence_filters` |
+| first occurrence keeps repeats | `test_sampled_twice_and_first_occurrence_filters` |
+| sign-flip floor off by one | `test_contrast_counts_harm_help_and_the_identity` |
+| futility threshold six games | `test_encounter_bands_and_the_futility_rule` |
+| futility counts encounters not reach | `test_encounter_bands_and_the_futility_rule` |
+| leave-one-out keeps the game | `test_leave_one_game_out` |
+| progress repeats count | `test_progress_needs_the_task_transformation_no_repeats_and_the_object_in_hand_for_the_lamp` |
+| progress any transformation | `test_progress_needs_the_task_transformation_no_repeats_and_the_object_in_hand_for_the_lamp` |
+| lamp counts without the object | `test_progress_needs_the_task_transformation_no_repeats_and_the_object_in_hand_for_the_lamp` |
+| sampler drops the fixed penalties | `test_real_sampler_sends_the_designed_payload` |
+| greedy diagnostic not greedy | `test_sampling_settings_after_review_1` |
+| drift threshold | `test_sampling_settings_after_review_1` |
+| smoke gate ignores the seed check | `test_bookkeeping_flags_identical_replies_drift_and_seed_check` |
+| neutral arm never scored | `test_arms_at_a_single_candidate_state_is_blind_only` |
+| neutral arm shows the real task | `test_each_arm_differs_only_in_the_query_task_line[llama3.1-8b]` |
+| harm share from all failures | `test_harm_kinds_count_harm_states_only` |
+| review2 S1 seed check uses t1 params | `test_seed_check_uses_the_primary_settings_and_compares_sequences` |
+| review2 S2 seed check compares sorted multiset | `test_seed_check_uses_the_primary_settings_and_compares_sequences` |
+| review2 S3 smoke gate drops nondegenerate>0 requirement | `test_smoke_gate_needs_a_non_degenerate_seed_check_state_and_reports_readouts` |
+| review2 S4 smoke gate format <= 0.25 | `test_bookkeeping_flags_identical_replies_drift_and_seed_check` |
+| review2 S5 fresh greedy agrees raw compare | `test_fresh_greedy_agreement_compares_normalised_actions_and_the_drift_boundary` |
+| review2 S6 sample seed 7 hex digits | `test_sample_seed_value_is_pinned` |
+| review2 S7 request_settings omit FIXED | `test_request_settings_and_normalisation_counts_are_recorded` |
+| review2 S8 server_info wrong path | `test_real_sampler_sends_the_designed_payload` |
+| review2 S9 saved history differs from served history | `test_end_to_end_every_decision_point_once` |
+| review2 S10 drift rule <= | `test_fresh_greedy_agreement_compares_normalised_actions_and_the_drift_boundary` |
+| review2 L1 union T1 first | `test_label_state_marks_determination_and_goal_agnostic_history` |
+| review2 L2 history check only first replay | `test_every_replay_of_a_state_must_reproduce_its_history` |
+| review2 L3 determination on replayed history | `test_labels_match_a_fresh_replay_on_the_simulator` |
+| review2 L4 admissible case-insensitive | `test_end_to_end_every_decision_point_once` |
+| review2 L5 swap excludes only primary candidates | `test_the_swap_object_excludes_every_candidate_of_both_lists` |
+| review2 L6 budget ignores current state | `test_label_budget_counts_the_next_state` |
+| review2 L7 akey not normalised | `test_normalize_collapses_space_case_and_final_stop` |
+| review2 F1 futility on encounter games | `test_encounter_bands_and_the_futility_rule` |
+| review2 F2 futility <= | `test_encounter_bands_and_the_futility_rule` |
+| review2 F3 analysis encounter on all labelled states | `test_rank1_mismatch_makes_the_state_unusable` |
+| review2 F4 t1 encounter uses primary | `test_t1_encounter_report_in_the_analysis_reads_the_t1_lists` |
+| review2 A1 conditional on reachable | `test_each_block_reads_its_own_estimand_p_decomposition_and_states` |
+| review2 A2 harm_mostly_regime strict > | `test_verdict_boundaries` |
+| review2 A3 attribution strict > | `test_attribution_rule` |
+| review2 A4 verdict lo >= 0 | `test_verdict_boundaries` |
+| review2 A5 t1 conditional uses all t1 | `test_t1_list_readouts_read_the_t1_list` |
+| review2 A6 complete_labs ignores neutral | `test_complete_labs_need_every_arm_where_defined` |
+| review2 A7 sampled_twice keeps count>=1 | `test_sampled_twice_and_first_occurrence_filters` |
+| review2 A8 g_nz counts all games | `test_contrast_counts_harm_help_and_the_identity` |
+| review2 A9 view ignores server errors | `test_views_count_only_runnable_candidates` |
+| review2 A10 score uses all labs | `test_rank1_mismatch_makes_the_state_unusable` |
+| review2 A11 conditional decomposition on all | `test_each_block_reads_its_own_estimand_p_decomposition_and_states` |
+| review2 A12 mistral gate p=0 | `test_a_failed_gate_enters_holm_with_p_one` |
+| review2 A13 reachable counts rank1 regime only | `test_encounter_strict_and_reachable` |
+| review2 A14 encounter by step band uses reachable | `test_encounter_bands_count_encounters_not_reachable_ones` |
+| review2 A15 regime ignores determination | `test_regime_needs_failure_goal_object_determination_and_no_shared_spot` |
+| review2 B4 conditional verdict reads overall decomposition | `test_each_block_reads_its_own_estimand_p_decomposition_and_states` |
+| review2 B6 t1 list drawn with the primary seed | `test_sampling_prompt_is_the_rq3_agent_prompt_and_request_settings` |
+| review2 B7 shards with different settings accepted | `test_shards_with_different_settings_are_refused` |
+| review2 B8 conditional Holm uses overall p | `test_each_block_reads_its_own_estimand_p_decomposition_and_states` |
+| review2 B9 seed check same seed as primary | `test_seed_check_on_the_smoke_states` |
+| review2 B10 encounter strict ignores agnostic | `test_encounter_strict_and_reachable` |
+| futility counts reachable games again | `test_encounter_bands_and_the_futility_rule` |
+| verdict suffix never added | `test_incompetent_models_stay_in_holm_and_harm_from_loops_is_flagged` |
+| verdict suffix at exactly half | `test_verdict_boundaries` |
+| scoring ignores the run order | `test_scoring_waits_for_the_model_free_analysis_unless_overridden` |
+| run order accepts another label run | `test_run_order_check_cases` |
+| run order accepts an analysis with models | `test_scoring_waits_for_the_model_free_analysis_unless_overridden` |
+| run order accepts an unfinished analysis | `test_run_order_check_cases` |
+| run order override not logged | `test_scoring_waits_for_the_model_free_analysis_unless_overridden` |
+| run order not saved | `test_scoring_waits_for_the_model_free_analysis_unless_overridden` |
+| same-seed repeat uses another seed | `test_seed_check_uses_the_primary_settings_and_compares_sequences` |
+| normalisation count counts every action | `test_request_settings_and_normalisation_counts_are_recorded` |
+| smoke gate drops the greedy readout | `test_smoke_gate_needs_a_non_degenerate_seed_check_state_and_reports_readouts` |
+| precision floor off by one | `test_precision_script_floor_and_holm_threshold` |
+| format error becomes look | `test_format_errors_count_and_add_no_candidate` |
+| seed check reads one seed | `test_seed_check_flags_a_seed_that_changes_nothing` |
+| paths: abstention read from the other side | `test_change_paths_by_path_outcome_and_step_band` |
+| paths: rank order reversed | `test_change_paths_by_path_outcome_and_step_band` |
+| paths: abstention ignored | `test_change_paths_by_path_outcome_and_step_band` |
+| step band includes step 1 | `test_inert_split_by_step_band` |
+| paths: harm and help swapped | `test_change_paths_by_path_outcome_and_step_band` |
+| paths not in the contrast | `test_change_paths_by_path_outcome_and_step_band` |
+| decomposition part paths reversed | `test_decomposition_parts_get_their_own_paths` |
+| decomposition swapped-blind paths from aware | `test_decomposition_parts_get_their_own_paths` |
+| hybrid arms reversed | `test_hybrid_verifiers` |
+| hybrid judges every candidate by its rank-1 arm | `test_hybrid_verifiers` |
+| hybrid difference against aware | `test_hybrid_verifiers` |
+| acceptance ignores the step band | `test_acceptance_by_position_and_step_band_and_every_decomposition_shift` |
+| headline reads later steps | `test_acceptance_by_position_and_step_band_and_every_decomposition_shift` |
+| aware-swapped shift reversed | `test_acceptance_by_position_and_step_band_and_every_decomposition_shift` |
+| swapped-blind shift from aware | `test_acceptance_by_position_and_step_band_and_every_decomposition_shift` |
+| inert bands not split | `test_inert_split_by_step_band` |
+| run order skips the label hashes | `test_run_order_check_compares_the_label_hashes` |
+| scorer passes no label files | `test_scoring_refuses_labels_changed_after_the_model_free_analysis` |
+| inert rank-1 share counts fallbacks only | `test_model_report_parts_add_up_and_readouts` |

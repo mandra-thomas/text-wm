@@ -1,0 +1,7 @@
+run_id: decisionsim_agent_dryrun
+# Stage 1b (notes/decisionsim_agent_design.md; wf/decisionsim_agent.py). No model and no server: the archived RQ3 no-foresight episodes
+# with rank 1 only (the greedy action and its recorded reply), opening observations from the item collection, history
+# and blind-prompt checks on every state, the model-free encounter readouts at rank 1, the re-pick proxy behind the
+# design note's precision estimate, and a known-answer check of the analysis code with stand-in scores.
+episodes_source: rq3
+first_obs_sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]

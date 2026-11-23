@@ -1,0 +1,15 @@
+run_id: decisionsim_agent_sample_smoke
+# Stage 1b (notes/decisionsim_agent_design.md, amended after review 1; wf/decisionsim_agent.py). Smoke run on the two train games of the RQ3 smoke run
+# (rq3_smoke, condition none), with the seed check. Gate before the census (smoke_gate in metrics.json): format errors
+# under 25% of samples in each list, no replay mismatch, and a second seed never reproducing a non-degenerate set.
+episodes_source: rq3_smoke
+split: train
+n_samples: 20
+samplings:
+  primary: {temperature: 0.7, top_p: 0.8, top_k: 20, min_p: 0.0}
+  t1: {temperature: 1.0, top_p: 1.0, top_k: -1, min_p: 0.0}
+max_tokens: 256
+k_max: 8
+seed: 20260924
+seed_check: true
+n_shards: 1
