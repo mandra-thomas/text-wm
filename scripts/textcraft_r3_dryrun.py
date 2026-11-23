@@ -54,8 +54,11 @@ def main() -> int:
     for tag in list(R3.CORE) + list(R3.EXTENSION):
         shards(f"textcraft_r3_score_{tag}", S.run_textcraft_r3_score)
         counts[tag] = len(Z.scores_of(f"textcraft_r3_score_{tag}", tag, runs))
-    for tag in R3.ENVCHECK_MODELS:
-        shards(f"textcraft_r3_envcheck_{tag}", S.run_textcraft_r3_envcheck)
+    for tag in R3.ENVCHECK_MODELS:  # a mock plan: one job on the mock "GPU" over all of round 2's shards (14.M4)
+        n2 = int(load_config(f"textcraft_r2_score_{tag}").get("n_shards", 1))
+        plan = {"models": {tag: {"runnable": True, "n_r2_shards": n2,
+                                 "jobs": [{"job": 0, "gpu": "mock", "r2_shards": list(range(n2))}]}}}
+        assert S.run_textcraft_r3_envcheck({**load_config(f"textcraft_r3_envcheck_{tag}"), "plan": plan}) == 0
         counts[f"envcheck {tag}"] = len(Z.scores_of(f"textcraft_r3_envcheck_{tag}", tag + R3.ENVCHECK_SUFFIX, runs))
     shards("textcraft_r3_placement_gemma4-12b-it", S.run_textcraft_r3_format)
     shards("textcraft_r3_nopreserve_qwen3.8-27b", S.run_textcraft_r3_format)
@@ -68,7 +71,7 @@ def main() -> int:
                "waiting": {f: m[f]["waiting"] for f in ("A3", "A3x")},
                "H3_P": m["A3"].get("H3_P", {}).get("overall"),
                "replication": {c: r["reading"] for c, r in m["A3"].get("replication", {}).items()},
-               "environment_pass": m["environment_check"].get("pass"),
+               "environment": m["environment_check"].get("status"), "b3_old_scores": m["B3"]["old_scores"],
                "B3_pairs": sorted(m["B3"]["differences"]), "exploratory": sorted(m["exploratory"]),
                "minutes": round((time.time() - t0) / 60, 1)}
     (out / "dryrun_summary.json").write_text(json.dumps(summary, indent=1) + "\n")

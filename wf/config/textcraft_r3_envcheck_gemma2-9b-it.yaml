@@ -1,0 +1,6 @@
+run_id: textcraft_r3_envcheck_gemma2-9b-it
+# TextCraft round 3 (notes/textcraft_r3_design.md, 14.M4). Environment check, part 2: gemma2-9b-it rescored in serve2 on the
+# seeded records of the round-2 shards that one job of the committed plan (wf/config/textcraft_r3_envcheck_plan.json)
+# names, every arm, saved under '<tag>-serve2', on exactly the plan's GPU name. WF_ENVCHECK_JOB selects the job.
+manifest: wf/textcraft/data/r2_manifest.json
+model: gemma2-9b-it

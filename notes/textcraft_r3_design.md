@@ -6,6 +6,7 @@ This note fixes, before any round-3 code exists and before any model scores a ro
 
 - Round 2 is frozen at tag `textcraft-r2-design-frozen-2026-11-23` (4ccf84b). Model families wave B, whose serve2 scorer fixes round 3 needs, is frozen at `families-waveb-design-frozen-2026-11-22` (f6bbffb). Both tags were merged into branch `textcraft-r3` before this note, with both studies' frozen code paths unchanged (section 12).
 - **Written without round-2 results.** No round-2 score, analysis output or result note was read while writing this note or building round 3. The round-3 hypotheses are carried forward from the round-2 *design*. Round 3 uses round 2's outcomes in exactly two places, both fixed here: as the target of the replication rule (section 7.3), and as the older half of the generation pairs (section 7.4). Any hypothesis added later because of what round 2 finds must be labelled "motivated by round-2 outcomes", reported as such, and never presented as independently prespecified.
+- **Amended after review 1:** section 14 states the rules as amended and governs where an earlier section differs.
 - The design is reviewed independently and then frozen at a git tag (`textcraft-r3-design-frozen-<date>`) before any round-3 GPU job, the smoke runs included. Any change after the tag is a reported deviation.
 - Round 3 changes no round-2 or wave-B file's behaviour. It has its own run names (`textcraft_r3_*`), configs, results folders, golden file and code (`wf/textcraft/r3*.py`), and it imports round-2 and wave-B code without editing it.
 
@@ -305,3 +306,92 @@ Built after this note is committed; nothing round-2 or wave-B specific changes b
 **Full suite, once at the end** (local, at bbfe6fa): 1,208 passed, 29 skipped (the skips need transformers 5, torch or cached tokenizers; the serve2-only tests ran on ICE).
 
 **What has not been run.** No GPU job, no smoke run, no weights downloaded or loaded, no round-3 score, and no round-2 score or result read. Not checkable before the weights load: the real checkpoints' strict loading, the real attention agreement, speed, and each model's yes/no mass; each is checked at the start of each GPU job (the smoke runs first), before its first score.
+
+## 14. Amendments after review 1 (2026-11-23, before the freeze and before any round-3 score)
+
+Review 1 ([textcraft_r3_review1.md](textcraft_r3_review1.md), commit 2a3a768, merged into this branch) found four must-fix and thirteen should-fix items. The coordinator decided the should-fix items; this section states the rules as amended. **Where an earlier section of this note differs, this section governs.** No round-2 score or result was read, and no model has scored a round-3 record. Code: `wf/textcraft/r3_gates.py` (new), and changes to `r3.py`, `r3_score.py`, `r3_think.py` and `r3_analysis.py`.
+
+### 14.M1 GPUs are checked per job
+
+`wf.provenance.run_record` keeps a shard's GPUs as a set of names, so a job on two L40S would read as one L40S and fail the 27B and 31B models' declared alternative. The analysis now reads each job's own GPU list from its shard's `jobs.jsonl` (`r3_gates.job_gpus`). Every job of every shard of a model must have recorded the identical list, and that list must be the model's pinned type or its declared alternative. A problem refuses only the family it belongs to (A3, A3x, or B3 through the pair's models or older scores); the other families are read.
+
+### 14.M2 A model that fails its gate is "not scored"
+
+A model is **not scored** when any filed gate record of its smoke or score run has `ok: false`: the strict loading check (now caught and filed by the scoring run as `loading_failed`), the tokenization gate, or the attention agreement (`r3_gates.model_state`). Other failures (a download, the weights hash check, a crash, an out-of-memory error) are not filed as gate failures; the job is rerun. A model not scored gets verdict "not scored" and competence false for every contrast, its tests enter their family at p = 1, and H3-P, R2 and the replication readings proceed with the other models. A B3 pair whose newer model is not scored reads "not scored" (its tests at p = 1). "Waiting" is kept only for a model whose run is not filed yet.
+
+### 14.M3 and S9 The Gemma fallback is code
+
+`r3_gates.gemma_slot` applies the rule to Gemma 4 12B's filed smoke record (`runs/textcraft_r3_smoke_gemma4-12b-it/shard_00_of_01/`). It returns `gemma4-e4b-it` when any of these holds: the loading check failed; the tokenization gate failed; the attention agreement failed; or a **format mismatch** (S9): the median yes/no mass P(Yes) + P(No) over every yes/no score of the smoke run is below one half **and** on more than half of those prompts the model's most probable next token is a structural or template marker (a special token, whitespace, markdown, or a bracketed marker) rather than an answer word. Every smoke run records that token (`top_token`, `top_token_special`) for every yes/no prompt, so the diagnostic is reported for every core model. A low mass without that evidence does not fire the fallback; it goes to the competence gate, and the model is reported "not competent", not substituted. Until 12B's smoke record is filed the slot is "waiting".
+
+The analysis takes the slot from this function and refuses a configured `gemma_core` that disagrees. The `gemma4-e4b-it` smoke and score runs refuse to start unless the function returns E4B. **If E4B then fails its own gate, the Gemma slot is "not scored"** (14.M2): Gemma's core tests enter at p = 1, and there is no further substitution.
+
+### 14.M4 The environment check mirrors round 2's shards
+
+*Why.* Round 2 scores each model in four shards, and its job script allows L40S, A40 or A100. With mixed types, at least 200 comparable records out of 300 would often be unreachable for a reason unrelated to software. (The coordinator reports that round 2's scoring now runs with every shard pinned to L40S, so the single-type shortcut below should apply; the general rule is implemented regardless.)
+
+*The rule* (`r3_gates.envcheck_plan`, `r3_score.run_textcraft_r3_envcheck`, `r3_analysis.envcheck_block`):
+
+1. **Plan from metadata only**, before any environment-check job: from the GPU names in each round-2 shard's `jobs.jsonl` for Qwen3-8B, Mistral-7B-v0.3 and Gemma-2-9B-it (S8). A shard is *typed* when every job recorded the same single-GPU list; otherwise its records are not comparable. The plan (shard, GPU name, seeded records) is written by `python -m wf.textcraft.r3_gates plan --r2-runs <round-2 runs>` to `wf/config/textcraft_r3_envcheck_plan.json` and committed before submission.
+2. **Mirror round 2's shards.** One job per typed round-2 shard (`WF_ENVCHECK_JOB`): the seeded records that lie in that shard by round 2's own partition (`r2_score.shard_records(all records, i, 4)`), every arm, pinned by `--constraint` and by a job-start check that refuses any GPU list other than exactly that shard's name.
+3. **Shortcut.** When every typed shard shares one type, one job on that type scores all of them.
+4. **Comparison, record by record.** A record is comparable when its round-2 shard and the environment-check shard that rescored it are each typed and their GPU lists are identical.
+5. **Pass rule:** wave B's rule on the union of comparable records, with at least 200 comparable; the goal effect and the yes/no share are read on the comparable main failures. The effect-level criteria are wave B's thresholds (goal effect within 0.10 nats on each scale, yes/no share within 0.02). **PLACEHOLDER: the per-score criterion is wave B's as amended.** Wave B's own check found Qwen3-8B's yes/no per-score difference (0.248 nats against 0.07) to be bf16 quantization of large log-odds; wave B is amending its per-score criterion. Round 3 does not copy 0.07: it reads wave B's rule from `wf/families.py` at run time (`r3_analysis.env_rule`), and uses wave B's per-score function once wave B provides one (`r3_analysis.per_score_check`). The amended criterion is entered here, by reference, before the freeze.
+6. **Outcomes.** "pass" (every model passes and its golden tokens agree with round 2's); "fail" (any model fails, or its golden tokens differ); **"not run (GPU types)"** (fewer than 200 comparable records because the plan could not reach 200, or a planned GPU type was not obtainable within 7 days of the first submission, filed as `gpu_unobtainable.json` in that model's run folder); "waiting" otherwise. "Not run" is not "failed": no software difference was detected; the check could not be made.
+7. **B3's older scores follow from the outcome (S5).** "pass": round 2's scores, after round 2's provenance check (S6). "fail" or "not run (GPU types)": the declared full serve2 rescoring of the three older models (`textcraft_r3_rescore_<tag>`), each job on exactly one L40S. A configured `b3_old_scores` that disagrees is refused.
+
+S8: Gemma-2-9B-it is now one of the environment check's models (`textcraft_r3_envcheck_gemma2-9b-it`, about 0.3 GPU-hours), under the same rule; its serve2 renderings already equal round 2's.
+
+### 14.S1 One competent model is too few for H3-P
+
+With fewer than two core models competent for P, H3-P overall is "inconclusive (fewer than two competent)", also when the one competent model is supported. "Rejected" keeps its precedence, inherited from round 2's R2: one competent model with P equivalent to zero or confirmed above zero, and none confirmed below, rejects H3-P (note N1: the rule is asymmetric, and is stated beside the reading).
+
+Note N2: an inconclusive round-2 model that is competent makes a contrast "not established", so round 3 reads "no replication target" for it. That means round 2 did not establish a general finding, not that round 2 found nothing; for P the headline may then rest on H3-P alone.
+
+### 14.S2 Equivalence power at Holm's first step of 30
+
+Round 2's power fields use 0.05/50. Round 3 recomputes each A3 and A3x contrast's equivalence power at a true zero at 0.05/30 (one-sided z = 2.935) and sets the "equivalence underpowered" flag from it (`r3_analysis.holm30_power`); round 2's values are kept beside it.
+
+### 14.S3 B3 equivalence power, the flag, and a fixed-denominator column
+
+Each B3 test reports its equivalence power at a true zero at Holm's first step (z = 2.935) and at 0.05, and "not distinguishable" reads "not distinguishable (equivalence underpowered)" when the first is below 0.8. The margin stays 0.20 standardized units. **Equivalence is practically unreachable in B3 for Dn, Dc and T at these sample sizes:** on the real goal-pair structure the reviewer's simulation gave equivalence power at Holm's first step of 0.00 for Dn, Dc and T unless the two models' item values correlate at about 0.8 (T: 0.41 there), against 0.39–0.92 for Λ and 0.02–0.74 for P (correlation 0 to 0.5). For those contrasts the realistic readings are "differs" (for differences of roughly 0.3 to 0.5 SD or more) or "not distinguishable". A descriptive column divides each model's contrast by a fixed denominator, its SD of ΔL over the 1,500 main failures (the SD that sets its margin), so a reader can see whether a B3 difference comes from the mean or from the spread.
+
+### 14.S4 Plain-words directions
+
+"Differs, newer higher" and "newer lower" carry the size in words: for two negative values, "smaller in size" or "larger in size", and for P "a smaller penalty" or "a larger penalty"; "opposite signs" when the signs differ.
+
+### 14.S6, S7 Round 2's provenance and the resample count
+
+Before B3 reads round 2's scores, round 2's own provenance check runs (`r2_analysis.provenance` on the three older models); any problem refuses B3. Round 3's metrics record the sha256 of round 2's `metrics.json` and its status line. B3's tests use 20,000 resamples; a different `b_draws` is refused outside a mock run.
+
+### 14.S10 The thinking arm
+
+- The forced flag is split: `forced_reason` is "cap" (the reasoning reached 2,048 tokens without closing) or "ended unclosed" (the turn ended without closing it); the unforced readouts exclude both.
+- At job start, before generating: every thinking prompt is checked (it ends with the thinking-on generation prompt, holds the clean system text and no forbidden text), and the next-token log-probabilities of the shortest prompt of the first batch, alone and left-padded inside the batch, must agree over its 20 most probable tokens within the attention-agreement tolerances (mean 0.10 nats, any 1.0). Either failure stops the job (`start_checks.json`).
+- Reproducibility depends on the shard count and the batch size (they decide which prompts share a batch, its padding and its random stream), and GPU sampling is not bitwise deterministic. Every generation is saved with its batch key and seed, and the readout is scored from the saved text.
+- **Cost, re-estimated from the smoke plan.** 4,530 generations make 567 batches of 8; a batch lasts as long as its longest trace, up to 2,048 tokens. At the 15–25 tokens per second per sequence expected for a 9 B model with PyTorch linear attention on an L40S, a batch takes about 60–140 seconds, so generation takes about 9–22 hours, and scoring after the traces about 0.5. The thinking smoke run (two batches) measures seconds per batch, and the full run is planned as 567 times that. The estimate below uses 9–22 hours.
+
+### 14.S11 No p-values outside the families
+
+The exploratory blocks (the size comparisons and the thinking arm's paired differences) carry estimates and intervals only.
+
+### 14.S12 Every job runs from the freeze tag
+
+Every round-3 GPU job runs from a checkout at the freeze tag's commit (detached, never pulled), and checks at job start that its HEAD is that commit or differs from it only outside `wf/`, `scripts/` and `pace/` (`r3_gates.require_freeze_commit`). The analysis checks every job of every shard of every round-3 run (scores, smoke runs, environment check, rescoring, format checks and the thinking arm) against the same rule.
+
+### 14.S13 and the reviewer's mutants
+
+Tests now pin the environment check's main-failure restriction, its yes/no share criterion and its per-record GPU match, the thinking arm's unforced subset, per-batch seeds and record-and-arm order, the revision check on a mixed set, and B3's resample count. The reviewer's eleven mutants, adapted to the amended code, are in `scripts/mutation_check.py` with the round-3 set.
+
+### 14.N Other corrections
+
+- Qwen3.5-9B has 9.41 B parameters in its architecture (8.95 B in the language model; the checkpoint stores 9.65 B tensors with its multi-token-prediction heads); `PAIR_CHANGES` said 9.7 B.
+
+### 14.C Cost, amended
+
+| Stage | Runs | GPU-hours (estimates) |
+|---|---|---|
+| Minimum | environment check, three models, mirroring round 2's shards (about 0.9 in all, a few short jobs per model when the shards are mixed), core smoke runs (0.3), `qwen3.5-9b` (2–4), `ministral3-8b-it` (1.7–2.5), `gemma4-12b-it` (2.5–3.5), downloads (1–2.5) | about 9.5–13.5; budget 15 |
+| Extension | as section 11 | about 15–23, 12–18 on 80 GB cards |
+| Thinking arm | smoke (two batches, 0.1) and 4,530 generations with scoring | about 9–22 |
+| All | | about 34–59; budget 60 |
+| If the environment check does not pass | full serve2 rescoring of the three older models on L40S | about 7 more |

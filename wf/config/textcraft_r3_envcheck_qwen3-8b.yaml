@@ -1,6 +1,6 @@
 run_id: textcraft_r3_envcheck_qwen3-8b
-# TextCraft round 3 (notes/textcraft_r3_design.md). Environment check, part 2 (design 8.1): qwen3-8b rescored in serve2 on 300 seeded records, every
-# arm, saved under '<tag>-serve2'; run on the GPU type of the model's round-2 shards.
+# TextCraft round 3 (notes/textcraft_r3_design.md, 14.M4). Environment check, part 2: qwen3-8b rescored in serve2 on the
+# seeded records of the round-2 shards that one job of the committed plan (wf/config/textcraft_r3_envcheck_plan.json)
+# names, every arm, saved under '<tag>-serve2', on exactly the plan's GPU name. WF_ENVCHECK_JOB selects the job.
 manifest: wf/textcraft/data/r2_manifest.json
 model: qwen3-8b
-n_shards: 1

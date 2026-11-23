@@ -1460,7 +1460,7 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
        for kind in ("score", "smoke") for tag in ("qwen3.5-9b", "ministral3-8b-it", "gemma4-12b-it", "gemma4-e4b-it",
                                                   "qwen3.8-27b", "gemma4-31b-it", "olmo3-7b-it")},
     **{f"textcraft_r3_envcheck_{tag}": (lambda cfg: _lazy("textcraft.r3_score", "run_textcraft_r3_envcheck")(cfg))
-       for tag in ("qwen3-8b", "mistral-7b-v0.3")},
+       for tag in ("qwen3-8b", "mistral-7b-v0.3", "gemma2-9b-it")},
     **{f"textcraft_r3_rescore_{tag}": (lambda cfg: _lazy("textcraft.r3_score", "run_textcraft_r3_rescore")(cfg))
        for tag in ("qwen3-8b", "mistral-7b-v0.3", "gemma2-9b-it")},
     "textcraft_r3_placement_gemma4-12b-it": lambda cfg: _lazy("textcraft.r3_score", "run_textcraft_r3_format")(cfg),

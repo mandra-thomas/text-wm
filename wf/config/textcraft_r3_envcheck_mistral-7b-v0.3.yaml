@@ -1,6 +1,6 @@
 run_id: textcraft_r3_envcheck_mistral-7b-v0.3
-# TextCraft round 3 (notes/textcraft_r3_design.md). Environment check, part 2 (design 8.1): mistral-7b-v0.3 rescored in serve2 on 300 seeded records, every
-# arm, saved under '<tag>-serve2'; run on the GPU type of the model's round-2 shards.
+# TextCraft round 3 (notes/textcraft_r3_design.md, 14.M4). Environment check, part 2: mistral-7b-v0.3 rescored in serve2 on the
+# seeded records of the round-2 shards that one job of the committed plan (wf/config/textcraft_r3_envcheck_plan.json)
+# names, every arm, saved under '<tag>-serve2', on exactly the plan's GPU name. WF_ENVCHECK_JOB selects the job.
 manifest: wf/textcraft/data/r2_manifest.json
 model: mistral-7b-v0.3
-n_shards: 1

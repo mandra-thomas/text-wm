@@ -13,7 +13,8 @@
 # Pinned GPU types (wf/textcraft/r3.py GPU_PIN, design section 10): L40S for the 7-12B models and the thinking arm;
 # an A100 80 GB for the 27B and 31B models (--constraint=A100-80GB --mem=128G), or two L40S on one node as the
 # declared alternative (--gres=gpu:l40s:2 --constraint=gpu-l40s), the same for every shard of a model. The
-# environment check and the fallback rescoring run on the GPU type of the earlier model's round-2 shards.
+# environment check runs one job per job of the committed plan (wf/config/textcraft_r3_envcheck_plan.json,
+# WF_ENVCHECK_JOB), on exactly that job's GPU name (design 14.M4); the fallback rescoring on exactly one L40S.
 # Brackets because ICE appends &cuda13.
 #SBATCH --constraint=(gpu-l40s)
 #SBATCH --output=logs/tc3_%j.out
@@ -22,8 +23,10 @@
 # TextCraft round 3 (notes/textcraft_r3_design.md) in the serve2 environment (transformers 5). Run order
 # (wf.textcraft.r3.RUN_ORDER): the environment check, the core smoke runs (the Gemma fallback rule), the core
 # models; then the extension, the format checks and the thinking arm as GPUs allow. Nothing is scored before the
-# round-3 design-freeze tag exists.
-#   bash pace/submit.sh textcraft_r3_score.sbatch --export=ALL,TC3_RUN=textcraft_r3_envcheck_qwen3-8b --constraint=<round-2 type>
+# round-3 design-freeze tag exists, and every job runs from a checkout at the tag's commit (detached, never
+# pulled); the job checks this at start (design 14.S12).
+#   bash pace/submit.sh textcraft_r3_score.sbatch --export=ALL,TC3_RUN=textcraft_r3_envcheck_qwen3-8b,WF_ENVCHECK_JOB=0 \
+#        --constraint=<the plan's GPU for job 0, e.g. gpu-l40s>
 #   bash pace/submit.sh textcraft_r3_score.sbatch --export=ALL,TC3_RUN=textcraft_r3_smoke_gemma4-12b-it,WF_WEIGHTS=local
 #   for s in 0 1; do bash pace/submit.sh textcraft_r3_score.sbatch \
 #     --export=ALL,TC3_RUN=textcraft_r3_score_qwen3.5-9b,WF_WEIGHTS=local,WF_SHARD=$s,WF_N_SHARDS=2; done

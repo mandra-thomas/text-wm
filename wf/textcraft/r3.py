@@ -94,11 +94,15 @@ FAMILY_SIZES = {"A3": 30, "A3x": 30, "B3": 30}
 # Older (round 2) -> newer (round 3), fixed before any score.
 PAIRS: tuple[tuple[str, str], ...] = (("qwen3-8b", "qwen3.5-9b"), ("mistral-7b-v0.3", "ministral3-8b-it"),
                                       ("gemma2-9b-it", "gemma4-12b-it"))
-ENVCHECK_MODELS = ("qwen3-8b", "mistral-7b-v0.3")
+ENVCHECK_MODELS = ("qwen3-8b", "mistral-7b-v0.3", "gemma2-9b-it")  # review 1, S8: Gemma 2 too
 ENVCHECK_SUFFIX = FAM.ENVCHECK_SUFFIX  # "-serve2"
 ENVCHECK_N = 300
 ENVCHECK_MIN_COMPARABLE = 200  # records whose round-2 shard ran on the rescoring's GPU type
-RESCORE_MODELS = ("qwen3-8b", "mistral-7b-v0.3", "gemma2-9b-it")  # fallback if the environment check fails
+RESCORE_MODELS = ("qwen3-8b", "mistral-7b-v0.3", "gemma2-9b-it")  # fallback if the environment check does not pass
+RESCORE_GPU = L40S  # the fallback rescoring runs on the round-3 models' type (review 1, M4)
+# Holm's first step in a family of 30 (one-sided normal quantile at 0.05 / 30), for the equivalence power (review 1, S2)
+Z_FIRST_30 = 2.935199
+Z_ALPHA = 1.644854
 FORMAT_N = 300
 FORMAT_ARMS = ("aligned", "swapped", "yn_aligned", "yn_swapped")
 SMOKE_N = 20
@@ -109,8 +113,11 @@ def seed(name: str) -> str:
 
 
 RUN_ORDER = ("textcraft_r3_envcheck_qwen3-8b", "textcraft_r3_envcheck_mistral-7b-v0.3",
+             "textcraft_r3_envcheck_gemma2-9b-it",
              "textcraft_r3_smoke_qwen3.5-9b", "textcraft_r3_smoke_ministral3-8b-it", "textcraft_r3_smoke_gemma4-12b-it",
              "textcraft_r3_score_qwen3.5-9b", "textcraft_r3_score_ministral3-8b-it", "textcraft_r3_score_gemma4-12b-it",
+             # only if the Gemma fallback fired (r3_gates.gemma_slot); the runs refuse otherwise
+             "textcraft_r3_smoke_gemma4-e4b-it", "textcraft_r3_score_gemma4-e4b-it",
              # extension, the format checks and the thinking arm, as GPUs allow
              "textcraft_r3_smoke_olmo3-7b-it", "textcraft_r3_score_olmo3-7b-it",
              "textcraft_r3_smoke_qwen3.8-27b", "textcraft_r3_score_qwen3.8-27b", "textcraft_r3_nopreserve_qwen3.8-27b",

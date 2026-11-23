@@ -22,6 +22,7 @@ from wf.textcraft import r2_analysis as A
 from wf.textcraft import r2_items as I
 from wf.textcraft import r2_score as S2
 from wf.textcraft import r3 as R3
+from wf.textcraft import r3_gates as G
 from wf.textcraft import r3_analysis as Z
 from wf.textcraft import r3_score as S
 from wf.textcraft import r3_think as K
@@ -367,7 +368,8 @@ def test_runs_refuse_unknown_models_and_unverified_records(mock_runs, small):
     with pytest.raises(SystemExit):
         S.run_textcraft_r3_score({"run_id": "x", "model": "qwen3-8b", "manifest": man})
     with pytest.raises(SystemExit):
-        S.run_textcraft_r3_envcheck({"run_id": "x", "model": "gemma2-9b-it", "manifest": man})
+        S.run_textcraft_r3_envcheck({"run_id": "x", "model": "llama3.1-8b", "manifest": man, "plan": {"models": {
+            "llama3.1-8b": {"runnable": True, "n_r2_shards": 1, "jobs": [{"job": 0, "gpu": "mock", "r2_shards": [0]}]}}}})
     with pytest.raises(SystemExit):
         S.run_textcraft_r3_format({"run_id": "x", "model": "qwen3.5-9b", "check": "placement", "manifest": man})
     m = json.loads((mock_runs / "r2_manifest.json").read_text())
@@ -450,16 +452,6 @@ def test_thinking_jobs_and_procedure(records):
     assert sum(a == "yn_neutral" and r["population"] == "success" for r, a in jobs) == 600
     assert K.MAX_REASONING == 2048 and K.SAMPLING == {"do_sample": True, "temperature": 0.6, "top_p": 0.95, "top_k": 20}
     assert K.batch_seed("a|b") == K.batch_seed("a|b") != K.batch_seed("a|c")
-
-
-def test_budget_forcing_and_the_readout_point():
-    assert K.close_reasoning("think a bit</think>\n\nCrafted 1") == ("think a bit</think>", False)
-    assert K.close_reasoning("still thinking") == ("still thinking\n</think>", True)
-    assert K.close_reasoning("cut<|im_end|>junk") == ("cut\n</think>", True)
-    assert K.AFTER_CLOSE == "\n\n"
-    rec = {"object": "oak planks"}
-    assert K.mentions("The goal needs oak planks", rec) == {"goal_word": True, "crafted_item": True}
-    assert K.mentions("nothing", rec) == {"goal_word": False, "crafted_item": False}
 
 
 def test_thinking_run_mock_generates_scores_and_resumes(mock_runs, records):
@@ -609,27 +601,6 @@ def test_r2_for_round_three():
     assert Z.r2_contemporary(v, {"a": False, "b": False})["value"] == "undecided"
 
 
-def test_h3p_reading():
-    below, eq = "confirmed below zero", "equivalent to zero"
-    v = {"a": V(parent_penalty=below), "b": V(parent_penalty=below), "c": V(parent_penalty=below)}
-    comp = {"a": True, "b": True, "c": True}
-    r1 = {t: False for t in v}
-    r2 = {"fires": False}
-    assert Z.h3p_reading(v, comp, r1, r2)["overall"] == "supported"
-    out = Z.h3p_reading({**v, "c": V()}, comp, r1, r2)
-    assert out["overall"] == "partial" and out["per_model"]["c"] == "inconclusive"
-    out = Z.h3p_reading({**v, "c": V(parent_penalty=eq)}, comp, {**r1, "c": True}, r2)
-    assert out["overall"] == "partial" and out["per_model"]["c"] == "rejected"
-    only = {"a": V(parent_penalty=eq), "b": V(), "c": V()}
-    assert Z.h3p_reading(only, comp, {"a": True, "b": False, "c": False}, r2)["overall"] == "rejected"
-    assert Z.h3p_reading(v, comp, r1, {"fires": True})["overall"] == "rejected"
-    one = Z.h3p_reading(v, {"a": True, "b": False, "c": False}, r1, r2)
-    assert one["overall"] == "partial" and one["per_model"]["b"].startswith("measurable only")
-    none = Z.h3p_reading({t: V() for t in v}, {t: False for t in v}, r1, r2)
-    assert none["overall"] == "inconclusive" and "fewer than 2" in none["reason"]
-    assert Z.h3p_reading({t: V() for t in v}, comp, r1, r2)["overall"] == "inconclusive"
-
-
 def test_round2_finding():
     b, a, e, i = "confirmed below zero", "confirmed above zero", "equivalent to zero", "inconclusive"
     comp = {"x": True, "y": True, "z": False}
@@ -740,30 +711,6 @@ def test_round3_extras_are_descriptive_and_include_the_strict_floor(small, fast)
     assert not any(ex2["competent_at_strict_floor"].values())
 
 
-def _env_scores(recs, tag, shift=0.0, model=None):
-    return [{"transition_id": r["id"], "condition": a, "model": model or tag,
-             "L": (hash((r["id"], a)) % 100) / 10 + (shift if a in ("aligned", "yn_aligned") else 0.0)}
-            for r in recs for a in r["arms"]]
-
-
-def test_environment_check_rule(records, tmp_path):
-    chosen = S.envcheck_subset(records)
-    old = [(tmp_path / "old0", _env_scores(chosen, "qwen3-8b"))]
-    gpus = {tmp_path / "old0": ["NVIDIA L40S"], tmp_path / "new0": ["NVIDIA L40S"]}
-    gpu_of = lambda p: gpus.get(p)  # noqa: E731
-    new = [(tmp_path / "new0", _env_scores(chosen, "qwen3-8b", model="qwen3-8b-serve2"))]
-    out = Z.envcheck_block(old, new, "qwen3-8b", records, gpu_of)
-    assert out["pass"] and out["n_comparable_records"] == 300
-    shifted = [(tmp_path / "new0", _env_scores(chosen, "qwen3-8b", shift=0.2, model="qwen3-8b-serve2"))]
-    bad = Z.envcheck_block(old, shifted, "qwen3-8b", records, gpu_of)
-    assert not bad["pass"] and not bad["checks"]["two_candidate_goal_effect"]
-    gpus[tmp_path / "old0"] = ["NVIDIA A40"]
-    assert not Z.envcheck_block(old, new, "qwen3-8b", records, gpu_of)["checks"]["enough_comparable_records"]
-    gpus[tmp_path / "old0"] = ["NVIDIA L40S"]
-    half = [(tmp_path / "new0", _env_scores(chosen[:150], "qwen3-8b", model="qwen3-8b-serve2"))]
-    assert not Z.envcheck_block(old, half, "qwen3-8b", records, gpu_of)["checks"]["complete"]
-
-
 def test_golden_tokens_check():
     case = {"n_ids": 10, "ids_sha256": "a"}
     r2g = {"models": {"qwen3-8b": {"revision": "r", "x|aligned": case}}}
@@ -795,93 +742,7 @@ def test_format_check_one_fifth_rule(records):
     assert out["ci_excludes_zero"] and not out["above_one_fifth"] and not out["format_dependent"]
 
 
-def test_provenance_problems(tmp_path):
-    recs = {tmp_path / "a": {"commit": "c1", "gpu": ["NVIDIA L40S"]}, tmp_path / "b": {"commit": "c1", "gpu": ["NVIDIA L40S"]},
-            tmp_path / "c": {"commit": "c2", "gpu": ["NVIDIA A40"]}}
-    rec = lambda p: recs[p]  # noqa: E731
-    pin = C.REVISIONS["Qwen/Qwen3.5-9B"]
-    ok = Z.provenance_problems({"qwen3.5-9b": [tmp_path / "a", tmp_path / "b"]},
-                               {"qwen3.5-9b": [{"model_revision": pin}]}, rec)
-    assert ok == []
-    bad = Z.provenance_problems({"qwen3.5-9b": [tmp_path / "a", tmp_path / "c"]},
-                                {"qwen3.5-9b": [{"model_revision": "other"}]}, rec)
-    assert any("commits" in p for p in bad) and any("different GPUs" in p for p in bad)
-    assert any("revisions" in p for p in bad)
-    gpu = Z.provenance_problems({"qwen3.5-9b": [tmp_path / "c"]}, {}, rec)
-    assert any("not the pinned" in p for p in gpu)
-
-
 # ---------------- end to end, mock ----------------
-
-
-def test_mock_end_to_end(mock_runs, small, monkeypatch, fast):
-    """Round 2 scored and analysed (mock), every round-3 run scored (mock), the thinking arm and both format checks,
-    then the round-3 analysis: three families of 30, H3-P, replication against round 2's filed verdicts, and B3."""
-    import wf.provenance as PV
-
-    man = _manifest(mock_runs, small)
-    for tag in R.TAGS:
-        assert S2.run_textcraft_r2_score({"run_id": f"textcraft_r2_score_{tag}", "model": tag, "manifest": man}) == 0
-    assert A.run_textcraft_r2_analysis({"run_id": "textcraft_r2_analysis", "manifest": man, "models": list(R.TAGS)}) in (0, 1)
-    for tag in list(R3.CORE) + list(R3.EXTENSION):
-        assert S.run_textcraft_r3_score({"run_id": f"textcraft_r3_score_{tag}", "model": tag, "manifest": man}) == 0
-    for tag in R3.ENVCHECK_MODELS:
-        assert S.run_textcraft_r3_envcheck({"run_id": f"textcraft_r3_envcheck_{tag}", "model": tag, "manifest": man}) == 0
-    assert S.run_textcraft_r3_format({"run_id": "textcraft_r3_placement_gemma4-12b-it", "model": "gemma4-12b-it",
-                                      "check": "placement", "manifest": man}) == 0
-    assert S.run_textcraft_r3_format({"run_id": "textcraft_r3_nopreserve_qwen3.8-27b", "model": "qwen3.8-27b",
-                                      "check": "nopreserve", "manifest": man}) == 0
-    assert K.run_textcraft_r3_think({"run_id": "textcraft_r3_think_qwen3.5-9b", "manifest": man}) == 0
-    real = PV.run_record
-    monkeypatch.setattr(PV, "run_record", lambda p: {**real(p), "gpu": ["NVIDIA A100-SXM4-80GB"]
-                                                     if ("27b" in str(p) or "31b" in str(p)) else ["NVIDIA L40S"]})
-    monkeypatch.setattr(Z, "golden_tokens_check", lambda *a: {"ok": True})
-    # the mock scorer's revision for every round-3 model is its pinned one
-    assert Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man}) == 0
-    m = json.loads((mock_runs / "runs" / "textcraft_r3_analysis" / "metrics.json").read_text())
-    assert m["A3"]["family_size"] == m["A3x"]["family_size"] == m["B3"]["family_size"] == 30
-    assert m["A3"]["waiting"] == [] and m["A3x"]["waiting"] == []
-    assert m["A3"]["H3_P"]["overall"] in ("supported", "rejected", "partial", "inconclusive")
-    assert all(r["reading"] != "waiting (round 2's analysis not filed)" for r in m["A3"]["replication"].values())
-    assert m["environment_check"]["pass"] is True
-    assert set(m["B3"]["differences"]) == {f"{o}->{n}" for o, n in R3.PAIRS}
-    assert all(v != Z.NOT_INTERPRETABLE_ENV for r in m["B3"]["readings"].values() for c, v in r.items() if c in A.CONTRASTS)
-    ex = m["exploratory"]
-    assert set(ex["format_checks"]) == {"placement", "nopreserve"} and "thinking_arm" in ex
-    assert {"qwen3.5-9b->qwen3.8-27b", "gemma4-12b-it->gemma4-31b-it"} <= set(ex)
-
-
-def test_b3_is_not_read_when_the_environment_check_fails(small, fast):
-    scores = {t: _planted(small, t) for t in list(R3.CORE) + list(R3.EXTENSION)}
-    old = {t: _planted(small, t) for t, _n in R3.PAIRS}
-    out = Z.analyse(small, SHOTS, scores, {}, None, old, {"pass": False})
-    assert all(v == Z.NOT_INTERPRETABLE_ENV for r in out["B3"]["readings"].values() for c, v in r.items()
-               if c in A.CONTRASTS)
-    assert out["B3"]["differences"] == {}
-    out = Z.analyse(small, SHOTS, scores, {"b3_old_scores": "rescore"}, None, old, {"pass": False})
-    assert set(out["B3"]["differences"]) == {f"{o}->{n}" for o, n in R3.PAIRS}
-
-
-def test_planted_pairs_are_read_on_the_standardized_scale(small, fast):
-    """A newer model that is the older one at three times the logit scale differs in nats but not standardized."""
-    scores = {t: _planted(small, t, scale=1.0) for t in list(R3.CORE) + list(R3.EXTENSION)}
-    old = {}
-    for o, n in R3.PAIRS:
-        base = _planted(small, n, scale=1.0)
-        old[o] = [{**s, "model": o, "L": s["L"] / 3, "logp_minus": -1.0 - s["L"] / 3,
-                   "logp_first_minus": -0.5 - s["L"] / 6} for s in base]
-    out = Z.analyse(small, SHOTS, scores, {"b_draws": 200}, None, old, {"pass": True})
-    d = out["B3"]["differences"]["qwen3-8b->qwen3.5-9b"]["lift"]
-    assert d["standardized"]["estimate"] == pytest.approx(0, abs=1e-9)
-    assert d["raw_nats_descriptive"]["estimate"] > 0
-    assert out["B3"]["readings"]["qwen3-8b->qwen3.5-9b"]["lift"] != "differs, newer higher"
-
-
-def test_the_fallback_slot_moves_every_core_role(small, fast):
-    scores = {t: _planted(small, t) for t in ("qwen3.5-9b", "ministral3-8b-it", "gemma4-e4b-it") + R3.EXTENSION}
-    out = Z.analyse(small, SHOTS, scores, {"gemma_core": "gemma4-e4b-it"}, None, None, {"pass": False})
-    assert out["A3"]["tags"] == ["qwen3.5-9b", "ministral3-8b-it", "gemma4-e4b-it"] and out["fallback_used"]
-    assert "gemma2-9b-it->gemma4-e4b-it" in out["B3"]["readings"]
 
 
 def test_golden_file_covers_every_tag_and_matches_round_two_for_the_earlier_models():
@@ -903,3 +764,607 @@ def test_golden_file_covers_every_tag_and_matches_round_two_for_the_earlier_mode
     assert q["text"].endswith("<|im_start|>assistant\n<think>\n\n</think>\n\n") and R.SYSTEM in q["text"]
     g = next(v for k, v in g3["models"]["gemma4-12b-it"].items() if k.endswith("|aligned"))
     assert g["text"].endswith("<|turn>model\n<|channel>thought\n<channel|>")
+
+
+# ---------------- review 1 fixes (design section 14) ----------------
+
+
+def test_budget_forcing_and_the_readout_point():
+    assert K.close_reasoning("think a bit</think>\n\nCrafted 1") == ("think a bit</think>", None)
+    assert K.close_reasoning("still thinking", K.MAX_REASONING) == ("still thinking\n</think>", K.CAP)
+    assert K.close_reasoning("short and stopped", 12) == ("short and stopped\n</think>", K.ENDED)
+    assert K.close_reasoning("cut<|im_end|>junk", K.MAX_REASONING) == ("cut\n</think>", K.ENDED)
+    assert K.AFTER_CLOSE == "\n\n"
+    rec = {"object": "oak planks"}
+    assert K.mentions("The goal needs oak planks", rec) == {"goal_word": True, "crafted_item": True}
+    assert K.mentions("nothing", rec) == {"goal_word": False, "crafted_item": False}
+
+
+def test_h3p_reading():
+    below, eq = "confirmed below zero", "equivalent to zero"
+    v = {"a": V(parent_penalty=below), "b": V(parent_penalty=below), "c": V(parent_penalty=below)}
+    comp = {"a": True, "b": True, "c": True}
+    r1 = {t: False for t in v}
+    r2 = {"fires": False}
+    assert Z.h3p_reading(v, comp, r1, r2)["overall"] == "supported"
+    out = Z.h3p_reading({**v, "c": V()}, comp, r1, r2)
+    assert out["overall"] == "partial" and out["per_model"]["c"] == "inconclusive"
+    out = Z.h3p_reading({**v, "c": V(parent_penalty=eq)}, comp, {**r1, "c": True}, r2)
+    assert out["overall"] == "partial" and out["per_model"]["c"] == "rejected"
+    only = {"a": V(parent_penalty=eq), "b": V(), "c": V()}
+    assert Z.h3p_reading(only, comp, {"a": True, "b": False, "c": False}, r2)["overall"] == "rejected"
+    assert Z.h3p_reading(v, comp, r1, {"fires": True})["overall"] == "rejected"
+    # S1: one competent model, supported, is "inconclusive (fewer than two competent)", not "partial"
+    one = Z.h3p_reading(v, {"a": True, "b": False, "c": False}, r1, r2)
+    assert one["overall"] == "inconclusive" and "fewer than 2" in one["reason"]
+    assert one["per_model"]["b"].startswith("measurable only") and one["per_model"]["a"] == "supported"
+    none = Z.h3p_reading({t: V() for t in v}, {t: False for t in v}, r1, r2)
+    assert none["overall"] == "inconclusive" and "fewer than 2" in none["reason"]
+    assert Z.h3p_reading({t: V() for t in v}, comp, r1, r2)["overall"] == "inconclusive"
+
+
+# M1 and S12: provenance per job, per family, at the freeze commit
+
+
+def _shard(tmp_path, name, jobs):
+    d = tmp_path / name
+    d.mkdir(parents=True)
+    (d / "jobs.jsonl").write_text("".join(json.dumps(j) + "\n" for j in jobs))
+    (d / "git_sha").write_text(jobs[0].get("git_sha", "c1") + "\n")
+    return d
+
+
+def _git(tag_commit="c1", diffs=None):
+    diffs = diffs or {}
+
+    def run(args):
+        if args[:2] == ["tag", "-l"]:
+            return "textcraft-r3-design-frozen-2026-11-30" if tag_commit else ""
+        if args[0] == "rev-parse":
+            return tag_commit if "frozen" in args[1] else "head"
+        if args[0] == "diff":
+            return diffs.get(args[3], "wf/x.py")
+        raise AssertionError(args)
+    return run
+
+
+def test_provenance_accepts_two_l40s_per_job_and_checks_each_job(tmp_path):
+    two = ["NVIDIA L40S", "NVIDIA L40S"]
+    pin = C.REVISIONS["Qwen/Qwen3.8-27B"]
+    ok = _shard(tmp_path, "a/shard_00_of_04", [{"gpu": two, "git_sha": "c1"}, {"gpu": two, "git_sha": "c1"}])
+    probs = Z.provenance_problems({"qwen3.8-27b": [ok]}, {"qwen3.8-27b": [{"model_revision": pin}]}, "c1", run_git=_git())
+    assert probs == {}
+    one = _shard(tmp_path, "b/shard_01_of_04", [{"gpu": ["NVIDIA L40S"], "git_sha": "c1"}])
+    probs = Z.provenance_problems({"qwen3.8-27b": [ok, one]}, {}, "c1", run_git=_git())
+    assert any("different" in p for p in probs["qwen3.8-27b"])
+    a100 = ["NVIDIA A100-SXM4-80GB"]
+    mixed = _shard(tmp_path, "c/shard_00_of_01", [{"gpu": a100, "git_sha": "c1"}, {"gpu": two, "git_sha": "c1"}])
+    assert Z.provenance_problems({"gemma4-31b-it": [mixed]}, {}, "c1", run_git=_git())["gemma4-31b-it"]
+    single = _shard(tmp_path, "d/shard_00_of_01", [{"gpu": ["NVIDIA L40S"], "git_sha": "c1"}])
+    assert any("not the pinned" in p for p in
+               Z.provenance_problems({"gemma4-31b-it": [single]}, {}, "c1", run_git=_git())["gemma4-31b-it"])
+
+
+def test_provenance_requires_the_freeze_commit_and_one_revision(tmp_path):
+    l40 = ["NVIDIA L40S"]
+    pin = C.REVISIONS["Qwen/Qwen3.5-9B"]
+    late = _shard(tmp_path, "a/shard_00_of_01", [{"gpu": l40, "git_sha": "c1"}, {"gpu": l40, "git_sha": "c2"}])
+    probs = Z.provenance_problems({"qwen3.5-9b": [late]}, {}, "c1", run_git=_git())
+    assert any("freeze tag" in p for p in probs["qwen3.5-9b"])
+    # a later commit that changes nothing under wf/, scripts/ or pace/ is code-identical
+    assert Z.provenance_problems({"qwen3.5-9b": [late]}, {}, "c1", run_git=_git(diffs={"c2": "notes/x.md\nREADME.md"})) == {}
+    assert Z.provenance_problems({"qwen3.5-9b": [late]}, {}, None, run_git=_git())["qwen3.5-9b"] == \
+        ["no round-3 freeze tag in this checkout"]
+    mixed = Z.provenance_problems({}, {"qwen3.5-9b": [{"model_revision": pin}, {"model_revision": "other"}]}, "c1")
+    assert any("revisions" in p for p in mixed["qwen3.5-9b"])  # the pinned one among others is not enough
+    assert Z.provenance_problems({}, {"qwen3.5-9b": [{"model_revision": pin}]}, "c1") == {}
+
+
+def test_freeze_commit_and_job_start_check(monkeypatch):
+    assert G.freeze_commit(_git("c1")) == "c1" and G.freeze_commit(_git("")) is None
+    with pytest.raises(SystemExit):
+        G.freeze_commit(lambda a: "textcraft-r3-design-frozen-a\ntextcraft-r3-design-frozen-b" if a[0] == "tag" else "")
+    monkeypatch.setenv("WF_MOCK_SCORE", "0")
+    with pytest.raises(SystemExit):
+        G.require_freeze_commit(_git(""))
+    with pytest.raises(SystemExit):  # HEAD differs in code
+        G.require_freeze_commit(_git("c1"))
+    assert G.require_freeze_commit(_git("c1", diffs={"head": "notes/a.md"}))["checked"] is True
+    monkeypatch.setenv("WF_MOCK_SCORE", "1")
+    assert G.require_freeze_commit(_git(""))["checked"] == "mock"
+
+
+def test_a_family_with_a_provenance_problem_is_refused_alone(small, fast):
+    scores = {t: _planted(small, t) for t in list(R3.CORE) + list(R3.EXTENSION)}
+    out = Z.analyse(small, SHOTS, scores, {}, None, None, {"status": "waiting"}, refused={"A3x": ["x"]})
+    assert out["A3x"]["refused"] == ["x"] and "H3_P" in out["A3"]
+
+
+# M2: "not scored" from the filed gate record
+
+
+def _gate_rec(tmp_path, run, rec, rows=None):
+    d = tmp_path / run / "shard_00_of_01"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "tokenization_checks.json").write_text(json.dumps(rec))
+    if rows is not None:
+        (d / "scoring.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return d
+
+
+def test_model_state_from_filed_gate_records(tmp_path):
+    assert G.model_state(tmp_path, "ministral3-8b-it")["state"] == "waiting"
+    _gate_rec(tmp_path, "textcraft_r3_smoke_ministral3-8b-it", {"ok": True})
+    assert G.model_state(tmp_path, "ministral3-8b-it")["state"] == "waiting"
+    _gate_rec(tmp_path, "textcraft_r3_score_ministral3-8b-it", {"ok": True})
+    assert G.model_state(tmp_path, "ministral3-8b-it")["state"] == "scored"
+    _gate_rec(tmp_path, "textcraft_r3_smoke_qwen3.5-9b", {"ok": False, "loading_failed": "missing keys"})
+    st = G.model_state(tmp_path, "qwen3.5-9b")
+    assert st["state"] == "not scored" and "loading check failed" in st["reasons"][0]
+    _gate_rec(tmp_path, "textcraft_r3_score_olmo3-7b-it", {"ok": False, "attention_agreement": {"ok": False}})
+    assert "attention" in G.model_state(tmp_path, "olmo3-7b-it")["reasons"][0]
+    _gate_rec(tmp_path, "textcraft_r3_score_gemma4-31b-it", {"ok": False, "problems": ["x"]})
+    assert "tokenization gate" in G.model_state(tmp_path, "gemma4-31b-it")["reasons"][0]
+    _gate_rec(tmp_path, "textcraft_r3_smoke_qwen3.8-27b", {"ok": None, "skipped": "mock"})
+    assert G.model_state(tmp_path, "qwen3.8-27b")["state"] == "waiting"
+
+
+def test_a_core_model_not_scored_enters_at_p_one_and_the_readings_proceed(small, fast):
+    scores = {t: _planted(small, t) for t in ("qwen3.5-9b", "gemma4-12b-it") + R3.EXTENSION}
+    states = {"ministral3-8b-it": {"state": "not scored", "reasons": ["loading check failed"]}}
+    out = Z.analyse(small, SHOTS, scores, {}, None, None, {"status": "waiting"}, states=states)
+    a3 = out["A3"]
+    assert a3["not_scored"] == ["ministral3-8b-it"] and a3["waiting"] == []
+    assert all(a3["tests"][f"ministral3-8b-it:{c}:{t}"]["p_in_family"] == 1.0 for c in A.CONTRASTS for t in A.TESTS)
+    assert a3["verdicts"]["ministral3-8b-it"]["contrasts"]["parent_penalty"] == "not scored"
+    assert "H3_P" in a3 and "replication" in a3 and "R2_contemporary" in a3
+    assert "ministral3-8b-it" not in a3["H3_P"]["competent"]
+    assert all(v == "not scored" for c, v in out["B3"]["readings"]["mistral-7b-v0.3->ministral3-8b-it"].items()
+               if c in A.CONTRASTS)
+    waiting = Z.analyse(small, SHOTS, {t: s for t, s in scores.items() if t != "qwen3.5-9b"}, {}, None, None,
+                        {"status": "waiting"}, states=states)
+    assert waiting["A3"]["waiting"] == ["qwen3.5-9b"] and "H3_P" not in waiting["A3"]
+
+
+def test_a_loading_failure_is_filed_and_stops_the_model(mock_runs, small, monkeypatch):
+    man = _manifest(mock_runs, small)
+
+    def broken(spec, tag=None):
+        raise RuntimeError("google/gemma-4-12B-it: loading check failed: ['missing: x']")
+
+    monkeypatch.setattr(FAM, "open_scorer", broken)
+    cfg = {"run_id": "textcraft_r3_smoke_gemma4-12b-it", "model": "gemma4-12b-it", "smoke": True, "manifest": man}
+    assert S.run_textcraft_r3_score(cfg) == 1
+    rec = json.loads((mock_runs / "runs" / "textcraft_r3_smoke_gemma4-12b-it" / "shard_00_of_01" /
+                      "tokenization_checks.json").read_text())
+    assert rec["ok"] is False and "loading check failed" in rec["loading_failed"]
+    assert G.model_state(mock_runs / "runs", "gemma4-12b-it")["state"] == "not scored"
+    monkeypatch.setattr(FAM, "open_scorer", lambda spec, tag=None: (_ for _ in ()).throw(RuntimeError("CUDA out of memory")))
+    with pytest.raises(RuntimeError):  # any other failure is not filed as a gate failure
+        S.run_textcraft_r3_score({**cfg, "run_id": "textcraft_r3_smoke_olmo3-7b-it", "model": "olmo3-7b-it"})
+
+
+# M3 and S9: the Gemma fallback as code
+
+
+def _yn(mass, top="Yes", special=False):
+    lp = math.log(mass / 2)
+    return {"condition": "yn_aligned", "logp_plus": lp, "logp_minus": lp, "top_token": top, "top_token_special": special}
+
+
+def test_gemma_slot_rule(tmp_path):
+    run = f"textcraft_r3_smoke_{R3.GEMMA_CORE}"
+    assert G.gemma_slot(tmp_path)["slot"] == "waiting"
+    _gate_rec(tmp_path, run, {"ok": True}, [_yn(0.9)] * 4)
+    assert G.gemma_slot(tmp_path)["slot"] == R3.GEMMA_CORE
+    for rec, why in (({"ok": False, "loading_failed": "x"}, "loading"), ({"ok": False, "problems": ["x"]}, "gate"),
+                     ({"ok": False, "attention_agreement": {"ok": False}}, "attention")):
+        _gate_rec(tmp_path, run, rec, [_yn(0.9)] * 4)
+        out = G.gemma_slot(tmp_path)
+        assert out["slot"] == R3.GEMMA_FALLBACK and why in out["triggers"][0]
+    # S9: low mass alone does not fire (it goes to the competence gate); with structural next tokens it does
+    _gate_rec(tmp_path, run, {"ok": True}, [_yn(0.1, "No")] * 4)
+    assert G.gemma_slot(tmp_path)["slot"] == R3.GEMMA_CORE
+    _gate_rec(tmp_path, run, {"ok": True}, [_yn(0.1, "<|channel>", True)] * 3 + [_yn(0.1, "Yes")])
+    out = G.gemma_slot(tmp_path)
+    assert out["slot"] == R3.GEMMA_FALLBACK and "format mismatch" in out["triggers"][0]
+    _gate_rec(tmp_path, run, {"ok": True}, [_yn(0.9, "**")] * 4)  # structural but enough mass: no
+    assert G.gemma_slot(tmp_path)["slot"] == R3.GEMMA_CORE
+    _gate_rec(tmp_path, run, {"ok": True}, [_yn(0.1, "**")] * 2 + [_yn(0.1, "Yes")] * 2)  # half is not most
+    assert G.gemma_slot(tmp_path)["slot"] == R3.GEMMA_CORE
+
+
+def test_structural_tokens():
+    for t, sp in (("<|channel>", False), ("  ", False), ("**", False), ("#", False), ("`", False), ("x", True)):
+        assert G.structural(t, sp)
+    for t in ("Yes", " No", "yes", "The", "C"):
+        assert not G.structural(t, False)
+
+
+def test_the_fallback_model_runs_only_when_the_rule_fired(mock_runs, small):
+    man = _manifest(mock_runs, small)
+    cfg = {"run_id": "textcraft_r3_smoke_gemma4-e4b-it", "model": "gemma4-e4b-it", "smoke": True, "manifest": man}
+    with pytest.raises(SystemExit):
+        S.run_textcraft_r3_score(cfg)
+    _gate_rec(mock_runs / "runs", f"textcraft_r3_smoke_{R3.GEMMA_CORE}", {"ok": False, "problems": ["x"]}, [])
+    assert S.run_textcraft_r3_score(cfg) == 0
+
+
+def test_smoke_runs_record_the_format_diagnostic(mock_runs, small):
+    man = _manifest(mock_runs, small)
+    assert S.run_textcraft_r3_score({"run_id": "textcraft_r3_smoke_qwen3.5-9b", "model": "qwen3.5-9b", "smoke": True,
+                                     "manifest": man}) == 0
+    rows = Z.scores_of("textcraft_r3_smoke_qwen3.5-9b", "qwen3.5-9b", mock_runs / "runs")
+    yn = [r for r in rows if r["condition"].startswith("yn_")]
+    assert yn and all("top_token" in r for r in yn) and not any("top_token" in r for r in rows if r not in yn)
+    assert G.smoke_diagnostic(rows)["n_top_tokens"] == len(yn)
+
+
+def test_the_analysis_refuses_a_gemma_core_the_rule_does_not_give(mock_runs, small):
+    man = _manifest(mock_runs, small)
+    assert Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man,
+                                        "gemma_core": "gemma4-e4b-it"}) == 1
+    status = (mock_runs / "runs" / "textcraft_r3_analysis" / "STATUS.md").read_text()
+    assert "fallback rule gives 'gemma4-12b-it'" in status
+
+
+def test_the_fallback_slot_moves_every_core_role(small, fast):
+    scores = {t: _planted(small, t) for t in ("qwen3.5-9b", "ministral3-8b-it", "gemma4-e4b-it") + R3.EXTENSION}
+    out = Z.analyse(small, SHOTS, scores, {}, None, None, {"status": "waiting"}, gemma="gemma4-e4b-it")
+    assert out["A3"]["tags"] == ["qwen3.5-9b", "ministral3-8b-it", "gemma4-e4b-it"] and out["fallback_used"]
+    assert "gemma2-9b-it->gemma4-e4b-it" in out["B3"]["readings"]
+
+
+# M4: the environment check mirrors round 2's shards
+
+
+def _r2_shards(tmp_path, tag, gpus):
+    for i, g in enumerate(gpus):
+        jobs = g if isinstance(g, list) and g and isinstance(g[0], list) else [g]
+        _shard(tmp_path, f"textcraft_r2_score_{tag}/shard_{i:02d}_of_{len(gpus):02d}", [{"gpu": j} for j in jobs])
+
+
+def test_envcheck_plan_from_round_two_gpu_names(tmp_path, records):
+    from wf.textcraft.r2_score import shard_records
+
+    L, A40 = ["NVIDIA L40S"], ["NVIDIA A40"]
+    _r2_shards(tmp_path, "qwen3-8b", [L, L, L, L])
+    p = G.envcheck_plan(tmp_path, "qwen3-8b", records)
+    assert p["single_type"] and p["runnable"] and p["n_comparable_planned"] == 300
+    assert p["jobs"] == [{"job": 0, "gpu": "NVIDIA L40S", "r2_shards": [0, 1, 2, 3]}]
+    _r2_shards(tmp_path, "mistral-7b-v0.3", [L, A40, [L, A40], None])
+    p = G.envcheck_plan(tmp_path, "mistral-7b-v0.3", records)
+    assert [s["typed"] for s in p["shards"]] == [True, True, False, False]
+    assert p["jobs"] == [{"job": 0, "gpu": "NVIDIA L40S", "r2_shards": [0]}, {"job": 1, "gpu": "NVIDIA A40", "r2_shards": [1]}]
+    seeded = {r["id"] for r in S.envcheck_subset(records)}
+    assert p["shards"][0]["n_records"] == sum(r["id"] in seeded for r in shard_records(records, 0, 4))
+    assert p["n_comparable_planned"] == p["shards"][0]["n_records"] + p["shards"][1]["n_records"]
+    assert not p["runnable"]  # 75 + 55 seeded records
+    assert G.envcheck_plan(tmp_path, "gemma2-9b-it", records)["status"] == "waiting"
+
+
+def test_envcheck_jobs_score_round_two_shards_on_the_exact_gpu(mock_runs, records, monkeypatch):
+    from wf.textcraft.r2_score import shard_records
+
+    plan = {"models": {"qwen3-8b": {"runnable": True, "n_r2_shards": 4, "jobs": [
+        {"job": 0, "gpu": "NVIDIA L40S", "r2_shards": [0]}, {"job": 1, "gpu": "NVIDIA A40", "r2_shards": [1, 3]}]}}}
+    job = G.plan_job("qwen3-8b", 1, plan)
+    recs = S.envcheck_job_records(records, job)
+    ids = {r["id"] for i in (1, 3) for r in shard_records(records, i, 4)}
+    assert recs and all(r["id"] in ids for r in recs) and len(recs) == len([r for r in S.envcheck_subset(records) if r["id"] in ids])
+    with pytest.raises(SystemExit):
+        G.plan_job("qwen3-8b", 2, plan)
+    with pytest.raises(SystemExit):
+        G.plan_job("qwen3-8b", 0, {"models": {"qwen3-8b": {"runnable": False, "jobs": []}}})
+    monkeypatch.setenv("WF_MOCK_SCORE", "0")
+    with pytest.raises(SystemExit):
+        S.gpu_check("qwen3-8b-serve2", ["NVIDIA L40S"], exact=["NVIDIA A40"])
+    assert S.gpu_check("qwen3-8b-serve2", ["NVIDIA A40"], exact=["NVIDIA A40"])["checked"] is True
+    with pytest.raises(SystemExit):
+        S.gpu_check("qwen3-8b-serve2", ["NVIDIA A40", "NVIDIA A40"], exact=["NVIDIA A40"])
+    monkeypatch.setenv("WF_MOCK_SCORE", "1")
+    man = _manifest(mock_runs, records)
+    assert S.run_textcraft_r3_envcheck({"run_id": "textcraft_r3_envcheck_qwen3-8b", "model": "qwen3-8b",
+                                        "manifest": man, "job": 1, "plan": plan}) == 0
+    d = mock_runs / "runs" / "textcraft_r3_envcheck_qwen3-8b" / "shard_01_of_02"
+    got = {json.loads(x)["transition_id"] for x in (d / "scoring.jsonl").read_text().splitlines()}
+    assert got == {r["id"] for r in recs}
+
+
+def _env_scores(recs, tag, shift=0.0, model=None, only_non_main=False):
+    out = []
+    for r in recs:
+        for a in r["arms"]:
+            base = (hash((r["id"], a)) % 100) / 10
+            bump = shift if a in ("aligned", "yn_aligned") else 0.0
+            if only_non_main and r["kind"] == "main" and r["population"] == "main":
+                bump = 0.0
+            out.append({"transition_id": r["id"], "condition": a, "model": model or tag, "L": base + bump})
+    return out
+
+
+def test_environment_check_matches_gpus_record_by_record(records, tmp_path):
+    from wf.textcraft.r2_score import shard_records
+
+    seeded = S.envcheck_subset(records)
+    parts = {i: [r for r in shard_records(records, i, 4) if r in seeded] for i in range(4)}
+    gpus = {}
+    old, new = [], []
+    for i in range(4):
+        po, pn = tmp_path / f"old{i}", tmp_path / f"new{i}"
+        gpus[po] = gpus[pn] = ["NVIDIA L40S"] if i % 2 == 0 else ["NVIDIA A40"]
+        old.append((po, _env_scores(parts[i], "qwen3-8b")))
+        new.append((pn, _env_scores(parts[i], "qwen3-8b", model="qwen3-8b-serve2")))
+    out = Z.envcheck_block(old, new, "qwen3-8b", records, gpus.get)
+    assert out["status"] == "pass" and out["n_comparable_records"] == 300
+    gpus[tmp_path / "new3"] = ["NVIDIA L40S"]  # shard 3 rescored on another type: its records are not comparable
+    out = Z.envcheck_block(old, new, "qwen3-8b", records, gpus.get)
+    assert out["n_comparable_records"] == 300 - len(parts[3])
+    gpus[tmp_path / "new3"] = None  # a rescoring shard on mixed GPUs (untyped): not comparable either
+    assert Z.envcheck_block(old, new, "qwen3-8b", records, gpus.get)["n_comparable_records"] == 300 - len(parts[3])
+    gpus[tmp_path / "new0"] = gpus[tmp_path / "new3"] = ["NVIDIA H100"]
+    few = Z.envcheck_block(old, new, "qwen3-8b", records, gpus.get)
+    assert few["status"] == "waiting" and few["pass"] is None
+    assert Z.envcheck_block(old, new, "qwen3-8b", records, gpus.get, unobtainable=True)["status"] == "not run (GPU types)"
+
+
+def test_environment_check_criteria(records, tmp_path):
+    seeded = S.envcheck_subset(records)
+    g = {tmp_path / "o": ["NVIDIA L40S"], tmp_path / "n": ["NVIDIA L40S"]}
+    old = [(tmp_path / "o", _env_scores(seeded, "qwen3-8b"))]
+    run = lambda **kw: Z.envcheck_block(old, [(tmp_path / "n", _env_scores(seeded, "qwen3-8b", model="qwen3-8b-serve2", **kw))],  # noqa: E731
+                                        "qwen3-8b", records, g.get)
+    assert run()["status"] == "pass"
+    bad = run(shift=0.2)
+    assert bad["status"] == "fail" and not bad["checks"]["two_candidate_goal_effect"]
+    # the goal effect is read on the main failures only: a shift on other records moves no effect criterion
+    other = run(shift=0.2, only_non_main=True)
+    assert other["checks"]["two_candidate_goal_effect"] and other["checks"]["yes_no_goal_effect"]
+    assert other["two_candidate"]["n_main_failures"] == sum(r["kind"] == "main" and r["population"] == "main" for r in seeded)
+    half = [(tmp_path / "n", _env_scores(seeded[:150], "qwen3-8b", model="qwen3-8b-serve2"))]
+    assert Z.envcheck_block(old, half, "qwen3-8b", records, g.get)["status"] == "waiting"
+    drop = {r["id"] for r in seeded[:10]}
+    gap = [(tmp_path / "n", [x for x in _env_scores(seeded, "qwen3-8b", model="qwen3-8b-serve2")
+                            if not (x["transition_id"] in drop and x["condition"] == "yn_swapped")])]
+    out = Z.envcheck_block(old, gap, "qwen3-8b", records, g.get)
+    assert not out["checks"]["complete"] and out["status"] == "fail"
+
+
+def test_environment_check_share_criterion(records, tmp_path):
+    seeded = S.envcheck_subset(records)
+    mf = [r for r in seeded if r["kind"] == "main" and r["population"] == "main"]
+    old_rows, new_rows = [], []
+    for k, r in enumerate(seeded):
+        for a in r["arms"]:
+            L = 0.0
+            if a == "yn_aligned" and r in mf:
+                L = 0.01 if k % 2 else -0.01  # aligned minus swapped straddles zero by a hundredth
+            old_rows.append({"transition_id": r["id"], "condition": a, "model": "qwen3-8b", "L": L})
+            new_rows.append({"transition_id": r["id"], "condition": a, "model": "qwen3-8b-serve2",
+                             "L": abs(L) if a == "yn_aligned" else L})  # every item now toward yes
+    g = {tmp_path / "o": ["NVIDIA L40S"], tmp_path / "n": ["NVIDIA L40S"]}
+    out = Z.envcheck_block([(tmp_path / "o", old_rows)], [(tmp_path / "n", new_rows)], "qwen3-8b", records, g.get)
+    assert out["checks"]["yes_no_goal_effect"] and out["checks"]["yes_no_per_score"]
+    assert not out["checks"]["yes_no_share"] and out["status"] == "fail"
+
+
+def test_environment_check_per_score_criterion_is_wave_bs_live_rule(monkeypatch):
+    assert Z.per_score_check("yes_no", [0.05, -0.05], [], [])["ok"]
+    monkeypatch.setitem(FAM.ENVCHECK_RULE, "yes_no_mean_abs_max", 0.01)  # wave B's rule as amended is read live
+    assert not Z.per_score_check("yes_no", [0.05, -0.05], [], [])["ok"]
+    monkeypatch.setattr(FAM, "envcheck_per_score_check", lambda fmt, d, o, n: True, raising=False)
+    out = Z.per_score_check("yes_no", [9.0], [], [])
+    assert out["ok"] and out["source"] == "families.envcheck_per_score_check"
+
+
+def test_environment_status_and_b3_source():
+    ok_tok = {t: {"ok": True} for t in R3.ENVCHECK_MODELS}
+    st = lambda *s: {t: {"status": x} for t, x in zip(R3.ENVCHECK_MODELS, s)}  # noqa: E731
+    assert Z.environment_status(st("pass", "pass", "pass"), ok_tok) == "pass"
+    assert Z.environment_status(st("pass", "fail", "not run (GPU types)"), ok_tok) == "fail"
+    assert Z.environment_status(st("pass", "not run (GPU types)", "pass"), ok_tok) == "not run (GPU types)"
+    assert Z.environment_status(st("pass", "not run (GPU types)", "waiting"), ok_tok) == "waiting"
+    assert Z.environment_status(st("pass", "pass"), ok_tok) == "waiting"  # Gemma 2 required too (S8)
+    assert Z.environment_status(st("pass", "pass", "pass"), {**ok_tok, "gemma2-9b-it": {"ok": False}}) == "fail"
+    assert Z.b3_source("pass", {}) == "round2" and Z.b3_source("fail", {}) == "rescore"
+    assert Z.b3_source("not run (GPU types)", {}) == "rescore" and Z.b3_source("waiting", {}) == "waiting"
+    with pytest.raises(ValueError):
+        Z.b3_source("pass", {"b3_old_scores": "rescore"})
+    assert R3.ENVCHECK_MODELS == ("qwen3-8b", "mistral-7b-v0.3", "gemma2-9b-it")
+
+
+def test_b3_follows_the_environment_check(small, fast, monkeypatch):
+    monkeypatch.setenv("WF_MOCK_SCORE", "1")
+    scores = {t: _planted(small, t) for t in list(R3.CORE) + list(R3.EXTENSION)}
+    old = {t: _planted(small, t) for t, _n in R3.PAIRS}
+    wait = Z.analyse(small, SHOTS, scores, {}, None, old, {"status": "waiting"})
+    assert wait["B3"]["differences"] == {} and wait["B3"]["old_scores"] == "waiting"
+    assert all(v == "waiting for the environment check" for r in wait["B3"]["readings"].values() for c, v in r.items()
+               if c in A.CONTRASTS)
+    failed = Z.analyse(small, SHOTS, scores, {}, None, old, {"status": "fail"})
+    assert failed["B3"]["old_scores"] == "rescore" and set(failed["B3"]["differences"]) == {f"{o}->{n}" for o, n in R3.PAIRS}
+    with pytest.raises(ValueError):
+        Z.analyse(small, SHOTS, scores, {"b3_old_scores": "round2"}, None, old, {"status": "fail"})
+    refused = Z.analyse(small, SHOTS, scores, {}, None, old, {"status": "pass"}, refused={"B3": ["round 2: x"]})
+    assert refused["B3"]["differences"] == {}
+    assert all(v == "refused (provenance)" for r in refused["B3"]["readings"].values() for c, v in r.items() if c in A.CONTRASTS)
+
+
+def test_b3_uses_twenty_thousand_resamples_outside_mock(small, fast, monkeypatch):
+    scores = {t: _planted(small, t) for t in list(R3.CORE) + list(R3.EXTENSION)}
+    old = {t: _planted(small, t) for t, _n in R3.PAIRS}
+    monkeypatch.setenv("WF_MOCK_SCORE", "0")
+    with pytest.raises(ValueError):
+        Z.analyse(small, SHOTS, scores, {"b_draws": 200}, None, old, {"status": "pass"})
+    out = Z.analyse(small, SHOTS, scores, {}, None, old, {"status": "pass"})
+    d = out["B3"]["differences"]["qwen3-8b->qwen3.5-9b"]["lift"]["standardized"]
+    assert d["n_draws"] == Z.B_DRAWS == 300  # the family's draw count (the fast fixture's stand-in for 20,000)
+
+
+def test_planted_pairs_are_read_on_the_standardized_scale(small, fast, monkeypatch):
+    """A newer model that is the older one at three times the logit scale differs in nats but not standardized."""
+    monkeypatch.setenv("WF_MOCK_SCORE", "1")
+    scores = {t: _planted(small, t, scale=1.0) for t in list(R3.CORE) + list(R3.EXTENSION)}
+    old = {}
+    for o, n in R3.PAIRS:
+        base = _planted(small, n, scale=1.0)
+        old[o] = [{**s, "model": o, "L": s["L"] / 3, "logp_minus": -1.0 - s["L"] / 3,
+                   "logp_first_minus": -0.5 - s["L"] / 6} for s in base]
+    out = Z.analyse(small, SHOTS, scores, {"b_draws": 200}, None, old, {"status": "pass"})
+    d = out["B3"]["differences"]["qwen3-8b->qwen3.5-9b"]["lift"]
+    assert d["standardized"]["estimate"] == pytest.approx(0, abs=1e-9)
+    assert d["raw_nats_descriptive"]["estimate"] > 0
+    assert "fixed_denominator_descriptive" in d and "equivalence_power_at_zero_holm_first_step" in d["standardized"]
+    assert not out["B3"]["readings"]["qwen3-8b->qwen3.5-9b"]["lift"].startswith("differs, newer higher")
+
+
+# S2, S3, S4, S11
+
+
+def test_round_three_power_uses_holm_first_step_of_thirty(small, fast):
+    by = {(s["transition_id"], s["condition"]): s for s in _planted(small, "m")}
+    block = A.model_block(by, A.populations(small))
+    rec = block["contrasts"]["lift"]
+    Z.holm30_power(block)
+    assert rec["holm_first_step_z"] == R3.Z_FIRST_30
+    assert rec["equivalence_power_at_zero_holm_first_step"] == pytest.approx(
+        A.equivalence_power(rec["bootstrap_se"], rec["margin"], 2.935199))
+    assert rec["equivalence_underpowered"] == (not rec["equivalence_power_at_zero_holm_first_step"] >= 0.8)
+    assert "equivalence_power_at_zero_holm_first_step_round2_family" in rec
+    assert abs(statistics.NormalDist().inv_cdf(1 - 0.05 / 30) - R3.Z_FIRST_30) < 1e-5
+
+
+def test_b3_equivalence_power_and_the_underpowered_flag():
+    old, new = _values(seed=11), _values(seed=12)
+    d = Z.paired_difference(old, new, False, B=300)["standardized"]
+    se = d["bootstrap_se"]
+    assert d["equivalence_power_at_zero_holm_first_step"] == pytest.approx(A.equivalence_power(se, 0.20, R3.Z_FIRST_30))
+    assert d["equivalence_power_at_zero_alpha_05"] == pytest.approx(A.equivalence_power(se, 0.20, R3.Z_ALPHA))
+    k = "qwen3-8b->qwen3.5-9b"
+    fam = {f"{k}:{c}:{t}": {"p_holm": 0.5} for c in A.CONTRASTS for t in A.TESTS}
+    rec = {"standardized": {"estimate": 0.0, "ci95": [-0.3, 0.3], "old": -0.5, "new": -0.5,
+                            "equivalence_underpowered": True}}
+    assert Z.pair_reading(rec, fam, f"{k}:timing") == "not distinguishable (equivalence underpowered)"
+    rec["standardized"]["equivalence_underpowered"] = False
+    assert Z.pair_reading(rec, fam, f"{k}:timing") == "not distinguishable"
+
+
+def test_b3_fixed_denominator_column():
+    old, new = _values(seed=21), _values(seed=22)
+    d = Z.paired_difference(old, new, False, B=100, fixed_sd=(2.0, 4.0))["fixed_denominator_descriptive"]
+    ro = statistics.mean(x for _r, x, _p in old.values())
+    rn = statistics.mean(x for _r, x, _p in new.values())
+    assert d["estimate"] == pytest.approx(rn / 4.0 - ro / 2.0) and d["ci95"][0] <= d["ci95"][1]
+
+
+def test_pair_readings_say_the_direction_in_plain_words():
+    k = "qwen3-8b->qwen3.5-9b"
+    fam = {f"{k}:{c}:{t}": {"p_holm": 0.001 if t == "differs" else 0.9} for c in A.CONTRASTS for t in A.TESTS}
+    rec = lambda o, n: {"standardized": {"estimate": n - o, "ci95": [n - o - 0.05, n - o + 0.05], "old": o, "new": n}}  # noqa: E731
+    assert Z.pair_reading(rec(-0.8, -0.3), fam, f"{k}:parent_penalty") == \
+        "differs, newer higher (smaller in size (a smaller penalty))"
+    assert Z.pair_reading(rec(-0.3, -0.8), fam, f"{k}:parent_penalty") == \
+        "differs, newer lower (larger in size (a larger penalty))"
+    assert Z.pair_reading(rec(0.3, 0.8), fam, f"{k}:lift") == "differs, newer higher (larger in size)"
+    assert Z.pair_reading(rec(-0.3, 0.4), fam, f"{k}:lift") == "differs, newer higher (opposite signs)"
+
+
+def test_exploratory_blocks_carry_no_p_values(small, fast, monkeypatch):
+    monkeypatch.setenv("WF_MOCK_SCORE", "1")
+    scores = {t: _planted(small, t) for t in list(R3.CORE) + list(R3.EXTENSION)}
+    think = [{**s, "model": R3.THINK_TAG, "forced": False, "n_new_tokens": 5} for s in _planted(small, "qwen3.5-9b")]
+    out = Z.analyse(small, SHOTS, scores, {}, None, None, {"status": "waiting"}, think=think)
+    text = json.dumps(out["exploratory"])
+    assert '"p_differs"' not in text and '"p_equivalent"' not in text
+    assert "qwen3.5-9b->qwen3.8-27b" in out["exploratory"] and "thinking_arm" in out["exploratory"]
+
+
+# S10 and the reviewer's thinking-arm mutants
+
+
+def test_thinking_unforced_subset_and_forced_reasons(small):
+    base = [{**s, "model": R3.THINK_TAG, "n_new_tokens": 5} for s in _planted(small, "qwen3.5-9b")]
+    for k, s in enumerate(base):
+        s["forced"] = k % 3 == 0
+        s["forced_reason"] = (K.CAP if k % 6 == 0 else K.ENDED) if s["forced"] else None
+        if s["forced"]:
+            s["L"] = 1e6  # a forced trace must not reach the unforced readouts
+    off = {(s["transition_id"], s["condition"]): s for s in _planted(small, "qwen3.5-9b")}
+    out = Z.think_block(base, off, small)
+    assert out["unforced"]["n_scores"] == sum(not s["forced"] for s in base) < out["all"]["n_scores"]
+    assert abs(out["unforced"]["parent_penalty"]["thinking_on"]["estimate"]) < 1e5
+    assert out["cap_share"] + out["ended_unclosed_share"] == pytest.approx(out["forced_share"])
+    assert out["cap_share"] == pytest.approx(sum(s["forced_reason"] == K.CAP for s in base) / len(base))
+
+
+def test_thinking_batches_have_their_own_seeds_in_record_and_arm_order(mock_runs, records):
+    man = _manifest(mock_runs, records)
+    assert K.run_textcraft_r3_think({"run_id": "textcraft_r3_think_smoke_qwen3.5-9b", "manifest": man, "max_jobs": 24}) == 0
+    d = mock_runs / "runs" / "textcraft_r3_think_smoke_qwen3.5-9b" / "shard_00_of_01"
+    gens = [json.loads(x) for x in (d / "generations.jsonl").read_text().splitlines()]
+    keys = [g["batch_key"] for g in gens]
+    assert len(set(keys)) == 3 and all(g["seed"] == K.batch_seed(g["batch_key"]) for g in gens)
+    assert len({g["seed"] for g in gens}) == 3
+    jobs = K.think_jobs(records)[:24]
+    assert [(g["transition_id"], g["condition"]) for g in gens] == [(r["id"], a) for r, a in jobs]
+    assert jobs == sorted(jobs, key=lambda x: (x[0]["id"], x[1]))
+    assert keys[0] == f"{jobs[0][0]['id']}|{jobs[0][1]}" and keys[8] == f"{jobs[8][0]['id']}|{jobs[8][1]}"
+    assert {g["forced_reason"] for g in gens} <= {None, K.CAP, K.ENDED}
+
+
+def test_thinking_start_checks():
+    spec = R3.THINK_SPEC
+    good = "x " + R.SYSTEM + " y" + spec.thinking_on_ending
+    assert K.prompt_problems([good]) == []
+    assert any("does not end" in p for p in K.prompt_problems([good + "z"]))
+    assert any("system text" in p for p in K.prompt_problems(["x" + spec.thinking_on_ending]))
+    assert any("contains" in p for p in K.prompt_problems([good], replace(spec, forbidden_in_prompt=("y",))))
+    assert K.padding_problems([-1.0, -2.0], [-1.02, -2.01]) == []
+    assert K.padding_problems([-1.0, -2.0], [-1.5, -2.0])  # mean 0.25 above 0.10
+    assert K.padding_problems([-1.0] * 20, [-1.0] * 19 + [-2.5])  # one token 1.5 apart
+    assert K.padding_problems([], [])
+
+
+def test_mock_end_to_end(mock_runs, small, monkeypatch, fast):
+    """Round 2 scored and analysed (mock), every round-3 run scored (mock) with the environment check run from a
+    plan, the thinking arm and both format checks, then the round-3 analysis: three families of 30, H3-P,
+    replication against round 2's filed verdicts, and B3 on round 2's scores after the environment check."""
+    man = _manifest(mock_runs, small)
+    for tag in R.TAGS:
+        assert S2.run_textcraft_r2_score({"run_id": f"textcraft_r2_score_{tag}", "model": tag, "manifest": man}) == 0
+    assert A.run_textcraft_r2_analysis({"run_id": "textcraft_r2_analysis", "manifest": man, "models": list(R.TAGS)}) in (0, 1)
+    for tag in list(R3.CORE) + list(R3.EXTENSION):
+        assert S.run_textcraft_r3_score({"run_id": f"textcraft_r3_score_{tag}", "model": tag, "manifest": man}) == 0
+    for tag in R3.ENVCHECK_MODELS:
+        plan = {"models": {tag: {"runnable": True, "n_r2_shards": 1, "jobs": [{"job": 0, "gpu": "mock", "r2_shards": [0]}]}}}
+        assert S.run_textcraft_r3_envcheck({"run_id": f"textcraft_r3_envcheck_{tag}", "model": tag, "manifest": man,
+                                            "plan": plan}) == 0
+    assert S.run_textcraft_r3_format({"run_id": "textcraft_r3_placement_gemma4-12b-it", "model": "gemma4-12b-it",
+                                      "check": "placement", "manifest": man}) == 0
+    assert S.run_textcraft_r3_format({"run_id": "textcraft_r3_nopreserve_qwen3.8-27b", "model": "qwen3.8-27b",
+                                      "check": "nopreserve", "manifest": man}) == 0
+    assert K.run_textcraft_r3_think({"run_id": "textcraft_r3_think_qwen3.5-9b", "manifest": man}) == 0
+    monkeypatch.setattr(Z, "golden_tokens_check", lambda *a: {"ok": True})
+    assert Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man}) == 0
+    m = json.loads((mock_runs / "runs" / "textcraft_r3_analysis" / "metrics.json").read_text())
+    assert m["A3"]["family_size"] == m["A3x"]["family_size"] == m["B3"]["family_size"] == 30
+    assert m["A3"]["waiting"] == [] and m["A3x"]["waiting"] == []
+    assert m["A3"]["H3_P"]["overall"] in ("supported", "rejected", "partial", "inconclusive")
+    assert all(r["reading"] != "waiting (round 2's analysis not filed)" for r in m["A3"]["replication"].values())
+    assert m["environment_check"]["status"] == "pass" and m["B3"]["old_scores"] == "round2"
+    assert set(m["environment_check"]["models"]) == set(R3.ENVCHECK_MODELS)
+    assert set(m["B3"]["differences"]) == {f"{o}->{n}" for o, n in R3.PAIRS}
+    assert m["round2_analysis_read"]["metrics_sha256"] and m["gemma_slot"]["slot"] == "waiting"
+    ex = m["exploratory"]
+    assert set(ex["format_checks"]) == {"placement", "nopreserve"} and "thinking_arm" in ex
+    assert {"qwen3.5-9b->qwen3.8-27b", "gemma4-12b-it->gemma4-31b-it"} <= set(ex)
+    # S6: a round-2 score with another revision fails round 2's provenance check, and B3 is refused
+    p = next((mock_runs / "runs" / "textcraft_r2_score_qwen3-8b").glob("shard_*/scoring.jsonl"))
+    rows = p.read_text().splitlines()
+    first = json.loads(rows[0])
+    first["model_revision"] = "another"
+    p.write_text("\n".join([json.dumps(first)] + rows[1:]) + "\n")
+    assert Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man}) == 0
+    m = json.loads((mock_runs / "runs" / "textcraft_r3_analysis" / "metrics.json").read_text())
+    assert m["B3"]["differences"] == {}
+    assert all(v == "refused (provenance)" for r in m["B3"]["readings"].values() for c, v in r.items() if c in A.CONTRASTS)
