@@ -271,6 +271,37 @@ Built after this note is committed; nothing round-2 or wave-B specific changes b
 - `wf/textcraft/r3_analysis.py`: `textcraft_r3_analysis` (families A3, A3x, B3; H3-P; the replication rule; R2 for round 3; standardized and first-token / tail readouts; the environment check; the thinking arm; the format checks; provenance and GPU checks).
 - Configs `wf/config/textcraft_r3_*.yaml`; jobs `pace/textcraft_r3_score.sbatch` (GPU, serve2, node-local weights) and `pace/textcraft_r3_tokcheck.sbatch` (CPU); tests `tests/test_textcraft_r3.py` and the serve2-only `tests/test_textcraft_r3_serve2.py`; round-3 mutants in `scripts/mutation_check.py` under the strict named-kill rule.
 
-## 13. Checks before the freeze (filled in as they are run)
+## 13. Checks before the freeze (2026-11-22 and 23; no model loaded with real weights, no round-3 score)
 
-To be recorded here: golden renderings per model; the CPU gate on every record and arm for every model (ICE, checkout `text-wm-fix43`); the weights manifests; serve2 tiny-model forward tests for each new architecture; a mocked end-to-end dry run; tests for every decision rule; mutation testing; the full suite once at the end.
+**Merge.** Round 2's tag, then wave B's (merge commits ed533a9 and 7dbbccf). Every round-2 file and round-2 test equals round 2's tag, and every wave-B file equals wave B's tag; three files that both studies append to were merged by keeping both sides (section 12). Full local suite on the merge: 1,154 passed, 25 skipped.
+
+**The round-3 gate on every record and arm, all twelve tags** (ICE, fresh checkout `text-wm-fix43` from a git bundle at 799f8c3, CPU job 7246224, serve2: transformers 5.23.0, tokenizers 0.23.3, offline, tokenizer and config files only, in a cache inside the checkout; `wf/textcraft/data/r3_tokcheck_ice.json`). For each of the seven models, the two format variants and the three earlier models as serve2 loads them: 32,942 candidate checks, 9,272 yes/no prompts, 17,057 arm pairs isolated, **0 problems**. Every round-3 model's 25,743 prompts end with its declared thinking-off ending; Ministral 3's 25,743 prompts equal mistral-common's encoding.
+
+| Tag | Yes / No ids | First tokens (success vs failure) | Longest input | Minutes |
+|---|---|---|---|---|
+| `qwen3.5-9b` | 9175 / 2665 | "Craft" vs "Could" | 1,832 | 11.6 |
+| `ministral3-8b-it` | 16860 / 4753 | "C" vs "Could" | 1,848 | 17.1 |
+| `gemma4-12b-it` | 10784 / 3771 | "Craft" vs "Could" | 1,717 | 11.8 |
+| `gemma4-e4b-it` | 10784 / 3771 | "Craft" vs "Could" | 1,713 | 11.7 |
+| `qwen3.8-27b` | 9175 / 2665 | "Craft" vs "Could" | 1,844 | 11.7 |
+| `gemma4-31b-it` | 10784 / 3771 | "Craft" vs "Could" | 1,717 | 11.8 |
+| `olmo3-7b-it` | 9642 / 2822 | "Craft" vs "Could" | 1,815 | 11.6 |
+| `gemma4-12b-it-firstturn` | 10784 / 3771 | "Craft" vs "Could" | 1,713 | 12.4 |
+| `qwen3.8-27b-nopreserve` | 9175 / 2665 | "Craft" vs "Could" | 1,832 | 11.8 |
+| `qwen3-8b-serve2` | 9454 / 2753 | "Craft" vs "Could" | 1,819 | 11.0 |
+| `mistral-7b-v0.3-serve2` | 6360 / 2538 | "Craft" vs "Could" | 2,054 | 9.1 |
+| `gemma2-9b-it-serve2` | 3553 / 1294 | "C" vs "Could" | 1,706 | 7.8 |
+
+**Golden renderings** (`wf/textcraft/data/r3_chat_golden.json`, from the same job): round 2's five cases for all twelve tags. **Environment check, part 1:** the serve2 renderings of Qwen3-8B, Mistral-7B-v0.3 and Gemma-2-9B-it equal round 2's stored renderings (made with transformers 4.51.3) in text, id count and id hash, in all five cases (a test pins this).
+
+**Weights manifests** (`wf/config/weights_manifests/`, Hub metadata only, no token; neither repository is gated): Gemma 4 12B-it, 7 files, 23.95 GB; OLMo 3 7B Instruct, 12 files, 14.61 GB; `snapshot_download(dry_run=True)` plans exactly the same files and sizes. The other five models use wave B's committed manifests.
+
+**serve2 forward tests** (`tests/test_textcraft_r3_serve2.py`, ICE CPU job 7246366: 4 passed). Tiny random-weight models built from the pinned configs of `Gemma4UnifiedForConditionalGeneration` and `Olmo3ForCausalLM` pass the round-3 gate on a round-2 record with the real pinned tokenizers and score it end to end (two-candidate and yes/no; the one-pass and two-pass yes/no scores agree). The Gemma 4 12B tiny model, saved with its vision-embedder tensors under the names the real checkpoint stores, loads back under the strict loading check with no missing, mismatched or unexpected parameter and with identical tensors: transformers renames the stored names on load. The eager-against-SDPA agreement check passes on the real class and switches back to SDPA. Wave B's own serve2 forward tests pass on the merged code in the same environment (job 7246496: 14 passed, 1 skipped, the skip being the Qwen3.5 base model, whose tokenizer the checkout's cache does not hold).
+
+**Mocked dry run, end to end** (`scripts/textcraft_r3_dryrun.py`, every scorer the mock scorer, round 2's full records): in a fresh runs folder, round 2's five models (128,715 scores, round 2's own run) and round 2's analysis, then every round-3 run in its config's shards: the six core and extension models (25,743 scores each, none missing), both environment-check rescorings (2,602 scores each: every arm of the 300 seeded records), both format checks and the thinking arm (4,530 generations and scores, a quarter of them budget-forced by the mock). The round-3 analysis exits 0 and writes every block: families A3, A3x and B3 of 30 tests each, H3-P, the replication readings against round 2's filed (mock) verdicts, the environment check (passed on the mock scores, with part 1 read from the golden files), all three pairs, the size comparisons, both format checks, the thinking arm and the capability table; 22 minutes on a laptop. The mock scores carry no effect, so no reading means anything.
+
+**Tests and mutants.** `tests/test_textcraft_r3.py`: 52 tests (every decision rule of section 7 and 8, the gate, the runs, the thinking arm, two end-to-end mock runs, the golden file). Mutation testing under wave B's strict named-kill rule (`notes/textcraft_r3_mutation_log.txt`, `notes/testing.md`): 67 round-3 mutants, all killed, by 38 different tests; a screen run first found nine survivors, and tests for each were added before the official run.
+
+**Full suite, once at the end** (local, at bbfe6fa): 1,208 passed, 29 skipped (the skips need transformers 5, torch or cached tokenizers; the serve2-only tests ran on ICE).
+
+**What has not been run.** No GPU job, no smoke run, no weights downloaded or loaded, no round-3 score, and no round-2 score or result read. Not checkable before the weights load: the real checkpoints' strict loading, the real attention agreement, speed, and each model's yes/no mass; each is checked at the start of each GPU job (the smoke runs first), before its first score.
