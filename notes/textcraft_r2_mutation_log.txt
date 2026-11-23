@@ -193,3 +193,28 @@ killed    textcraft r2 F lift difference reversed  [tests/test_textcraft_r2.py::
 killed    textcraft r2 A interpretation ignores competence  [tests/test_textcraft_r2.py::test_interpretation_separates_measurable_effects_from_distortions]
 
 6/6 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]
+
+# Pre-freeze audit run (2026-11-22, at ae8f005): the auditor's 12 mutants with its own strict script (scripts/audit_textcraft_r2_mutants.py), and the two new G mutants (scripts/mutation_check.py, official mode).
+
+KILLED    X1 R3 fires without a signed unmatched gap: tests/test_textcraft_r2.py::test_x1_r3_does_not_fire_when_both_gaps_cross_zero
+KILLED    X2 R3 matched gap only needs not to be opposite: tests/test_textcraft_r2.py::test_rejection_list_per_model
+KILLED    X3 R2 counts Llama-3.1 among the others: tests/test_textcraft_r2.py::test_across_models_patterns_and_f3
+KILLED    X4 role gap on a different row set from Dn and Dc: tests/test_textcraft_r2.py::test_x4_role_gap_is_naming_plus_completion_through_contrasts
+KILLED    X5 margin SD from the ingredient failures: tests/test_textcraft_r2.py::test_margin_is_capped_at_four_tenths
+KILLED    X6 TOST takes the smaller one-sided p: tests/test_textcraft_r2.py::test_statistics_helpers
+KILLED    X7 Λ and P sign flip by item: tests/test_textcraft_r2.py::test_audit_every_resample_is_over_goal_pairs
+KILLED    X8 equivalence verdict on the unadjusted p: tests/test_textcraft_r2.py::test_verdicts_are_statistical_and_never_withheld
+KILLED    X9 lift difference over class-matched ingredients only: tests/test_textcraft_r2.py::test_lift_difference_is_paired
+KILLED    X10 H6-best needs strictly better tracking: tests/test_textcraft_r2.py::test_x10_central_question_exact_tie_counts_as_inventory_consistent
+KILLED    X11 NaN ps dropped from the family instead of entering as 1: tests/test_textcraft_r2.py::test_family_is_fixed_at_fifty_and_pads_missing
+KILLED    X12 R4 difference reported as Qwen minus Llama: tests/test_textcraft_r2.py::test_x12_lift_difference_is_llama_minus_qwen
+
+## G shard 0/2
+killed    textcraft r2 G analysis accepts any model set  [tests/test_textcraft_r2.py::test_analysis_requires_the_five_models]
+
+1/1 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]
+
+## G shard 1/2
+killed    textcraft r2 G timing gates missing from the inference map  [tests/test_textcraft_r2.py::test_analysis_requires_the_five_models]
+
+1/1 killed; survivors=[]; inconclusive (timeout)=[]; not applied=[]

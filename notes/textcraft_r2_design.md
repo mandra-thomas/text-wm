@@ -836,3 +836,22 @@ No error was found in the Holm, TOST, margin, clustering or identity code.
 - `tests/test_textcraft_r2.py`: 141 tests pass.
 - Mutants: 145 round-2 mutants. The 22 new or changed ones were run in official mode at 170db45, and all were killed by named tests (log appended to `notes/textcraft_r2_mutation_log.txt`). The other 123 were killed in the official run at ef73d40, and their code is unchanged.
 - The full suite was run once at the end, at 6734c35: 1,003 passed, 7 skipped.
+
+
+## 15.G Pre-freeze audit (2026-11-22)
+
+An independent audit of fb7e86b (`notes/textcraft_r2_audit.md`, with `scripts/audit_textcraft_r2_stats.py` and `scripts/audit_textcraft_r2_mutants.py`) re-derived the statistics and found them correct. It found that nothing defining the experiment had changed since f610413. It asked for small fixes, all made here without changing any rule, prompt, population, sample size or model:
+
+- *15.R wording.* R3's sentence now says it "counts against the decomposition (descriptive diagnostic; no familywise error control)" and that it does not fire when the matched gap does not confirm. R5's sentence now says it rejects only the predicted attenuation, as 15.F1, 15.F3 and the code already did.
+- *Minor wording.*
+  - Section 1 points the central question to the neutral labels of 15.C and 15.F5.
+  - Section 8's across-model row reads as a decomposition reading, not a mechanism.
+  - R2 (15.R, 14.R6) says "none of them", meaning none of the competent models other than Llama-3.1.
+  - 15.S quotes the current reading suffix.
+- *Hardening.*
+  - `analyse` refuses any model set other than the five, so the Holm family is always 50 tests.
+  - The inference map lists the two interval-based timing conditions (applicability; comparable to the one-look-up change) as gates, not tests.
+- *Tests.* Tests now kill the audit's surviving mutants: X1 (R3 with both gaps crossing zero), X4 (the role gap equal to Dn + Dc through `contrasts`, with noisy scores, to 1e-12) and X12 (the sign and value of the lift difference). A further test pins the central question's exact tie (X10).
+- *Mutants.* Rerun with the auditor's strict script, all 12 audit mutants are killed by named tests. Two new mutants for the hardening are killed in official mode.
+
+Tests and suite: `tests/test_textcraft_r2.py` holds 146 tests, and the full suite was run once at the end: FULL_SUITE_G.
