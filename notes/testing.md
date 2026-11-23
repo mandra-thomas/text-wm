@@ -812,3 +812,5 @@ written for it. Four new mutants first survived the targeted tests, each a gap c
 differences were checked), class mix judged on estimates instead of intervals, and the analysis not marking gated
 comparisons (the end-to-end test did not look). The runners stopped in their full-suite fallback were killed and only
 the nine mutants not yet completed were rerun (2026-11-22).
+
+**Interpretability tests need scikit-learn (2026-11-23).** `tests/test_interp.py` and `tests/test_interp_pilot.py` skip when scikit-learn is missing (`pytest.importorskip("sklearn")`). The `.venv` on `main` and both cluster environments lack it. So a full-suite count on `main` does not include those tests: 1,361 passed and 60 skipped on 2026-11-23 at `713e110`. They ran, with their mutants, in the interpretability branch's own environment (scikit-learn 1.9.1). To include them, install scikit-learn 1.9.1 in the environment that runs the suite.
