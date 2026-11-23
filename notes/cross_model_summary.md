@@ -61,7 +61,7 @@ This comes from `mechanism2_results.md` and `mechanism2_metrics.json` (merged in
 
 ## 4. What still rests on two models, and what is being added
 
-The TextCraft and τ-bench results, and the reading of the effect as task relevance that they support, have so far been scored only on Qwen3-8B and Llama-3.1-8B. The following runs add models. *(Rows updated 2026-11-23 to match the README's status table; designs fixed at a tag are called "frozen".)*
+The TextCraft and τ-bench results, and the reading of the effect as task relevance that they support, have so far been scored only on Qwen3-8B and Llama-3.1-8B. The following runs add models. *(Added 2026-11-23.)* The τ-bench authorization experiment (exploratory, frozen at tag `tau-auth-design-frozen-2026-11-22`; [tau_auth_results.md](tau_auth_results.md), metrics `tau_auth_metrics.json`) tested that reading directly on the same two models, adds none, and changes no verdict. For Qwen3-8B, which passed both gates, a backend description that states and demonstrates that the task never changes the output removes none of the request component (−0.09 nats [−0.42, +0.26] of +2.30) or of the naming component (−0.08 of +1.87): both are "relevance-like (reading (a))". For Llama-3.1-8B both categories are "inconclusive (gate)": it failed the task-blind comprehension check (question K2, 0 of 24) and its positive control was +0.30 nats [+0.19, +0.40], below the 1-nat threshold. *(Rows updated 2026-11-23 to match the README's status table; designs fixed at a tag are called "frozen".)*
 
 | Study | Models added | State |
 |---|---|---|
