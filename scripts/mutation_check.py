@@ -857,9 +857,19 @@ MUTANTS = [
     ('textcraft r3 D-T1 deviation scope unchecked', 'wf/textcraft/r3_gates.py', '    if outside:\n', '    if False:\n'),
     ('textcraft r3 D-T1 two deviation tags accepted', 'wf/textcraft/r3_gates.py', '    if len(tags) > 1:\n        return {"commit": None, "problems": [f"more than one D-T1', '    if False:\n        return {"commit": None, "problems": [f"more than one D-T1'),
     ('textcraft r3 D-T1 deviation commit not accepted for thinking shards', 'wf/textcraft/r3_gates.py', '\n                      and not (also is not None and code_identical(c, also, run_git))})', '})'),
-    ('textcraft r3 D-T1 analysis accepts the deviation commit for every run', 'wf/textcraft/r3_analysis.py', '    cp = G.commit_problems({k: v for k, v in cs.items() if k != "think"}, tag_commit, **kw)', '    cp = G.commit_problems({k: v for k, v in cs.items() if k != "think"}, tag_commit, also=dev.get("commit"), **kw)'),
+    ('textcraft r3 D-T1 analysis accepts the deviation commit for every run', 'wf/textcraft/r3_analysis.py', '    cp = G.commit_problems({k: v for k, v in cs.items() if not exempt(k)}, tag_commit, **kw)', '    cp = G.commit_problems({k: v for k, v in cs.items() if not exempt(k)}, tag_commit, also=dev.get("commit"), **kw)'),
     ('textcraft r3 D-T1 analysis drops the deviation problems', 'wf/textcraft/r3_analysis.py', '        if dev.get("problems"):', '        if False:'),
     ('textcraft r3 D-T1 thinking shard commits not recorded', 'wf/textcraft/r3_analysis.py', '    return {f"{p.parent.name}/{p.name}": sorted(set(commits_of(p))) for p in folders}', '    return {}'),
+    ('textcraft r3 D-G1 exemption for any textcraft_r3 run', 'wf/textcraft/r3_gates.py', 'DEVIATION_RUNS = ("textcraft_r3_think", "textcraft_r3x_")', 'DEVIATION_RUNS = ("textcraft_r3_think", "textcraft_r3")'),
+    ('textcraft r3 D-G1 scoring loop gives no run id', 'wf/textcraft/r3_score.py', '    env["freeze_commit"] = G.require_freeze_commit(run_id=run_id)  # D-G1', '    env["freeze_commit"] = G.require_freeze_commit()  # D-G1'),
+    ('textcraft r3 D-G1 criterion mean loosened', 'wf/textcraft/r3x.py', '"yes_no_mean_abs_max": 0.01,', '"yes_no_mean_abs_max": 0.20,'),
+    ('textcraft r3 D-G1 criterion max unchecked', 'wf/textcraft/r3x.py', '    if not f32.get("yes_no_max_abs", float("inf")) <= CRITERION["yes_no_any_abs_max"]:', '    if False:'),
+    ('textcraft r3 D-G1 run ignores the criterion', 'wf/textcraft/r3x.py', '    if bad:\n        raise SystemExit', '    if False:\n        raise SystemExit'),
+    ('textcraft r3 D-G1 attention gate still on', 'wf/textcraft/r3x.py', 'attn_agreement_check=False)', 'attn_agreement_check=True)'),
+    ('textcraft r3 D-G1 exploratory block reads the core run', 'wf/textcraft/r3_analysis.py', '    xruns = {t: load_run(f"textcraft_r3x_{t}", root) for t in R3X_TAGS}  # D-G1', '    xruns = {t: load_run(run_folder("score", t), root) for t in R3X_TAGS}  # D-G1'),
+    ('textcraft r3 D-G1 p-values kept in the block', 'wf/textcraft/r3_analysis.py', '    drop = ("p_", "holm", ', '    drop = ("holm", '),
+    ('textcraft r3 D-G1 block has extra contrasts', 'wf/textcraft/r3_analysis.py', '    out["contrasts"] = {c: strip_tests(b["contrasts"][c]) for c in CONTRASTS}  # the five contrasts', '    out["contrasts"] = strip_tests(b["contrasts"])'),
+    ('textcraft r3 D-G1 every outside run accepted at the deviation commit', 'wf/textcraft/r3_analysis.py', '    exempt = lambda k: k == "think" or k.startswith("r3x:")  # noqa: E731', '    exempt = lambda k: True  # noqa: E731'),
 ]
 
 

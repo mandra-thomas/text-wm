@@ -1468,6 +1468,8 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "textcraft_r3_think_qwen3.5-9b": lambda cfg: _lazy("textcraft.r3_think", "run_textcraft_r3_think")(cfg),
     "textcraft_r3_think_smoke_qwen3.5-9b": lambda cfg: _lazy("textcraft.r3_think", "run_textcraft_r3_think")(cfg),
     "textcraft_r3_analysis": lambda cfg: _lazy("textcraft.r3_analysis", "run_textcraft_r3_analysis")(cfg),
+    # 2026-11-23, deviation D-G1 (notes/textcraft_r3_deviation_gemma_e4b.md): exploratory, outside every family.
+    "textcraft_r3x_gemma4-e4b-it": lambda cfg: _lazy("textcraft.r3x", "run_textcraft_r3x")(cfg),
 }
 
 

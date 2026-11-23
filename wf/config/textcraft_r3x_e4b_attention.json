@@ -1,0 +1,37 @@
+{
+ "deviation": "D-G1",
+ "tag": "gemma4-e4b-it",
+ "job": 7252801,
+ "checkout": "text-wm-fix48 at 0d6f460 (the freeze tag)",
+ "items": [
+  "tc-p019-26b08dadcdc6",
+  "tc-p038-c033e70a9fcb",
+  "tc-p073-b186ea3640e7",
+  "tc-p086-a55f08abe2d6",
+  "tc-p093-69441cc67283"
+ ],
+ "arms": [
+  "aligned",
+  "yn_aligned"
+ ],
+ "criterion": {
+  "yes_no_mean_abs_max": 0.01,
+  "yes_no_any_abs_max": 0.05,
+  "stated": "notes/textcraft_r3_deviation_gemma_e4b.md, commit 96a946d, before the job ran"
+ },
+ "bfloat16": {
+  "yes_no_mean_abs": 0.12500000707805156,
+  "yes_no_max_abs": 0.37499984074383974,
+  "two_candidate_mean_abs": 0.014983698264845201,
+  "two_candidate_max_abs": 0.024046246976922703
+ },
+ "float32": {
+  "yes_no_mean_abs": 1.1081062257289887e-05,
+  "yes_no_max_abs": 2.6559457182884216e-05,
+  "two_candidate_mean_abs": 2.0239292643964292e-05,
+  "two_candidate_max_abs": 6.110756658017635e-05
+ },
+ "criterion_met": true,
+ "source": "notes/textcraft_r3_diag/e4bdiag_7252801.json",
+ "source_sha256": "d07f6cdb22783a96ca8e1d145e7069c0b52d6809c76b7c5c9da5477ec3e5c415"
+}

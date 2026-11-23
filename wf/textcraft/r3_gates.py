@@ -27,13 +27,18 @@ from typing import Any, Callable
 from wf.textcraft import r3 as R3
 
 FREEZE_TAG_PREFIX = "textcraft-r3-design-frozen-"
-# Deviation D-T1 (2026-11-23, notes/textcraft_r3_deviation_thinking_padding.md): only the thinking arm's runs may start
-# at the commit of this annotated tag, and only if that commit changes no code outside D-T1's files. Every other run
-# still refuses anything but the freeze tag's commit.
+# Deviations D-T1 and D-G1 (2026-11-23, notes/textcraft_r3_deviation_thinking_padding.md and
+# notes/textcraft_r3_deviation_gemma_e4b.md): only the thinking arm's runs and the exploratory textcraft_r3x_ runs may
+# start at the commit of this annotated tag, and only if that commit changes no code outside the deviations' files.
+# Every other run still refuses anything but the freeze tag's commit.
 DEVIATION_TAG_PREFIX = "textcraft-r3-deviation-t1-"
-DEVIATION_RUNS = "textcraft_r3_think"  # run ids textcraft_r3_think_qwen3.5-9b and textcraft_r3_think_smoke_qwen3.5-9b
+DEVIATION_RUNS = ("textcraft_r3_think", "textcraft_r3x_")  # D-T1: the thinking smoke and arm; D-G1: the E4B run
 DEVIATION_FILES = ("wf/textcraft/r3_think.py", "wf/textcraft/r3_gates.py", "wf/textcraft/r3_analysis.py",
-                   "scripts/mutation_check.py")
+                   "scripts/mutation_check.py",
+                   # D-G1: the exploratory run, its registration, config, diagnostic record and job script, and the
+                   # scoring loop's one-line change (it passes its run id to require_freeze_commit)
+                   "wf/textcraft/r3x.py", "wf/runs.py", "wf/config/textcraft_r3x_gemma4-e4b-it.yaml",
+                   "wf/config/textcraft_r3x_e4b_attention.json", "pace/textcraft_r3x.sbatch", "wf/textcraft/r3_score.py")
 CODE_PATHS = ("wf/", "scripts/", "pace/")  # a commit that differs from the tag only outside these is code-identical
 PLAN_FILE = Path(__file__).resolve().parents[1] / "config" / "textcraft_r3_envcheck_plan.json"
 UNOBTAINABLE = "gpu_unobtainable.json"  # filed in an envcheck run folder when a planned GPU type was not obtainable
@@ -159,8 +164,9 @@ def _dirty() -> bool:
 def require_freeze_commit(run_git: Callable[[list[str]], str] = _git, dirty: Callable[[], bool] = _dirty,
                           run_id: str = "") -> dict[str, Any]:
     """At job start: this checkout's HEAD is the freeze tag's commit, or code-identical to it, and its tracked files
-    carry no uncommitted change (review 2, S2). The one exemption (D-T1): a thinking-arm run (`run_id` starting
-    textcraft_r3_think) may start at D-T1's deviation commit (or a code-identical one). Mock runs are not checked."""
+    carry no uncommitted change (review 2, S2). The one exemption (D-T1, D-G1): a thinking-arm run or an exploratory
+    run (`run_id` starting textcraft_r3_think or textcraft_r3x_) may start at the deviation commit (or a
+    code-identical one). Mock runs are not checked."""
     if mock():
         return {"checked": "mock"}
     tag = freeze_commit(run_git)
@@ -174,7 +180,8 @@ def require_freeze_commit(run_git: Callable[[list[str]], str] = _git, dirty: Cal
             why = f"; {dev['problems']}" if dev and dev["problems"] else ""
             raise SystemExit(f"this checkout is at {head[:12]}, not the freeze tag's {tag[:12]} (or a code-identical "
                              f"commit){why}")
-        out.update({"deviation": "D-T1", "deviation_commit": dev["commit"], "deviation_tag": dev["tag"]})
+        out.update({"deviation": "D-G1" if run_id.startswith("textcraft_r3x_") else "D-T1",
+                    "deviation_commit": dev["commit"], "deviation_tag": dev["tag"]})
     if dirty():
         raise SystemExit("this checkout has uncommitted changes to tracked files: round-3 jobs run from a clean checkout")
     return out

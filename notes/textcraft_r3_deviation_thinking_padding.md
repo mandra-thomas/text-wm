@@ -77,7 +77,7 @@ tag after review. The exemption holds only under three conditions:
 - **One tag.** There is exactly one such tag.
 - **Narrow code change.** Relative to the freeze tag's commit, that commit changes code only in D-T1's files:
   `wf/textcraft/r3_think.py`, `wf/textcraft/r3_gates.py`, `wf/textcraft/r3_analysis.py` and
-  `scripts/mutation_check.py`. Tests and notes may change. Any other code change voids the exemption
+  `scripts/mutation_check.py`, plus the files of D-G1 (notes/textcraft_r3_deviation_gemma_e4b.md), which shares the tag. Tests and notes may change. Any other code change voids the exemption
   (`r3_gates.deviation_commit`).
 - **Clean checkout.** The checkout is clean.
 

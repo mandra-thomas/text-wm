@@ -199,7 +199,7 @@ def score_shard(cfg: dict, tag: str, spec, select: Callable[[list[dict]], list[d
     env = FAM.require_environment(spec, envcheck=envcheck)
     env["resources"] = FAM.require_resources(spec)
     env["gpu"] = gpu_check(tag, exact=exact_gpu)
-    env["freeze_commit"] = G.require_freeze_commit()
+    env["freeze_commit"] = G.require_freeze_commit(run_id=run_id)  # D-G1: only textcraft_r3x_ runs are exempt
     if shard is None:
         i = int(os.environ.get("WF_SHARD") or cfg.get("shard", 0))
         n = int(os.environ.get("WF_N_SHARDS") or cfg.get("n_shards", 1))

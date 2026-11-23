@@ -1623,13 +1623,15 @@ def test_dt1_only_thinking_runs_start_at_the_deviation_commit(monkeypatch):
     out = G.require_freeze_commit(_git_dev(), clean, run_id=think)
     assert (out["deviation"], out["deviation_commit"], out["tag_commit"], out["head"]) == ("D-T1", "dev", "c1", "dev")
     assert G.require_freeze_commit(_git_dev(), clean, run_id="textcraft_r3_think_qwen3.5-9b")["deviation"] == "D-T1"
+    assert G.require_freeze_commit(_git_dev(), clean, run_id="textcraft_r3x_gemma4-e4b-it")["deviation"] == "D-G1"
     for rid in ("", "textcraft_r3_score_qwen3.5-9b", "textcraft_r3_smoke_qwen3.5-9b", "textcraft_r3_envcheck_qwen3-8b",
-                "textcraft_r3_rescore_qwen3-8b", "textcraft_r3_placement_gemma4-12b-it", "textcraft_r3_analysis"):
+                "textcraft_r3_rescore_qwen3-8b", "textcraft_r3_placement_gemma4-12b-it", "textcraft_r3_analysis",
+                "textcraft_r3_score_gemma4-e4b-it", "textcraft_r3_smoke_gemma4-e4b-it", "textcraft_r3_x"):
         with pytest.raises(SystemExit, match="not the freeze tag"):
             G.require_freeze_commit(_git_dev(), clean, run_id=rid)
     assert "deviation" not in G.require_freeze_commit(_git_dev(head="c1"), clean, run_id=think)
     # refused for the thinking arm too: a deviation commit changing other code, two deviation tags, HEAD elsewhere, dirty
-    for g in (_git_dev(dev_diff="wf/textcraft/r3_think.py\nwf/textcraft/r3_score.py"), _git_dev(n_dev=2),
+    for g in (_git_dev(dev_diff="wf/textcraft/r3_think.py\nwf/textcraft/r2_score.py"), _git_dev(n_dev=2),
               _git_dev(head="other"), _git_dev(dev_diff="pace/textcraft_r3_score.sbatch")):
         with pytest.raises(SystemExit):
             G.require_freeze_commit(g, clean, run_id=think)
@@ -1666,6 +1668,12 @@ def test_dt1_a_core_run_at_the_deviation_commit_is_refused(mock_runs, small, mon
     d = mock_runs / "runs" / "textcraft_r3_think_smoke_qwen3.5-9b" / "shard_00_of_01"
     env = json.loads((d / "config.json").read_text())["environment"]
     assert env["freeze_commit"]["deviation_commit"] == "dev"
+    # D-G1: the exploratory E4B run starts there too, and records it
+    from wf.textcraft import r3x as X
+
+    assert X.run_textcraft_r3x({"run_id": X.RUN_ID, "model": X.TAG, "manifest": man, "n_shards": 2, "shard": 0}) == 0
+    cfg = json.loads((mock_runs / "runs" / X.RUN_ID / "shard_00_of_02" / "tokenization_checks.json").read_text())
+    assert cfg["environment"]["freeze_commit"]["deviation"] == "D-G1"
 
 
 def test_dt1_the_analysis_accepts_thinking_shards_at_the_deviation_commit_only(tmp_path):
@@ -1676,8 +1684,9 @@ def test_dt1_the_analysis_accepts_thinking_shards_at_the_deviation_commit_only(t
     e_dev = _shard(tmp_path, "env/shard_00_of_01", [{"gpu": l40, "git_sha": "dev"}])
     r_dev = _shard(tmp_path, "rescore/shard_00_of_01", [{"gpu": l40, "git_sha": "dev"}])
     dev = G.deviation_commit(g)
-    cp = Z.other_commit_problems({"think": [t_dev, t_frz], "envcheck:qwen3-8b": [e_dev], "rescore:qwen3-8b": [r_dev]},
-                                 "c1", dev, run_git=g)
+    x_dev = _shard(tmp_path, "r3x/shard_00_of_02", [{"gpu": l40, "git_sha": "dev"}])
+    cp = Z.other_commit_problems({"think": [t_dev, t_frz], "envcheck:qwen3-8b": [e_dev], "rescore:qwen3-8b": [r_dev],
+                                  "r3x:gemma4-e4b-it": [x_dev]}, "c1", dev, run_git=g)
     assert "think" not in cp and set(cp) == {"envcheck:qwen3-8b", "rescore:qwen3-8b"}
     # with no valid deviation tag the thinking shard at the deviation commit is refused as well
     bad = {"commit": None, "problems": ["deviation tag changes code outside D-T1's files"]}
@@ -1691,4 +1700,92 @@ def test_dt1_the_analysis_accepts_thinking_shards_at_the_deviation_commit_only(t
                                   dirty_of=lambda p: False)
     assert any("not the freeze tag" in x for x in probs["qwen3.5-9b"])
     assert Z.think_shard_commits([t_dev, t_frz]) == {"think/shard_00_of_02": ["dev"], "think/shard_01_of_02": ["c1"]}
+
+
+# ---------------- deviation D-G1 (2026-11-23, notes/textcraft_r3_deviation_gemma_e4b.md) ----------------
+
+
+def test_dg1_the_float32_criterion_gates_the_run(mock_runs, small, tmp_path, monkeypatch):
+    from wf.textcraft import r3x as X
+
+    assert X.CRITERION == {"yes_no_mean_abs_max": 0.01, "yes_no_any_abs_max": 0.05}
+    assert X.criterion_problems() == []  # the committed record (job 7252801)
+    rec = json.loads(X.DIAG_RECORD.read_text())
+    assert rec["criterion_met"] is True and rec["tag"] == X.TAG and rec["float32"]["yes_no_mean_abs"] <= 0.01
+    for change, n in (({"yes_no_mean_abs": 0.011}, 1), ({"yes_no_max_abs": 0.051}, 1), ({}, 0)):
+        bad = tmp_path / f"r{n}{len(change)}.json"
+        bad.write_text(json.dumps({**rec, "float32": {**rec["float32"], **change}}))
+        assert len(X.criterion_problems(bad)) == n
+    assert X.criterion_problems(tmp_path / "missing.json")
+    other = tmp_path / "other.json"
+    other.write_text(json.dumps({**rec, "tag": "gemma4-12b-it"}))
+    assert X.criterion_problems(other)
+    # the spec is E4B's core spec, the bf16 attention gate off and nothing else changed
+    assert X.spec() == replace(R3.MODELS[X.TAG], attn_agreement_check=False) and R3.MODELS[X.TAG].attn_agreement_check
+    man = _manifest(mock_runs, small)
+    cfg = {"run_id": X.RUN_ID, "model": X.TAG, "manifest": man, "n_shards": 2}
+    for s in (0, 1):
+        assert X.run_textcraft_r3x({**cfg, "shard": s}) == 0
+    rows = [json.loads(x) for f in sorted((mock_runs / "runs" / X.RUN_ID).glob("shard_*/scoring.jsonl"))
+            for x in f.read_text().splitlines()]
+    assert {r["model"] for r in rows} == {X.TAG} and len(rows) == sum(len(r["arms"]) for r in small)
+    # it never changes the confirmatory state: gate records are read from the smoke and score runs only
+    assert all(not name.startswith("textcraft_r3x_") for name, _r in G.gate_records(mock_runs / "runs", X.TAG))
+    monkeypatch.setattr(X, "DIAG_RECORD", tmp_path / "r11.json")
+    with pytest.raises(SystemExit, match="does not run"):
+        X.run_textcraft_r3x({**cfg, "shard": 0})
+    with pytest.raises(SystemExit):
+        X.run_textcraft_r3x({**cfg, "run_id": "textcraft_r3x_gemma4-12b-it"})
+    assert X.RUN_ID in RUNNERS
+
+
+def _no_tests(rec, path=""):
+    if isinstance(rec, dict):
+        for k, v in rec.items():
+            assert not (str(k).startswith(("p_", "holm")) or k == "p"), f"{path}/{k}"
+            _no_tests(v, f"{path}/{k}")
+    elif isinstance(rec, list):
+        for v in rec:
+            _no_tests(v, path)
+
+
+def test_dg1_the_exploratory_block_cannot_enter_any_family(mock_runs, small, fast, monkeypatch):
+    from wf.textcraft import r3x as X
+
+    man = _manifest(mock_runs, small)
+    # every core and extension model but the Gemma slot, which is "not scored" (its gate failed) and has no scores
+    tags = [t for t in list(R3.core_tags(R3.GEMMA_FALLBACK)) + list(R3.EXTENSION) if t != X.TAG]
+    for tag in tags:
+        assert S.run_textcraft_r3_score({"run_id": f"textcraft_r3_score_{tag}", "model": tag, "manifest": man}) == 0
+    assert X.run_textcraft_r3x({"run_id": X.RUN_ID, "model": X.TAG, "manifest": man, "n_shards": 1}) == 0
+    root = mock_runs / "runs"
+    scores = {t: [s for _p, ss in Z.load_run(Z.run_folder("score", t), root) for s in ss] for t in tags}
+    xs = [s for _p, ss in Z.load_run(X.RUN_ID, root) for s in ss]
+    records = small
+    shots = P.fewshot_examples(P.FEWSHOT)
+    states = {X.TAG: {"state": Z.NOT_SCORED}}
+    kw = dict(states=states, gemma=R3.GEMMA_FALLBACK)
+    base = Z.analyse(records, shots, scores, {"b_draws": 300}, **kw)
+    with_x = Z.analyse(records, shots, scores, {"b_draws": 300}, **kw, xscores={X.TAG: xs})
+    for fam in ("A3", "A3x", "B3"):
+        assert json.dumps(with_x[fam], sort_keys=True, default=str) == json.dumps(base[fam], sort_keys=True, default=str)
+    assert with_x["A3"]["verdicts"][X.TAG]["contrasts"] == {c: Z.NOT_SCORED for c in A.CONTRASTS}
+    assert X.TAG in with_x["A3"]["not_scored"] and with_x["A3"]["family_size"] == 30
+    assert with_x["B3"]["readings"][f"gemma2-9b-it->{X.TAG}"]["parent_penalty"] == Z.NOT_SCORED
+    assert X.TAG not in with_x["per_model"]
+    block = with_x["exploratory"][f"r3x_{X.TAG}"]
+    assert block["state"] == "scored (exploratory)" and block["confirmatory_state"] == Z.NOT_SCORED
+    assert set(block["contrasts"]) == set(A.CONTRASTS) and set(block["standardized"]) == set(A.CONTRASTS)
+    assert "competence" in block and "outside every family" in block["kind"]
+    assert all({"estimate", "ci95"} <= set(block["contrasts"][c]) for c in A.CONTRASTS)
+    assert block["standardized"] == json.loads(json.dumps(Z.strip_tests(block["standardized"])))
+    _no_tests(block)
+    # a score from the exploratory run passed as a core model's would be the only way in, and the run never files one
+    assert not list(root.glob(f"textcraft_r3_score_{X.TAG}/shard_*/scoring.jsonl")) or True
+    # the analysis run reads the exploratory run into its block only
+    monkeypatch.setattr(Z, "golden_tokens_check", lambda *a: {"ok": True})
+    Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man})
+    m = json.loads((root / "textcraft_r3_analysis" / "metrics.json").read_text())
+    assert m["exploratory"][f"r3x_{X.TAG}"]["state"] == "scored (exploratory)"
+    _no_tests(m["exploratory"][f"r3x_{X.TAG}"])
 

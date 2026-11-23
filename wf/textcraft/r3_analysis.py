@@ -689,17 +689,54 @@ def provenance_problems(folders: dict[str, list[Path]], scores: dict[str, list[d
 def other_commit_problems(other: dict[str, list[Path]], tag_commit: str | None, dev: dict[str, Any],
                           commits_of: Callable[[Path], list[str]] | None = None,
                           run_git: Callable[[list[str]], str] | None = None) -> dict[str, list[str]]:
-    """S12 for the runs outside the families (environment check, rescoring, thinking arm): every job at the freeze tag's
-    commit; the thinking arm's (key "think") also at D-T1's deviation commit `dev["commit"]`, and only those."""
+    """S12 for the runs outside the families (environment check, rescoring, thinking arm, exploratory runs): every job
+    at the freeze tag's commit; the thinking arm's (key "think", D-T1) and the exploratory runs' (keys "r3x:<tag>",
+    D-G1) also at the deviation commit `dev["commit"]`, and only those."""
     commits_of = commits_of or G.shard_commits
     kw = {"run_git": run_git} if run_git else {}
     cs = {k: [c for p in ps for c in commits_of(p)] for k, ps in other.items()}
-    cp = G.commit_problems({k: v for k, v in cs.items() if k != "think"}, tag_commit, **kw)
-    if "think" in cs:  # D-T1
-        cp.update(G.commit_problems({"think": cs["think"]}, tag_commit, also=dev.get("commit"), **kw))
+    exempt = lambda k: k == "think" or k.startswith("r3x:")  # noqa: E731
+    cp = G.commit_problems({k: v for k, v in cs.items() if not exempt(k)}, tag_commit, **kw)
+    for k in [k for k in cs if exempt(k)]:
+        cp.update(G.commit_problems({k: cs[k]}, tag_commit, also=dev.get("commit"), **kw))
         if dev.get("problems"):
-            cp.setdefault("think", []).extend(dev["problems"])
+            cp.setdefault(k, []).extend(dev["problems"])
     return cp
+
+
+R3X_TAGS = ("gemma4-e4b-it",)  # D-G1: the models with an exploratory textcraft_r3x_<tag> run
+R3X_KIND = ("exploratory (D-G1): outside every family; no p-values; never feeds A3, A3x, B3, H3-P, R2 or the "
+            "replication reading; printed beside the confirmatory 'not scored'")
+
+
+def strip_tests(rec: Any) -> Any:
+    """An exploratory block without p-values or test decisions (review 1, S11; D-G1): drops every key that names a
+    p-value, a Holm step, an equivalence test or a power figure, at any depth."""
+    drop = ("p_", "holm", "equivalence_power", "equivalence_underpowered", "rejected", "verdict")
+    if isinstance(rec, dict):
+        return {k: strip_tests(v) for k, v in rec.items() if not (isinstance(k, str) and k.startswith(drop))
+                and k != "p"}
+    if isinstance(rec, list):
+        return [strip_tests(v) for v in rec]
+    return rec
+
+
+def r3x_block(records: list[dict], shots, xscores: list[dict], tag: str, problems: list[str] | None = None) -> dict[str, Any]:
+    """D-G1's exploratory block for `tag` (scored by textcraft_r3x_<tag>): the five contrasts' estimates and intervals,
+    the competence readout and the standardized effects, with no test; built apart from every family."""
+    out: dict[str, Any] = {"kind": R3X_KIND, "tag": tag, "provenance_problems": list(problems or [])}
+    ma = model_analysis(records, shots, {tag: xscores}, [tag])
+    if tag not in ma["blocks"]:
+        out["state"] = "waiting" if not xscores else f"missing scores ({ma['missing'].get(tag)})"
+        return out
+    b = ma["blocks"][tag]
+    out["state"] = "scored (exploratory)"
+    out["contrasts"] = {c: strip_tests(b["contrasts"][c]) for c in CONTRASTS}  # the five contrasts
+    out["competence"] = strip_tests(b["competence"])
+    out["standardized"] = strip_tests(b["round3"]["standardized"])
+    out["first_token_tail"] = b["round3"]["first_token_tail"]
+    out["competent"] = b["round3"]["competent"]
+    return out
 
 
 def think_shard_commits(folders: list[Path], commits_of: Callable[[Path], list[str]] | None = None) -> dict[str, list[str]]:
@@ -782,7 +819,8 @@ def analyse(records: list[dict], shots, scores: dict[str, list[dict]], cfg: dict
             r2: dict[str, Any] | None = None, old_scores: dict[str, list[dict]] | None = None,
             environment: dict[str, Any] | None = None, think: list[dict] | None = None,
             formats: dict[str, tuple[str, str]] | None = None, states: dict[str, dict] | None = None,
-            gemma: str | None = None, refused: dict[str, list[str]] | None = None) -> dict[str, Any]:
+            gemma: str | None = None, refused: dict[str, list[str]] | None = None,
+            xscores: dict[str, list[dict]] | None = None, xproblems: dict[str, list[str]] | None = None) -> dict[str, Any]:
     """The analysis. `gemma` is the Gemma slot from the filed smoke record (r3_gates.gemma_slot); `states` the model
     states (r3_gates.model_state); `refused` the families refused for provenance."""
     if cfg.get("b_draws") not in (None, B_DRAWS) and not G.mock():  # review 1, S7
@@ -862,6 +900,10 @@ def analyse(records: list[dict], shots, scores: dict[str, list[dict]], cfg: dict
         expl["thinking_arm"] = think_block(think, ma["bys"]["qwen3.5-9b"], records)
     expl["kind"] = "exploratory: estimates and intervals only; no test, no family"
     out["exploratory"] = expl
+    # D-G1: the exploratory runs, apart from every family and reported beside the confirmatory state
+    for t, xs in (xscores or {}).items():
+        out["exploratory"][f"r3x_{t}"] = {**r3x_block(records, shots, xs, t, (xproblems or {}).get(t)),
+                                          "confirmatory_state": states.get(t, {}).get("state", "waiting")}
     out["inference_map"] = INFERENCE_MAP
     return out
 
@@ -875,7 +917,8 @@ INFERENCE_MAP = {
     "descriptive": ["R3 diagnostic", "central question", "standardized contrasts (analysis a)", "raw nats in B3",
                     "the fixed-denominator column in B3", "item shares", "first-token / tail split",
                     "competence at the 0.80 floor", "the smoke runs' format diagnostic", "every other readout"],
-    "exploratory": ["size and recency within a line", "format checks", "thinking arm", "capability table"],
+    "exploratory": ["size and recency within a line", "format checks", "thinking arm", "capability table",
+                    "D-G1: Gemma 4 E4B scored by textcraft_r3x_gemma4-e4b-it (no family, no p-value)"],
     "gates": ["the environment check (B3 reads round 2's scores only if it passes, else the serve2 rescores)",
               "the Gemma fallback rule (r3_gates.gemma_slot, on the filed smoke record)",
               "model states: 'not scored' from a filed gate failure (r3_gates.model_state)"],
@@ -954,6 +997,10 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
     tps = [p for p, _s in load_run(run_folder("think", "qwen3.5-9b"), root)]
     if tps:
         other["think"] = tps
+    xruns = {t: load_run(f"textcraft_r3x_{t}", root) for t in R3X_TAGS}  # D-G1
+    for t, xr in xruns.items():
+        if xr:
+            other[f"r3x:{t}"] = [p for p, _s in xr]
     tag_commit = None if mock_run else G.freeze_commit()
     # D-T1: the thinking arm's shards may also run at the deviation commit; every other run only at the freeze tag's
     dev = {"commit": None, "problems": []} if mock_run else G.deviation_commit(tag_commit=tag_commit)
@@ -1030,8 +1077,15 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
         if bad:
             refused["B3"] = refused.get("B3", []) + bad
     think = [s for _p, ss in load_run(run_folder("think", "qwen3.5-9b"), root) for s in ss] or None
+    xscores = {t: [s for _p, ss in xr for s in ss] for t, xr in xruns.items() if xr}
+    xproblems = {t: probs.get(f"r3x:{t}", []) for t in xscores}
+    for t, xs in xscores.items():
+        revs = {s.get("model_revision") for s in xs}
+        if not mock_run and revs != {R3.spec_for(t).revision}:
+            xproblems[t].append(f"model revisions {sorted(map(str, revs))}, pinned {R3.spec_for(t).revision}")
     try:
-        metrics = analyse(records, shots, scores, cfg, r2, old_scores, environment, think, formats, states, gemma, refused)
+        metrics = analyse(records, shots, scores, cfg, r2, old_scores, environment, think, formats, states, gemma, refused,
+                          xscores, xproblems)
     except A.StaleScore as e:
         write_status(run_id, f"stale score: {e}", ok=False)
         return 1
@@ -1047,7 +1101,8 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
                                        r2_status.read_text(encoding="utf-8").splitlines()[0] if r2_status.exists() else None}
     metrics["freeze_commit"] = tag_commit
     metrics["deviation_t1"] = {"commit": dev["commit"], "problems": dev["problems"],  # which commit each thinking shard ran at
-                               "think_shard_commits": think_shard_commits(other.get("think", []))}
+                               "think_shard_commits": think_shard_commits(other.get("think", [])),
+                               "r3x_shard_commits": {t: think_shard_commits(other.get(f"r3x:{t}", [])) for t in xscores}}
     write_json(d / "metrics.json", metrics)
     lines = [f"Gemma slot: {gemma} (triggers {slot.get('triggers')})"]
     for fam in ("A3", "A3x"):

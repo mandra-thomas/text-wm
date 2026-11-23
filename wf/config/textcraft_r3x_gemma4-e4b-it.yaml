@@ -1,0 +1,7 @@
+run_id: textcraft_r3x_gemma4-e4b-it
+# TextCraft round 3, deviation D-G1 (notes/textcraft_r3_deviation_gemma_e4b.md): exploratory run of gemma4-e4b-it, every
+# record and arm of round 2's records, as a core model is scored (SDPA, bf16, node-local weights, the round-3 gate);
+# outside every family. Sharded by goal pair (WF_SHARD / WF_N_SHARDS).
+manifest: wf/textcraft/data/r2_manifest.json
+model: gemma4-e4b-it
+n_shards: 2
