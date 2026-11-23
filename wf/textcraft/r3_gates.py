@@ -304,22 +304,17 @@ RULE_PIN = Path(__file__).resolve().parents[1] / "config" / "textcraft_r3_envche
 
 
 def rule_fingerprint() -> dict[str, Any]:
-    """Wave B's environment-check rule as round 3 reads it: families.ENVCHECK_RULE, any per-model grid wave B
-    defines (ENVCHECK_PER_MODEL_GRID), and the sha256 of the per-score hook's source (None while there is none)."""
+    """Round 3's environment-check rule (r3.ENVCHECK_RULE: wave B's original criteria, unamended) and the sha256 of
+    its canonical JSON."""
     import hashlib
-    import inspect
 
-    from wf import families as FAM
-
-    hook = getattr(FAM, "envcheck_per_score_check", None)
-    src = inspect.getsource(hook) if hook is not None else None
-    grid = getattr(FAM, "ENVCHECK_PER_MODEL_GRID", None)
-    return {"rule": dict(FAM.ENVCHECK_RULE), "per_model_grid": json.loads(json.dumps(grid)) if grid is not None else None,
-            "hook_sha256": hashlib.sha256(src.encode()).hexdigest() if src is not None else None}
+    rule = dict(R3.ENVCHECK_RULE)
+    return {"rule": rule, "sha256": hashlib.sha256(json.dumps(rule, sort_keys=True).encode()).hexdigest(),
+            "source": "wave B's original criteria, unamended (design 14.M4)"}
 
 
 def rule_problems(path: Path = RULE_PIN) -> list[str]:
-    """The rule in force must equal the one committed at the freeze."""
+    """Round 3's rule constant must equal the one pinned in the committed file (values and sha256)."""
     if not path.exists():
         return [f"no pinned environment-check rule at {path}"]
     pinned = json.loads(path.read_text(encoding="utf-8"))

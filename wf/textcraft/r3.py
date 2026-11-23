@@ -100,6 +100,11 @@ ENVCHECK_N = 300
 ENVCHECK_MIN_COMPARABLE = 200  # records whose round-2 shard ran on the rescoring's GPU type
 RESCORE_MODELS = ("qwen3-8b", "mistral-7b-v0.3", "gemma2-9b-it")  # fallback if the environment check does not pass
 RESCORE_GPU = L40S  # the fallback rescoring runs on the round-3 models' type (review 1, M4)
+# The environment check's pass rule (design 14.M4, as resolved after review 2): wave B's original criteria,
+# unamended, written here as round 3's own constant so that a later change in wave B cannot change round 3. Pinned
+# with its sha256 in wf/config/textcraft_r3_envcheck_rule.json; the analysis refuses if the two differ.
+ENVCHECK_RULE = {"yes_no_mean_abs_max": 0.07, "yes_no_goal_effect_diff_max": 0.10, "yes_no_share_diff_max": 0.02,
+                 "two_candidate_mean_abs_max": 0.35, "two_candidate_goal_effect_diff_max": 0.10}
 # Holm's first step in a family of 30 (one-sided normal quantile at 0.05 / 30), for the equivalence power (review 1, S2)
 Z_FIRST_30 = 2.935199
 Z_ALPHA = 1.644854

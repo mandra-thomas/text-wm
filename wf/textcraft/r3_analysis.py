@@ -46,27 +46,17 @@ WITHIN = ("lift", "parent_penalty")
 CONFIRMED = ("confirmed above zero", "confirmed below zero")
 NOT_INTERPRETABLE_ENV = "not interpretable (environment check)"
 def env_rule() -> dict[str, float]:
-    """Wave B's environment-check rule, read from wf/families.py at call time (never copied), so round 3 uses wave B's
-    rule as amended (design 14.M4; the per-score criterion is under amendment in wave B)."""
-    return dict(FAM.ENVCHECK_RULE)
+    """The environment check's pass rule: round 3's own constant (r3.ENVCHECK_RULE), wave B's original criteria,
+    unamended (design 14.M4). Never read from wf/families.py, so a later change in wave B does not change round 3."""
+    return dict(R3.ENVCHECK_RULE)
 
 
-def per_score_check(fmt: str, diffs: list[float], old: list[float], new: list[float], *, model: str,
-                    conditions: list[str]) -> dict[str, Any]:
-    """The per-score criterion of the environment check: wave B's own, as amended. If wave B provides
-    `families.envcheck_per_score_check(fmt, diffs, old, new, *, model, conditions)` (model: the earlier model's tag;
-    conditions: the condition label of each difference, aligned with diffs), that function decides; otherwise the mean
-    absolute difference per score against wave B's current threshold. PLACEHOLDER (design 14.M4): pending wave B's
-    amendment, which is committed and pinned (r3_gates.RULE_PIN) before the freeze."""
-    if len(conditions) != len(diffs):
-        raise ValueError("conditions must align with diffs")
-    hook = getattr(FAM, "envcheck_per_score_check", None)
-    if hook is not None:
-        return {"ok": bool(hook(fmt, diffs, old, new, model=model, conditions=conditions)),
-                "source": "families.envcheck_per_score_check"}
+def per_score_check(fmt: str, diffs: list[float]) -> dict[str, Any]:
+    """The per-score criterion: the mean absolute difference per score against round 3's constant (yes/no 0.07 nats,
+    two-candidate 0.35)."""
     m = sum(abs(x) for x in diffs) / len(diffs) if diffs else float("nan")
     limit = env_rule()[f"{fmt}_mean_abs_max"]
-    return {"ok": m <= limit, "mean_abs_diff": m, "limit": limit, "source": "families.ENVCHECK_RULE"}
+    return {"ok": m <= limit, "mean_abs_diff": m, "limit": limit, "source": "r3.ENVCHECK_RULE"}
 ONE_FIFTH = 0.2
 
 # ---------------- loading ----------------
@@ -517,11 +507,7 @@ def envcheck_block(old: list[tuple[Path, list[dict]]], new: list[tuple[Path, lis
     mf = [r for r in chosen if r["kind"] == "main" and r["population"] == "main"]
     for fmt, keep, (al, sw) in (("yes_no", lambda a: a.startswith("yn_"), ("yn_aligned", "yn_swapped")),
                                 ("two_candidate", lambda a: not a.startswith("yn_"), ("aligned", "swapped"))):
-        kept = sorted(k for k in pairs if keep(k[1]))
-        d = [pairs[k][1] - pairs[k][0] for k in kept]
-        olds_v = [pairs[k][0] for k in kept]
-        news_v = [pairs[k][1] for k in kept]
-        conds = [k[1] for k in kept]
+        d = [b - a for (i, c), (a, b) in pairs.items() if keep(c)]
         effects = {}
         for which, idx in (("old", 0), ("new", 1)):
             g = [pairs[(r["id"], al)][idx] - pairs[(r["id"], sw)][idx] for r in mf
@@ -532,7 +518,7 @@ def envcheck_block(old: list[tuple[Path, list[dict]]], new: list[tuple[Path, lis
                "max_abs_diff": max((abs(x) for x in d), default=float("nan")),
                "goal_effect_old": effects["old"], "goal_effect_new": effects["new"],
                "goal_effect_diff": effects["new"] - effects["old"], "n_main_failures": len(mf)}
-        rec["per_score"] = per_score_check(fmt, d, olds_v, news_v, model=R3.base_tag(tag), conditions=conds)
+        rec["per_score"] = per_score_check(fmt, d)
         checks[f"{fmt}_per_score"] = rec["per_score"]["ok"]
         checks[f"{fmt}_goal_effect"] = abs(rec["goal_effect_diff"]) <= rule[f"{fmt}_goal_effect_diff_max"]
         if fmt == "yes_no":
@@ -908,7 +894,7 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
         write_status(run_id, f"gemma_core is {cfg.get('gemma_core')!r}, but the fallback rule gives {gemma!r}", ok=False)
         return 1
     tags = list(R3.core_tags(gemma)) + list(R3.EXTENSION)
-    rule_bad = G.rule_problems()  # review 2: wave B's rule as pinned at the freeze
+    rule_bad = G.rule_problems()  # round 3's own rule, as pinned (design 14.M4)
     if rule_bad:
         write_status(run_id, f"environment-check rule: {rule_bad}", ok=False)
         return 1

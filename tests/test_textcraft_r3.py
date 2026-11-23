@@ -1467,41 +1467,16 @@ def test_a_declared_extension_model_lets_a3x_proceed(mock_runs, small, fast, mon
     assert "refused" in m["A3x"] and json.loads((mock_runs / "runs" / G.FIRST_CORE).read_text())["time"] == first
 
 
-def test_environment_check_per_score_criterion_is_wave_bs_live_rule(monkeypatch):
-    kw = {"model": "qwen3-8b", "conditions": ["yn_aligned", "yn_swapped"]}
-    assert Z.per_score_check("yes_no", [0.05, -0.05], [], [], **kw)["ok"]
-    monkeypatch.setitem(FAM.ENVCHECK_RULE, "yes_no_mean_abs_max", 0.01)  # wave B's rule as amended is read live
-    assert not Z.per_score_check("yes_no", [0.05, -0.05], [], [], **kw)["ok"]
-    seen = {}
-
-    def hook(fmt, diffs, old, new, *, model, conditions):
-        seen.update(fmt=fmt, model=model, conditions=conditions, n=len(diffs))
-        return True
-
-    monkeypatch.setattr(FAM, "envcheck_per_score_check", hook, raising=False)
-    out = Z.per_score_check("yes_no", [9.0, 1.0], [0.0, 0.0], [9.0, 1.0], **kw)
-    assert out["ok"] and out["source"] == "families.envcheck_per_score_check"
-    assert seen == {"fmt": "yes_no", "model": "qwen3-8b", "conditions": ["yn_aligned", "yn_swapped"], "n": 2}
-    with pytest.raises(ValueError):
-        Z.per_score_check("yes_no", [1.0], [0.0], [1.0], model="qwen3-8b", conditions=[])
-
-
-def test_envcheck_block_gives_the_hook_the_model_and_aligned_conditions(records, tmp_path, monkeypatch):
-    seeded = S.envcheck_subset(records)
-    calls = []
-
-    def hook(fmt, diffs, old, new, *, model, conditions):
-        calls.append((fmt, model, len(diffs), len(conditions), [n - o for o, n in zip(old, new)] == diffs,
-                      all(c.startswith("yn_") == (fmt == "yes_no") for c in conditions)))
-        return True
-
-    monkeypatch.setattr(FAM, "envcheck_per_score_check", hook, raising=False)
-    g = {tmp_path / "o": ["NVIDIA L40S"], tmp_path / "n": ["NVIDIA L40S"]}
-    out = Z.envcheck_block([(tmp_path / "o", _env_scores(seeded, "gemma2-9b-it"))],
-                           [(tmp_path / "n", _env_scores(seeded, "gemma2-9b-it", shift=0.01, model="gemma2-9b-it-serve2"))],
-                           "gemma2-9b-it", records, g.get)
-    assert out["status"] == "pass" and {c[0] for c in calls} == {"yes_no", "two_candidate"}
-    assert all(c[1] == "gemma2-9b-it" and c[2] == c[3] > 0 and c[4] and c[5] for c in calls)
+def test_the_environment_rule_is_round_threes_own_and_unamended(monkeypatch):
+    assert R3.ENVCHECK_RULE == {"yes_no_mean_abs_max": 0.07, "yes_no_goal_effect_diff_max": 0.10,
+                                "yes_no_share_diff_max": 0.02, "two_candidate_mean_abs_max": 0.35,
+                                "two_candidate_goal_effect_diff_max": 0.10}
+    assert Z.per_score_check("yes_no", [0.05, -0.05])["ok"] and not Z.per_score_check("yes_no", [0.08, -0.08])["ok"]
+    assert Z.per_score_check("two_candidate", [0.3])["ok"] and not Z.per_score_check("two_candidate", [0.4])["ok"]
+    # a later change in wave B does not change round 3
+    monkeypatch.setitem(FAM.ENVCHECK_RULE, "yes_no_mean_abs_max", 5.0)
+    monkeypatch.setattr(FAM, "envcheck_per_score_check", lambda *a, **k: True, raising=False)
+    assert not Z.per_score_check("yes_no", [0.08, -0.08])["ok"] and Z.env_rule() == R3.ENVCHECK_RULE
 
 
 def test_the_environment_rule_is_pinned(tmp_path, monkeypatch):
@@ -1509,19 +1484,16 @@ def test_the_environment_rule_is_pinned(tmp_path, monkeypatch):
     assert G.rule_problems(pin)  # no pin: refused
     pin.write_text(json.dumps(G.rule_fingerprint()))
     assert G.rule_problems(pin) == []
-    assert G.rule_problems() == []  # the committed pin is the rule in force
-    monkeypatch.setitem(FAM.ENVCHECK_RULE, "yes_no_mean_abs_max", 0.5)
-    assert any("rule" in x for x in G.rule_problems(pin))
-    monkeypatch.setitem(FAM.ENVCHECK_RULE, "yes_no_mean_abs_max", 0.07)
-    monkeypatch.setattr(FAM, "envcheck_per_score_check", lambda *a, **k: True, raising=False)
-    assert any("hook_sha256" in x for x in G.rule_problems(pin))
-    monkeypatch.setattr(FAM, "ENVCHECK_PER_MODEL_GRID", {"qwen3-8b": 0.25}, raising=False)
-    assert any("per_model_grid" in x for x in G.rule_problems(pin))
+    assert G.rule_problems() == []  # the committed pin is round 3's constant
+    pinned = json.loads(G.RULE_PIN.read_text())
+    assert pinned["rule"] == R3.ENVCHECK_RULE and pinned["sha256"] == G.rule_fingerprint()["sha256"]
+    monkeypatch.setitem(R3.ENVCHECK_RULE, "yes_no_mean_abs_max", 0.25)
+    assert any("rule" in x for x in G.rule_problems(pin)) and G.rule_problems()
 
 
 def test_the_analysis_refuses_a_changed_environment_rule(mock_runs, small, monkeypatch):
     man = _manifest(mock_runs, small)
-    monkeypatch.setitem(FAM.ENVCHECK_RULE, "two_candidate_mean_abs_max", 1.0)
+    monkeypatch.setitem(R3.ENVCHECK_RULE, "two_candidate_mean_abs_max", 1.0)
     assert Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man}) == 1
     assert "environment-check rule" in (mock_runs / "runs" / "textcraft_r3_analysis" / "STATUS.md").read_text()
 

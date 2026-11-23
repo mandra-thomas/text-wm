@@ -841,8 +841,8 @@ MUTANTS = [
     ('textcraft r3 R2-S6 a core model can be declared not run', 'wf/textcraft/r3_gates.py', '    if tag not in R3.EXTENSION:', '    if False:'),
     ('textcraft r3 R2-S6 a late declaration accepted', 'wf/textcraft/r3_gates.py', '    if when and first_core and when >= first_core:', '    if False:'),
     ('textcraft r3 R2-S6 first core reading overwritten', 'wf/textcraft/r3_analysis.py', '    if metrics["A3"].get("H3_P") is not None and not first_core_file.exists():', '    if metrics["A3"].get("H3_P") is not None:'),
-    ('textcraft r3 R2 hook not given the model', 'wf/textcraft/r3_analysis.py', '        return {"ok": bool(hook(fmt, diffs, old, new, model=model, conditions=conditions)),', '        return {"ok": bool(hook(fmt, diffs, old, new, model="", conditions=conditions)),'),
-    ('textcraft r3 R2 hook conditions misaligned', 'wf/textcraft/r3_analysis.py', '        conds = [k[1] for k in kept]', '        conds = [k[1] for k in sorted(pairs)][:len(kept)]'),
+    ('textcraft r3 R2 rule read from wave B', 'wf/textcraft/r3_analysis.py', '    return dict(R3.ENVCHECK_RULE)', '    return dict(FAM.ENVCHECK_RULE)'),
+    ('textcraft r3 R2 rule constant loosened', 'wf/textcraft/r3.py', '                 "two_candidate_mean_abs_max": 0.35,', '                 "two_candidate_mean_abs_max": 0.50,'),
     ('textcraft r3 R2 rule pin never differs', 'wf/textcraft/r3_gates.py', '    return [f"the environment-check rule\'s {k} differs from the one pinned at the freeze" for k in now\n            if now[k] != pinned.get(k)]', '    return []'),
     ('textcraft r3 R2 analysis ignores the rule pin', 'wf/textcraft/r3_analysis.py', '    if rule_bad:\n        write_status(run_id, f"environment-check rule', '    if False:\n        write_status(run_id, f"environment-check rule'),
 ]
