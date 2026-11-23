@@ -144,6 +144,10 @@ A fourth outside review passed the engineering and the science with fixes; the c
 
 A fifth, confirming review (`notes/interp_review5.md`) found one must-fix; the changes are in `notes/interp_design.md`, "Amendments after review 5, before any run", made before any activation, patching, probe or lens result existed. No interpretability job has run. The direct-path rule now excludes a layer only if its removal passes as well (lower bound at least 0.6): excluding a failing layer could move the onset earlier and turn "after arrival" into "at or before arrival". Also: tests pin the gated second projection's value, its both-folds condition and its 0.5 boundary, and the ablation plan; a missing fold makes the second projection not assessable; NaN H4 quantities read "not assessable"; the object-mention share's sample size is counted and planned in its own items; the pooled stratum has no plan. Review 5's ten mutants and eight new ones are in the mutation check.
 
+### Interpretability pilot: analysis fix after a crash (2026-11-23, before any analysis output was read)
+
+The frozen analysis (job 7252128) stopped in the hidden-state probe at the answer position: it estimated the success direction from the probe's balanced training rows, which hold no success, because every labelled success is a take whose object was there. The design's direction (A1, A3, B2) is the training fold's determined successes and failures after step 0, and the fix uses those rows. Only the answer-position hidden probe changes; it had no value at the frozen commit. Operational: scikit-learn 1.9.1 was supplied from a separate `--target` folder, because the study environment lacks it. Details in `notes/interp_deviation_analysis_fix.md` (branch `interp-analysis-fix`).
+
 ## Closed 2026-11-20: items open after the pilots
 
 Each item is kept as written, with what became of it first.

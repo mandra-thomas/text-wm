@@ -148,6 +148,10 @@ Review 5 (`notes/interp_review5.md`) ran ten spot-check mutants (V1 to V10); fiv
 | W1 a failing layer excluded again; W2 removal must pass strictly above 0.6; W8 removal's upper bound read as the lower | `test_a_failing_layer_is_never_excluded_so_the_onset_cannot_move_earlier` |
 | W3 ablation summary without the removal profile | `test_onset_and_deepest_bound_come_from_the_kept_layers`, `test_ablation_summary_keeps_a_failing_layer_with_a_large_direct_path` |
 
+## Interpretability pilot, analysis fix (2026-11-23, branch `interp-analysis-fix`)
+
+The frozen analysis crashed in the hidden-state probe's answer-position success direction (`notes/interp_deviation_analysis_fix.md`). The mock end-to-end test never reached that code, because its balanced probe training set has fewer than 20 items. A new test, `test_hidden_probe_success_direction_is_the_training_folds_not_the_balanced_rows`, uses items shaped like the real data. It fails on the frozen `pilot.py` with the crash's own error, and it pins the direction to the training fold's successes and failures after step 0. Four mutants were added: AF1 (the frozen selection), AF2 (the direction from the test fold), AF3 (step-0 failures let in) and AF4 (the extra rows not loaded). Under origin/main's strict runner (`--root` this branch, `--mutants-from` its list, `--require-unique`), all four were killed by that test by name. The 240 earlier interpretability mutants match their target text exactly as at the tag. Interp tests: 104 passed (scikit-learn 1.9.1, CPU torch 2.2.2).
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:

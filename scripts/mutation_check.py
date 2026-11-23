@@ -903,6 +903,20 @@ MUTANTS = [
     ('interp W8 removal lower bound read as the upper', 'wf/interp/analysis.py',
      'lo = ((removal.get(m) or removal.get(str(m)) or {}).get("ci") or (float("nan"),))[0]',
      'lo = ((removal.get(m) or removal.get(str(m)) or {}).get("ci") or (float("nan"), float("nan")))[1]'),
+    # Analysis fix, 2026-11-23 (notes/interp_deviation_analysis_fix.md): the hidden probe's success direction.
+    ('interp AF1 hidden-probe success direction from the balanced probe rows (the frozen crash)', 'wf/interp/pilot.py',
+     '                    st, ft = pop[f]\n',
+     '                    st = [t for t in tr if t["id"] in succ_ids]\n'
+     '                    ft = [t for t in tr if t["id"] not in succ_ids and (t.get("history_len") or 0) > 0]\n'),
+    ('interp AF2 hidden-probe success direction from the test fold', 'wf/interp/pilot.py',
+     'pop = {f: success_population(sets, fold, have, 1 - f) for f in (0, 1)}',
+     'pop = {f: success_population(sets, fold, have, f) for f in (0, 1)}'),
+    ('interp AF3 step-0 failures in the hidden-probe success direction', 'wf/interp/pilot.py',
+     'fold[t["game_id"]] == f and (t.get("history_len") or 0) > 0\n          and all(',
+     'fold[t["game_id"]] == f\n          and all('),
+    ('interp AF4 success-direction rows not loaded', 'wf/interp/pilot.py',
+     '\n                  | {f"{t[\'id\']}|yn|absent" for sc, fl in pop.values() for t in sc + fl})',
+     ')'),
 ]
 
 

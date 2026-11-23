@@ -306,6 +306,89 @@ def test_answer_projection_removes_readout_and_success():
     assert np.abs(Xp @ e[0]).max() < 1e-9 and np.abs(Xp @ proj[1]).max() < 1e-9
 
 
+class _ArrayStore:
+    """An ActStore's records() and load() over in-memory arrays: every key's array is (probe layers, width), and
+    load() ignores `sel` (the test's arrays already hold the probe layers only)."""
+
+    def __init__(self, recs, arrays):
+        self.recs, self.arrays = recs, arrays
+
+    def records(self):
+        return self.recs
+
+    def load(self, name, keys, sel=None):
+        by = {r["key"]: r for r in self.recs}
+        return [by[k] for k in keys], np.stack([self.arrays[k] for k in keys])
+
+
+def test_hidden_probe_success_direction_is_the_training_folds_not_the_balanced_rows(monkeypatch, tmp_path):
+    """Deviation 2026-11-23 (notes/interp_deviation_analysis_fix.md). As in the real data, every labelled success is
+    a take whose object was at the receptacle (label true), so balancing within outcome keeps no success and the
+    frozen analysis raised "no verb has both a success and a failure" at the first probe layer. The direction
+    projected out at the answer position is the training fold's success direction (A1, A3, B2): its determined
+    successes, labelled or not, and its failures after step 0."""
+    rng = np.random.default_rng(11)
+    W, pl = 8, [3, 7]
+    fails, succs = [], []
+    for g in range(10):
+        gid = f"hg{g}"
+        for k in range(10):  # takes and moves, half with the object at the receptacle; two step-0 items a game
+            obj, at = f"mug {k + 1}", k % 2 == 0
+            act = f"take {obj} from cabinet 3" if k < 8 else f"move {obj} to cabinet 3"
+            fails.append(_item(id=f"hf{g}_{k}", game_id=gid, action=act, history_len=0 if k in (6, 7) else 1,
+                               history_text="> go to shelf 1", scene_locations={obj: ["cabinet 3" if at else "shelf 1"]}))
+        succs += [_item(id=f"hs{g}_t", game_id=gid, action="take plate 1 from shelf 1", history_len=1,
+                        history_text="> go to shelf 1", scene_locations={"plate 1": ["shelf 1"]}),
+                  _item(id=f"hs{g}_e", game_id=gid, action="examine shelf 1", history_len=1,
+                        history_text="> go to shelf 1", scene_locations={"plate 1": ["shelf 1"]}),
+                  _item(id=f"hs{g}_m", game_id=gid, action="move cup 1 to cabinet 3", history_len=2,
+                        history_text="> go to shelf 1\n> take cup 1 from shelf 1", scene_locations={"cup 1": ["shelf 1"]})]
+    from wf.interp.probes import hidden_labels
+
+    lab = {t["id"]: hidden_labels(t)["object_at_receptacle"] for t in succs}
+    assert {v for i, v in lab.items() if i.endswith("_t")} == {True} and {lab[f"hs{g}_m"] for g in range(10)} == {None}
+    recs, arrays = [], {}
+    for t in fails + succs:
+        y = hidden_labels(t)["object_at_receptacle"]
+        for goal in ("absent", "aligned", "swapped"):
+            key = f"{t['id']}|yn|{goal}"
+            recs.append({"id": t["id"], "goal": goal, "fmt": "yn", "key": key, "probe_layers": pl,
+                         "d": float(rng.normal())})
+            x = rng.standard_normal((len(pl), W))
+            x[:, 0] += 2.0 * bool(y) + (0.5 if goal == "aligned" else 0.0)  # the fact, and a goal shift
+            x[:, 1] += 2.0 * (t in succs)  # the success feature
+            x[:, 2] += {"take": 0.0, "move": 1.5, "examine": -1.5}[t["action"].split()[0]]  # a verb offset
+            arrays[key] = x
+    (tmp_path / "interp_pilot_stage0").mkdir()
+    lens = rng.standard_normal(W)
+    np.save(tmp_path / "interp_pilot_stage0" / "lens_dir.npy", lens)
+    monkeypatch.setenv("RUNS_DIR", str(tmp_path))
+    store = _ArrayStore(recs, arrays)
+    monkeypatch.setattr(PI, "_stage0_store", lambda cfg: store)
+    monkeypatch.setattr(PI, "load_sets", lambda cfg: {"failures": fails, "successes": succs})
+    calls = []
+    real = PI.answer_projection
+
+    def spy(*a):
+        calls.append(real(*a))
+        return calls[-1]
+
+    monkeypatch.setattr(PI, "answer_projection", spy)
+    out = PI.hidden_probe_report({})
+    fold = PI.folds(fails + succs, 0)
+    assert len(calls) == 2 * len(pl)  # every probe layer, both folds, reached the answer position
+    for c, (k, f) in enumerate((k, f) for k in range(len(pl)) for f in (0, 1)):
+        sc = [t for t in succs if fold[t["game_id"]] != f]  # the training fold's successes, labelled or not
+        fl = [t for t in fails if fold[t["game_id"]] != f and t["history_len"] > 0]
+        want = A.success_direction([arrays[f"{t['id']}|yn|absent"][k] for t in sc],
+                                   [arrays[f"{t['id']}|yn|absent"][k] for t in fl],
+                                   [A.verb(t) for t in sc], [A.verb(t) for t in fl])
+        assert np.allclose(calls[c][1], want, atol=1e-12) and np.allclose(calls[c][0], lens)
+    for layer in pl:
+        assert math.isfinite(out["by_layer"][layer]["answer"]["auc"])
+        assert math.isfinite(out["by_layer"][layer]["rec"]["auc"])
+
+
 def _items_for_selection():
     from tests.test_interp import _item
 

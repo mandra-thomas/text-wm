@@ -352,6 +352,17 @@ def answer_projection(lens_dir: Any, succ_rows: Any, fail_rows: Any, succ_verbs:
     return [lens_dir, sv]
 
 
+def success_population(sets: dict, fold: dict[str, int], have: Any, f: int) -> tuple[list[dict], list[dict]]:
+    """(successes, failures) whose neutral residuals estimate fold `f`'s success direction (amendment 1, A3;
+    amendment 2, B2): the fold's determined successes, and its failures after step 0, each with its neutral prompt
+    in stage 0 (failures also with their aligned and swapped prompts), as `fold_directions` and `h4_cosine_report`
+    select them. `have` holds (id, goal) pairs."""
+    sc = [t for t in sets["successes"] if fold[t["game_id"]] == f and (t["id"], "absent") in have]
+    fl = [t for t in sets["failures"] if fold[t["game_id"]] == f and (t.get("history_len") or 0) > 0
+          and all((t["id"], g) in have for g in ("aligned", "swapped", "absent"))]
+    return sc, fl
+
+
 def fold_directions(cfg: dict, store: Any, sets: dict, fold: dict[str, int], layers: list[int],
                     random_layers: tuple[int, ...] = (), seed: int = 0, lens_dir: Any = None) -> dict:
     """{fold: {layer: directions}} estimated on each fold's items (`analysis.estimate_directions`); at
@@ -979,7 +990,8 @@ def hidden_probe_report(cfg: dict) -> dict:
 
     Label: the action's object was at the action's receptacle at reset (`probes.hidden_labels`). Trained on
     neutral-task prompts (balanced within true outcome), at the action's receptacle token and at the answer
-    position after projecting out the readout direction and the fold's success direction; tested on the other
+    position after projecting out the readout direction and the training fold's success direction
+    (`success_population`); tested on the other
     fold: AUC on neutral prompts, then the standardised shift aligned minus swapped on the failures (positive =
     toward "the object is there"), and at the answer position also the shift left after removing what the
     readout's own change predicts. Descriptive in the minimal pilot: its stage 0 has only RQ2's items and the
@@ -1007,9 +1019,17 @@ def hidden_probe_report(cfg: dict) -> dict:
     out: dict[str, Any] = {"n_labelled": len(items), "share_true": float(np.mean([lab[t["id"]] for t in items])),
                            "layers": pl, "by_layer": {}}
 
+    # The success direction projected out at the answer position is the training fold's (A1, A3, B2): its determined
+    # successes and its failures after step 0, labelled or not. Not the balanced probe-training rows: every labelled
+    # success is a "take" whose object was there, so balancing within outcome keeps no success, and no verb has
+    # both (deviation 2026-11-23, notes/interp_deviation_analysis_fix.md).
+    pop = {f: success_population(sets, fold, have, 1 - f) for f in (0, 1)}
+
     # One streaming pass per array, keeping the probe layers only (float16): the receptacle token's residual and
-    # the answer position's, for the neutral, aligned and swapped prompts of the labelled items.
-    keys = sorted(f"{t['id']}|yn|{g}" for t in items for g in ("absent", "aligned", "swapped") if (t["id"], g) in have)
+    # the answer position's, for the neutral, aligned and swapped prompts of the labelled items, and the neutral
+    # prompts of the success direction's items.
+    keys = sorted({f"{t['id']}|yn|{g}" for t in items for g in ("absent", "aligned", "swapped") if (t["id"], g) in have}
+                  | {f"{t['id']}|yn|absent" for sc, fl in pop.values() for t in sc + fl})
     krows, rec_arr = store.load("probe", keys, sel=(slice(None), 1))
     _, ans_arr = store.load("last", keys, sel=list(pl))
     at = {r["key"]: n for n, r in enumerate(krows)}
@@ -1033,8 +1053,7 @@ def hidden_probe_report(cfg: dict) -> dict:
                 Xtr = X([t["id"] for t in tr], "absent", pos, k, layer)
                 proj = None
                 if pos == "answer":
-                    st = [t for t in tr if t["id"] in succ_ids]
-                    ft = [t for t in tr if t["id"] not in succ_ids and (t.get("history_len") or 0) > 0]
+                    st, ft = pop[f]
                     proj = answer_projection(lens_dir, X([t["id"] for t in st], "absent", pos, k, layer),
                                              X([t["id"] for t in ft], "absent", pos, k, layer),
                                              [verb(t) for t in st], [verb(t) for t in ft])
