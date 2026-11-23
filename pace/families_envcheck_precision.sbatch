@@ -8,15 +8,16 @@
 # Two model loads (about 2 min each) and 450 forward passes per environment; well under 30 minutes.
 #SBATCH --time=0:40:00
 #SBATCH --gres=gpu:1
-# Qwen3-8B's earlier run and its serve2 rescoring both ran on an L40S (wf.families.ENVCHECK_GPU).
-#SBATCH --constraint=gpu-l40s
+# Qwen3-8B's earlier run and its serve2 rescoring both ran on an L40S (wf.families.ENVCHECK_GPU). Brackets because
+# ICE appends &cuda13.
+#SBATCH --constraint=(gpu-l40s)
 #SBATCH --output=logs/envprec_%j.out
 #SBATCH --error=logs/envprec_%j.err
 #
 # Precision diagnostic for the wave B environment check (scripts/families_envcheck_precision.py; design note
 # section 8, amendment): the same 50 items scored in the study environment (transformers 4.51.3, read-only use of its
 # Python) and in serve2, keeping bf16 and float64-head logits. No wave B model is loaded.
-#   sbatch pace/families_envcheck_precision.sbatch
+#   bash pace/submit.sh families_envcheck_precision.sbatch   (account, QOS and partition from pace.env)
 
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
