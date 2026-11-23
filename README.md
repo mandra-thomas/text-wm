@@ -1,5 +1,7 @@
 # Wishful Foresight: does the agent's goal leak into an LLM world model?
 
+**New to the project? Start with [notes/GUIDE.md](notes/GUIDE.md)**, a reader's guide to how the experiments are set up and scored.
+
 Language-model agents increasingly consult a **world model**, a language model asked what the environment will reply to an action, before they act. That world model is often shown the agent's task.
 
 In a goal-independent environment, an action whose failure is already settled by what the agent has seen should be predicted to fail, whatever the task says. This project tests whether it is. The study is preregistered and runs on ALFWorld (text household tasks). It compares two prompted models, Qwen3-8B (thinking off) and Llama-3.1-8B-Instruct, and also scores Word2World's fine-tuned ALFWorld world models. Later, exploratory runs extend the ALFWorld test to eleven models from four developers ([notes/cross_model_summary.md](notes/cross_model_summary.md)) and to two further environments.
