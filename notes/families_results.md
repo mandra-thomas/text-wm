@@ -1,6 +1,6 @@
 # Model families, wave A: results (2026-11-20)
 
-Exploratory. The design, predictions and analysis rules are in [families_design.md](families_design.md); they were fixed, including three amendments, before any wave-A score was read. Analysis run `families_analysis` at ca76bb9 (ICE job 7201550); every number below is from [families_metrics.json](families_metrics.json). Scoring ran at 65eb591 on the 4,666 primary RQ2 items (determined failures) and 292 determined successes, three task lines each (aligned, swapped, neutral), two-candidate and yes/no formats.
+Exploratory. The design, predictions and analysis rules are in [families_design.md](families_design.md); they were fixed, including three amendments, before any wave-A score was read. Analysis run `families_analysis` at ca76bb9 (ICE job 7201550); every number below is from [families_metrics.json](families_metrics.json). *(Corrected 2026-11-23: the metrics file on `main` is from a rerun of `families_analysis` at the same commit, ICE job 7204329, made once the Mistral placement scores were in (commit d0b30c1). Against the job 7201550 version first committed (a32eaeb), only its `placement`, `waiting` and `provenance` blocks differ; every other block is identical, so every number in the first table and the comparisons is the same in both.)* Scoring ran at 65eb591 on the 4,666 primary RQ2 items (determined failures) and 292 determined successes, three task lines each (aligned, swapped, neutral), two-candidate and yes/no formats.
 
 **Primary measure** (yes/no format): the share of failure items whose log-odds of "Yes" is higher under the aligned task than the swapped one (ties count as not moved); 0.5 means no effect. A model is interpretable only if, under the neutral task, its yes/no AUC is at least 0.70, it answers Yes to at most 95% of failures and at least 5% of successes, and the median P(Yes)+P(No) is at least 0.5. Intervals are game-clustered bootstraps (95%).
 
@@ -17,6 +17,9 @@ All six models show a positive effect in both formats (the logged prediction hol
 
 **Planned comparisons of the share** (paired by item, game-clustered; "differs" from the 95% interval of the paired difference; equivalence would need the 90% interval inside ±0.05):
 
+*(Clarified 2026-11-23.)* Two rules give a reading here, and they are not the same rule. The **primary** reading of each of the seven planned comparisons comes from the primary family of 18 tests (`primary_family.comparison_readings` in the metrics file): "differs" needs the Holm-adjusted game sign-flip permutation p of the paired difference (`p_differs`) below 0.05, and "matches" needs the Holm-adjusted TOST p for a difference within ±0.05 (`p_equivalent`) below 0.05; differs without matching reads "differs", neither reads "inconclusive (no difference detected)". The **descriptive** reading in the `comparisons` block, which the table's column follows, says "differs" when the 95% bootstrap interval of the difference excludes zero and "matches" when its 90% interval lies inside ±0.05, with no correction. For the seven planned comparisons the two agree: the four Gemma and Llama-3.2-3B-against-Llama-3.1-8B comparisons differ (Holm p 0.018 each), and both Mistral comparisons are inconclusive (Holm p of the difference 1.0; of equivalence 0.156 and 0.126). The two rows outside the planned comparisons (Llama-3.2-3B and Llama-3.2-1B against Qwen3-8B) have only the descriptive reading, and the Llama-3.2-1B comparisons are not interpreted.
+
+
 | Comparison | Difference in share | Reading |
 |---|---|---|
 | gemma2-9b-it − llama3.1-8b | -0.147 [-0.198, -0.100] | differs |
@@ -30,6 +33,8 @@ All six models show a positive effect in both formats (the logged prediction hol
 | mistral-7b-v0.3 − qwen3-8b | -0.009 [-0.046, +0.030] | no difference detected |
 
 No comparison met the ±0.05 equivalence margin after Holm correction. Mistral is within about 2 points of both reference models but equivalence is not shown.
+
+**One key name, two quantities.** *(Added 2026-11-23.)* The code key `yes_share_failures` means different things in two modules, and both appear in `families_metrics.json`. In `wf/sizes.py` (and so under `models.<model>.yes_no.yes_share_failures` in `families_metrics.json`, and in `size_metrics.json` and `size_v2_metrics.json`) it is the mean of σ(L) over failing actions, a mean probability of "Yes". In `wf/families.py` (under `models.<model>.argmax_answers.yes_share_failures`) it is the share of failing actions whose yes/no log-odds is above zero, that is, answered Yes. This note's "Answers Yes on failures" column is the second (for Mistral under the aligned task, 0.803 against a mean σ of 0.757). The keys are not renamed.
 
 **Practical size depends on calibration.** Models that are very confident that failures fail (Qwen3-8B, Gemma 2) rarely change their answer under the aligned task, although the task still moves their scores. Less confident models change many answers: Mistral already answers Yes to 45% of failures under the swapped task and 80% under the aligned task. The goal-to-evidence ratio R (secondary) is in the metrics file; across families it mostly reflects how far each model pushes its log-odds (design note, third amendment), so it is not used to rank models.
 

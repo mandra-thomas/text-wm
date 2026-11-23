@@ -161,6 +161,8 @@ Design and prediction were logged before any score. Scoring ran at 8bfd84c and t
 - the yes-share is the mean σ of the yes/no score on failing actions, under the neutral task; next to it is the share of failing actions answered Yes, that is, with "Yes" scored above "No" (`audit_metrics.json`, `size_yes_share.<model>.failures.yn_absent`);
 - the AUC compares working with failing actions on the two-candidate score.
 
+*(Added 2026-11-23.)* In the code, the key `yes_share_failures` holds the first of these two quantities in `wf/sizes.py` (the mean σ, as in `size_metrics.json`) but the second in `wf/families.py` (the share with "Yes" scored above "No", under `argmax_answers` in `families_metrics.json`, which also carries the mean σ under `yes_no`). Read the key by the module that wrote it; the keys are not renamed.
+
 | Size (parameters) | ΔL two-candidate | ΔL yes/no | Score shift | First-token sign changes, either direction | Yes-share on failures (mean σ) | Failures answered Yes (share) | AUC, neutral → aligned |
 |---|---|---|---|---|---|---|---|
 | 0.6B (0.75B) | 0.89 | 0.12 | 2.0 | 0.6% | 99.9% | 100% | 0.72 → 0.57 |
