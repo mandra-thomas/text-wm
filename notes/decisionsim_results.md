@@ -1,6 +1,6 @@
 # Decision simulation, Stage 1a (fixed candidate menus): results (2026-11-22)
 
-Design frozen before scoring at tag `decisionsim-stage1a-frozen-2026-11-21` (commit `eeeb7dd`; [decisionsim_design.md](decisionsim_design.md), gate at line 143). Scoring: Qwen3-8B (ICE job 7230581) and Llama-3.1-8B (job 7230582) at `eeeb7dd`. Analysis: `decisionsim_analysis` (job 7239661). The three secondary models (Mistral-7B, Gemma-2-9B, Llama-3.2-3B) were scored afterwards and are reported below; they never decide the gate, which needs only the primary models. Numbers are from [decisionsim_metrics.json](decisionsim_metrics.json).
+Design frozen before scoring at tag `decisionsim-stage1a-frozen-2026-11-21` (commit `eeeb7dd`; [decisionsim_design.md](decisionsim_design.md), gate at line 143). Scoring: Qwen3-8B (ICE job 7230581) and Llama-3.1-8B (job 7230582) at `eeeb7dd`. Analysis: `decisionsim_analysis` (job 7239661). The three secondary models (Mistral-7B, Gemma-2-9B, Llama-3.2-3B) were scored afterwards and are reported below; they never decide the gate, which needs only the primary models. Numbers are from [decisionsim_metrics.json](decisionsim_metrics.json), except the three secondary models' numbers, which are from [decisionsim_dx_metrics.json](decisionsim_dx_metrics.json) (`frozen_functions_secondary_models` and `models`): the frozen analysis ran before those models were scored and lists them as waiting. *(Citation corrected 2026-11-23.)*
 
 ## Question
 
@@ -58,9 +58,11 @@ The direction holds under every variant. The size (3–6 points under natural ch
 
 | Model | Real − task-blind | Net states | Note |
 |---|---|---|---|
-| Mistral-7B | +3.3 points | 24 (21 needed) | all at step 0 |
+| Mistral-7B | +3.3 points | 24 (21 needed) | 21 of the 24 at step 0 |
 | Gemma-2-9B | +8.9 | 65 | same two-part mechanism as Qwen |
 | Llama-3.2-3B | +15.4 | 112 | its task-blind verifier fails 8.0%, worse than no verifier (5.8%); scores within ±0.6 nats of zero, so flips are tiny threshold crossings |
+
+*(Corrected 2026-11-23: Mistral-7B's harm was described as all at step 0. By `decisionsim_dx_metrics.json` (`models.mistral-7b-v0.3.q1_recompute`), its 24 net states are 24 harmed and 0 helped; 21 are at step 0, where the real-task verifier rejects a working first move and the fallback picks a failing action, and 3 are at later steps, where the real-task verifier accepts a failing proposal that the task-blind verifier rejects. The category and the +3.3 points are unchanged.)*
 
 All three reach "worth doing" under both the task-blind and neutral comparisons. With a fallback free of goal-object actions, all three drop to "no reliable change" or "too rare".
 
