@@ -860,20 +860,6 @@ def test_provenance_requires_the_freeze_commit_and_one_revision(tmp_path):
     assert Z.provenance_problems({}, {"qwen3.5-9b": [{"model_revision": pin}]}, "c1") == {}
 
 
-def test_freeze_commit_and_job_start_check(monkeypatch):
-    assert G.freeze_commit(_git("c1")) == "c1" and G.freeze_commit(_git("")) is None
-    with pytest.raises(SystemExit):
-        G.freeze_commit(lambda a: "textcraft-r3-design-frozen-a\ntextcraft-r3-design-frozen-b" if a[0] == "tag" else "")
-    monkeypatch.setenv("WF_MOCK_SCORE", "0")
-    with pytest.raises(SystemExit):
-        G.require_freeze_commit(_git(""))
-    with pytest.raises(SystemExit):  # HEAD differs in code
-        G.require_freeze_commit(_git("c1"))
-    assert G.require_freeze_commit(_git("c1", diffs={"head": "notes/a.md"}))["checked"] is True
-    monkeypatch.setenv("WF_MOCK_SCORE", "1")
-    assert G.require_freeze_commit(_git(""))["checked"] == "mock"
-
-
 def test_a_family_with_a_provenance_problem_is_refused_alone(small, fast):
     scores = {t: _planted(small, t) for t in list(R3.CORE) + list(R3.EXTENSION)}
     out = Z.analyse(small, SHOTS, scores, {}, None, None, {"status": "waiting"}, refused={"A3x": ["x"]})
@@ -1148,15 +1134,6 @@ def test_environment_check_share_criterion(records, tmp_path):
     assert not out["checks"]["yes_no_share"] and out["status"] == "fail"
 
 
-def test_environment_check_per_score_criterion_is_wave_bs_live_rule(monkeypatch):
-    assert Z.per_score_check("yes_no", [0.05, -0.05], [], [])["ok"]
-    monkeypatch.setitem(FAM.ENVCHECK_RULE, "yes_no_mean_abs_max", 0.01)  # wave B's rule as amended is read live
-    assert not Z.per_score_check("yes_no", [0.05, -0.05], [], [])["ok"]
-    monkeypatch.setattr(FAM, "envcheck_per_score_check", lambda fmt, d, o, n: True, raising=False)
-    out = Z.per_score_check("yes_no", [9.0], [], [])
-    assert out["ok"] and out["source"] == "families.envcheck_per_score_check"
-
-
 def test_environment_status_and_b3_source():
     ok_tok = {t: {"ok": True} for t in R3.ENVCHECK_MODELS}
     st = lambda *s: {t: {"status": x} for t, x in zip(R3.ENVCHECK_MODELS, s)}  # noqa: E731
@@ -1368,3 +1345,183 @@ def test_mock_end_to_end(mock_runs, small, monkeypatch, fast):
     m = json.loads((mock_runs / "runs" / "textcraft_r3_analysis" / "metrics.json").read_text())
     assert m["B3"]["differences"] == {}
     assert all(v == "refused (provenance)" for r in m["B3"]["readings"].values() for c, v in r.items() if c in A.CONTRASTS)
+
+
+# ---------------- review 2 (design section 14.R2) ----------------
+
+
+def test_freeze_commit_and_job_start_check(monkeypatch):
+    clean = lambda: False  # noqa: E731
+    assert G.freeze_commit(_git("c1")) == "c1" and G.freeze_commit(_git("")) is None
+    with pytest.raises(SystemExit):
+        G.freeze_commit(lambda a: "textcraft-r3-design-frozen-a\ntextcraft-r3-design-frozen-b" if a[0] == "tag" else "")
+    monkeypatch.setenv("WF_MOCK_SCORE", "0")
+    with pytest.raises(SystemExit):
+        G.require_freeze_commit(_git(""), clean)
+    with pytest.raises(SystemExit):  # HEAD differs in code
+        G.require_freeze_commit(_git("c1"), clean)
+    assert G.require_freeze_commit(_git("c1", diffs={"head": "notes/a.md"}), clean)["checked"] is True
+    # R2-S7: a change to a job script is a code change, as under wf/ or scripts/
+    for path in ("pace/textcraft_r3_score.sbatch", "scripts/mutation_check.py", "wf/textcraft/r3.py"):
+        with pytest.raises(SystemExit):
+            G.require_freeze_commit(_git("c1", diffs={"head": f"notes/a.md\n{path}"}), clean)
+        assert not G.code_identical("head", "c1", _git("c1", diffs={"head": path}))
+    # R2-S2: uncommitted changes to tracked files refuse the job
+    with pytest.raises(SystemExit):
+        G.require_freeze_commit(_git("c1", diffs={"head": "notes/a.md"}), lambda: True)
+    monkeypatch.setenv("WF_MOCK_SCORE", "1")
+    assert G.require_freeze_commit(_git(""))["checked"] == "mock"
+
+
+def test_dirty_shards_are_refused(tmp_path):
+    l40 = ["NVIDIA L40S"]
+    d = _shard(tmp_path, "a/shard_00_of_01", [{"gpu": l40, "git_sha": "c1"}])
+    (d / "inputs.json").write_text(json.dumps({"inputs": {}, "git_dirty": True}))
+    assert G.shard_dirty(d)
+    probs = Z.provenance_problems({"qwen3.5-9b": [d]}, {}, "c1", run_git=_git())
+    assert any("uncommitted" in x for x in probs["qwen3.5-9b"])
+    (d / "inputs.json").write_text(json.dumps({"inputs": {}, "git_dirty": False}))
+    assert not G.shard_dirty(d) and Z.provenance_problems({"qwen3.5-9b": [d]}, {}, "c1", run_git=_git()) == {}
+
+
+def test_b3_is_refused_through_a_newer_models_provenance():
+    probs = {"ministral3-8b-it": ["ministral3-8b-it: jobs ran on different or unrecorded GPUs"], "olmo3-7b-it": ["x"]}
+    out = Z.newer_model_refusals(probs, R3.pairs())
+    assert out == ["a pair's newer model: ministral3-8b-it: jobs ran on different or unrecorded GPUs"]
+    assert Z.newer_model_refusals(probs, [("gemma2-9b-it", "gemma4-e4b-it")]) == []
+    assert Z.newer_model_refusals({"gemma4-e4b-it": ["y"]}, R3.pairs("gemma4-e4b-it"))
+
+
+def test_h3p_labels_a_model_not_scored():
+    v = {"a": V(parent_penalty="confirmed below zero"), "b": V(parent_penalty="confirmed below zero"),
+         "c": {c: "not scored" for c in A.CONTRASTS}}
+    out = Z.h3p_reading(v, {"a": True, "b": True, "c": False}, {t: False for t in v}, {"fires": False})
+    assert out["per_model"]["c"] == "not scored" and out["overall"] == "supported"
+
+
+def test_gpu_unobtainable_needs_the_first_submission_and_seven_days(tmp_path):
+    import datetime as dt
+
+    today = dt.date(2026, 12, 10)
+    assert G.unobtainable_check(tmp_path, today) == {"filed": False, "valid": False}
+    (tmp_path / G.UNOBTAINABLE).write_text(json.dumps({"reason": "no A40"}))
+    assert not G.unobtainable_check(tmp_path, today)["valid"]
+    (tmp_path / G.UNOBTAINABLE).write_text(json.dumps({"first_submission_job_id": "7250001",
+                                                       "first_submission_date": "2026-12-05"}))
+    out = G.unobtainable_check(tmp_path, today)
+    assert not out["valid"] and out["days"] == 5
+    (tmp_path / G.UNOBTAINABLE).write_text(json.dumps({"first_submission_job_id": "7250001",
+                                                       "first_submission_date": "2026-12-03"}))
+    assert G.unobtainable_check(tmp_path, today)["valid"]
+    (tmp_path / G.UNOBTAINABLE).write_text(json.dumps({"first_submission_job_id": "",
+                                                       "first_submission_date": "2026-12-01"}))
+    assert not G.unobtainable_check(tmp_path, today)["valid"]
+
+
+def test_a_filed_gate_failure_is_final(mock_runs, small):
+    man = _manifest(mock_runs, small)
+    _gate_rec(mock_runs / "runs", "textcraft_r3_score_qwen3.5-9b", {"ok": False, "problems": ["x"]})
+    with pytest.raises(SystemExit):
+        S.run_textcraft_r3_score({"run_id": "textcraft_r3_score_qwen3.5-9b", "model": "qwen3.5-9b", "manifest": man})
+    rec = json.loads((mock_runs / "runs" / "textcraft_r3_score_qwen3.5-9b" / "shard_00_of_01" /
+                      "tokenization_checks.json").read_text())
+    assert rec["ok"] is False  # the record is kept
+    _gate_rec(mock_runs / "runs", "textcraft_r3_score_olmo3-7b-it", {"ok": True})
+    assert S.run_textcraft_r3_score({"run_id": "textcraft_r3_score_olmo3-7b-it", "model": "olmo3-7b-it", "manifest": man}) == 0
+
+
+def test_not_run_declarations(tmp_path):
+    def declare(tag, when):
+        d = tmp_path / f"textcraft_r3_score_{tag}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "not_run.json").write_text(json.dumps({"date": when, "reason": "GPU availability"}))
+
+    assert G.not_run_declaration(tmp_path, "qwen3.8-27b", None) == {"declared": False}
+    declare("qwen3.8-27b", "2026-12-01T09:00:00")
+    assert G.not_run_declaration(tmp_path, "qwen3.8-27b", None)["valid"]
+    assert G.not_run_declaration(tmp_path, "qwen3.8-27b", "2026-12-02T10:00:00")["valid"]
+    late = G.not_run_declaration(tmp_path, "qwen3.8-27b", "2026-11-30T10:00:00")
+    assert not late["valid"] and "first core reading" in late["problems"][0]
+    declare("qwen3.5-9b", "2026-12-01")
+    assert not G.not_run_declaration(tmp_path, "qwen3.5-9b", None)["valid"]  # a core model cannot be declared
+    declare("olmo3-7b-it", "yesterday")
+    assert not G.not_run_declaration(tmp_path, "olmo3-7b-it", None)["valid"]
+
+
+def test_a_declared_extension_model_lets_a3x_proceed(mock_runs, small, fast, monkeypatch):
+    man = _manifest(mock_runs, small)
+    for tag in list(R3.CORE) + ["qwen3.8-27b", "olmo3-7b-it"]:
+        assert S.run_textcraft_r3_score({"run_id": f"textcraft_r3_score_{tag}", "model": tag, "manifest": man}) == 0
+    d = mock_runs / "runs" / "textcraft_r3_score_gemma4-31b-it"
+    d.mkdir(parents=True)
+    (d / "not_run.json").write_text(json.dumps({"date": "2026-12-01T09:00:00", "reason": "no A100 80 GB"}))
+    assert Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man}) == 0
+    m = json.loads((mock_runs / "runs" / "textcraft_r3_analysis" / "metrics.json").read_text())
+    assert m["A3x"]["not_scored"] == ["gemma4-31b-it"] and "H3_P" in m["A3x"]
+    assert (mock_runs / "runs" / G.FIRST_CORE).exists()
+    # a declaration dated after the first core reading is refused, and refuses A3x
+    first = json.loads((mock_runs / "runs" / G.FIRST_CORE).read_text())["time"]
+    (d / "not_run.json").write_text(json.dumps({"date": "2999-01-01T00:00:00", "reason": "late"}))
+    assert Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man}) == 0
+    m = json.loads((mock_runs / "runs" / "textcraft_r3_analysis" / "metrics.json").read_text())
+    assert "refused" in m["A3x"] and json.loads((mock_runs / "runs" / G.FIRST_CORE).read_text())["time"] == first
+
+
+def test_environment_check_per_score_criterion_is_wave_bs_live_rule(monkeypatch):
+    kw = {"model": "qwen3-8b", "conditions": ["yn_aligned", "yn_swapped"]}
+    assert Z.per_score_check("yes_no", [0.05, -0.05], [], [], **kw)["ok"]
+    monkeypatch.setitem(FAM.ENVCHECK_RULE, "yes_no_mean_abs_max", 0.01)  # wave B's rule as amended is read live
+    assert not Z.per_score_check("yes_no", [0.05, -0.05], [], [], **kw)["ok"]
+    seen = {}
+
+    def hook(fmt, diffs, old, new, *, model, conditions):
+        seen.update(fmt=fmt, model=model, conditions=conditions, n=len(diffs))
+        return True
+
+    monkeypatch.setattr(FAM, "envcheck_per_score_check", hook, raising=False)
+    out = Z.per_score_check("yes_no", [9.0, 1.0], [0.0, 0.0], [9.0, 1.0], **kw)
+    assert out["ok"] and out["source"] == "families.envcheck_per_score_check"
+    assert seen == {"fmt": "yes_no", "model": "qwen3-8b", "conditions": ["yn_aligned", "yn_swapped"], "n": 2}
+    with pytest.raises(ValueError):
+        Z.per_score_check("yes_no", [1.0], [0.0], [1.0], model="qwen3-8b", conditions=[])
+
+
+def test_envcheck_block_gives_the_hook_the_model_and_aligned_conditions(records, tmp_path, monkeypatch):
+    seeded = S.envcheck_subset(records)
+    calls = []
+
+    def hook(fmt, diffs, old, new, *, model, conditions):
+        calls.append((fmt, model, len(diffs), len(conditions), [n - o for o, n in zip(old, new)] == diffs,
+                      all(c.startswith("yn_") == (fmt == "yes_no") for c in conditions)))
+        return True
+
+    monkeypatch.setattr(FAM, "envcheck_per_score_check", hook, raising=False)
+    g = {tmp_path / "o": ["NVIDIA L40S"], tmp_path / "n": ["NVIDIA L40S"]}
+    out = Z.envcheck_block([(tmp_path / "o", _env_scores(seeded, "gemma2-9b-it"))],
+                           [(tmp_path / "n", _env_scores(seeded, "gemma2-9b-it", shift=0.01, model="gemma2-9b-it-serve2"))],
+                           "gemma2-9b-it", records, g.get)
+    assert out["status"] == "pass" and {c[0] for c in calls} == {"yes_no", "two_candidate"}
+    assert all(c[1] == "gemma2-9b-it" and c[2] == c[3] > 0 and c[4] and c[5] for c in calls)
+
+
+def test_the_environment_rule_is_pinned(tmp_path, monkeypatch):
+    pin = tmp_path / "pin.json"
+    assert G.rule_problems(pin)  # no pin: refused
+    pin.write_text(json.dumps(G.rule_fingerprint()))
+    assert G.rule_problems(pin) == []
+    assert G.rule_problems() == []  # the committed pin is the rule in force
+    monkeypatch.setitem(FAM.ENVCHECK_RULE, "yes_no_mean_abs_max", 0.5)
+    assert any("rule" in x for x in G.rule_problems(pin))
+    monkeypatch.setitem(FAM.ENVCHECK_RULE, "yes_no_mean_abs_max", 0.07)
+    monkeypatch.setattr(FAM, "envcheck_per_score_check", lambda *a, **k: True, raising=False)
+    assert any("hook_sha256" in x for x in G.rule_problems(pin))
+    monkeypatch.setattr(FAM, "ENVCHECK_PER_MODEL_GRID", {"qwen3-8b": 0.25}, raising=False)
+    assert any("per_model_grid" in x for x in G.rule_problems(pin))
+
+
+def test_the_analysis_refuses_a_changed_environment_rule(mock_runs, small, monkeypatch):
+    man = _manifest(mock_runs, small)
+    monkeypatch.setitem(FAM.ENVCHECK_RULE, "two_candidate_mean_abs_max", 1.0)
+    assert Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man}) == 1
+    assert "environment-check rule" in (mock_runs / "runs" / "textcraft_r3_analysis" / "STATUS.md").read_text()
+

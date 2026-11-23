@@ -30,6 +30,7 @@ FREEZE_TAG_PREFIX = "textcraft-r3-design-frozen-"
 CODE_PATHS = ("wf/", "scripts/", "pace/")  # a commit that differs from the tag only outside these is code-identical
 PLAN_FILE = Path(__file__).resolve().parents[1] / "config" / "textcraft_r3_envcheck_plan.json"
 UNOBTAINABLE = "gpu_unobtainable.json"  # filed in an envcheck run folder when a planned GPU type was not obtainable
+UNOBTAINABLE_DAYS = 7
 MASS_MIN = 0.5
 STRUCTURAL_SHARE_MIN = 0.5  # "most" smoke yes/no prompts
 
@@ -117,9 +118,15 @@ def commit_problems(commits: dict[str, list[str]], tag_commit: str | None,
     return out
 
 
-def require_freeze_commit(run_git: Callable[[list[str]], str] = _git) -> dict[str, Any]:
-    """At job start: this checkout's HEAD is the freeze tag's commit, or code-identical to it. Mock runs are not
-    checked."""
+def _dirty() -> bool:
+    from wf.util import git_dirty
+
+    return git_dirty()
+
+
+def require_freeze_commit(run_git: Callable[[list[str]], str] = _git, dirty: Callable[[], bool] = _dirty) -> dict[str, Any]:
+    """At job start: this checkout's HEAD is the freeze tag's commit, or code-identical to it, and its tracked files
+    carry no uncommitted change (review 2, S2). Mock runs are not checked."""
     if mock():
         return {"checked": "mock"}
     tag = freeze_commit(run_git)
@@ -128,7 +135,22 @@ def require_freeze_commit(run_git: Callable[[list[str]], str] = _git) -> dict[st
     head = run_git(["rev-parse", "HEAD"])
     if not code_identical(head, tag, run_git):
         raise SystemExit(f"this checkout is at {head[:12]}, not the freeze tag's {tag[:12]} (or a code-identical commit)")
+    if dirty():
+        raise SystemExit("this checkout has uncommitted changes to tracked files: round-3 jobs run from a clean checkout")
     return {"checked": True, "head": head, "tag_commit": tag}
+
+
+def shard_dirty(folder: Path) -> bool:
+    """Whether the shard's run recorded uncommitted changes (inputs.json, git_dirty; review 2, S2)."""
+    f = Path(folder) / "inputs.json"
+    return bool(json.loads(f.read_text(encoding="utf-8")).get("git_dirty")) if f.exists() else False
+
+
+def refuse_after_gate_failure(folder: Path) -> None:
+    """A filed gate failure is final (review 2, S5): a run into a shard folder that holds one refuses to start."""
+    f = Path(folder) / "tokenization_checks.json"
+    if f.exists() and json.loads(f.read_text(encoding="utf-8")).get("ok") is False:
+        raise SystemExit(f"{folder} holds a filed gate failure; it is final (design 14.M2) and is never rerun")
 
 
 # ---------------- gate records and model states (M2) ----------------
@@ -221,6 +243,91 @@ def gemma_slot(root: Path) -> dict[str, Any]:
             "diagnostic": smoke_diagnostic(rows)}
 
 
+# ---------------- declarations filed by the operator (review 2, S4 and S6) ----------------
+
+
+def _date(text: str):
+    import datetime as dt
+
+    return dt.date.fromisoformat(str(text)[:10])
+
+
+def unobtainable_check(folder: Path, today=None) -> dict[str, Any]:
+    """`gpu_unobtainable.json` in an environment-check run folder: it must name the first submission's Slurm job id and
+    date, and at least UNOBTAINABLE_DAYS must have passed since that date (review 2, S4)."""
+    import datetime as dt
+
+    f = Path(folder) / UNOBTAINABLE
+    if not f.exists():
+        return {"filed": False, "valid": False}
+    rec = json.loads(f.read_text(encoding="utf-8"))
+    today = today or dt.date.today()
+    try:
+        first = _date(rec["first_submission_date"])
+        job = str(rec["first_submission_job_id"]).strip()
+    except (KeyError, ValueError):
+        return {"filed": True, "valid": False, "problem": "needs first_submission_job_id and first_submission_date"}
+    days = (today - first).days
+    ok = bool(job) and days >= UNOBTAINABLE_DAYS
+    return {"filed": True, "valid": ok, "first_submission_job_id": job, "first_submission_date": str(first),
+            "days": days, **({} if ok else {"problem": f"{days} days since the first submission; {UNOBTAINABLE_DAYS} needed"})}
+
+
+FIRST_CORE = "textcraft_r3_first_core_reading.json"  # written once, when the analysis first reads the core models
+
+
+def not_run_declaration(root: Path, tag: str, first_core: str | None) -> dict[str, Any]:
+    """`runs/textcraft_r3_score_<tag>/not_run.json` (review 2, S6): an extension model declared not run for GPU
+    availability, with its date. Valid only for an extension model and only when dated before the analysis first
+    read any core result; then the model counts as not scored (p = 1)."""
+    f = Path(root) / f"textcraft_r3_score_{tag}" / "not_run.json"
+    if not f.exists():
+        return {"declared": False}
+    rec = json.loads(f.read_text(encoding="utf-8"))
+    problems = []
+    if tag not in R3.EXTENSION:
+        problems.append(f"{tag} is a core model: it cannot be declared not run")
+    try:
+        when = str(rec["date"])
+        _date(when)
+    except (KeyError, ValueError):
+        problems.append("the declaration needs a date (ISO 8601)")
+        when = None
+    if when and first_core and when >= first_core:
+        problems.append(f"dated {when}, not before the first core reading {first_core}")
+    return {"declared": True, "date": when, "reason": rec.get("reason"), "valid": not problems, "problems": problems}
+
+
+# ---------------- the environment check's per-score rule, pinned at the freeze (review 2) ----------------
+
+RULE_PIN = Path(__file__).resolve().parents[1] / "config" / "textcraft_r3_envcheck_rule.json"
+
+
+def rule_fingerprint() -> dict[str, Any]:
+    """Wave B's environment-check rule as round 3 reads it: families.ENVCHECK_RULE, any per-model grid wave B
+    defines (ENVCHECK_PER_MODEL_GRID), and the sha256 of the per-score hook's source (None while there is none)."""
+    import hashlib
+    import inspect
+
+    from wf import families as FAM
+
+    hook = getattr(FAM, "envcheck_per_score_check", None)
+    src = inspect.getsource(hook) if hook is not None else None
+    grid = getattr(FAM, "ENVCHECK_PER_MODEL_GRID", None)
+    return {"rule": dict(FAM.ENVCHECK_RULE), "per_model_grid": json.loads(json.dumps(grid)) if grid is not None else None,
+            "hook_sha256": hashlib.sha256(src.encode()).hexdigest() if src is not None else None}
+
+
+def rule_problems(path: Path = RULE_PIN) -> list[str]:
+    """The rule in force must equal the one committed at the freeze."""
+    if not path.exists():
+        return [f"no pinned environment-check rule at {path}"]
+    pinned = json.loads(path.read_text(encoding="utf-8"))
+    now = rule_fingerprint()
+    return [f"the environment-check rule's {k} differs from the one pinned at the freeze" for k in now
+            if now[k] != pinned.get(k)]
+
+
 # ---------------- the environment-check plan (M4) ----------------
 
 
@@ -281,7 +388,13 @@ def main(argv: list[str] | None = None) -> int:
     b = sub.add_parser("plan")
     b.add_argument("--r2-runs", required=True)
     b.add_argument("--out", default=str(PLAN_FILE))
+    pin = sub.add_parser("pin-rule")
+    pin.add_argument("--out", default=str(RULE_PIN))
     a = ap.parse_args(argv)
+    if a.cmd == "pin-rule":
+        Path(a.out).write_text(json.dumps(rule_fingerprint(), indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        print(json.dumps(rule_fingerprint()))
+        return 0
     from wf.textcraft.r2_items import read_records
 
     records = read_records()

@@ -1,0 +1,11 @@
+{
+ "hook_sha256": null,
+ "per_model_grid": null,
+ "rule": {
+  "two_candidate_goal_effect_diff_max": 0.1,
+  "two_candidate_mean_abs_max": 0.35,
+  "yes_no_goal_effect_diff_max": 0.1,
+  "yes_no_mean_abs_max": 0.07,
+  "yes_no_share_diff_max": 0.02
+ }
+}

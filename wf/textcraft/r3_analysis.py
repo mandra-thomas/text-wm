@@ -51,13 +51,19 @@ def env_rule() -> dict[str, float]:
     return dict(FAM.ENVCHECK_RULE)
 
 
-def per_score_check(fmt: str, diffs: list[float], old: list[float], new: list[float]) -> dict[str, Any]:
-    """The per-score criterion of the environment check: wave B's own, as amended. If wave B provides a function for
-    it (`families.envcheck_per_score_check(fmt, diffs, old, new)`), that function decides; otherwise the mean absolute
-    difference per score against wave B's current threshold. PLACEHOLDER (design 14.M4): pending wave B's amendment."""
+def per_score_check(fmt: str, diffs: list[float], old: list[float], new: list[float], *, model: str,
+                    conditions: list[str]) -> dict[str, Any]:
+    """The per-score criterion of the environment check: wave B's own, as amended. If wave B provides
+    `families.envcheck_per_score_check(fmt, diffs, old, new, *, model, conditions)` (model: the earlier model's tag;
+    conditions: the condition label of each difference, aligned with diffs), that function decides; otherwise the mean
+    absolute difference per score against wave B's current threshold. PLACEHOLDER (design 14.M4): pending wave B's
+    amendment, which is committed and pinned (r3_gates.RULE_PIN) before the freeze."""
+    if len(conditions) != len(diffs):
+        raise ValueError("conditions must align with diffs")
     hook = getattr(FAM, "envcheck_per_score_check", None)
     if hook is not None:
-        return {"ok": bool(hook(fmt, diffs, old, new)), "source": "families.envcheck_per_score_check"}
+        return {"ok": bool(hook(fmt, diffs, old, new, model=model, conditions=conditions)),
+                "source": "families.envcheck_per_score_check"}
     m = sum(abs(x) for x in diffs) / len(diffs) if diffs else float("nan")
     limit = env_rule()[f"{fmt}_mean_abs_max"]
     return {"ok": m <= limit, "mean_abs_diff": m, "limit": limit, "source": "families.ENVCHECK_RULE"}
@@ -288,7 +294,9 @@ def h3p_reading(verdicts: dict[str, dict], competent: dict[str, bool], r1: dict[
     per = {}
     for t, v in verdicts.items():
         p = v["parent_penalty"]
-        if competent[t] and p == "confirmed below zero":
+        if p == NOT_SCORED:  # review 2, S3
+            per[t] = NOT_SCORED
+        elif competent[t] and p == "confirmed below zero":
             per[t] = "supported"
         elif r1[t]:
             per[t] = "rejected"
@@ -509,9 +517,11 @@ def envcheck_block(old: list[tuple[Path, list[dict]]], new: list[tuple[Path, lis
     mf = [r for r in chosen if r["kind"] == "main" and r["population"] == "main"]
     for fmt, keep, (al, sw) in (("yes_no", lambda a: a.startswith("yn_"), ("yn_aligned", "yn_swapped")),
                                 ("two_candidate", lambda a: not a.startswith("yn_"), ("aligned", "swapped"))):
-        d = [b - a for (i, c), (a, b) in pairs.items() if keep(c)]
-        olds_v = [a for (i, c), (a, b) in pairs.items() if keep(c)]
-        news_v = [b for (i, c), (a, b) in pairs.items() if keep(c)]
+        kept = sorted(k for k in pairs if keep(k[1]))
+        d = [pairs[k][1] - pairs[k][0] for k in kept]
+        olds_v = [pairs[k][0] for k in kept]
+        news_v = [pairs[k][1] for k in kept]
+        conds = [k[1] for k in kept]
         effects = {}
         for which, idx in (("old", 0), ("new", 1)):
             g = [pairs[(r["id"], al)][idx] - pairs[(r["id"], sw)][idx] for r in mf
@@ -522,7 +532,7 @@ def envcheck_block(old: list[tuple[Path, list[dict]]], new: list[tuple[Path, lis
                "max_abs_diff": max((abs(x) for x in d), default=float("nan")),
                "goal_effect_old": effects["old"], "goal_effect_new": effects["new"],
                "goal_effect_diff": effects["new"] - effects["old"], "n_main_failures": len(mf)}
-        rec["per_score"] = per_score_check(fmt, d, olds_v, news_v)
+        rec["per_score"] = per_score_check(fmt, d, olds_v, news_v, model=R3.base_tag(tag), conditions=conds)
         checks[f"{fmt}_per_score"] = rec["per_score"]["ok"]
         checks[f"{fmt}_goal_effect"] = abs(rec["goal_effect_diff"]) <= rule[f"{fmt}_goal_effect_diff_max"]
         if fmt == "yes_no":
@@ -656,15 +666,21 @@ def descriptive_only(rec: dict) -> dict:
 def provenance_problems(folders: dict[str, list[Path]], scores: dict[str, list[dict]], tag_commit: str | None,
                         mock_run: bool = False, run_git: Callable[[list[str]], str] | None = None,
                         gpus_of: Callable[[Path], list[list[str] | None]] | None = None,
-                        commits_of: Callable[[Path], list[str]] | None = None) -> dict[str, list[str]]:
+                        commits_of: Callable[[Path], list[str]] | None = None,
+                        dirty_of: Callable[[Path], bool] | None = None) -> dict[str, list[str]]:
     """{tag: problems} for every round-3 run read: every job of every shard at the freeze tag's commit (or a
     code-identical one; S12); every job of every shard of a model on the identical GPU list, of its pinned type (each
     job's own list from jobs.jsonl; M1); every score with its model's pinned revision, and no other. A mock run checks
     the revisions only."""
     gpus_of = gpus_of or G.job_gpus
     commits_of = commits_of or G.shard_commits
+    dirty_of = dirty_of or G.shard_dirty
     out: dict[str, list[str]] = defaultdict(list)
     if not mock_run:
+        for tag, ps in folders.items():  # review 2, S2: a shard scored from a checkout with uncommitted changes
+            bad = [p.name for p in ps if dirty_of(p)]
+            if bad:
+                out[tag].append(f"{tag}: shards {bad} ran with uncommitted changes (git_dirty)")
         cp = G.commit_problems({t: [c for p in ps for c in commits_of(p)] for t, ps in folders.items()}, tag_commit,
                                **({"run_git": run_git} if run_git else {}))
         for t, probs in cp.items():
@@ -858,6 +874,12 @@ INFERENCE_MAP = {
 }
 
 
+def newer_model_refusals(probs: dict[str, list[str]], pairs) -> list[str]:
+    """B3 is refused when a pair's newer model (the Gemma slot's model included) has a provenance problem (review 2,
+    S1), as A3 or A3x is for the same model."""
+    return [f"a pair's newer model: {x}" for _o, n in pairs for x in probs.get(n, [])]
+
+
 def _sha(path: Path) -> str | None:
     import hashlib
 
@@ -886,7 +908,20 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
         write_status(run_id, f"gemma_core is {cfg.get('gemma_core')!r}, but the fallback rule gives {gemma!r}", ok=False)
         return 1
     tags = list(R3.core_tags(gemma)) + list(R3.EXTENSION)
+    rule_bad = G.rule_problems()  # review 2: wave B's rule as pinned at the freeze
+    if rule_bad:
+        write_status(run_id, f"environment-check rule: {rule_bad}", ok=False)
+        return 1
     states = {t: G.model_state(root, t) for t in tags}
+    first_core_file = root / G.FIRST_CORE
+    first_core = json.loads(first_core_file.read_text())["time"] if first_core_file.exists() else None
+    declared = {}
+    for t in tags:  # review 2, S6: an extension model declared not run counts as not scored
+        dec = G.not_run_declaration(root, t, first_core)
+        if dec["declared"]:
+            declared[t] = dec
+            if dec["valid"] and states[t]["state"] == "waiting":
+                states[t] = {"state": NOT_SCORED, "reasons": [f"declared not run ({dec.get('reason')}, {dec['date']})"]}
     scores, folders = {}, {}
     for t in tags:
         shards = load_run(run_folder("score", t), root)
@@ -913,6 +948,13 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
         other["think"] = tps
     tag_commit = None if mock_run else G.freeze_commit()
     probs = provenance_problems(folders, scores, tag_commit, mock_run)
+    for k, ps in (other.items() if not mock_run else ()):  # review 2, S2
+        bad = [p.name for p in ps if G.shard_dirty(p)]
+        if bad:
+            probs.setdefault(k, []).append(f"{k}: shards {bad} ran with uncommitted changes (git_dirty)")
+    for t, dec in declared.items():
+        if not dec["valid"]:
+            probs.setdefault(t, []).extend(dec["problems"])
     if not mock_run:
         cp = G.commit_problems({k: [c for p in ps for c in G.shard_commits(p)] for k, ps in other.items()}, tag_commit)
         for k, v in cp.items():
@@ -937,7 +979,10 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
     for t in R3.ENVCHECK_MODELS:
         old = [(p.parent, read_jsonl(p)) for p in sorted((r2_root / A.score_run(t)).glob("shard_*/scoring.jsonl"))]
         new = load_run(run_folder("envcheck", t), root)
-        un = (root / run_folder("envcheck", t) / G.UNOBTAINABLE).exists()
+        unob = G.unobtainable_check(root / run_folder("envcheck", t))  # review 2, S4
+        un = unob["valid"]
+        if unob["filed"] and not unob["valid"]:
+            probs.setdefault(f"envcheck:{t}", []).append(f"gpu_unobtainable.json: {unob.get('problem')}")
         plan = (G.read_plan() or {}).get("models", {}).get(t, {})
         if plan and not plan.get("runnable", True):
             un = True
@@ -954,10 +999,13 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
         write_status(run_id, str(e), ok=False)
         return 1
     old_scores: dict[str, list[dict]] = {}
+    newer_bad = newer_model_refusals(probs, gemma_pairs)  # review 2, S1
+    if newer_bad:
+        refused["B3"] = newer_bad
     if source == "round2":
         bad = A.provenance([o for o, _n in gemma_pairs], r2_root)
         if bad:
-            refused["B3"] = [f"round 2's provenance: {x}" for x in bad]
+            refused["B3"] = refused.get("B3", []) + [f"round 2's provenance: {x}" for x in bad]
         else:
             for old, _new in gemma_pairs:
                 ss = A.load_scores(old, r2_root)
@@ -970,7 +1018,7 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
                 old_scores[old] = [{**s, "model": old} for s in ss]  # saved under <tag>-serve2
         bad = [x for o, _n in gemma_pairs for x in probs.get(f"rescore:{o}", [])]
         if bad:
-            refused["B3"] = bad
+            refused["B3"] = refused.get("B3", []) + bad
     think = [s for _p, ss in load_run(run_folder("think", "qwen3.5-9b"), root) for s in ss] or None
     try:
         metrics = analyse(records, shots, scores, cfg, r2, old_scores, environment, think, formats, states, gemma, refused)
@@ -978,6 +1026,12 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
         write_status(run_id, f"stale score: {e}", ok=False)
         return 1
     metrics["gemma_slot"] = slot
+    metrics["declared_not_run"] = declared
+    metrics["environment_rule"] = G.rule_fingerprint()
+    if metrics["A3"].get("H3_P") is not None and not first_core_file.exists():  # the first core reading, once
+        import datetime as dt
+
+        write_json(first_core_file, {"time": dt.datetime.now().isoformat(timespec="seconds"), "run": run_id})
     metrics["provenance_problems"] = probs
     metrics["round2_analysis_read"] = {"metrics_sha256": _sha(r2_metrics), "status_line":
                                        r2_status.read_text(encoding="utf-8").splitlines()[0] if r2_status.exists() else None}

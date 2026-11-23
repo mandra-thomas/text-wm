@@ -208,6 +208,9 @@ def score_shard(cfg: dict, tag: str, spec, select: Callable[[list[dict]], list[d
     run_id = f"{run_id}/shard_{i:02d}_of_{n:02d}"
     cfg = {**cfg, "run_id": run_id, "shard": i, "n_shards": n, "model_spec": spec.record(), "system_text": R.SYSTEM,
            "scored_tag": tag, "arms": list(arms) if arms else "all"}
+    from wf.util import runs_root
+
+    G.refuse_after_gate_failure(runs_root() / run_id)  # review 2, S5: a filed gate failure is final
     d = _init_run(run_id, cfg, inputs=(rpath, spath, mpath))
     all_records = load_records(rpath)
     records = select(all_records) if shard is not None else shard_records(select(all_records), i, n)
