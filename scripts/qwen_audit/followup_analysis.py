@@ -3,8 +3,10 @@ collection and the stored runs are (read-only).
 
 A. Qwen3-8B on all 4,666 primary items: the stored scores (with the block) against the rescoring without it.
 B. Qwen3 sizes on the 300-item subsample, both formats from one job each (8B: stored and rescored values).
+   B_plain: the same items in plain text (no chat template) against the block, with the first-token mass.
 C. The decision simulation's step 0: yes/no acceptance, scores and the verification rule's chosen failures, per arm
-   and format; the with-block values checked against the stored decision-simulation scores.
+   and format; the with-block values checked against the stored decision-simulation scores. C_plain: the same in
+   plain text (" Yes" against " No"), with the first-token mass.
 
 Intervals: 95% percentile bootstrap over games, 2,000 resamples, seed 20260924. Writes followup_summary.json.
 
@@ -140,10 +142,38 @@ def part_b(d: Path, items_all: dict, sizes_items: list[str]) -> dict:
     return out
 
 
-def part_c(d: Path, src: Path, stored_dsim: Path) -> dict:
+def part_b_plain(d: Path, items_all: dict, sizes_items: list[str]) -> dict:
+    """Plain text against the chat template with the block, per size on the 300 items. The block values come from
+    the first round's same-job rescoring (4B, 14B) or the stored scores (8B); the plain values from the plain round
+    (another job, so a few tenths of a nat of GPU noise per score are possible). Also the first-token mass."""
+    out = {}
+    for tag in ("qwen3-4b", "qwen3-8b", "qwen3-14b"):
+        plain = {r["id"]: r for r in load_jsonl(d / f"fu_sizes_{tag}_plain.jsonl")}
+        if tag == "qwen3-8b":
+            block = {i: (items_all[i]["stored"][TAG8]["aligned"]["L"] - items_all[i]["stored"][TAG8]["swapped"]["L"])
+                     for i in sizes_items}
+        else:
+            block = {r["id"]: r["scores"]["block/aligned"]["L"] - r["scores"]["block/swapped"]["L"]
+                     for r in load_jsonl(d / f"fu_sizes_{tag}.jsonl")}
+        ids = [i for i in sizes_items if i in plain and i in block]
+        if not ids:
+            continue
+        pairs = [(block[i], plain[i]["scores"]["plain/aligned"]["L"] - plain[i]["scores"]["plain/swapped"]["L"])
+                 for i in ids]
+        r = describe(pairs, [items_all[i]["transition"]["game_id"] for i in ids])
+        masses = [plain[i]["scores"][f"plain/{c}"]["first_mass"] for i in ids for c in ("aligned", "swapped")]
+        r["plain_first_mass_mean"], r["plain_first_mass_median"] = mean(masses), st.median(masses)
+        r["plain_mean_L_aligned"] = mean([plain[i]["scores"]["plain/aligned"]["L"] for i in ids])
+        r["plain_mean_L_swapped"] = mean([plain[i]["scores"]["plain/swapped"]["L"] for i in ids])
+        out[tag] = r
+    return out
+
+
+def part_c(d: Path, src: Path, stored_dsim: Path, fname: str = "fu_dsim_step0.jsonl",
+           formats: tuple[str, ...] = ("block", "noblock")) -> dict:
     from wf import decisionsim as D
 
-    recs = {(r["game_id"], r["state_idx"]): r for r in load_jsonl(d / "fu_dsim_step0.jsonl")}
+    recs = {(r["game_id"], r["state_idx"]): r for r in load_jsonl(d / fname)}
     if not recs:
         return {}
     transitions = [json.loads(x) for k in range(3) for x in (src / f"rq12_transitions_s{k}" / "transitions.jsonl").open()]
@@ -155,10 +185,15 @@ def part_c(d: Path, src: Path, stored_dsim: Path) -> dict:
     chk = [abs(D.quantize(recs[(s["game_id"], 0)]["scores"][t["id"]][f"block/{a}"]) - D.quantize(stored[(t["id"], a)]))
            for s in states for t in s["candidates"] for a in D.DEFAULT_ARMS
            if f"block/{a}" in recs[(s["game_id"], 0)]["scores"].get(t["id"], {}) and (t["id"], a) in stored]
+    if "block" not in formats:
+        chk = []
     out = {"n_states": len(states), "check_block_vs_stored": {"n": len(chk), "n_exact_at_1_64": sum(x == 0 for x in chk),
                                                               "mean_abs_diff": mean(chk), "max_abs_diff": max(chk) if chk else None},
            "proposal_fails_share": mean([float(not D.succeeded(D._proposal(s))) for s in states]), "arms": {}}
-    for fmt in ("block", "noblock"):
+    if "plain" in formats:
+        m = [v for r in recs.values() for per in r.get("first_mass", {}).values() for v in per.values()]
+        out["plain_first_mass_mean"], out["plain_first_mass_median"] = mean(m), st.median(m)
+    for fmt in formats:
         for arm in D.DEFAULT_ARMS:
             acc, fail, work_L, goalfail_L, games = [], [], [], [], []
             for s in states:
@@ -178,7 +213,7 @@ def part_c(d: Path, src: Path, stored_dsim: Path) -> dict:
                 "rule2_chosen_failure_ci": boot(fail, games, mean), "mean_L_working": mean(work_L),
                 "mean_L_goal_object_failures": mean(goalfail_L)}
     # Paired aligned-minus-blind difference in chosen failures, per format, over states scored in both arms.
-    for fmt in ("block", "noblock"):
+    for fmt in formats:
         diffs, games = [], []
         for s in states:
             sc = recs[(s["game_id"], 0)]["scores"]
@@ -200,7 +235,10 @@ def main() -> None:
     items_all = {r["id"]: r for r in load_jsonl(d / "items_all.jsonl")}
     sizes_items = [r["id"] for r in load_jsonl(d / "items_sizes.jsonl")]
     out = {"A_qwen3_8b_all_items": part_a(d, items_all), "B_sizes_300": part_b(d, items_all, sizes_items),
-           "C_decisionsim_step0": part_c(d, Path(args.src), Path(args.stored_dsim))}
+           "C_decisionsim_step0": part_c(d, Path(args.src), Path(args.stored_dsim)),
+           "B_sizes_300_plain": part_b_plain(d, items_all, sizes_items),
+           "C_decisionsim_step0_plain": part_c(d, Path(args.src), Path(args.stored_dsim), "fu_dsim_step0_plain.jsonl",
+                                               ("plain",))}
     out["gpus"] = {g.stem: g.read_text().strip() for g in d.glob("fu_*_gpu.txt")}
     (d / "followup_summary.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
