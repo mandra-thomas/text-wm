@@ -194,6 +194,8 @@ The total is about 11 to 19 GPU-hours, of which about 5 to 9 are on 80 GB cards,
 - `wf/tools/envcheck_tokens.py` (`--rescore`) and `wf/tools/prefetch_models.py` (reference tags).
 - Tests are in `tests/test_families_waveb.py`.
 
+Under the strict mutation rule (killed only when pytest exits 1 and names a failing test), all 33 new mutants are killed, by 14 different tests. The 135 earlier wave B mutants, rerun on the amended code, are all killed too; one of them was retargeted first, because the line it mutates now reads the rescorings' gate. The list is in `notes/families_waveb_mutants.txt`. Full local suite: 948 passed, 77 skipped.
+
 ## 9. Measures and analysis
 
 Everything in wave A's "Measures" section and its three amendments applies unchanged: the size series' block per model; the item share toward Yes (primary), R, ΔL, the standardised effect d and the two-candidate format (secondary); argmax answers and flips; first-token coverage; one (item, condition) population for every model; game-clustered bootstrap CIs and sign-flip permutation p-values; paired comparisons on shared items with the difference test and the ±0.05 equivalence test (TOST); readings "differs", "matches", "differs, within the margin", "inconclusive (no difference detected)"; the 0.3-nat noise floor for ΔL differences.

@@ -470,7 +470,7 @@ MUTANTS = [
     ('families wave B token compare ignores the revision', 'wf/tools/envcheck_tokens.py', '\n            and left["revision"] == right["revision"],', ','),
     ('families wave B wave B family loses the base comparison', 'wf/families.py', 'planned, expected = list(WAVE_B_PLANNED), list(WAVE_B_SHARE_TESTS)', 'planned, expected = list(WAVE_B_PLANNED)[:4], list(WAVE_B_SHARE_TESTS)'),
     ("families wave B wave B analysis uses wave A's family", 'wf/families.py', '    if wave == "A":\n        planned, expected', '    if True:\n        planned, expected'),
-    ('families wave B environment gate not applied', 'wf/families.py', '        apply_environment_gate(report["primary_family"], report["environment_check"]["pass"])', '        pass'),
+    ('families wave B environment gate not applied', 'wf/families.py', '        apply_environment_gate(report["primary_family"], report["serve2_rescoring"]["pass"])', '        pass'),
     ('families wave B environment gate passes a missing check', 'wf/families.py', '    if passed:\n        return family', '    if passed is not False:\n        return family'),
     ('families wave B B2 direction flipped', 'wf/families.py', 'else not (differs and est < 0)', 'else not (differs and est > 0)'),
     ('families wave B B1 holds when the share is not supported', 'wf/families.py', '        else:  # "not supported" or "not computable"\n            holds = False', '        else:  # "not supported" or "not computable"\n            holds = both'),

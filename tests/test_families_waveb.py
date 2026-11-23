@@ -963,6 +963,8 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root, monke
     assert "qwen3.5-9b vs qwen3-8b" in rep["comparisons_original_environment"]
     assert "qwen3.5-9b vs qwen3.5-9b-plain" not in rep["comparisons_original_environment"]
     assert rep["amendments"]["serve2_rescoring"] == families.RESCORE_AMENDMENT
+    # the predictions are read (the rescorings passed) although the environment check failed
+    assert all(v["both_formats_positive"] is not None for v in rep["predictions_b"]["B1"].values())
     assert set(rep["models"]) == set(B) and set(rep["predictions_b"]["B1"]) == set(B)
     assert set(rep["comparisons"]) >= {f"{a} vs {b}" for a, b in families.WAVE_B_PLANNED}
     assert "qwen3.5-9b vs qwen3.5-9b-plain" in rep["comparisons"] and "gemma4-e4b-it" in rep["placement"]
@@ -1138,6 +1140,23 @@ def test_rescore_gate_needs_every_model(mock_root, monkeypatch):
     assert families.rescore_gate({})["pass"] is False
     g = families.rescore_gate({"rescore": {**given, "qwen3-32b": {"run": "family_rescore_nope", "tokens": None}}})
     assert g["pass"] is False and g["models"]["qwen3-32b"]["checks"]["complete"] is False
+
+
+def test_analysis_waits_for_incomplete_rescorings(mock_root, monkeypatch):
+    from wf.runs import load_config
+
+    import wf.provenance as prov
+
+    gpu = families.RESCORE_GPU["qwen3-8b"]
+    monkeypatch.setattr(prov, "gpu_names", lambda: [gpu])
+    assert families.run_family_rescore(_cfg("family_rescore_qwen3-8b", "qwen3-8b")) == 0
+    cfg = {**load_config("families_waveb_analysis"), "sources": ["rq12_transitions_smoke"], "models": [],
+           "reference_original": {}, "placement": {}, "template_checks": {}}
+    assert families.run_families_analysis(cfg) == 0
+    rep = json.loads((mock_root / "families_waveb_analysis" / "metrics.json").read_text())
+    want = {f"serve2 rescoring {t}" for t in families.RESCORE_MODELS if t != "qwen3-8b"}
+    assert want <= set(rep["waiting"]) and "serve2 rescoring qwen3-8b" not in rep["waiting"]
+    assert rep["serve2_rescoring"]["pass"] is False and rep["withheld"] == families.ENVIRONMENT_BLOCKED
 
 
 def test_environment_sensitivity_is_serve2_minus_original():
