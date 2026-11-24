@@ -44,7 +44,16 @@ def dump(tag: str, primary: list[dict], successes: list[dict], tok: Any, transfo
             rec[f"{t['id']}|{name}"] = _digest(families._ids(scorer._encode_candidate(t["candidates"][name])))
     for word in families.YES_NO:
         rec[f"answer|{word}"] = _digest(families._ids(scorer._encode_candidate(word)))
+    from wf.util import git_sha
+
+    try:
+        import tokenizers
+        tokenizers_version = tokenizers.__version__
+    except ImportError:
+        tokenizers_version = None
+    # review 2, S4 (2026-11-24): the commit and the tokenizer stack, so the rescorings' gate can check both
     return {"model": tag, "hf_id": spec.hf_id, "revision": REVISIONS[spec.hf_id], "transformers": transformers_version,
+            "tokenizers": tokenizers_version, "git_sha": git_sha(),
             "tokenizer_class": type(tok).__name__, "n": len(rec), "records": rec}
 
 
@@ -56,8 +65,9 @@ def compare(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
             and left["revision"] == right["revision"],
             "model": left["model"], "n_compared": len(set(a) & set(b)), "n_different": len(diff),
             "n_only_one_side": len(only), "examples": (diff + only)[:20],
-            "left": {k: left.get(k) for k in ("transformers", "tokenizer_class", "revision", "n")},
-            "right": {k: right.get(k) for k in ("transformers", "tokenizer_class", "revision", "n")}}
+            "left": {k: left.get(k) for k in ("transformers", "tokenizers", "tokenizer_class", "revision", "n", "git_sha")},
+            "right": {k: right.get(k) for k in ("transformers", "tokenizers", "tokenizer_class", "revision", "n",
+                                                 "git_sha")}}
 
 
 def main(argv: list[str] | None = None) -> int:

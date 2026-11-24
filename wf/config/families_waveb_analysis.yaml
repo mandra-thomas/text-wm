@@ -31,7 +31,7 @@ reference:
     runs:
       family_rescore_mistral-7b-v0.3: [aligned, swapped, absent, yn_aligned, yn_swapped, yn_absent]
 # The gate (wf.families.rescore_check): each rescoring run and its token comparison (wf.tools.envcheck_tokens with
-# --rescore, pace/families_envcheck_tokens.sbatch with ENVTOK_TAGS and ENVTOK_OUT=rescore_tokens).
+# --rescore, pace/families_envcheck_tokens.sbatch with ENVTOK_RESCORE=1, which writes rescore_tokens/compare_<tag>.json).
 rescore:
   mistral-7b-v0.3: {run: family_rescore_mistral-7b-v0.3, tokens: rescore_tokens/compare_mistral-7b-v0.3.json}
   qwen3-8b: {run: family_rescore_qwen3-8b, tokens: rescore_tokens/compare_qwen3-8b.json}

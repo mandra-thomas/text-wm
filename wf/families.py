@@ -56,7 +56,7 @@ from wf import rq1x, sizes
 from wf.analysis.report import write_run_report
 from wf.analysis.stats import cluster_bootstrap, holm, pair_permutation, paired_conditions
 from wf.rq2 import SOURCES, complete_shards, load_items
-from wf.runs import _effect, _init_run
+from wf.runs import _effect, _init_run, _item_hash
 from wf.scoring.logodds import LogoddsScorer
 from wf.scoring.prompts import plain_text_prompt
 from wf.util import read_jsonl, require_filed, runs_root, write_json, write_status
@@ -239,9 +239,10 @@ PREDICTION_B = (
     "count as holding). B3: if the base model fails only the yes/no coverage criterion, B3 is read on the "
     "two-candidate item share (B3_FALLBACK).")
 # M2 (review 1): the Qwen3 size series' item share and yes/no effect (size_score_qwen3-<size>, 4,666 failures each;
-# recomputed 2026-11-22 from the archived scores). A competent model can carry a large mean effect on a minority of
-# items (4B); the share moves non-monotonically with size within one line, so a generation pair, which also changes
-# size, cannot isolate the generation.
+# recomputed 2026-11-22 from the archived scores; original environment, transformers 4.51.3: the serve2 rescorings of
+# 8B and 32B, printed beside them since the section 8 amendment, may differ slightly). A competent model can carry a
+# large mean effect on a minority of items (4B); the share moves non-monotonically with size within one line, so a
+# generation pair, which also changes size, cannot isolate the generation.
 QWEN3_SIZE_SERIES = {"qwen3-4b": {"share": 0.491, "yes_no_delta_L": 2.27},
                      "qwen3-8b": {"share": 0.887, "yes_no_delta_L": 2.80},
                      "qwen3-14b": {"share": 0.701, "yes_no_delta_L": 3.18},
@@ -253,8 +254,8 @@ B1_READINGS = {
     "reversed": "yes/no effect reversed (aligned below swapped)",
 }
 PAIR_CAVEAT = ("Generation pairs also change size, and within the Qwen3 line the item share runs 0.49 / 0.89 / 0.70 / "
-               "0.71 across 4B / 8B / 14B / 32B, so a 'differs' here is not a generation effect: it describes two "
-               "whole models.")
+               "0.71 across 4B / 8B / 14B / 32B (original environment, transformers 4.51.3), so a 'differs' here "
+               "is not a generation effect: it describes two whole models.")
 # B3's readout if the base model fails only the yes/no coverage criterion (median P(Yes) + P(No) under the neutral
 # task below 0.5), fixed after review 1 and before any score: the paired difference in the two-candidate item share
 # (failures with two-candidate L(aligned) > L(swapped)), instruct minus base, game-clustered, read by its 95% CI;
@@ -717,6 +718,8 @@ def _gate(spec: ModelSpec, env: dict[str, Any] | None = None) -> Callable[[Path,
         if spec.wave != "A":
             rec["environment"] = env
             rec["loading"] = scorer.load_info
+            # review 2, M3 (2026-11-24): whether the loading check ran, so the rescorings' gate can require it
+            rec["strict_load"] = bool(getattr(scorer, "strict_load", False))
             rec["device_map"] = {k: str(v) for k, v in (getattr(scorer._model, "hf_device_map", None) or {}).items()}
             rec["model_class_loaded"] = type(scorer._model).__name__
             # review 1, M3: node-local weights were hashed against the committed manifest before loading
@@ -1145,14 +1148,30 @@ RESCORE_GPU = {"mistral-7b-v0.3": "NVIDIA A40", "qwen3-8b": "NVIDIA L40S", "gemm
 RESCORE_NODE_LOCAL = ("qwen3-32b",)
 RESCORE_AMENDMENT = (
     "Amended 2026-11-23, after the environment check failed and its cause was found, before any wave B score existed "
-    "(design section 8): the check stays FAILED (Qwen3-8B's yes/no per-score difference 0.248 nats; a float64 "
-    "diagnostic showed a hidden-state perturbation of about one bf16 epsilon, amplified by Qwen's large readout "
-    "logits, not rounding). Every older model used in a wave B comparison is rescored in serve2 on every item and "
-    "condition (RESCORE_MODELS), and every comparison, planned or descriptive, uses those rescorings. Wave B is read "
-    "only when every rescoring is complete, its tokens match the study environment's, it ran on its pinned GPU type, "
-    "its gate passed in transformers 5 at the pinned revision and, for node-local weights, its files matched the "
-    "manifest (rescore_check). The original-environment scores are reported beside the serve2 ones, descriptively. "
-    "The six item-share tests, the 16-test Holm family, the thresholds and the competence gate are unchanged.")
+    "(design section 8; corrected after review 2, 2026-11-24). The check stays FAILED: Qwen3-8B's yes/no per-score "
+    "difference was 0.248 nats, about seven times the archived cross-GPU difference (0.035), and Mistral 7B passed "
+    "narrowly (0.069 against 0.07). A float64 diagnostic showed that the float64 logits themselves changed between "
+    "the environments (median relative change 0.44%, about the bf16 unit roundoff 2^-8), so the hidden state differs "
+    "(inferred, not measured); Qwen's large readout logits make that about a quarter of a nat; bf16 rounding is not "
+    "the cause. This amendment replaces the gate; it does not satisfy it. Every older model used in a wave B "
+    "comparison is rescored in serve2 on every item and condition (RESCORE_MODELS), and every comparison, planned or "
+    "descriptive, uses those rescorings. Wave B is read only when every rescoring passes rescore_check (complete and "
+    "covering every scored item with matching item hashes; token ids identical between the study stack and serve2, "
+    "compared at the rescoring's commit; its pinned GPU type; its gate and loading check passed in transformers 5 at "
+    "the pinned revision; for node-local weights, its files matched the manifest) and the analysis's references read "
+    "exactly those rescorings. The label 'not interpretable (environment check)' now means that the serve2 rescorings "
+    "have not passed. The original-environment scores are reported beside the serve2 ones, descriptively; a reference "
+    "whose item share moves by more than 0.02 or whose yes/no goal effect moves by more than 0.10 nats between the "
+    "environments is 'environment-dependent', and every comparison involving it is reported with both readings (the "
+    "serve2 reading stands). The six item-share tests, the 16-test Holm family, the thresholds and the competence "
+    "gate are unchanged.")
+# Review 2, S2 (2026-11-24, before any score): a reference whose serve2 rescoring moves its item share by more than
+# 0.02, or its yes/no goal effect by more than 0.10 nats, against its original-environment scores (the environment
+# check's effect-level limits) is "environment-dependent"; the comparisons involving it are reported with both
+# readings, the serve2 one standing.
+ENV_DEPENDENT_RULE = {"item_share_max": 0.02, "yes_no_delta_L_max": 0.10}
+# Review 2, S4: the token comparison's left side must be the study environment's tokenizer stack.
+TOKEN_STUDY_STACK = {"transformers": "4.51.3", "tokenizers": "0.21.4"}
 
 
 def rescore_spec(tag: str) -> ModelSpec:
@@ -1184,22 +1203,62 @@ def run_family_rescore(cfg: dict) -> int:
                              gate=_gate(spec, env))
 
 
-def rescore_check(tag: str, run: str, tokens: str | None) -> dict[str, Any]:
-    """Whether `tag`'s serve2 rescoring may be read (the amendment's gate): every shard complete at one commit; the
-    token ids identical between the study environment and serve2 (`tokens`: the compare JSON of
-    wf.tools.envcheck_tokens); every shard on RESCORE_GPU[tag] alone; every shard's gate passed in transformers 5 at
-    the pinned revision; and, for a node-local model, the downloaded files hashed against the manifest."""
+def _token_provenance(trec: dict[str, Any], tag: str, commit: str | None) -> dict[str, bool]:
+    """Review 2, S4: the token comparison compares the study stack (left) with transformers 5 (right), at the pinned
+    revision on both sides, from dumps made at the rescoring's commit."""
+    left, right = trec.get("left") or {}, trec.get("right") or {}
+    pin = C.REVISIONS[spec_for(tag).hf_id]
+    major = int(str(right.get("transformers") or "0").split(".")[0] or 0)
+    return {"left_is_study_stack": all(left.get(k) == v for k, v in TOKEN_STUDY_STACK.items()),
+            "right_is_transformers_5": major >= 5,
+            "pinned_revision_both_sides": left.get("revision") == pin and right.get("revision") == pin,
+            "at_rescoring_commit": bool(commit) and left.get("git_sha") == commit and right.get("git_sha") == commit}
+
+
+def rescore_check(tag: str, run: str, tokens: str | None, primary: list[dict], successes: list[dict]) -> dict[str, Any]:
+    """Whether `tag`'s serve2 rescoring may be read (the amendment's gate; hardened after review 2):
+
+    - complete: every shard complete, at one commit;
+    - coverage: exactly one score for every (item, condition) of sizes.size_jobs on the analysis's items, each with
+      that item's hash (review 2, S5);
+    - tokens_identical: the compare JSON of wf.tools.envcheck_tokens (`tokens`) says identical, for this model;
+    - tokens_provenance: its left side the study stack, its right side transformers 5, both at the pinned revision,
+      both dumped at the rescoring's commit (review 2, S4);
+    - gpu_type: every shard on RESCORE_GPU[tag] alone;
+    - gate_passed_in_serve2: every shard's gate passed in transformers 5 with the loading check on and passed
+      (review 2, M3);
+    - pinned_revision: every shard saved this model's serve2 tag at the pinned revision;
+    - weights_hashed (node-local models): every shard's downloaded files matched the manifest at the pinned revision.
+    """
     from wf.provenance import run_record
 
     folders, problems = complete_shards(run)
     out: dict[str, Any] = {"run": run, "problems": list(problems)}
     checks: dict[str, bool] = {"complete": bool(folders) and not problems}
+    # coverage and item identity
+    hashes = {t["id"]: _item_hash(t) for t in primary + successes}
+    expected = {(t["id"], a) for t, a in sizes.size_jobs(primary, successes)}
+    recs = [x for p in folders for x in read_jsonl(p / "scoring.jsonl") if x.get("model") == tag + RESCORE_SUFFIX] \
+        if folders else []
+    keys = [(x["transition_id"], x["condition"]) for x in recs]
+    bad_hash = sum(x.get("item_hash") != hashes.get(x["transition_id"]) for x in recs)
+    out["coverage"] = {"n_expected": len(expected), "n_records": len(recs), "n_missing": len(expected - set(keys)),
+                       "n_unexpected": len(set(keys) - expected), "n_duplicates": len(keys) - len(set(keys)),
+                       "n_item_hash_mismatch": bad_hash}
+    checks["coverage"] = bool(expected) and set(keys) == expected and len(keys) == len(set(keys)) and bad_hash == 0
+    # tokens
+    commits = {run_record(p)["commit"] for p in folders}
+    commit = commits.pop() if len(commits) == 1 else None
     tok = _resolve(tokens) if tokens else None
     trec = json.loads(tok.read_text(encoding="utf-8")) if tok is not None and tok.exists() else None
     out["tokens"] = {"path": str(tok) if tok else None, "found": trec is not None,
-                     **({k: trec.get(k) for k in ("ok", "model", "n_compared", "n_different", "n_only_one_side")}
-                        if trec else {})}
+                     **({k: trec.get(k) for k in ("ok", "model", "n_compared", "n_different", "n_only_one_side",
+                                                   "left", "right")} if trec else {})}
     checks["tokens_identical"] = bool(trec and trec.get("ok") is True and trec.get("model") == tag)
+    prov = _token_provenance(trec, tag, commit) if trec else {}
+    out["tokens"]["provenance"] = prov
+    checks["tokens_provenance"] = bool(prov) and all(prov.values())
+    # GPU type, gate, loading check, revision, weights: every shard
     want = RESCORE_GPU[tag]
     gpus = {p.name: run_record(p)["gpu"] for p in folders}
     out["gpu"] = {"expected": want, "recorded": gpus}
@@ -1211,7 +1270,8 @@ def rescore_check(tag: str, run: str, tokens: str | None) -> dict[str, Any]:
         env = g.get("environment") or {}
         mock = g.get("skipped") == "mock" and env.get("checked") == "mock"
         major = int(str(env.get("transformers") or "0").split(".")[0] or 0)
-        gates[p.name] = mock or (g.get("ok") is True and env.get("checked") is True and major >= 5)
+        loaded = g.get("strict_load") is True and (g.get("loading") or {}).get("ok") is True
+        gates[p.name] = mock or (g.get("ok") is True and env.get("checked") is True and major >= 5 and loaded)
         cfg_rec = json.loads((p / "config.json").read_text(encoding="utf-8")) if (p / "config.json").exists() else {}
         spec_rec = cfg_rec.get("model_spec") or {}
         revisions.add((spec_rec.get("tag"), spec_rec.get("revision")))
@@ -1228,26 +1288,77 @@ def rescore_check(tag: str, run: str, tokens: str | None) -> dict[str, Any]:
     return out
 
 
-def rescore_gate(cfg: dict) -> dict[str, Any]:
+def rescore_reference(tag: str, run: str) -> dict[str, Any]:
+    """The `reference` entry the analysis must use for `tag` after the amendment: its serve2 rescoring, all arms."""
+    return {"model": tag + RESCORE_SUFFIX, "runs": {run: list(ENVCHECK_ARMS)}}
+
+
+def rescore_gate(cfg: dict, primary: list[dict], successes: list[dict]) -> dict[str, Any]:
     """The analysis's gate after the amendment: every older comparison model's serve2 rescoring passes rescore_check
-    (cfg["rescore"]: {tag: {"run": ..., "tokens": ...}}); every model of RESCORE_MODELS must be there."""
+    (cfg["rescore"]: {tag: {"run": ..., "tokens": ...}}); every model of RESCORE_MODELS must be there; and the
+    references the analysis reads (cfg["reference"]) must be exactly those rescorings (review 2, S3), with no other
+    reference."""
     given = cfg.get("rescore") or {}
-    models = {t: rescore_check(t, given[t]["run"], given[t].get("tokens")) for t in RESCORE_MODELS if t in given}
+    refs = cfg.get("reference") or {}
+    models = {}
+    for t in RESCORE_MODELS:
+        if t not in given:
+            continue
+        m = rescore_check(t, given[t]["run"], given[t].get("tokens"), primary, successes)
+        m["checks"]["reference_reads_this_rescoring"] = refs.get(t) == rescore_reference(t, given[t]["run"])
+        m["pass"] = all(m["checks"].values())
+        models[t] = m
     missing = [t for t in RESCORE_MODELS if t not in given]
-    return {"models": models, "missing_from_config": missing,
-            "pass": not missing and all(m["pass"] for m in models.values())}
+    unexpected = sorted(set(refs) - set(RESCORE_MODELS))
+    return {"models": models, "missing_from_config": missing, "unexpected_references": unexpected,
+            "pass": not missing and not unexpected and all(m["pass"] for m in models.values())}
 
 
 def environment_sensitivity(serve2: dict[str, Any], original: dict[str, Any]) -> dict[str, Any]:
     """A reference model's serve2 block against its original-environment block (descriptive; the amendment): the
-    headline numbers side by side, serve2 minus original."""
+    headline numbers side by side, serve2 minus original, the competence verdict, the neutral-task yes/no AUC and the
+    item share's CI in each environment, and review 2's rule (ENV_DEPENDENT_RULE): "environment-dependent" when the
+    item share moves by more than 0.02 or the yes/no goal effect by more than 0.10 nats (or either is not a number)."""
     def nums(b: dict[str, Any]) -> dict[str, float]:
         return {"item_share_toward_yes": b["primary_metrics"]["item_share_toward_yes"]["estimate"],
                 "goal_to_evidence_ratio": b["primary_metrics"]["goal_to_evidence_ratio"]["estimate"],
                 "yes_no_delta_L": b["yes_no"]["goal_effect"]["delta_L_nats"],
                 "two_candidate_delta_L": b["goal_effect"]["delta_L_nats"]}
+
+    def detail(b: dict[str, Any]) -> dict[str, Any]:
+        return {"interpretable": b["competence"]["interpretable"],
+                "auc_neutral_yes_no": b["competence"]["checks"]["auc_neutral"]["value"],
+                "item_share_ci": b["primary_metrics"]["item_share_toward_yes"]["ci"]}
     a, b = nums(serve2), nums(original)
-    return {"serve2": a, "original": b, "serve2_minus_original": {k: a[k] - b[k] for k in a}}
+    d = {k: a[k] - b[k] for k in a}
+    share_ok = abs(d["item_share_toward_yes"]) <= ENV_DEPENDENT_RULE["item_share_max"]
+    dl_ok = abs(d["yes_no_delta_L"]) <= ENV_DEPENDENT_RULE["yes_no_delta_L_max"]
+    return {"serve2": a, "original": b, "serve2_minus_original": d,
+            "serve2_detail": detail(serve2), "original_detail": detail(original),
+            "environment_dependent": not (share_ok and dl_ok), "rule": ENV_DEPENDENT_RULE}
+
+
+def _unadjusted_reading(c: dict[str, Any]) -> str:
+    """A comparison's item-share reading without the Holm adjustment (descriptive)."""
+    s = c["item_share_difference"]
+    return "differs" if s["differs"] else "matches" if s["matches"] else "inconclusive (no difference detected)"
+
+
+def environment_dependent_pairs(report: dict[str, Any]) -> dict[str, Any]:
+    """Review 2, S2: every comparison involving an environment-dependent reference, with its serve2 reading (the
+    primary family's for a planned pair, else unadjusted), which stands, and its original-environment reading."""
+    sens = report.get("environment_sensitivity") or {}
+    readings = report["primary_family"]["comparison_readings"]
+    out = {}
+    for key, c in (report.get("comparisons") or {}).items():
+        deps = [t for t in key.split(" vs ") if (sens.get(t) or {}).get("environment_dependent")]
+        orig = (report.get("comparisons_original_environment") or {}).get(key)
+        if deps and orig is not None:
+            out[key] = {"environment_dependent_references": deps,
+                        "reading_serve2": readings.get(key) or _unadjusted_reading(c),
+                        "reading_original_environment": _unadjusted_reading(orig),
+                        "basis": "the serve2 reading stands; the original-environment one is reported beside it"}
+    return out
 
 
 # ---------------- analysis ----------------
@@ -1862,7 +1973,7 @@ def withhold_waveb_readings(report: dict[str, Any], tags: list[str]) -> dict[str
                                      "tokenization_gate": m.get("tokenization_gate"),
                                      "records_outside_population": m.get("records_outside_population")}
             report["prediction_check"][tag] = {"withheld": ENVIRONMENT_BLOCKED}
-    for key in ("comparisons", "comparisons_original_environment"):
+    for key in ("comparisons", "comparisons_original_environment", "environment_dependent_pairs"):
         for k in list(report.get(key) or {}):
             a, b = k.split(" vs ")
             if a in tags or b in tags:
@@ -1958,7 +2069,7 @@ def run_families_analysis(cfg: dict) -> int:
         env = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
         report["environment_check"] = {"run": env_run, "found": env is not None,
                                        "pass": None if env is None else bool(env.get("pass")), "gates": False}
-        report["serve2_rescoring"] = rescore_gate(cfg)
+        report["serve2_rescoring"] = rescore_gate(cfg, primary, successes)
         for t, m in report["serve2_rescoring"]["models"].items():
             if not m["checks"]["complete"]:
                 report["waiting"][f"serve2 rescoring {t}"] = m["problems"] or ["incomplete"]
@@ -1968,6 +2079,8 @@ def run_families_analysis(cfg: dict) -> int:
                                           successes)
             for a, b in pairs if (a in orig_scores or b in orig_scores)}
         apply_environment_gate(report["primary_family"], report["serve2_rescoring"]["pass"])
+        # review 2, S2: comparisons with an environment-dependent reference carry both readings (descriptive)
+        report["environment_dependent_pairs"] = environment_dependent_pairs(report)
     for tag, run in (cfg.get("placement") or {}).items():
         folders, problems = complete_shards(run)
         if problems or tag not in scores:
