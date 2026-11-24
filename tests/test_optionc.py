@@ -1034,7 +1034,8 @@ def test_registry_and_configs():
     assert load_config("optionc_qwen3-8b_yn_argmax")["rules"] == ["argmax"]
     an = load_config("optionc_analysis")
     assert an["primary_run"] == "optionc_qwen3-8b_obs"
-    assert an["runs"] == {"optionc_qwen3-8b_obs": "optionc_qwen3-8b_obs", "optionc_qwen3-8b_yn": "optionc_qwen3-8b_yn"}
+    assert an["runs"] == {"optionc_qwen3-8b_obs": "optionc_qwen3-8b_obs", "optionc_qwen3-8b_yn": "optionc_qwen3-8b_yn",
+                         "optionc_qwen3-8b_yn_argmax": "optionc_qwen3-8b_yn_argmax"}
     step0 = {"models": {"qwen3-8b": {"classification": "question-specific (supports the task-success reading)",
                                      "obs_competence": {"passed": True}}}}
     assert O.primary_problems(tier1, step0) == []

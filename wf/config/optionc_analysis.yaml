@@ -8,6 +8,7 @@ run_id: optionc_analysis
 runs:
   optionc_qwen3-8b_obs: optionc_qwen3-8b_obs
   optionc_qwen3-8b_yn: optionc_qwen3-8b_yn
+  optionc_qwen3-8b_yn_argmax: optionc_qwen3-8b_yn_argmax  # Tier 2, added once complete (jobs 7253142-7253145)
 primary_run: optionc_qwen3-8b_obs
 rq3_source: rq3
 step0_analysis: optionc_step0_analysis
