@@ -10,3 +10,9 @@ sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
 split_seed: 0
 bootstrap: 2000
 hidden_probe: true
+# Deviation 2026-11-23 (notes/interp_deviation_analysis_fix.md): the analysis runs at the deviation commit, while the
+# GPU stages ran at the freeze commit 7ade3b9; the fix touches analysis code only, so their outputs are trusted as is.
+accept_commits:
+  interp_pilot_stage0: [7ade3b98d2b26f2c7b48e5dea04589f5eac7e7fe]
+  interp_pilot_patch: [7ade3b98d2b26f2c7b48e5dea04589f5eac7e7fe]
+  interp_pilot_ablate: [7ade3b98d2b26f2c7b48e5dea04589f5eac7e7fe]
