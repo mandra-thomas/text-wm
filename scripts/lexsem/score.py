@@ -129,6 +129,9 @@ def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...], fail
 
     name_ids = tok(" " + t["goal_object"], add_special_tokens=False)["input_ids"]
     base = count_occurrences(prompt_ids(tok, lexsem.messages(t, rec["specs"]["swapped"], "obs"), mode), name_ids)
+    # the real task names the object itself; lines built on it are checked against the real task's own count
+    aligned = count_occurrences(prompt_ids(tok, lexsem.messages(t, {"task_line": t["task_line"]}, "obs"), mode),
+                                name_ids) - base
     jobs = []
     for c, spec in rec["specs"].items():
         for fmt in formats + (("fail",) if c in fail_conds else ()):
@@ -136,9 +139,10 @@ def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...], fail
             cont = {"obs": rec["o_plus"], "fail": FAILURE_TEXT}.get(fmt)
             ids, n_p = sequence(tok, msgs, mode, cont)
             if fmt == "obs":
-                form = lexsem.MENTIONS[c][0] if c in lexsem.MENTIONS else ("aligned" if c == "aligned" else None)
+                form = lexsem.MENTIONS[c][0] if c in lexsem.MENTIONS else None
+                on_aligned = c == "aligned" or (c in lexsem.MENTIONS and lexsem.MENTIONS[c][2] == "aligned")
                 added = count_occurrences(ids[:n_p], name_ids) - base
-                want = 1 if form in ("name", "homonym") else (0 if c != "aligned" else added)
+                want = (aligned if on_aligned else 0) + (1 if form in ("name", "homonym") else 0)
                 if added != want:
                     raise SystemExit(f"{t['id']} {c}: adds {added} copies of the name's tokens, expected {want}")
             jobs.append({"cond": c, "fmt": fmt, "ids": ids, "n_prompt": n_p})

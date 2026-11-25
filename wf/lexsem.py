@@ -125,6 +125,8 @@ MENTIONS = {
     "name_ignore": ("name", "ignore", "task"), "ctrl_ignore": ("ctrl", "ignore", "task"),
     "name_assert_pre": ("name", "assert", "pre"), "ctrl_assert_pre": ("ctrl", "assert", "pre"),
     "name_assert_post": ("name", "assert", "post"), "ctrl_assert_post": ("ctrl", "assert", "post"),
+    # the real task followed by the control object's assertion: the competition signature (design section 5)
+    "aligned_ctrl_assert": ("ctrl", "assert", "aligned"),
     "name_reliable": ("name", "reliable", "task"), "ctrl_reliable": ("ctrl", "reliable", "task"),
     "name_unreliable": ("name", "unreliable", "task"), "ctrl_unreliable": ("ctrl", "unreliable", "task"),
 }
@@ -142,6 +144,14 @@ GROUPS = {
     # the Llama yes/no arm: the content contrasts with the name, the elsewhere sentence and the description
     "names_only": ANCHORS + ("name_assert", "ctrl_assert", "name_deny", "ctrl_deny", "name_use", "ctrl_use",
                              "name_elsewhere", "ctrl_elsewhere", "desc_assert", "cdesc_assert"),
+    "competition": ("aligned_ctrl_assert",),
+}
+# The three arms' condition sets (decided 2026-11-25; "Ignore the X" and the competition line added on the
+# coordinator's request after the mention investigation).
+ARMS = {
+    "qwen_plain": ("core", "ignore", "position", "reliability", "competition"),
+    "qwen_block": ("block8", "ignore", "competition"),
+    "llama_chat": ("names_only", "ignore", "competition"),
 }
 CORE = GROUPS["core"]
 # Each mention condition's control: same carrier and position, the control object's reference in its place. The
@@ -246,6 +256,8 @@ def specs(t: dict, conditions: tuple[str, ...] = CORE,
         pos = MENTIONS[c][2]
         if pos == "task":
             out[c] = {"task_line": f"{t['swapped_task_line']} {s}"}
+        elif pos == "aligned":
+            out[c] = {"task_line": f"{t['task_line']} {s}"}
         else:
             out[c] = {"task_line": t["swapped_task_line"], pos: s}
     return out

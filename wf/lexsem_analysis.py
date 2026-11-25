@@ -29,15 +29,22 @@ MASS_FIRST, MASS_FIRST_GAP, MASS_YN = 0.7, 0.1, 0.9  # gate 2
 MIN_RECOG = {"later": 100, "step0": 50}  # gate 5
 STEP0_BRIDGE_BLOCK = (0.29, 0.23, 0.37)  # stage 0 with the think block, same items (section 8)
 REF_FRACTION = 0.5  # a ratio is read only if its reference's interval lies above zero and above half its estimate
-# Numerical floor (nats) of a paired effect under the run's fixed environment (design section 7). A ratio's zones
-# are only resolvable if a quarter of its reference exceeds the floor; otherwise the contrast is "below numerical
-# resolution" and does not enter the readings. Set from the measured paired-effect sensitivity before the freeze.
-NUMERICAL_FLOOR = 0.13
+# Numerical floor (nats) of a mean paired effect under a change of environment, per model and format, from
+# notes/numerical_sensitivity.md (2026-11-25): 0.13 for Qwen with the empty think block, 0.05 for Llama; for Qwen in
+# plain text, which that note calls less extreme than the block case, the upper end (0.08) of its measured range for
+# Qwen means over a few hundred items. Rules adopted from that note: a margin must be at least MARGIN_MULT times the
+# floor, and a reading whose interval ends within FRAGILE_MULT times the floor of a boundary is "numerically fragile".
+FLOORS = {"plain": 0.08, "block": 0.13, "chat": 0.05}
+MARGIN_MULT, FRAGILE_MULT = 5, 2
+NUMERICAL_FLOOR = FLOORS["plain"]
+LEVEL_BOUNDS = (-0.25, 0.25, 0.75, 1.25)
+STAGE0_ALLOWANCE = 0.12  # environment alone moves "new minus archived" stage-0 means by up to about this much
 READOUT_LABELS = {"first": "first-token observation", "yn": "yes/no", "full2c": "full two-candidate"}
 # What every score file must share (section 10, decided by the user 2026-11-25): GPU type, stack, dtype, scoring.
 ENV_REQUIRED = {"gpu_contains": "L40S", "dtype": "bfloat16", "unbatched": True}
 # contrast -> (condition, its control); the rules read the ones in R.PREDICTIONS
 CONTRASTS = {c: (c, k) for c, k in lexsem.CONTROL_OF.items()}
+COMPETITION = ("aligned", "aligned_ctrl_assert", "swapped", "ctrl_assert")
 
 
 # ---------------- readouts ----------------
@@ -94,6 +101,14 @@ def interval(point: float, draws: np.ndarray) -> dict:
             "n_draws_undefined": int(len(draws) - len(d))}
 
 
+def fragile(ci: list[float], ref: float, bounds: tuple[float, ...]) -> bool:
+    """An interval end within FRAGILE_MULT floors (expressed in units of the reference) of a zone boundary."""
+    if not ref or not all(map(math.isfinite, ci)):
+        return False
+    tol = FRAGILE_MULT * NUMERICAL_FLOOR / abs(ref)
+    return any(abs(e - b) < tol for e in ci for b in bounds)
+
+
 def mean(boot: Boot, games: list[str], x: np.ndarray) -> tuple[dict, np.ndarray]:
     n, nd = boot.sums(games, x)
     k, kd = boot.sums(games, np.ones_like(x))
@@ -116,7 +131,8 @@ def ratio(boot: Boot, games: list[str], num: np.ndarray, den: np.ndarray) -> tup
     out["num_den_correlation"] = float(np.corrcoef(num_dr[ok], den_dr[ok])[0, 1]) if min(sd) > 0 else None
     lo, est = den_iv["ci"][0], den_iv["estimate"]
     out["reference_ok"] = bool(lo > 0 and lo >= REF_FRACTION * est)
-    out["resolvable"] = bool(abs(est) * 0.25 > NUMERICAL_FLOOR)
+    out["resolvable"] = bool(abs(est) * 0.25 >= MARGIN_MULT * NUMERICAL_FLOOR)
+    out["numerically_fragile"] = fragile(out["ci"], est, LEVEL_BOUNDS)
     out["numerator_within_floor"] = bool(-NUMERICAL_FLOOR <= num_iv["ci"][0] and num_iv["ci"][1] <= NUMERICAL_FLOOR)
     return out, draws
 
@@ -183,7 +199,9 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
     g = np.array([value(r, "aligned", readout) - value(r, "swapped", readout) for r in base])
     G, _ = mean(boot, games, g)
     out["G"] = G
-    gate1 = G["ci"][0] > 0 and G["ci"][0] >= 0.5 * G["estimate"] and 0.25 * G["estimate"] > NUMERICAL_FLOOR
+    gate1 = (G["ci"][0] > 0 and G["ci"][0] >= 0.5 * G["estimate"]
+             and 0.25 * G["estimate"] >= MARGIN_MULT * NUMERICAL_FLOOR)
+    out["numerical_floor_nats"] = NUMERICAL_FLOOR
     out["gate_goal_effect"] = "passed" if gate1 else "failed: nats only, no reading"
     gate2 = mass_gate(recs, readout)
     out["gate_mass"] = gate2
@@ -210,6 +228,7 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
     A, A_draws = ratio(boot, games_a, m_a, g_a)
     A["readout_used"] = ro_a
     out["A"] = A
+    A["numerically_fragile"] = fragile(A["ci"], G["estimate"], LEVEL_BOUNDS)
     out["mention_reading"] = R.mention_reading(*A["ci"]) if gate1 else "not read: goal-effect gate failed"
     out["relevance"] = R.relevance_reading(*A["ci"]) if gate1 else "not read: goal-effect gate failed"
     rho_draws = {}
@@ -239,8 +258,8 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
             iv["ratio_not_read"] = ("the name assertion's net effect on these items has an interval that includes zero "
                                     "or a lower bound below half its estimate: absolute effects only")
         elif not iv["resolvable"]:
-            iv["ratio_not_read"] = (f"below numerical resolution: a quarter of the reference is not above the "
-                                    f"{NUMERICAL_FLOOR} nats floor: absolute effects only")
+            iv["ratio_not_read"] = (f"below numerical resolution: a quarter of the reference is less than "
+                                    f"{MARGIN_MULT} times the {NUMERICAL_FLOOR}-nat floor: absolute effects only")
         if form in ("desc", "alias"):
             snum = np.array([value(r, cond, ro) - value(r, ctrl, ro) for r in s_all])
             sden = np.array([value(r, "name_assert", ro) - value(r, "ctrl_assert", ro) for r in s_all])
@@ -256,6 +275,8 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
     out["single_account_reading"] = (R.single_account_reading(rho_iv, tuple(A["ci"])) if gate1
                                      else "not read: goal-effect gate failed")
     out["broad_evidence"] = R.broad_evidence_status(statuses)
+    out["numerically_fragile"] = sorted([c for c in rho_iv if rho[c].get("numerically_fragile")]
+                                        + (["A"] if A.get("numerically_fragile") else []))
     basic = {c: tuple(rho[c]["basic_ci"]) for c in rho_iv}
     basic_reading = R.single_account_reading(basic, tuple(A["basic_ci"]))
     out["interval_sensitive"] = basic_reading != out["single_account_reading"] and gate1
@@ -302,6 +323,8 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
         vis_iv = ratio(boot, gs, net["assert_post"] - net["assert_pre"], gg)[0]
         rec_m, vis_m = ("recency, with the region change, matters",
                         "visibility to the action's tokens, with the region change, matters")
+        for iv_ in (rec_iv, vis_iv):
+            iv_["numerically_fragile"] = fragile(iv_["ci"], G["estimate"], (-0.25, 0.25))
         out["position"] = {
             "recency": {**rec_iv, "reading": R.difference_reading(*rec_iv["ci"], rec_m,
                                                                    "no recency effect beyond 0.25", rec_m)},
@@ -319,6 +342,7 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
                       - (value(r, "name_unreliable", readout) - value(r, "ctrl_unreliable", readout)) for r in s])
         gg = np.array([value(r, "aligned", readout) - value(r, "swapped", readout) for r in s])
         iv = ratio(boot, gs, d, gg)[0]
+        iv["numerically_fragile"] = fragile(iv["ci"], G["estimate"], (-0.25, 0.25))
         out["reliability"] = {**iv, "reading": R.difference_reading(*iv["ci"], "the unreliable source lifts more",
                                                                      "no reliability effect beyond 0.25",
                                                                      "the reliable source lifts more"),
@@ -328,6 +352,22 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
                                        "sampled history shows the object); no proportional or quantitative claim"}
     else:
         out["reliability"] = "not scored"
+    # competition: the control object's assertion after the real task, net of the same sentence after the swapped
+    # task (stored rq1 values: Qwen -1.09 nats, Llama -0.06, two-candidate, with the block for Qwen)
+    s = _paired(base, COMPETITION, readout) if eff(COMPETITION) == readout else []
+    if s:
+        gs = [r["game_id"] for r in s]
+        d = np.array([(value(r, "aligned_ctrl_assert", readout) - value(r, "aligned", readout))
+                      - (value(r, "ctrl_assert", readout) - value(r, "swapped", readout)) for r in s])
+        gg = np.array([value(r, "aligned", readout) - value(r, "swapped", readout) for r in s])
+        iv = ratio(boot, gs, d, gg)[0]
+        iv["numerically_fragile"] = fragile(iv["ci"], G["estimate"], (-0.25, 0.25))
+        out["competition"] = {**iv, "reading": R.difference_reading(
+            *iv["ci"], "competition: naming another object after the real task lowers its reading",
+            "no competition beyond 0.25 of the goal effect",
+            "naming another object after the real task raises its reading")}
+    else:
+        out["competition"] = "not scored"
     # the stage-0 bridge, as stage 0 defined it (minus the plain swapped task), and net of the control
     s = _paired(base, ("name_assert",), readout)
     if s:
@@ -383,8 +423,12 @@ def prevalence_covariate(recs: list[dict], ro: str, boot: Boot) -> dict | str:
             "mean_gap": float(gap.mean())}
 
 
-def run_model(recs: list[dict], readouts: tuple[str, ...], checks: dict | None, B: int, seed: int) -> dict:
-    out: dict = {}
+def run_model(recs: list[dict], readouts: tuple[str, ...], checks: dict | None, B: int, seed: int,
+              floor: float | None = None) -> dict:
+    global NUMERICAL_FLOOR
+    if floor is not None:
+        NUMERICAL_FLOOR = floor
+    out: dict = {"numerical_floor_nats": NUMERICAL_FLOOR}
     strata = ("later", "step0")
     boots = {s: Boot([r["game_id"] for r in recs if r["stratum"] == s], B, seed) for s in strata}
     joint = Boot([r["game_id"] for r in recs], B, seed)
@@ -446,6 +490,8 @@ def step_comparison(recs: list[dict], ro: str, joint: Boot, checks: dict | None,
         pt = ((by["step0"]["A"]["estimate"] - by["later"]["A"]["estimate"]) if c == "A"
               else by["step0"]["relative_lift"][c]["estimate"] - by["later"]["relative_lift"][c]["estimate"])
         diffs[c] = interval(pt, d0 - d1)
+        ref = by["later"]["G"]["estimate"] if c == "A" else by["later"]["relative_lift"][c]["denominator_nats"]["estimate"]
+        diffs[c]["numerically_fragile"] = fragile(diffs[c]["ci"], ref, (-0.25, 0.25))
     if "A" in diffs:
         res["A"] = {**diffs["A"], "reading": R.difference_reading(*diffs["A"]["ci"], "step 0 lower",
                                                                     "no step difference beyond 0.25",
@@ -519,9 +565,64 @@ def bridge_compare(plain: list[dict], block: list[dict], B: int, seed: int) -> d
         diff = interval(res["plain"]["estimate"] - res["block"]["estimate"], dr["plain"] - dr["block"])
         reading = R.difference_reading(*diff["ci"], "plain text lower than the block format",
                                        "the same in both formats (within 0.25)", "plain text higher than the block format")
+        diff["numerically_fragile"] = fragile(diff["ci"], res["block"]["denominator_nats"]["estimate"],
+                                              (-0.25, 0.25))
         out[s] = {**res, "plain_minus_block": diff, "reading": reading}
         if s == "step0" and reading == "plain text higher than the block format":
             out[s]["stage0_reading"] = "stage 0's low step-0 share belongs to the block format"
+    return out
+
+
+def ignore_compare(arms: dict[str, list[dict]], B: int, seed: int) -> dict:
+    """"Ignore the X" across arms on the same items (design section 5): its relative lift (net of its control, over
+    the name assertion's net effect) in Qwen plain text, Qwen with the block and Llama, and the pre-specified
+    reading of whether Qwen's share without the block falls toward Llama's. Yes/no for all three; first token for
+    the two Qwen arms (Llama's first token is reported, not read)."""
+    conds = ("name_ignore", "ctrl_ignore", "name_assert", "ctrl_assert")
+    out = {}
+    for ro in ("yn", "first"):
+        for st in ("later", "step0"):
+            have = {a: {r["id"]: r for r in recs if r["stratum"] == st
+                        and all(value(r, c, ro) is not None for c in conds)} for a, recs in arms.items()}
+            have = {a: v for a, v in have.items() if v}
+            if "qwen_plain" not in have or len(have) < 2:
+                continue
+            ids = sorted(set.intersection(*(set(v) for v in have.values())))
+            first = have["qwen_plain"]
+            boot = Boot([first[i]["game_id"] for i in ids], B, seed)
+            gs = [first[i]["game_id"] for i in ids]
+            res, dr = {}, {}
+            for a, v in have.items():
+                num = np.array([value(v[i], "name_ignore", ro) - value(v[i], "ctrl_ignore", ro) for i in ids])
+                den = np.array([value(v[i], "name_assert", ro) - value(v[i], "ctrl_assert", ro) for i in ids])
+                res[a], dr[a] = ratio(boot, gs, num, den)
+            entry: dict = {"relative_lift_ignore": res, "n_items": len(ids)}
+            diffs = {}
+            for other in ("qwen_block", "llama_chat"):
+                if other in res:
+                    diffs[other] = interval(res["qwen_plain"]["estimate"] - res[other]["estimate"],
+                                            dr["qwen_plain"] - dr[other])
+            entry["plain_minus"] = diffs
+            if {"qwen_block", "llama_chat"} <= set(diffs):
+                b, l_ = diffs["qwen_block"]["ci"], diffs["llama_chat"]["ci"]
+                falls = b[1] < -0.25
+                stays_block = -0.25 <= b[0] and b[1] <= 0.25
+                like_llama = -0.25 <= l_[0] and l_[1] <= 0.25
+                above_llama = l_[0] > 0.25
+                if falls and like_llama:
+                    reading = "block-dependent: without the block, Qwen's 'Ignore' share falls to Llama's"
+                elif falls and above_llama:
+                    reading = "partly block-dependent: it falls without the block but stays above Llama's"
+                elif stays_block and above_llama:
+                    reading = "model-level: without the block Qwen's 'Ignore' share stays at its with-block size, above Llama's"
+                else:
+                    reading = "inconclusive"
+                entry["reading"] = reading + "; neither outcome identifies a mechanism"
+            elif "qwen_block" in diffs:
+                entry["reading"] = R.difference_reading(*diffs["qwen_block"]["ci"], "lower without the block",
+                                                        "the same with and without the block (within 0.25)",
+                                                        "higher without the block") + " (no Llama comparison in this readout)"
+            out[f"{ro}|{st}"] = entry
     return out
 
 
@@ -548,8 +649,13 @@ def stage0_paired(index_path: str, block: list[dict], B: int, seed: int) -> dict
         old_m = np.array([a[r["id"]]["swapped_plus"] - a[r["id"]]["swapped"] for r in rs])
         per = np.array([abs(value(r, c, "yn") - a[r["id"]][o]) for r in rs
                         for c, o in (("aligned", "aligned"), ("swapped", "swapped"), ("name_assert", "swapped_plus"))])
-        out[s] = {"goal_effect_new_minus_archived": mean(boot, gs, new_g - old_g)[0],
-                  "mention_effect_new_minus_archived": mean(boot, gs, new_m - old_m)[0],
+        gdiff, mdiff = mean(boot, gs, new_g - old_g)[0], mean(boot, gs, new_m - old_m)[0]
+        within = lambda iv: (-STAGE0_ALLOWANCE <= iv["ci"][0] and iv["ci"][1] <= STAGE0_ALLOWANCE)  # noqa: E731
+        out[s] = {"goal_effect_new_minus_archived": gdiff, "mention_effect_new_minus_archived": mdiff,
+                  "numerical_allowance_nats": STAGE0_ALLOWANCE,
+                  "reading": ("within the numerical allowance of a change of environment" if within(gdiff)
+                              and within(mdiff) else "beyond the numerical allowance in at least one paired effect; "
+                              "read as a difference between environments, never as a change in the model"),
                   "mean_abs_per_score_difference": float(per.mean()), "n_items": len(rs)}
     return out
 
@@ -558,10 +664,14 @@ def run(scores_path: str, out_path: str | None = None, items_path: str | None = 
         block_path: str | None = None, llama_path: str | None = None, B: int = B_DEFAULT, seed: int = SEED,
         expect_commit: str | None = None, stage0_index: str | None = None, require_env: bool = True,
         floor: float | None = None) -> dict:
-    global NUMERICAL_FLOOR
-    if floor is not None:
-        NUMERICAL_FLOOR = floor
     sp = Path(scores_path)
+
+    def floor_for(path: Path, default_mode: str) -> float:
+        if floor is not None:
+            return floor
+        e = path.parent / f"{path.stem}_env.json"
+        mode = json.loads(e.read_text()).get("mode", default_mode) if e.exists() else default_mode
+        return FLOORS[mode]
     if require_env:
         problems = check_env([sp] + [Path(x) for x in (block_path, llama_path) if x and Path(x).exists()])
         if problems:
@@ -579,19 +689,28 @@ def run(scores_path: str, out_path: str | None = None, items_path: str | None = 
     recs = attach(load_scores(sp), items)
     has_fail = any("fail" in v for r in recs for v in r["scores"].values())
     readouts = ("first", "yn", "you", "nothing", "success_text") + (("full2c",) if has_fail else ())
-    report = {"numerical_floor_nats": NUMERICAL_FLOOR,
+    report = {"numerical_rules": {"floors_nats": FLOORS, "margin_multiple": MARGIN_MULT,
+                                  "fragile_multiple": FRAGILE_MULT, "stage0_allowance_nats": STAGE0_ALLOWANCE},
               "recognition_checks": "read" if checks is not None else "absent: every item counted as recognised",
-              "qwen_plain": run_model(recs, readouts, checks, B, seed),
+              "qwen_plain": run_model(recs, readouts, checks, B, seed, floor_for(sp, "plain")),
               "full_two_candidate": "scored" if has_fail else "not scored"}
     for name, path in (("block_yes_no", block_path), ("llama_yes_no", llama_path)):
         if not path or not Path(path).exists():
             report[name] = "not scored"
             continue
         own = load_checks(Path(path).parent / f"{Path(path).stem}_check.json")  # each model's own recognition
-        report[name] = run_model(attach(load_scores(path), items), ("yn",), own if own is not None else checks, B,
-                                 seed)
+        arm = attach(load_scores(path), items)
+        ros = ("yn",) + (("first",) if any("obs" in v for r in arm for v in r["scores"].values()) else ())
+        report[name] = run_model(arm, ros, own if own is not None else checks, B,
+                                 seed, floor_for(Path(path), "block" if name == "block_yes_no" else "chat"))
     if isinstance(report["llama_yes_no"], dict):
         report["model_comparison_yes_no"] = flags(report["qwen_plain"]["yn"], report["llama_yes_no"]["yn"])
+    arms = {"qwen_plain": recs}
+    if block_path and Path(block_path).exists():
+        arms["qwen_block"] = attach(load_scores(block_path), items)
+    if llama_path and Path(llama_path).exists():
+        arms["llama_chat"] = attach(load_scores(llama_path), items)
+    report["ignore_across_arms"] = ignore_compare(arms, B, seed) if len(arms) > 1 else "not scored"
     if block_path and Path(block_path).exists():
         block = attach(load_scores(block_path), items)
         report["bridge_plain_vs_block"] = bridge_compare(recs, block, B, seed)

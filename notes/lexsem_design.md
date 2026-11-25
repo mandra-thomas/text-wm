@@ -2,7 +2,7 @@
 
 **Status: design, not frozen.** No effect has been scored. Two 5-item smoke runs measured timing and validity only (section 11). The rules (section 9, `wf/lexsem_rules.py`) and the analysis (`wf/lexsem_analysis.py`) are written and tested on planted data; the design is to be reviewed again before the freeze tag (section 13). Exploratory, frozen procedure: the same standing as the mechanism battery and τ-auth.
 
-**Decisions by the user (2026-11-25).** (1) The full run uses the `serve2` software stack. (2) Every sequence is scored one at a time, unpadded, as every stored project score was made; no float32 output layer. (3) Included arms: the core; "Ignore the X" with its control; the three-position arm; E4's stated-reliability pair; the failure-text sequence on every core cell (the full two-candidate score); Qwen3-8B with the empty think block in yes/no, eight conditions; Llama-3.1-8B in yes/no, twelve conditions. Expected cost about one GPU-hour. On the same day the user added six scientific qualifications (identifiability, statistics, controls, environment, the reliability arm, readouts); sections 2, 7, 10, 5, 12 and 4 answer them.
+**Decisions by the user (2026-11-25).** (1) The full run uses the `serve2` software stack. (2) Every sequence is scored one at a time, unpadded, as every stored project score was made; no float32 output layer. (3) Included arms: the core; "Ignore the X" with its control; the three-position arm; E4's stated-reliability pair; the failure-text sequence on every core cell (the full two-candidate score); Qwen3-8B with the empty think block in yes/no, eight conditions; Llama-3.1-8B in yes/no, twelve conditions. Expected cost about one GPU-hour. Later the same day, after a CPU investigation of why a mention reproduces more of Qwen's effect than of Llama's, the coordinator added "Ignore the X" (with its control) to the with-block and Llama arms, a competition line (the real task plus the control object's assertion) to all three arms, and the first-token readout to the with-block arm, within about 1.2 GPU-hours (section 11). The user also adopted the numerical-sensitivity rules of `notes/numerical_sensitivity.md` (section 7). The user added six scientific qualifications (identifiability, statistics, controls, environment, the reliability arm, readouts); sections 2, 7, 10, 5, 12 and 4 answer them.
 
 **Revision history.** First version 064edb6; reviewed twice on 2026-11-25 (section 17 lists every point and what was done).
 
@@ -71,7 +71,7 @@ Each mention condition's lift is read relative to the lift of asserting the name
 
 ## 4. Model, format and readouts
 
-**Model and format.** Qwen3-8B in plain text: no chat template, the study's own messages rendered by the Qwen audit's `plain_text`, the reply after one space. This format matched the no-block render on the goal effect (3.26 against 3.28 nats; `qwen_effect_audit_pipeline.md` §4, §7.2 B); it has not been validated for the effects of individual sentences. The with-block arm scores the name conditions in Qwen's own thinking-off format in yes/no, so format dependence of the content pattern can be read directly (section 11). Conclusions are worded per model and format.
+**Model and format.** Qwen3-8B in plain text: no chat template, the study's own messages rendered by the Qwen audit's `plain_text`, the reply after one space. This format matched the no-block render on the goal effect (3.26 against 3.28 nats; `qwen_effect_audit_pipeline.md` §4, §7.2 B); it has not been validated for the effects of individual sentences. The with-block arm scores the name conditions, "Ignore the X" and the competition line in Qwen's own thinking-off format, in the first token and yes/no, so format dependence of the content pattern can be read directly (sections 9 and 11). Conclusions are worded per model and format.
 
 **Three readouts, three separate conclusions.** One sequence per item, condition and format; from them:
 
@@ -108,6 +108,16 @@ None of the three is the definitive measure of the model's belief about the tran
 **Tokens.** Every name carrier keeps the name's leading space and ends it at a word boundary, so the name has exactly the same tokens as in the action line (checked for all 55 names in all name carriers with both tokenizers; checked per item at run time).
 
 **Homonyms are not a pure lexical isolate.** Nine object types have a natural sense with the identical token (mug, watch, pan, plate, book, pencil, cup, bowl, egg). An unrelated-sense homonym may still activate the original concept. Its reading is therefore "the lexical form, without the intended sense in context"; semantic activation is allowed a partial lift on it, and the homonym never decides an account's reading on its own. A full homonym lift is not taken as proof of lexical-only processing.
+
+**The three arms.** All on the same 450 items, in one run, on one GPU type and stack.
+
+| Arm | Model and format | Conditions | Readouts |
+|---|---|---|---|
+| Qwen plain text | Qwen3-8B, no chat template | core, "Ignore the X", position, reliability, competition (with controls) | first token, yes/no; failure text on core cells (full two-candidate) |
+| Qwen with the block | Qwen3-8B, thinking-off chat template (empty think block) | anchors; name assertion, denial and listed word; "Ignore the X"; competition (with controls) | first token, yes/no |
+| Llama | Llama-3.1-8B-Instruct, its chat template | anchors; name assertion, denial, listed word, elsewhere; description assertion; "Ignore the X"; competition (with controls) | yes/no |
+
+**The competition line.** The real task followed by the control object's assertion ("Your task is to: put some saltshaker on cabinet. There is a toiletpaper somewhere in the room."). Its effect is read net of the same sentence after the swapped task, so the carrier's own effect is removed (section 9). In stored two-candidate scores (rq1, with the block for Qwen), naming another object after the real task lowered Qwen's reading by 1.09 nats and Llama's by 0.06.
 
 **Recognition checks.** Descriptions are put to rq1x's naming question and read by rq1x's reader plus a frozen lenient list (fixed after reading Qwen's rq1x answers; about 77–79% of sampled items expected to pass); description contrasts are read on items that pass. Aliases are checked by forced choice ("Can the word "skillet" refer to a pan?" must favour Yes; the same with a frozen foil must favour No). Each model's own checks are used for its own arm.
 
@@ -173,11 +183,17 @@ Further estimands: the unnormalized versions (log p(" You"), log p(" Nothing"), 
 
 ## 7. Statistics
 
+**Numerical rules** (adopted from `notes/numerical_sensitivity.md`, 2026-11-25). Within one environment, scores are deterministic; a change of GPU type, stack, code path or input shape adds noise that is not independent rounding (the two arms of a contrast move nearly independently, means shift systematically, and tails are heavy). Three rules follow.
+
+- *One environment per comparison*, including the code path and the input shape: every readout is computed the same way for every condition of a comparison (yes/no from a pass over the prompt alone; the first token and the success text from a pass over the prompt and the success text; the failure text from its own pass), and the analysis refuses mixed environments (gate 7).
+- *Margins at least five times the floor.* The floor is the measured one-SD shift of a mean paired effect under a change of environment: 0.13 nats for Qwen with the think block, 0.05 for Llama, and for Qwen in plain text, which that note judges less extreme than the block case but did not measure, the upper end of its measured range for Qwen means over a few hundred items, 0.08 nats. A zone of a ratio is 0.25 of its reference wide, so a ratio is read only if a quarter of its reference is at least five floors: references of at least 1.6 nats (Qwen plain), 2.6 (Qwen with the block) and 1.0 (Llama). The goal-effect gate requires the same of $G$; otherwise only absolute effects are reported, marked "below numerical resolution". **This may bind for the plain-text first-token readout**: on the Qwen audit's 300 items its goal effect was 1.31 nats at later steps and 1.65 at step 0. If it binds, that readout's account readings are not made; the yes/no and full two-candidate readouts, with larger effects, are read on their own.
+- *Fragility.* A reading whose interval ends within two floors (in units of its reference) of a zone boundary is labelled "numerically fragile".
+
+The descriptive comparison of archived stage-0 scores (original stack) with their rescoring here carries an allowance of about ±0.12 nats in the mean: inside it, the difference is read as environment alone.
+
 **Joint uncertainty.** One game-clustered bootstrap per stratum (2,000 resamples of games with replacement, seed 20260924) is shared by every estimand of that stratum, so a ratio, its numerator, its denominator, differences between ratios and the mixture weights all come from the same draws. The step comparison uses one joint bootstrap over the games of both strata. Percentile 95% intervals; a reading that changes under basic intervals is flagged "interval-sensitive".
 
 **A small or poorly estimated reference.** A ratio is read only if its reference (the denominator: $G$ for the mention lift, the name assertion's net effect on the same items for a relative lift) has an interval that lies above zero and whose lower end is at least half its estimate. Otherwise only the absolute effects are reported for that contrast, and it does not enter the account readings. The threshold, fixed before scoring, keeps the reference's coefficient of variation at or below about 0.26 (the interval's lower half-width at most 50% of the estimate, so the standard error at most about a quarter of it). At that precision the ratio's first-order bias, roughly the squared coefficient of variation, is under 7%, the reference almost never crosses zero in a bootstrap draw (so the ratio's interval is bounded), and the same rule already governs $G$ (gate 1). In addition, relative lifts are read only if $A$'s lower bound is at least 0.25, that is, only if there is a mention lift that is not about zero to decompose. (An earlier draft required 0.5; the simulation in section 10 showed that this made every decomposition unreadable whenever the true lift was half the goal effect or less, which is plausible at step 0, while the reference rule already guards the ratios' stability.)
-
-**Numerical floor.** Small references and every equivalence-style reading ("about zero", "no effect beyond 0.25") need the effects to be resolvable above numerical noise, and that noise is not assumed to be independent rounding. The run fixes GPU type, stack, revision, dtype and unbatched scoring, which removes the largest measured sources (batch shape changed readouts by up to 0.375 nats in plain text and 1.25 nats with the think block in the first smoke; the newer stack shifts yes/no scores by about 0.2 nats per score; attention implementation differs by 0.275 nats on yes/no for one wave-B model on this stack). The remaining floor for a paired effect under the fixed environment is taken from the measured paired-effect sensitivity before the freeze (section 11); until then the analysis uses a provisional 0.13 nats, the per-readout batch-row noise the interpretability pilot measured on the same GPU type. A ratio's zones are read only if a quarter of its reference exceeds the floor (a 0.25 band narrower than the floor cannot be resolved), and the goal-effect gate requires the same of $G$; otherwise only absolute effects are reported, marked "below numerical resolution".
 
 **Equal-width bands do not give equal power.** The predicted zones are bounded and equally wide (section 9), but power still depends on the reference size, the noise of each condition and the correlation of contrasts. Section 10 validates the whole procedure by simulation across a grid of those.
 
@@ -188,7 +204,7 @@ Further estimands: the unnormalized versions (log p(" You"), log p(" Nothing"), 
 1. **Goal effect**: $G$'s interval above zero, lower end at least half the estimate; otherwise nats only.
 2. **Readout mass**: first-token mass at least 0.7 and within 0.1 of the swapped condition's (a failing condition is read on log p(" You") and flagged); yes/no mass at least 0.9 (otherwise invalid in yes/no).
 3. **A lift to decompose**: relative lifts read only if $A$'s lower bound is at least 0.25.
-4. **Reference**: the small-reference rule of section 7, per contrast, and the numerical floor (a quarter of the reference above the floor).
+4. **Reference**: the small-reference rule of section 7, per contrast, and the numerical rule (a quarter of the reference at least five floors); readings near a boundary labelled "numerically fragile".
 5. **Precision**: a relative lift with half-width above 0.25 is "imprecise" and counts as undecided.
 6. **Recognition**: description and alias contrasts on recognised items only; not assessable below 100 later or 50 step-0 items.
 7. **Environment**: every score file must record the same GPU type (L40S), stack, model revision, dtype (bf16) and unbatched scoring (section 11), or the analysis refuses to run.
@@ -224,6 +240,19 @@ Evidence is read in two forms: literal claim about this room (as above), and inc
 **Other readings.** Mention sufficiency and task relevance from $A$ (as sole account: about zero or below; as a component: the shortfall of $A$ from 1). The homonym descriptively: "the lexical form lifts without the intended sense in context", or "does not lift". "Ignore the X" against relevance read as a hint. Mixture weights (least squares on the three pure patterns, with intervals) and shares, always descriptive. The step difference in $A$ ("step 0 lower", "no step difference beyond 0.25", "step 0 higher", inconclusive), and "stratum-specific" only when an account is contradicted in one stratum, consistent in the other, and the responsible contrast's step difference lies outside ±0.25. Position: "recency, with the region change" and "visibility to the action's tokens, with the region change", each "matters" if its interval lies wholly outside ±0.25 of the goal effect, "no effect beyond 0.25" if wholly within. Item-level agreement: "tracks the goal effect item by item" (correlation lower bound at least 0.7), "weak item tracking" (upper bound below 0.5), otherwise intermediate.
 
 **Readout disagreements.** For each pair of readouts (first-token against yes/no, first-token against full two-candidate, yes/no against full two-candidate) and each contrast, a disagreement is recorded when the two categories share no zone. The normalization flag compares the first-token readout with log p(" You"). These lists are reported as findings; no readout overrides another.
+
+**"Ignore the X" across formats and models** (pre-specified). Its relative lift (net of its control, over the name assertion's net effect, same items, one bootstrap) is computed in each arm, and the differences "plain minus block" and "plain minus Llama" are read in yes/no; in the first token, Qwen plain against Qwen with the block (Llama's first token is not scored).
+
+| Outcome (yes/no) | Reading | Meaning |
+|---|---|---|
+| Plain lower than block by more than 0.25, and plain within ±0.25 of Llama | "block-dependent: without the block, Qwen's 'Ignore' share falls to Llama's" | Qwen's content-blind response to "Ignore the X" is tied to the thinking-off format (or the extreme certainty it creates), not to Qwen3-8B's processing in general |
+| Plain lower than block by more than 0.25, but above Llama by more than 0.25 | "partly block-dependent" | the block enlarges it, but a Qwen-specific part remains |
+| Plain within ±0.25 of block, and above Llama by more than 0.25 | "model-level" | the response belongs to Qwen3-8B in both formats (no other Qwen size is scored, so not "Qwen-general") |
+| Anything else | "inconclusive" | — |
+
+The first-token comparison (plain against block) is read "lower without the block", "the same with and without the block (within 0.25)" or "higher without the block". None of these outcomes identifies a mechanism.
+
+**Competition** (each arm, each readout): the competition line's effect net of the control's carrier effect, over $G$: "competition: naming another object after the real task lowers its reading" if wholly below −0.25; "no competition beyond 0.25 of the goal effect" if within ±0.25; "raises" if above; otherwise inconclusive. A Qwen competition with none in Llama fits the investigation's description (Qwen's lift depends on the action's object being the most prominently named); it does not identify a mechanism.
 
 **Llama.** Llama's arm is yes/no only; the comparison with Qwen uses Qwen's yes/no line, and states that formats also differ (Qwen in plain text, Llama in its chat template).
 
@@ -264,7 +293,19 @@ The quick, rules-only mode (`simulate_rules.py rules`, independent draws per con
 
 **The bridge to stage 0 is rescored inside this run.** Stage 0's yes/no prompts for the aligned task, the swapped task and its mention sentence are, byte for byte, the with-block arm's aligned, swapped and name-assertion yes/no prompts. The bridge is therefore read within the run, on the same items, GPU type, stack and bootstrap draws: the plain-text bridge ratio against the with-block one, with the rule "plain text higher than the block format", "the same in both formats (within 0.25)" or "plain text lower" for their difference; at step 0, "plain text higher" is read as "stage 0's low step-0 share belongs to the block format". This costs nothing beyond the with-block arm. The archived stage-0 scores (original stack) are compared with their rescoring only descriptively, as differences in the *paired* effects (goal effect and mention effect, with intervals) and the mean per-score difference; the earlier 0.2-nat per-score stack difference is not assumed to carry over to paired effects.
 
-SMOKE_RESULTS
+**Cost of the full run**, at the measured rate for one unpadded sequence at a time on an L40S (0.088 s in plain text, 0.076 with the think block, 0.071 for Llama; first smoke).
+
+| Arm | Item-conditions | Sequences | GPU-minutes |
+|---|---|---|---|
+| Qwen plain text: core 6,853, "Ignore" 900, position 1,800, reliability 1,800, competition 450 | 11,803 | 23,606 (first token and yes/no) + 6,853 failure texts = 30,459 | about 44.7 |
+| Qwen with the block: 11 conditions | 4,950 | 9,900 (first token and yes/no) | about 12.5 |
+| Llama: 15 conditions | 6,750 | 6,750 (yes/no) | about 8.0 |
+| Loading three models, recognition checks | | | about 5 |
+| **Total** | | | **about 70 (1.17 GPU-hours)** |
+
+Against the first full plan (about one GPU-hour), the additions cost: the two control-object reliability sentences about 2.6 minutes; "Ignore the X" in the with-block and Llama arms about 2.2; the competition line in all three arms about 2.4; the first-token readout in the with-block arm about 6.3.
+
+**Second smoke run** (job 7315488, commit 3f3a31a, 5 items, unbatched, every arm as of that commit; timing and validity only; queued before the competition line, the "Ignore" pair in the block and Llama arms and the block arm's first token were added). SMOKE2
 
 ## 12. The stated-reliability arm (E4) and screening off
 

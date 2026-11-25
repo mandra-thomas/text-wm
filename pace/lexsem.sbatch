@@ -5,7 +5,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
-#SBATCH --time=2:00:00
+#SBATCH --time=1:30:00
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=gpu-l40s
 #SBATCH --output=logs/lexsem_%j.out
@@ -13,9 +13,10 @@
 #
 # Lexsem diagnostic (notes/lexsem_design.md). Submit only from the commit of the design's freeze tag, in the serve2
 # stack (decided by the user, 2026-11-25). LX_ARM picks one of the three runs:
-#   qwen_plain  Qwen3-8B, plain text, core + ignore + position + reliability, obs and yes/no, failure text on core
-#   qwen_block  Qwen3-8B, thinking-off chat format (empty think block), block8, yes/no
-#   llama_chat  Llama-3.1-8B, its chat template, names_only, yes/no
+#   qwen_plain  Qwen3-8B, plain text, core + ignore + position + reliability + competition, obs and yes/no,
+#               failure text on core
+#   qwen_block  Qwen3-8B, thinking-off chat format (empty think block), block8 + ignore + competition, obs and yes/no
+#   llama_chat  Llama-3.1-8B, its chat template, names_only + ignore + competition, yes/no
 # Example: sbatch ... --export=ALL,LX_ARM=qwen_plain,SERVE_ENV=...,HF_HOME=...,HF_HUB_CACHE=... pace/lexsem.sbatch
 
 set -euo pipefail
@@ -33,10 +34,12 @@ nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | tr ' ' '_' >"${D}/
 git rev-parse HEAD >"${D}/${ARM}_commit.txt"
 S=scripts/lexsem/score.py
 case "${ARM}" in
-  qwen_plain) python "${S}" --mode plain --groups core,ignore,position,reliability --formats obs,yn \
+  qwen_plain) python "${S}" --mode plain --groups core,ignore,position,reliability,competition --formats obs,yn \
                 --fail-groups core --out "${D}/${ARM}.jsonl" ;;
-  qwen_block) python "${S}" --mode block --groups block8 --formats yn --out "${D}/${ARM}.jsonl" ;;
-  llama_chat) python "${S}" --model meta-llama/Llama-3.1-8B-Instruct --mode chat --groups names_only --formats yn \
+  qwen_block) python "${S}" --mode block --groups block8,ignore,competition --formats obs,yn \
+                --out "${D}/${ARM}.jsonl" ;;
+  llama_chat) python "${S}" --model meta-llama/Llama-3.1-8B-Instruct --mode chat --groups names_only,ignore,competition \
+                --formats yn \
                 --out "${D}/${ARM}.jsonl" ;;
   *) echo "unknown LX_ARM=${ARM}" >&2; exit 2 ;;
 esac

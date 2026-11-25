@@ -30,6 +30,8 @@ def _added(spec: dict, t: dict) -> str:
     if spec.get("pre") or spec.get("post"):
         assert spec["task_line"] == t["swapped_task_line"]
         return spec.get("pre") or spec.get("post")
+    if spec["task_line"].startswith(t["task_line"] + " "):  # the competition line is built on the real task
+        return spec["task_line"][len(t["task_line"]) + 1:]
     assert spec["task_line"].startswith(t["swapped_task_line"] + " ")
     return spec["task_line"][len(t["swapped_task_line"]) + 1:]
 

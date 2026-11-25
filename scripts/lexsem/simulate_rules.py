@@ -104,6 +104,7 @@ def procedure(reps: int, B: int, sizes: tuple[float, ...], n_items: int, n_games
               tau: float = TAU) -> dict:
     from wf import lexsem_analysis as LA
 
+    LA.NUMERICAL_FLOOR = 0.0  # statistical behaviour only; numerical resolution is a separate gate (design section 7)
     out = {}
     for name, (w, override) in SCENARIOS.items():
         rho = true_rho(w, override)

@@ -27,9 +27,12 @@ nvidia-smi --query-gpu=name,memory.total --format=csv || true
 activate_serve
 python -c "import torch, transformers; print('torch', torch.__version__, 'transformers', transformers.__version__)"
 S=scripts/lexsem/score.py
-python "${S}" --mode plain --groups core,ignore,position,reliability --formats obs,yn --fail-groups core --smoke 5 \
+python "${S}" --mode plain --groups core,ignore,position,reliability,competition --formats obs,yn --fail-groups core \
+  --smoke 5 \
   --out "${D}/smoke_qwen_plain.json"
-python "${S}" --mode block --groups block8 --formats yn --smoke 5 --out "${D}/smoke_qwen_block.json"
-python "${S}" --model meta-llama/Llama-3.1-8B-Instruct --mode chat --groups names_only --formats yn --smoke 5 \
+python "${S}" --mode block --groups block8,ignore,competition --formats obs,yn --smoke 5 \
+  --out "${D}/smoke_qwen_block.json"
+python "${S}" --model meta-llama/Llama-3.1-8B-Instruct --mode chat --groups names_only,ignore,competition \
+  --formats yn --smoke 5 \
   --out "${D}/smoke_llama_chat.json"
 echo "=== lexsem smoke END $(date) ==="

@@ -29,17 +29,17 @@ def _yn(y):
 
 def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), games=40, deny_mass=None,
           trap=False, fail=False, desc_fail=False, commit=None, name="qwen", a_true=A_TRUE, model="Qwen/Qwen3-8B",
-          gpu="NVIDIA L40S"):
+          gpu="NVIDIA L40S", g_mean=3.0, overrides=None, competition=0.0):
     """Per-item scores from a planted mixture: every mention condition's net lift is its planted relative lift times
     A times the item's goal effect, on top of its control."""
     rng = random.Random(seed)
-    rho = R.planted(weights)
+    rho = {**R.planted(weights), **(overrides or {})}
     conds = tuple(dict.fromkeys(c for g in groups for c in lexsem.GROUPS[g]))
     items, scores = [], []
     for i in range(sum(n)):
         st = "later" if i < n[0] else "step0"
         obj = OBJECTS[i % len(OBJECTS)]
-        b, g = rng.gauss(-3, 1), max(0.3, rng.gauss(1.3, 0.4))
+        b, g = rng.gauss(-3, 1), max(0.3, rng.gauss(g_mean, 0.4))
         y = {"swapped": b, "aligned": b + g}
         for c in conds:
             if c in lexsem.ANCHORS or not c.startswith(("ctrl", "cdesc")):
@@ -52,6 +52,9 @@ def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), 
             form = lexsem.MENTIONS[c][0]
             if (form == "variant" and obj not in lexsem.VARIANTS) or (form == "alias" and obj not in lexsem.ALIASES) \
                     or (form == "homonym" and obj not in lexsem.HOMONYMS):
+                continue
+            if c == "aligned_ctrl_assert":  # the carrier's own +0.2 plus any planted competition (in goal effects)
+                y[c] = y["aligned"] + 0.2 + competition * g + rng.gauss(0, noise)
                 continue
             if c in ("name_reliable", "name_unreliable"):  # planted: the source's stated reliability changes nothing
                 y[c] = y[lexsem.CONTROL_OF[c]] + a_true * g + rng.gauss(0, noise)
@@ -201,6 +204,12 @@ def test_environment_check(tmp_path):
     assert _run(p, require_env=False)["qwen_plain"]
 
 
+def test_goal_effect_below_five_floors_is_not_read(tmp_path):
+    """Plain-text Qwen floor 0.08 nats: a goal effect of 1.3 nats gives a quarter-band of 0.33 < 5 x 0.08."""
+    x = _run(plant(tmp_path, {"evidence": 1}, g_mean=1.3, name="small"))["qwen_plain"]["first"]["later"]
+    assert x["gate_goal_effect"].startswith("failed") and x["numerical_floor_nats"] == 0.08
+
+
 def test_numerical_floor_makes_small_references_unreadable(tmp_path):
     p = plant(tmp_path, {"evidence": 1})
     ok = _run(p)["qwen_plain"]["first"]["later"]["relative_lift"]["name_use"]
@@ -208,6 +217,27 @@ def test_numerical_floor_makes_small_references_unreadable(tmp_path):
     try:
         low = _run(p, floor=5.0)["qwen_plain"]["first"]["later"]
     finally:
-        LA.NUMERICAL_FLOOR = 0.13
+        LA.NUMERICAL_FLOOR = LA.FLOORS["plain"]
     assert "below numerical resolution" in low["relative_lift"]["name_use"]["ratio_not_read"]
     assert low["accounts"]["evidence"]["per_contrast"] == {}
+
+
+@pytest.mark.parametrize("plain_ignore,expected", [(1.0, "model-level"), (0.3, "block-dependent")])
+def test_ignore_across_arms(tmp_path, plain_ignore, expected):
+    arms = ("names_only", "ignore", "competition")
+    p = plant(tmp_path, {"lexical": 1}, groups=("core", "ignore", "competition"),
+              overrides={"name_ignore": plain_ignore})
+    block = plant(tmp_path, {"lexical": 1}, groups=("block8", "ignore", "competition"), name="block",
+                  overrides={"name_ignore": 1.0})
+    llama = plant(tmp_path, {"lexical": 1}, groups=arms, name="llama", model="meta-llama/Llama-3.1-8B-Instruct",
+                  overrides={"name_ignore": 0.3})
+    rep = _run(p, block_path=str(block), llama_path=str(llama))
+    assert rep["ignore_across_arms"]["yn|later"]["reading"].startswith(expected)
+    assert "first|later" in rep["ignore_across_arms"]  # plain against block in the first token
+
+
+def test_competition_reading(tmp_path):
+    x = _run(plant(tmp_path, {"evidence": 1}, groups=("core", "competition"), competition=-0.6))
+    assert x["qwen_plain"]["first"]["later"]["competition"]["reading"].startswith("competition")
+    y = _run(plant(tmp_path, {"evidence": 1}, groups=("core", "competition"), name="nocomp"))
+    assert y["qwen_plain"]["first"]["later"]["competition"]["reading"].startswith("no competition")
