@@ -54,7 +54,7 @@ def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), 
                     or (form == "homonym" and obj not in lexsem.HOMONYMS):
                 continue
             if c in ("name_reliable", "name_unreliable"):  # planted: the source's stated reliability changes nothing
-                y[c] = y["name_assert"] + rng.gauss(0, noise)
+                y[c] = y[lexsem.CONTROL_OF[c]] + a_true * g + rng.gauss(0, noise)
                 continue
             ctrl = lexsem.CONTROL_OF.get(c, "ctrl_assert")
             if ctrl not in y:

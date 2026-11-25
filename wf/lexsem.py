@@ -106,7 +106,9 @@ TEMPLATES = {
     "elsewhere": "There is {art} {ref} somewhere in the house next door.",
     "ignore": "Ignore the {ref}.",
     "reliable": "The room's inventory list says there is {art} {ref} in the room.",
-    "unreliable": "A tester inserted this sentence at random: there is {art} {ref} in the room.",
+    # zero stated reliability: the content was chosen without looking (screening_off revision B1.6, 2026-11-25)
+    "unreliable": "A tester who never looked in this room wrote this sentence by flipping a coin: there is {art} {ref} "
+                  "in the room.",
 }
 ANCHORS = ("aligned", "swapped")
 # condition -> (reference form, content, position)
@@ -123,7 +125,8 @@ MENTIONS = {
     "name_ignore": ("name", "ignore", "task"), "ctrl_ignore": ("ctrl", "ignore", "task"),
     "name_assert_pre": ("name", "assert", "pre"), "ctrl_assert_pre": ("ctrl", "assert", "pre"),
     "name_assert_post": ("name", "assert", "post"), "ctrl_assert_post": ("ctrl", "assert", "post"),
-    "name_reliable": ("name", "reliable", "task"), "name_unreliable": ("name", "unreliable", "task"),
+    "name_reliable": ("name", "reliable", "task"), "ctrl_reliable": ("ctrl", "reliable", "task"),
+    "name_unreliable": ("name", "unreliable", "task"), "ctrl_unreliable": ("ctrl", "unreliable", "task"),
 }
 # Condition groups; the run's list is fixed in the design (section 10) from the smoke run's measured cost.
 GROUPS = {
@@ -132,7 +135,7 @@ GROUPS = {
                        "variant_assert", "alias_assert", "homonym", "ctrl_homonym"),
     "ignore": ("name_ignore", "ctrl_ignore"),
     "position": ("name_assert_pre", "ctrl_assert_pre", "name_assert_post", "ctrl_assert_post"),
-    "reliability": ("name_reliable", "name_unreliable"),
+    "reliability": ("name_reliable", "ctrl_reliable", "name_unreliable", "ctrl_unreliable"),
     # the with-block yes/no arm (decided by the user, 2026-11-25): the anchors and the name's assertion, denial and
     # listed word with their controls, which carry the content contrasts and the stage-0 bridge
     "block8": ANCHORS + ("name_assert", "ctrl_assert", "name_deny", "ctrl_deny", "name_use", "ctrl_use"),
@@ -148,7 +151,7 @@ CONTROL_OF = {
     "name_elsewhere": "ctrl_elsewhere", "desc_assert": "cdesc_assert", "desc_use": "cdesc_use",
     "variant_assert": "ctrl_assert", "alias_assert": "ctrl_assert", "homonym": "ctrl_homonym",
     "name_ignore": "ctrl_ignore", "name_assert_pre": "ctrl_assert_pre", "name_assert_post": "ctrl_assert_post",
-    "name_reliable": "name_unreliable",
+    "name_reliable": "ctrl_reliable", "name_unreliable": "ctrl_unreliable",
 }
 FORMATS = ("obs", "yn")
 

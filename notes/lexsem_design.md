@@ -21,9 +21,15 @@ That sentence, like every mention used so far, also asserts or presupposes that 
 - **(a) Identification.** How the model identifies the entity the sentence is about: by the token string (lexical), or by the entity whatever its wording (semantic).
 - **(b) Inference.** What the model infers about the entity: nothing in particular (a content-blind lift), that it exists in this room (evidence), or that it matters to the task (relevance).
 - **(c) Influence.** How that inference moves the transition prediction: through the action's own tokens (which can attend to earlier text) or later, at the answer; through the predicted observation or through a reading of the question.
-- **(d) Appropriateness.** Whether the influence is warranted. Every item here is a failure the history already decides, so a correct simulator should show no influence at all; any lift is inappropriate, whatever level produces it.
+- **(d) Appropriateness.** Whether the influence is warranted given the environmental evidence (next paragraph).
 
-The diagnostic's accounts are read at levels (a) and (b): **lexical repetition** (identification by string, lift without regard to content), **semantic activation** (identification by entity, lift without regard to content), **task as evidence** (lift follows the inferred existence of the object in this room), and **task relevance** (lift follows a goal or hint role). Level (c) is probed descriptively by the position arm and by comparing readouts; level (d) is fixed by the item pool (section 12).
+Every item here is a failure the history already decides. On the **probability scale** a correct simulator therefore shows no influence: its predicted probability of success is zero with or without the sentence. On the **log-odds scale** of the readouts this holds only in the limit. A simulator with any residual doubt should move its log-odds by the Bayes-correct shift (screening-off note, revision B1.2)
+
+$$\Delta^* = \log\Lambda + \log\big(1 + (1-r)\,o\big) - \log\big(1 + (1-r)\,\Lambda\,o\big),$$
+
+where $\Lambda$ is the claim's likelihood ratio, $o$ the odds of the claimed precondition after the history, and $r$ the chance of success given that precondition. This shift lies between 0 and $\log\Lambda$ and vanishes only as $o \to \infty$, when the history already confirms what the claim asserts. No sampled history shows the object, so a lift in log-odds is not by itself a violation, and its appropriate size is unknown here because $\Lambda$, $o$ and $r$ are unknown. The relative-lift rules compare sentences with each other, not with zero, and are unaffected.
+
+The diagnostic's accounts are read at levels (a) and (b): **lexical repetition** (identification by string, lift without regard to content), **semantic activation** (identification by entity, lift without regard to content), **task as evidence** (lift follows the inferred existence of the object in this room), and **task relevance** (lift follows a goal or hint role). Level (c) is probed descriptively by the position arm and by comparing readouts; level (d) cannot be assessed quantitatively on this pool (section 12).
 
 A reading such as "only task as evidence fits" therefore says that the *lift* depends on what the sentence claims and not on how the object is named. It does not say that the model skips lexical recognition or entity activation; those stages may well occur, and are needed to read the claim, but on their own they do not move the prediction.
 
@@ -42,7 +48,7 @@ A reading such as "only task as evidence fits" therefore says that the *lift* de
 | Homonym (same token, other sense) | (a) | lexical (lifts) from evidence (no lift), never alone | a lexical component's presence | lexical from semantic activation that crosses senses |
 | "Ignore the X" | (b) | relevance read as a hint from the content accounts | none | lexical, semantic and evidence (all presuppose or name the object) |
 | Position: task line, end of history, after the action | (c) | none of the content accounts | none | every content account can act at any position |
-| Stated reliability of the assertion | (b), (d) | qualitative evidence-weighting from content-blind accounts | none | a reliability effect from a carrier-wording effect (the two carriers differ in wording) |
+| Stated reliability of the assertion, net of each sentence's control object | (b), (d) | the ordering expected under evidence weighting from content-blind accounts (one inequality) | none | the size of any update; a reliability effect from an object-specific wording effect |
 | Readouts compared | (c) | none | none | a channel effect (question reading, output copying) from a belief change |
 
 Four kinds of equivalence remain whatever the outcome.
@@ -96,7 +102,7 @@ None of the three is the definitive measure of the model's belief about the tran
 | "Ignore the X" | presupposes, irrelevant | Ignore the saltshaker. | all |
 | name assertion at the end of the history | in this room | (last line of the history, just before "Action:") | all |
 | name assertion after the action | in this room | (a line just after the action line) | all |
-| stated reliability | in this room, reliable or not | The room's inventory list says there is a saltshaker in the room. / A tester inserted this sentence at random: there is a saltshaker in the room. | all |
+| stated reliability, with a control-object version of each | in this room, reliable or stated zero reliability | The room's inventory list says there is a saltshaker in the room. / A tester who never looked in this room wrote this sentence by flipping a coin: there is a saltshaker in the room. | all |
 | controls | the same carriers with the control object's name or description, or the homonym sentence with a control word | There is a toiletpaper somewhere in the room. / Critics often praise sequels to popular films. | as their pairs |
 
 **Tokens.** Every name carrier keeps the name's leading space and ends it at a word boundary, so the name has exactly the same tokens as in the action line (checked for all 55 names in all name carriers with both tokenizers; checked per item at run time).
@@ -220,7 +226,32 @@ Evidence is read in two forms: literal claim about this room (as above), and inc
 
 `scripts/lexsem/simulate_rules.py procedure` generates whole strata of item-level scores and reads them with the frozen analysis itself (`wf.lexsem_analysis.analyse`: bootstrap, gates, reference rule, rules). The generator has the plain-text first-token goal effect (1.31 nats, item SD 1.10; Qwen audit sample); an item-level mention response correlated 0.45 with the goal effect (stage 0) with a game component, shared by every mention condition of the item; one control per carrier shared by the conditions that use it; unequal carrier noise (0.35 to 0.55 nats by carrier); and condition-specific item heterogeneity at two levels, an optimistic one (relative-lift half-widths about 0.06 to 0.10 on the later stratum) and the planning one (about 0.15 to 0.20 later, 0.20 to 0.25 at step 0). The grid crosses reference sizes ($A$ of 0.95, 0.5 and 0.3) with planted truths: each pure account; semantic with a homonym that activates the concept at 0.4; partial-strength evidence (claims at 0.7); 85/15 and 70/30 evidence plus semantic; even mixtures; and an unlisted mechanism that lifts every mention alike. 100 datasets per cell.
 
-SIM_TABLE
+Each cell gives three percentages of 100 simulated datasets: read **as intended** / read as **a single account that is not the planted truth** (or, for a pure planted account, that account contradicted) / **uninformative** ("not distinguished" or "not assessable"). "As intended" means the planted account named ("only X fits" or "X not contradicted") for a pure or partial-strength truth, and "no single proposed account fits" for a mixture or the unlisted mechanism. "Optimistic" and "planning" are the two levels of item heterogeneity; $A$ is the planted mention lift over the goal effect.
+
+| Planted truth | later, optimistic, A 0.95 | later, optimistic, A 0.50 | later, optimistic, A 0.30 | later, planning, A 0.95 | later, planning, A 0.50 | later, planning, A 0.30 | step 0, planning, A 0.95 | step 0, planning, A 0.50 | step 0, planning, A 0.30 |
+|---|---|---|---|---|---|---|---|---|---|
+| pure lexical | 100 / 0 / 0 | 100 / 0 / 0 | 69 / 0 / 31 | 100 / 0 / 0 | 100 / 0 / 0 | 65 / 0 / 35 | 70 / 0 / 30 | 45 / 0 / 55 | 3 / 0 / 97 |
+| pure semantic | 100 / 0 / 0 | 100 / 0 / 0 | 64 / 0 / 36 | 100 / 0 / 0 | 99 / 0 / 1 | 57 / 0 / 43 | 75 / 0 / 25 | 33 / 0 / 67 | 2 / 0 / 98 |
+| pure semantic, homonym activates the concept at 0.4 | 100 / 0 / 0 | 100 / 0 / 0 | 66 / 0 / 34 | 100 / 0 / 0 | 100 / 0 / 0 | 61 / 0 / 39 | 68 / 0 / 32 | 35 / 0 / 65 | 2 / 0 / 98 |
+| pure evidence | 100 / 0 / 0 | 100 / 0 / 0 | 57 / 0 / 43 | 100 / 0 / 0 | 100 / 0 / 0 | 57 / 0 / 43 | 92 / 0 / 8 | 72 / 0 / 28 | 22 / 0 / 78 |
+| partial-strength evidence (claims at 0.7) | 78 / 22 / 0 | 89 / 11 / 0 | 47 / 9 / 44 | 94 / 6 / 0 | 95 / 5 / 0 | 47 / 9 / 44 | 84 / 7 / 9 | 76 / 3 / 21 | 31 / 0 / 69 |
+| 85% evidence, 15% semantic | 0 / 100 / 0 | 0 / 100 / 0 | 0 / 53 / 47 | 1 / 99 / 0 | 2 / 98 / 0 | 0 / 53 / 47 | 1 / 87 / 12 | 1 / 62 / 37 | 0 / 26 / 74 |
+| 70% evidence, 30% semantic | 88 / 12 / 0 | 60 / 40 / 0 | 21 / 37 / 42 | 33 / 67 / 0 | 32 / 68 / 0 | 12 / 46 / 42 | 15 / 71 / 14 | 9 / 65 / 26 | 4 / 33 / 63 |
+| half semantic, half evidence | 100 / 0 / 0 | 100 / 0 / 0 | 63 / 0 / 37 | 95 / 5 / 0 | 95 / 5 / 0 | 59 / 4 / 37 | 44 / 37 / 19 | 37 / 25 / 38 | 4 / 10 / 86 |
+| half lexical, half semantic | 100 / 0 / 0 | 99 / 1 / 0 | 52 / 11 / 37 | 80 / 20 / 0 | 59 / 41 / 0 | 23 / 33 / 44 | 18 / 53 / 29 | 8 / 30 / 62 | 0 / 2 / 98 |
+| half lexical, half evidence | 100 / 0 / 0 | 100 / 0 / 0 | 62 / 0 / 38 | 99 / 1 / 0 | 99 / 1 / 0 | 58 / 4 / 38 | 65 / 19 / 16 | 44 / 23 / 33 | 9 / 12 / 79 |
+| unlisted: every mention lifts alike | 0 / 100 / 0 | 0 / 100 / 0 | 0 / 67 / 33 | 0 / 100 / 0 | 0 / 100 / 0 | 0 / 59 / 41 | 0 / 80 / 20 | 0 / 27 / 73 | 0 / 2 / 98 |
+
+What the grid shows.
+
+- **A pure account is never contradicted** in any cell. With a large mention lift on the later stratum it is read as intended every time; at a lift of 0.3 a third to two fifths of datasets are "not assessable" (the gate on $A$ or the reference rule), never wrongly read.
+- **Even mixtures are read as "no single proposed account" on the later stratum** in 80–100% of datasets when the lift is at least half the goal effect, except half lexical and half semantic at the planning heterogeneity (59–80%, the rest read as one of the two "not contradicted").
+- **Uneven mixtures are usually read as the majority account.** 85/15 is read "evidence not contradicted" almost always, 70/30 in two thirds of datasets at the planning heterogeneity. This is the stated limitation: a component under about a third of the lift is usually missed, and "not contradicted, not shown consistent" must not be read as "pure".
+- **Partial-strength evidence** (claims lifting 0.7 instead of 1) is read as evidence in 78–95% and contradicts the pure prediction in 5–22% on the later stratum.
+- **An unlisted mechanism that lifts every mention alike is read "semantic activation not contradicted" in every later-stratum dataset with a lift of at least half the goal effect.** This is the behavioural equivalence of section 2: only the homonym separates them, and it may not decide alone. Such a reading therefore does not distinguish semantic activation from an unlisted uniform lift.
+- **Step 0 is much weaker.** With 150 items in 96 games and the planning heterogeneity, half of the pure-account datasets are uninformative at a lift of 0.5, and even mixtures are read as a single account in 19–53% at a lift of 0.95. Step-0 account readings are therefore reported but treated as weak; a "not contradicted" reading at step 0 carries little weight against a mixture.
+
+The quick, rules-only mode (`simulate_rules.py rules`, independent draws per contrast) agrees qualitatively and is kept for reference.
 
 ## 11. Environment and cost
 
@@ -232,11 +263,24 @@ SMOKE_RESULTS
 
 ## 12. The stated-reliability arm (E4) and screening off
 
-**What it can test.** Two sentences assert the object's presence with different stated reliability: "The room's inventory list says there is a saltshaker in the room." and "A tester inserted this sentence at random: there is a saltshaker in the room." Evidence weighting predicts the reliable source lifts more; content-blind accounts predict no difference. The reading is three-way ("the reliable source lifts more", "no reliability effect beyond 0.25 of the goal effect", "the unreliable source lifts more"). The two carriers differ in wording and length, so a difference could also be a carrier effect; the arm has no control that separates the two.
+**What is scored.** Two sentences assert the object's presence: "The room's inventory list says there is a saltshaker in the room." (a source that looked) and "A tester who never looked in this room wrote this sentence by flipping a coin: there is a saltshaker in the room." (stated zero reliability: the content was chosen without looking). The second wording replaces "A tester inserted this sentence at random", which described how the sentence was placed rather than stating that its content is uninformative (screening-off note, revision B1.6). Each sentence also has a control-object version, so the reliability gap is taken net of each prefix's object-independent effect:
 
-**Screening off cannot be tested here.** The arm was meant to cross stated reliability with whether the history already settles the action's outcome. Every item in the pool is a determined failure: the history settles it. The collections hold 23 undetermined transitions that act on the goal object, in 10 games, 20 of them "examine" actions, which is not a usable comparison set. So the arm measures responsiveness to stated reliability only where it should not matter at all. A test of whether the shift shrinks when the history settles the outcome needs undetermined items (the direction-A review's E3); it is not attempted here.
+$$d_{\text{rel}} = \frac{1}{G}\cdot\frac{1}{n}\sum_i\Big[\big(y_i(\text{name, reliable}) - y_i(\text{control, reliable})\big) - \big(y_i(\text{name, unreliable}) - y_i(\text{control, unreliable})\big)\Big].$$
 
-**Qualitative, not Bayesian.** The arm can show at most qualitative responsiveness: whether the shift orders with stated reliability. Whether the update has the right size requires a known joint distribution of evidence and outcome and is reserved for a controlled Bayesian environment. The results will claim no more than the former.
+The name's tokens are unchanged in both sentences (checked with both tokenizers). The reading is three-way: "the reliable source lifts more", "no reliability effect beyond 0.25 of the goal effect", "the unreliable source lifts more".
+
+**What it can establish: ordering at most.** With two levels of stated reliability, the arm can show one inequality: whether the model's response is larger for the source that looked than for the one that did not. It makes no proportional or quantitative claim. Proportional correctness (a shift scaled like the model's use of other evidence) and quantitatively correct updating (predicted probabilities equal to the Bayes posterior) are reserved for the controlled environment, where the prior, the history's diagnosticity, the source's reliability and the other preconditions are fixed and stated.
+
+**Why not more**, for four reasons (screening-off note, B1.6):
+
+- every item is a determined failure, so the Bayes probability shift is zero for both sentences and the Bayes log-odds shift is undefined;
+- the Bayes shift depends on four unknowns (the model's prior that the object exists, the diagnosticity it gives the history, its residual doubt about the deciding fact, and the reliability it gives "the room's inventory list") against one measurement per item, so no observed shift can be called too large or too small;
+- the zero-reliability sentence states zero reliability only as the model reads it;
+- the two sentences differ in wording and length; the control-object versions remove each prefix's object-independent effect, not an interaction between a prefix and the object.
+
+**Screening off cannot be crossed on this pool.** The arm was to be crossed with whether the history settles the action's outcome: every sampled item is a determined failure, so the history always settles it. The collections hold 23 undetermined transitions acting on the goal object, in 10 games, 20 of them "examine" actions, which is not a usable comparison set. Nor can the redundancy comparison be made (is the reliability gap smaller where the history already establishes that the object exists?): the later stratum excludes items whose history names the object, and no step-0 history does, so no sampled history establishes the object's existence. Both questions need other items and are not attempted.
+
+**Cost.** The two control-object sentences add 900 item-conditions, 1,800 sequences, about 2.6 GPU-minutes at the measured 0.088 s per unbatched sequence.
 
 ## 13. Freeze plan
 

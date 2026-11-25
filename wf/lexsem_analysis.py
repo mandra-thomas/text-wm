@@ -33,7 +33,7 @@ READOUT_LABELS = {"first": "first-token observation", "yn": "yes/no", "full2c": 
 # What every score file must share (section 10, decided by the user 2026-11-25): GPU type, stack, dtype, scoring.
 ENV_REQUIRED = {"gpu_contains": "L40S", "dtype": "bfloat16", "unbatched": True}
 # contrast -> (condition, its control); the rules read the ones in R.PREDICTIONS
-CONTRASTS = {c: (c, k) for c, k in lexsem.CONTROL_OF.items() if c != "name_reliable"}
+CONTRASTS = {c: (c, k) for c, k in lexsem.CONTROL_OF.items()}
 
 
 # ---------------- readouts ----------------
@@ -302,18 +302,21 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
                          "also moves the sentence next to the reply label"}
     else:
         out["position"] = "not scored"
-    s = _paired(base, ("name_reliable", "name_unreliable"), readout)
+    rel = ("name_reliable", "ctrl_reliable", "name_unreliable", "ctrl_unreliable")
+    s = _paired(base, rel, readout) if eff(rel) == readout else []
     if s:
         gs = [r["game_id"] for r in s]
-        d = np.array([value(r, "name_reliable", readout) - value(r, "name_unreliable", readout) for r in s])
+        d = np.array([(value(r, "name_reliable", readout) - value(r, "ctrl_reliable", readout))
+                      - (value(r, "name_unreliable", readout) - value(r, "ctrl_unreliable", readout)) for r in s])
         gg = np.array([value(r, "aligned", readout) - value(r, "swapped", readout) for r in s])
         iv = ratio(boot, gs, d, gg)[0]
         out["reliability"] = {**iv, "reading": R.difference_reading(*iv["ci"], "the unreliable source lifts more",
                                                                      "no reliability effect beyond 0.25",
                                                                      "the reliable source lifts more"),
-                              "scope": "qualitative responsiveness to stated reliability, on items whose history "
-                                       "already settles the outcome; settledness is not crossed (the pool has no "
-                                       "unsettled items); not a test of quantitatively correct Bayesian updating"}
+                              "scope": "ordering by stated reliability at most (one inequality), net of each "
+                                       "sentence's control object; on items whose history already settles the "
+                                       "outcome, with settledness and redundancy not crossed (no unsettled items; no "
+                                       "sampled history shows the object); no proportional or quantitative claim"}
     else:
         out["reliability"] = "not scored"
     # the stage-0 bridge, as stage 0 defined it (minus the plain swapped task), and net of the control
