@@ -1,0 +1,8 @@
+run_id: tau_auth_l32_smoke_analysis
+# Smoke analysis of the Llama-3.2-3B extension: tau_auth_smoke_analysis unchanged except source, model and target.
+# No estimate, CI, p or category of any contrast.
+source: tau_auth_l32_score_smoke
+build_run: tau_build
+models: [llama3.2-3b]
+project_to: tau_auth_l32_score
+time_limit_hours: 4  # pace/tau_auth_score.sbatch --time (a test keeps them equal)

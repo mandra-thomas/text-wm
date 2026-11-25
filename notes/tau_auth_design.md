@@ -755,3 +755,158 @@ All at `1eedecb` (the code of these amendments; this note and the deviations ent
   `tau-g-77cc59152d73`).
 
 Before scoring: review 2 of these amendments, then the freeze tag, then the smoke run.
+
+## Extension 2026-11-25: Llama-3.2-3B-Instruct (written before any score of this model in this experiment)
+
+The design was frozen at `tau-auth-design-frozen-2026-11-22` (`f70b285`) and run on Qwen3-8B and Llama-3.1-8B
+(`notes/tau_auth_results.md`, on `main`). This section adds one model under the frozen design. Nothing above changes.
+It is committed, reviewed once and tagged before any Llama-3.2-3B score of this experiment exists; the smoke record and
+the full run follow (E8). Scores of this model on the confirmatory τ-bench prompt (arm (i)'s prompt) already exist
+from the τ families extension (`notes/tau_families_results.md`) and were read before this section was written; they
+are the source of the margin (E3) and of the predictions (E9).
+
+### E1. The model and why
+
+**Llama-3.2-3B-Instruct**, revision `0cb88a4f764b7a12671c53f0838cd831a0843b95` (`wf.constants.REVISIONS`), bf16, with
+the τ families extension's handling of its chat template (`wf.families.MODELS["llama3.2-3b"]`): the Llama 3 header
+format with `date_string` fixed at "26 Jul 2024", which Llama-3.1-8B's template always writes, so that the rendered
+prompts are the same text as Llama-3.1-8B's; default attention (SDPA); the confirmatory `LogoddsScorer`, one sequence
+per pass, batch size 1. Tag in records: `llama3.2-3b`.
+
+It is the only model besides the two reference models that the τ families extension found interpretable on the
+first-token readout: it passed the families competence rule (AUC 0.775), the discrimination check (+1.55 nats) and the
+manipulation check (+1.17), with a first-token goal effect of +0.99 nats. Unlike Llama-3.1-8B it has a naming
+component (+0.52 nats on the 856 primary items), so the general-suppression control of §6.5 and R1-M1 is available for
+it. Its yes/no readout failed the families competence rule (it answers No to about 98% of calls); see E9.
+
+### E2. What is unchanged
+
+Everything in §2 to §8 and in the amendments after review 1, as frozen: the 192 items, the 24 comprehension items and
+the 7 smoke items; the three arms, their texts and system messages (sha256 `7cc04248…`, `11ede0a6…`, `2c621c0e…`); the
+few-shot examples and their per-item order; the five task lines; the 48 passes per item and 9,504 per model; both
+readouts and the comprehension questions; the gates (arm (iii) passes the comprehension check, the correct answer more
+probable on at least 80% of the 24 items on each of K1 to K4; the positive control at least 1 nat with its 95% CI above
+0); the categories of §6.4 with R1-M2's overshoot category and aligned-half condition; the readings of §6.5 with R1-M1,
+R1-S2 and R1-S4; the secondary analyses of §7; 2,000 user-level bootstrap resamples, sign-flip permutation tests at the
+user level with seed 20260924, 10,000 permutations for the primary tests and 1,000 for the others, α = 0.01. The
+analysis is the frozen code, with only the changes of E4.
+
+### E3. The margin
+
+§6.2 sets the margin to one third of the model's confirmatory request component. For the reference models that was
+the write-minus-question contrast on the 856 primary items under the confirmatory prompt (`tau_dx.md`: +2.17 and
++0.50). The same contrast for Llama-3.2-3B on the same 856 items and prompt is in the τ families metrics
+(`write_minus_mention`, +0.474), so
+
+$$\delta_{\text{Llama-3.2-3B}} = 0.474/3 \approx 0.16 \text{ nats},$$
+
+used for both components, as for the other models.
+
+### E4. The Holm family, and the code changes
+
+**Holm family.** The frozen family is the eight primary tests of the two reference models; their categories are
+published and are not reopened. The new model is decided in its own family of four tests (the removed and the persisting
+part of the request and of the naming component on the failing call's first token), Holm at α = 0.01, a missing or
+non-numeric p entering as 1 (R1-S1). With 10,000 permutations the smallest raw p is about 0.0001, which survives a
+multiplication by 4. As a descriptive check that decides nothing, the results note also gives the Holm-adjusted p each of
+the four tests would have in a family of twelve (these four and the eight published raw p-values of the reference
+models in `tau_auth_metrics.json`) and names any category that would differ.
+
+**Code** (branch `tau-auth`, after `f70b285`; no change to any frozen run's prompts, jobs, rules or outputs):
+
+- `wf/tau/auth.py`: `EXTENSION_MARGIN = {"llama3.2-3b": 0.16}` beside the unchanged `MARGIN`; `make_scorer` loads a
+  frozen model exactly as before and an extension model with its wave-A spec (revision, attention, template
+  arguments); `holm_family` and `decide` take the family as a parameter, whose default is the frozen family of eight;
+  the analysis reads it from the config key `holm_family` and refuses a model outside it.
+- `wf/tau/auth_token_check.py`: renders an extension model's prompts with its template arguments (the fixed date).
+- Configs `tau_auth_l32_score`, `tau_auth_l32_score_smoke`, `tau_auth_l32_smoke_analysis` and `tau_auth_l32_analysis`,
+  equal to the frozen four except the run ids, the model and, for the analysis, `holm_family: [llama3.2-3b]` (a test
+  checks this key by key); registered in `wf/runs.py` with the frozen runners.
+- `tests/test_tau_auth.py`: 6 tests for the above (configs, margin, scorer spec, token-check rendering, the family of
+  four, a mock run end to end with the refusal); 106 tests in all, passing.
+
+### E5. Environment (numerical_sensitivity.md, rule 1)
+
+- **Software stack:** the environment of the original authorization runs and of the τ families scoring runs (the
+  project's `serve` Python environment, the "old stack" of `numerical_sensitivity.md` §2: torch 2.6.0, transformers
+  4.51.3), with the `pace.env` of the τ families checkout copied into a new checkout with only its paths rewritten.
+- **GPU type:** NVIDIA L40S for the smoke run and all four shards, pinned with `--constraint` at submission; a resumed
+  shard is resubmitted with the same constraint. The original authorization runs used an L40S for the smoke run and
+  shard 3 and A40s for shards 0 to 2; the τ families extension scored Llama-3.2-3B on L40S only. One GPU type keeps every
+  test of this model's family in one environment (rule 1); every within-item contrast is within one job in any case.
+- **Checkout:** a new ICE checkout at the extension's tag, with the pinned build (`tau_build`) and its verification
+  record (`tau_verify`) copied from the original authorization checkout (`text-wm-fix38`); the scoring run refuses any
+  other build files.
+- **Token check** (CPU, before the smoke run): `wf.tau.auth_token_check --models meta-llama/Llama-3.2-3B-Instruct
+  --config tau_auth_l32_score` on every prompt the full run scores, with the frozen pass conditions.
+
+### E6. Numerical sensitivity (numerical_sensitivity.md, rules 3 and 4)
+
+Llama-3.2-3B's numerical floor has not been measured (`numerical_sensitivity.md` §8). The Llama-3.1-8B values stand in
+for it: one standard deviation of a mean contrast across environments is about 0.026 nats at 100 items and 0.018 at 300
+(§4.8), about 0.02 at 192 items. The margin of 0.16 nats is six to eight times that, which meets rule 3's requirement of
+at least five.
+
+**Fragility labels (rule 3), fixed now.** In the results note, a reading is labelled "numerically fragile" when the
+number that decides it lies within 0.05 nats (about twice the floor) of its boundary: a CI end within 0.05 of 0 or of
+±δ (0.16) where the category needs it on one side; an estimate within 0.05 of ±δ where the category needs at least δ
+in size; the positive control's estimate within 0.05 of 1 nat or its CI's lower end within 0.05 of 0; the arm (i)
+component's CI end within 0.05 of ±δ (absent or not). A comprehension question whose count is 19 or 20 of 24 (one item
+from the 80% cutoff of 19.2 items) is labelled fragile too. The labels sit beside the category and change none.
+
+**No cross-environment rescore (rule 4).** Rule 4 asks for a rescore of a subset on another GPU type for small effects
+and equivalence-type decisions, and a "negligible" removed part is one. It is not run: rescoring even half of the items
+on another GPU type would take about another GPU-hour, beyond this extension's budget of about 2 GPU-hours. The
+fragility labels are the substitute, and the results note states the omission as a limit.
+
+### E7. Budget and the stopping rule
+
+The τ families runs scored Llama-3.2-3B on L40S at 0.61 seconds per pass (median prompt 9,771 tokens). Arms (ii) and
+(iii) are about 15% and 19% longer than arm (i) (§9, implementation record), so the full run's 9,504 passes are expected
+to take about 1.8 GPU-hours, and the smoke run about 0.1. Four shards of about 0.45 hours each, under the frozen
+4-hour limit of `pace/tau_auth_score.sbatch`. **Stopping rule:** if the smoke run's GPU time plus the smoke analysis's
+projected GPU-hours for the full run exceeds 2.25 GPU-hours, the full run is not submitted and the projection is
+reported; no rule, item or job is changed to fit.
+
+### E8. Order of work
+
+1. This section and the code (committed together, before any score). 2. One independent review; fixes committed.
+3. The annotated tag `tau-auth-ext-llama32-2026-11-25`, pushed. 4. The CPU token check (it scores nothing and may run
+before the tag; a failure stops the extension). 5. The smoke run and smoke analysis at the tag; the smoke record (format,
+timing, projection, the standard deviations of §9.2 with projected half-widths, and both gates, which R1-S3 allows to be
+read) committed to this note before the full run. 6. The full run, whatever the smoke gates show, as in the original
+run: a gate failure is a reported outcome, not a reason to change the design (the only stop is E7's). 7. The analysis
+at the tag. 8. A dated extension section in `notes/tau_auth_results.md` with the metrics copied unchanged as
+`notes/tau_auth_l32_metrics.json`. Any change after the tag is logged as a deviation.
+
+### E9. Predictions, and what each outcome would mean
+
+**What is known.** On the 856 primary items under the confirmatory prompt, Llama-3.2-3B's failing-call first token
+gave a goal effect of +0.99, a naming component of +0.52 and a request component of +0.47 nats; both write requests lift
+predicted success above the neutral line (aligned − neutral +2.01, swapped − neutral +1.02), and a bare question about
+the target order lowers it (mention-aligned − neutral −0.30); the witness's goal effect was +1.07. Its yes/no answers
+were No for about 98% of calls, working or failing, under the neutral line.
+
+**Expected gate outcomes (stated before any data of this experiment).** The comprehension check is read on yes/no. A
+model that answers No to almost everything fails K1 and K4 in arm (iii), whose correct answer is Yes, so gate 1 is more
+likely to fail than to pass (subjective probability of passing about 0.25). The positive control needs the witness's
+aligned − swapped gap to grow by 1 nat under the authorization description. Llama-3.1-8B, whose witness goal effect was
++0.38, reached +0.30; Llama-3.2-3B's is +1.07, so passing is possible but not likely (about 0.4). Both gates passing:
+about 0.15. The most likely outcome is therefore "inconclusive (gate)" for both components, which is a result: this
+design cannot certify, for this model, that it read the task-blind description or follows a stated backend.
+
+**If both gates pass**, the frozen categories read as follows.
+
+| Request component | Naming component | What it would mean |
+|---|---|---|
+| relevance-like | relevance-like | As Qwen3-8B: the request effect survives a stated, demonstrated and understood task-blind backend; it is not a belief the description corrects. A second model family for reading (a) |
+| relevance-like part shown (removed part uncertain) | any | The persisting part is shown; whether a part of up to about the margin is removed is not determined. With a projected half-width of about 0.1 to 0.2 nats for the removed part at 192 items, this is the likely form of reading (a) for this model |
+| authorization-like, both, or a part shown, with the aligned half shown | relevance-like | The first evidence in this experiment of an authorization-like part: the request's extra effect shrinks under the task-blind backend, through the aligned half, while the naming effect persists |
+| any removal of the request component not carried by the aligned half | any | Copying of the demonstrated minimal pairs (R1-M2), not an authorization belief |
+| any removal of the request component | removed too, or absent | A general suppression of task effects by the arm is not excluded (R1-M1) |
+| grows or overshoot | any | Reported, not interpreted (as Llama-3.1-8B's ungated request component) |
+| absent (arm (i) CI inside ±0.16) | any | Nothing to decompose on these 192 items; possible, since the request component (+0.47) is three margins wide and the 192-item interval may reach inside |
+
+**What no outcome shows.** Any category concerns the failing call's first token on 192 items of two classes, in one
+domain and one prompt format. One more Meta model does not separate size, distillation and post-training, and does not
+extend the result to another developer.

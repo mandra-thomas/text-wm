@@ -1,0 +1,14 @@
+run_id: tau_auth_l32_score_smoke
+# Smoke run of the Llama-3.2-3B extension (design note, "Extension 2026-11-25"): tau_auth_score_smoke unchanged except
+# the model. Read for format, timing, the spread of the decisive contrasts and the two gates, never for estimates.
+build_run: tau_build
+verify_run: tau_verify
+models: [llama3.2-3b]
+items_per_class: 3
+extra_items: [tau-g-77cc59152d73]
+comprehension_per_class: 4
+n_shards: 1
+expected_outputs_sha256:
+  items.jsonl: 2c8ffeac7dedd4635df5974be955d6ceff84d3f8184f88a73eca579282a578b6
+  natural_items.jsonl: 9bd6c3f7fda464f7cc32307e9a570da564b1bed7d4e3ab0d75dbfd00f6b83502
+  fewshot.json: 231607f79c92580375ada0ce4267fb954e7e0bc0a743ccb9b75813610eb13119

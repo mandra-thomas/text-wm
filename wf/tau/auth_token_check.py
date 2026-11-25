@@ -32,6 +32,15 @@ from wf.tau import prompts as PR
 MODELS = ("Qwen/Qwen3-8B", "meta-llama/Llama-3.1-8B-Instruct")
 
 
+def template_kwargs(name: str) -> dict:
+    """The chat-template arguments the scorer renders with: none for the frozen models; for an extension model
+    (wf.tau.auth.EXTENSION_MARGIN) its wave-A spec's, e.g. Llama 3.2's fixed date_string."""
+    from wf import families as F
+
+    specs = [F.MODELS[t] for t in A.EXTENSION_MARGIN]
+    return next((dict(s.template_kwargs) for s in specs if s.hf_id == name), {})
+
+
 def chosen(items_path: Path, fewshot_path: Path, cfg: dict) -> tuple[list[dict], set[str], list[dict]]:
     rows = [json.loads(x) for x in items_path.read_text(encoding="utf-8").splitlines() if x.strip()]
     items = A.auth_items(rows, cfg["items_per_class"])
@@ -43,7 +52,8 @@ def check_model(name: str, items: list[dict], comp: set[str], fewshot: list[dict
 
     tok = AutoTokenizer.from_pretrained(name, revision=REVISIONS.get(name), cache_dir=cache_dir)
     enc = lambda s: tok(s, add_special_tokens=False).input_ids
-    render = lambda ms: tok.apply_chat_template(ms, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+    kw = template_kwargs(name)
+    render = lambda ms: tok.apply_chat_template(ms, tokenize=False, add_generation_prompt=True, enable_thinking=False, **kw)
     singles = {s: enc(s) for s in ('{"', "Error", "Yes", "No", ' {"', " Error", " Yes", " No")}
     gen_tail = render([{"role": "user", "content": "x"}])[-24:]
     bad: dict[str, list] = {"first_token": [], "boundary": [], "only_task_line": []}
@@ -78,7 +88,7 @@ def check_model(name: str, items: list[dict], comp: set[str], fewshot: list[dict
                             bad["boundary"].append((it["id"], arm, action, readout, ans[:12]))
     single_ok = all(len(singles[s]) == 1 for s in ('{"', "Error", "Yes", "No"))
     passed = single_ok and gen_tail.endswith("\n") and not any(bad.values())
-    return {"model": name, "revision": REVISIONS.get(name), "single_token_ids": singles,
+    return {"model": name, "revision": REVISIONS.get(name), "template_kwargs": kw, "single_token_ids": singles,
             "single_tokens": {s: tok.convert_ids_to_tokens(v) for s, v in singles.items()},
             "auth_error_ids": enc(A.AUTH_ERROR)[:4], "generation_prompt_tail": gen_tail, "items": len(items),
             "comprehension_items": len(comp), "prompts_rendered": n_prompts,

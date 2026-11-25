@@ -984,3 +984,86 @@ def test_a_non_finite_per_item_value_is_left_out():
         by[(t["id"], "main", "fail", "first", "swapped")] = _rec(0.0)
     blk = A.lin(by, items, A.q_terms("G", "main", "fail"), n_perm=100)
     assert blk["n_items"] == 5 and blk["estimate"] == 1.0
+
+
+# ---------------- extension 2026-11-25: Llama-3.2-3B (design note, "Extension 2026-11-25") ----------------
+
+L32 = "llama3.2-3b"
+
+
+def test_extension_runs_and_configs_differ_from_the_frozen_ones_only_in_model_and_names():
+    for name in ("tau_auth_l32_score", "tau_auth_l32_score_smoke", "tau_auth_l32_analysis", "tau_auth_l32_smoke_analysis"):
+        assert name in RUNNERS and RUNNERS[name].__code__.co_consts == RUNNERS[name.replace("_l32", "")].__code__.co_consts
+    for name, renamed in (("tau_auth_score", ()), ("tau_auth_score_smoke", ()),
+                          ("tau_auth_smoke_analysis", ("source", "project_to")), ("tau_auth_analysis", ("source",))):
+        frozen, ext = load_config(name), load_config(name.replace("tau_auth", "tau_auth_l32"))
+        assert ext["models"] == [L32] and ext["run_id"] == name.replace("tau_auth", "tau_auth_l32")
+        for k in renamed:
+            assert ext[k] == frozen[k].replace("tau_auth", "tau_auth_l32")
+        same = set(frozen) - {"models", "run_id", *renamed}
+        assert {k: ext[k] for k in same} == {k: frozen[k] for k in same}
+        assert set(ext) - set(frozen) == ({"holm_family"} if name == "tau_auth_analysis" else set())
+    assert load_config("tau_auth_l32_analysis")["holm_family"] == [L32]
+
+
+def test_extension_margin_is_a_third_of_its_request_component_and_frozen_values_stay():
+    assert A.EXTENSION_MARGIN == {L32: round(0.47444510337500617 / 3, 2)} == {L32: 0.16}
+    assert A.MARGIN == {"qwen3-8b-fewshot": 0.72, "llama3.1-8b-fewshot": 0.17}
+
+
+def test_extension_scorer_uses_the_wave_a_spec(monkeypatch):
+    monkeypatch.setenv("WF_MOCK_SCORE", "1")
+    s = A.make_scorer(L32)
+    assert s.model_name == "meta-llama/Llama-3.2-3B-Instruct" and s.model_tag == L32
+    assert s.revision == "0cb88a4f764b7a12671c53f0838cd831a0843b95"
+    assert s.template_settings() == {"enable_thinking": False, "date_string": "26 Jul 2024"}
+    assert A.make_scorer(LLAMA).template_settings() == {"enable_thinking": False}  # frozen models unchanged
+    with pytest.raises(KeyError):
+        A.make_scorer("mistral-7b-v0.3")
+
+
+def test_token_check_renders_the_extension_model_with_its_fixed_date():
+    from wf.tau import auth_token_check as T
+
+    assert T.template_kwargs("meta-llama/Llama-3.2-3B-Instruct") == {"date_string": "26 Jul 2024"}
+    assert T.template_kwargs("meta-llama/Llama-3.1-8B-Instruct") == {} == T.template_kwargs("Qwen/Qwen3-8B")
+
+
+def test_extension_holm_family_has_the_models_four_tests():
+    primary = {L32: {x: {part: {"perm_p": 0.002} for part in A.PRIMARY_PARTS} for x in A.PRIMARY_COMPONENTS}}
+    adj = A.holm_family(primary, (L32,))
+    assert len(adj) == 4 and all(v == pytest.approx(0.008) for v in adj.values())
+    assert len(A.holm_family(primary)) == 8  # the frozen family is unchanged
+    # decide(): the extension model is decided in its own family with its own margin; a raw 0.002 adjusts to 0.008
+    blocks = {"main": _blk(0.5, 0.4, 0.6), "Z": {**_blk(0.0, -0.1, 0.1), "perm_p": 0.5},
+              "R": {**_blk(0.5, 0.4, 0.6), "perm_p": 0.002}}
+    gates = {L32: {"comprehension_blind_passes": True, "positive_control_passes": True}}
+    dec = A.decide({L32: {x: blocks for x in A.PRIMARY_COMPONENTS}}, gates, family=(L32,))
+    assert set(dec["per_model"]) == {L32} and dec["per_model"][L32]["margin"] == 0.16
+    assert dec["per_model"][L32]["categories"] == {"W": A.RELEVANCE, "M": A.RELEVANCE}
+    # Z's CI [-0.1, 0.1] lies inside (-0.16, 0.16), so it is negligible; at a margin of 0.09 it would not be
+    assert A.component_category(blocks["main"], blocks["Z"], blocks["R"], 1.0, 0.008, 0.09) != A.RELEVANCE
+    gates[L32]["positive_control_passes"] = False
+    dec = A.decide({L32: {x: blocks for x in A.PRIMARY_COMPONENTS}}, gates, family=(L32,))
+    assert dec["per_model"][L32]["categories"] == {"W": "inconclusive (gate)", "M": "inconclusive (gate)"}
+
+
+def test_extension_score_then_analysis(runs, monkeypatch):
+    ext = {**_cfg(run_id="tau_auth_l32_score"), "models": [L32]}
+    for i in (0, 1):
+        monkeypatch.setenv("WF_SHARD", str(i))
+        assert A.run_tau_auth_score(ext) == 0
+    monkeypatch.delenv("WF_SHARD")
+    recs = [r for i in (0, 1) for r in read_jsonl(runs / "tau_auth_l32_score" / f"shard_{i:02d}_of_02" / "scoring.jsonl")]
+    assert {r["model"] for r in recs} == {L32}
+    real = A.load_config
+    monkeypatch.setattr(A, "load_config", lambda name: ext if name == "tau_auth_l32_score" else real(name))
+    assert A.run_tau_auth_analysis({**load_config("tau_auth_l32_analysis"), "n_perm_primary": 200}) == 0
+    m = json.loads((runs / "tau_auth_l32_analysis" / "metrics.json").read_text())
+    assert m["missing_scores"] == 0 and m["stale_scores"] == 0 and set(m["models"]) == {L32}
+    assert set(m["decision"]["per_model"]) == {L32} and len(m["decision"]["holm_adjusted_p"]) == 4
+    assert m["decision"]["per_model"][L32]["margin"] == 0.16
+    # the analysis refuses a model outside its Holm family (the frozen family of eight does not hold it)
+    with pytest.raises(SystemExit):
+        A.run_tau_auth_analysis({**load_config("tau_auth_l32_analysis"), "run_id": "tau_auth_l32_nofamily",
+                                 "holm_family": list(P.CO_PRIMARY), "n_perm_primary": 200})

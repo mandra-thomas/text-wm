@@ -1425,6 +1425,11 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "tau_auth_score_smoke": lambda cfg: _lazy("tau.auth", "run_tau_auth_score")(cfg),
     "tau_auth_analysis": lambda cfg: _lazy("tau.auth", "run_tau_auth_analysis")(cfg),
     "tau_auth_smoke_analysis": lambda cfg: _lazy("tau.auth", "run_tau_auth_analysis")(cfg),
+    # its extension to Llama-3.2-3B (design note, "Extension 2026-11-25"): the same runners, new run ids
+    "tau_auth_l32_score": lambda cfg: _lazy("tau.auth", "run_tau_auth_score")(cfg),
+    "tau_auth_l32_score_smoke": lambda cfg: _lazy("tau.auth", "run_tau_auth_score")(cfg),
+    "tau_auth_l32_analysis": lambda cfg: _lazy("tau.auth", "run_tau_auth_analysis")(cfg),
+    "tau_auth_l32_smoke_analysis": lambda cfg: _lazy("tau.auth", "run_tau_auth_analysis")(cfg),
     # 2026-11-20, documentation audit: the shared-spot sensitivity (A2), the audit analyses (C) and re-runs of
     # analyses under new run ids, so the original runs stay as they were (A3, B1, B4).
     "rq2_shared_score": lambda cfg: _lazy("rq2_shared", "run_rq2_shared_score")(cfg),

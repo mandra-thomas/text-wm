@@ -91,6 +91,13 @@ N_PERM_PRIMARY = 10_000
 PRIMARY_COMPONENTS = ("W", "M")
 PRIMARY_PARTS = ("Z", "R")
 
+# Extension after the freeze (design note, "Extension 2026-11-25: Llama-3.2-3B"): a model scored on the frozen design,
+# with the wave-A chat-template handling of wf/families.py (Llama 3.2's fixed date) and its margin by the rule of §6.2,
+# one third of its confirmatory request component (write minus mention, +0.474 on the 856 primary items,
+# notes/tau_families_metrics.json). Each extension model is decided in its own Holm family of four tests
+# (`holm_family` in the analysis config); the frozen family of eight and MARGIN above are unchanged.
+EXTENSION_MARGIN = {"llama3.2-3b": 0.16}
+
 
 # ---------------- prompts ----------------
 
@@ -325,6 +332,20 @@ def _score_job(scorer: LogoddsScorer, t: dict, fewshot: list[dict], job: tuple[s
     return scorer.score_one_token_pair(t["id"], cond, messages, "Yes", "No")
 
 
+def make_scorer(tag: str) -> LogoddsScorer:
+    """The frozen models load as in the frozen runs; an extension model loads with its wave-A spec (wf/families.py:
+    the pinned revision, its attention setting and template arguments, for Llama 3.2 the fixed date_string)."""
+    if tag in P.MODELS:
+        return LogoddsScorer(P.MODELS[tag], model_tag=tag)
+    if tag in EXTENSION_MARGIN:
+        from wf import families as F
+
+        spec = F.MODELS[tag]
+        return LogoddsScorer(spec.hf_id, model_tag=tag, attn_implementation=spec.attn_implementation,
+                             template_kwargs=spec.template_kwargs)
+    raise KeyError(f"{tag!r} is neither a frozen model nor an extension model of the authorization experiment")
+
+
 def score_key(s: dict) -> tuple[str, str, str, str, str, str]:
     return (s["model"], s["transition_id"], s["arm"], s["action"], s["readout"], s["condition"])
 
@@ -357,7 +378,7 @@ def run_tau_auth_score(cfg: dict) -> int:
         todo = [(t, job) for t, job in all_jobs(items, comp) if (tag, t["id"], *job) not in done]
         if not todo:
             continue
-        scorer = LogoddsScorer(P.MODELS[tag], model_tag=tag)
+        scorer = make_scorer(tag)
         report = token_report(scorer, items[0])
         write_json(d / f"tokens_{tag}.json", report)
         if not report.get("first_token_ok"):
@@ -652,25 +673,28 @@ def primary_block(by: dict, items: list[dict], n_perm: int = N_PERM_PRIMARY, act
     return out
 
 
-def holm_family(primary: dict[str, dict]) -> dict[str, float]:
+def holm_family(primary: dict[str, dict], family: tuple[str, ...] = P.CO_PRIMARY) -> dict[str, float]:
     """Holm over the eight primary tests (Z and R of W and M, both models); a missing model, or a p that is not a
-    number, counts p = 1, so the family always has eight members (review 1, S1)."""
+    number, counts p = 1, so the family always has eight members (review 1, S1). An extension passes its own `family`
+    (four tests per model, with the same p = 1 rule)."""
     def p_of(m: str, x: str, part: str) -> float:
         p = primary[m][x][part].get("perm_p", float("nan")) if m in primary else 1.0
         return p if p == p else 1.0
-    raw = {f"{m}|{x}|{part}": p_of(m, x, part) for m in P.CO_PRIMARY for x in PRIMARY_COMPONENTS for part in PRIMARY_PARTS}
+    raw = {f"{m}|{x}|{part}": p_of(m, x, part) for m in family for x in PRIMARY_COMPONENTS for part in PRIMARY_PARTS}
     return holm(raw)
 
 
 def decide(primary: dict[str, dict], gates: dict[str, dict], margins: dict[str, float] | None = None,
-           by_class: dict[str, dict] | None = None, shares: dict[str, dict] | None = None) -> dict[str, Any]:
+           by_class: dict[str, dict] | None = None, shares: dict[str, dict] | None = None,
+           family: tuple[str, ...] = P.CO_PRIMARY) -> dict[str, Any]:
     """Per-model categories and reading (design §6 as amended after review 1), with Holm over the eight primary tests,
-    the gates, the aligned-half condition, the per-class values and the removed shares."""
-    margins = margins or MARGIN
+    the gates, the aligned-half condition, the per-class values and the removed shares. An extension decides the
+    models of its own `family`, with their margins from EXTENSION_MARGIN."""
+    margins = margins or {**MARGIN, **EXTENSION_MARGIN}
     by_class, shares = by_class or {}, shares or {}
-    adj = holm_family(primary)
+    adj = holm_family(primary, family)
     out: dict[str, Any] = {"holm_adjusted_p": adj, "per_model": {}}
-    for m in P.CO_PRIMARY:
+    for m in family:
         if m not in primary:
             out["per_model"][m] = {"reading": "not scored"}
             continue
@@ -809,6 +833,9 @@ def run_tau_auth_analysis(cfg: dict) -> int:
     hashes = {t["id"]: P.item_hash(t) for t in items}
     stale = sum(1 for s in scores if hashes.get(s["transition_id"]) != s.get("item_hash"))
     models = tuple(cfg.get("models", P.CO_PRIMARY))
+    family = tuple(cfg.get("holm_family", P.CO_PRIMARY))
+    if not cfg.get("project_to") and not set(models) <= set(family):
+        raise SystemExit(f"{run_id}: models {list(models)} are not all in the Holm family {list(family)}")
     wanted = {(m, t["id"], *j) for m in models for t, j in all_jobs(items, comp)}
     got = {score_key(s) for s in scores}
     missing = len(wanted - got)
@@ -855,7 +882,7 @@ def run_tau_auth_analysis(cfg: dict) -> int:
         primary[m] = blk["primary"]
         gates[m] = blk["gates"]
     report["decision"] = decide(primary, gates, by_class={m: report["models"][m]["by_class"] for m in models},
-                                shares={m: report["models"][m]["removed_shares"] for m in models})
+                                shares={m: report["models"][m]["removed_shares"] for m in models}, family=family)
     write_json(d / "metrics.json", report)
     write_run_report(run_id, "τ-bench retail: relevance bias or a belief in request-matching authorization?", report)
     lines = [f"{m}: W {_fmt(primary[m]['W']['main'])} -> Z {_fmt(primary[m]['W']['Z'])}, R {_fmt(primary[m]['W']['R'])}; "
