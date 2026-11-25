@@ -174,3 +174,43 @@ def planted(weights: dict[str, float], evidence_deny: float = 0.0) -> dict[str, 
         out[k] = v
     total = sum(weights.values())
     return {k: v / total for k, v in out.items()}
+
+
+def broad_evidence_status(statuses: dict[str, dict]) -> str:
+    """Evidence including pragmatic cues (section 8): contradicted only if the denial contradicts it too, since a
+    listed word or an elsewhere sentence may be read as a hint."""
+    ev = statuses["evidence"]
+    if ev["overall"] != "contradicted":
+        return ev["overall"]
+    return "contradicted" if ev["per_contrast"].get("name_deny") == "contradicted" else "not contradicted by the denial"
+
+
+def hint_relevance_reading(lo: float, hi: float) -> str:
+    """Relevance read as a hint, from "Ignore the X" relative to the name assertion: it allows only about zero or
+    below zero; the three content accounts allow full."""
+    cat = category(lo, hi)
+    if (hi - lo) / 2 > PRECISION_LIMIT:
+        return "imprecise"
+    if cat <= {ZERO, NEG}:
+        return "consistent with relevance as a hint"
+    if not cat & {ZERO, NEG}:
+        return "contradicts relevance as a hint"
+    return "undecided"
+
+
+def bridge_reading(lo: float, hi: float) -> str:
+    """The stage-0 bridge at step 0 (stage 0, with the think block: 0.29 [0.23, 0.37] on these items)."""
+    if lo > 0.5:
+        return "specific to the block format"
+    if hi < 0.5:
+        return "reproduced in plain text"
+    return "inconclusive"
+
+
+def agreement_reading(lo: float, hi: float) -> str:
+    """Item-level agreement of a mention effect with the goal effect (descriptive)."""
+    if lo >= 0.7:
+        return "tracks the goal effect item by item"
+    if hi < 0.5:
+        return "weak item tracking"
+    return "intermediate"

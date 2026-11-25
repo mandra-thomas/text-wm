@@ -33,6 +33,7 @@ from pathlib import Path
 
 EXPECTED_SAMPLE_DIGEST = "cc8da36181976edd"  # sha256 of the sorted sample ids, first 16 hex digits
 READOUT = {"obs": ("You", "Nothing"), "yn": ("Yes", "No")}
+FAILURE_TEXT = "Nothing happens."  # the "fail" format (optional): the failure text after the observation prompt
 
 
 def sample_digest(ids: list[str]) -> str:
@@ -139,8 +140,9 @@ def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...]) -> l
     jobs = []
     for c, spec in rec["specs"].items():
         for fmt in formats:
-            msgs = lexsem.messages(t, spec, fmt)
-            ids, n_p = sequence(tok, msgs, mode, rec["o_plus"] if fmt == "obs" else None)
+            msgs = lexsem.messages(t, spec, "obs" if fmt == "fail" else fmt)
+            cont = {"obs": rec["o_plus"], "fail": FAILURE_TEXT}.get(fmt)
+            ids, n_p = sequence(tok, msgs, mode, cont)
             if fmt == "obs":
                 form = lexsem.MENTIONS[c][0] if c in lexsem.MENTIONS else ("aligned" if c == "aligned" else None)
                 added = count_occurrences(ids[:n_p], name_ids) - base
@@ -154,14 +156,14 @@ def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...]) -> l
 def readouts(jobs: list[dict], rows: list, pairs: dict, tok) -> dict:
     out: dict = {}
     for j, lp in zip(jobs, rows):
-        a, b = pairs[j["fmt"]]
+        a, b = pairs["obs" if j["fmt"] == "fail" else j["fmt"]]
         r = {"lp_a": round(lp[0, a].item(), 5), "lp_b": round(lp[0, b].item(), 5), "n_prompt": j["n_prompt"]}
-        if j["fmt"] == "obs":
+        if j["fmt"] in ("obs", "fail"):
             cont = j["ids"][j["n_prompt"]:]
             r["tok_lp"] = [round(lp[k, cont[k]].item(), 5) for k in range(len(cont))]
             r["toks"] = [tok.decode([x]) for x in cont]
-            if cont[0] != a:
-                raise SystemExit(f"success text does not start with the readout token: {r['toks'][0]!r}")
+            if cont[0] != (a if j["fmt"] == "obs" else b):
+                raise SystemExit(f"{j['fmt']} text does not start with its readout token: {r['toks'][0]!r}")
         out.setdefault(j["cond"], {})[j["fmt"]] = r
     return out
 
@@ -171,8 +173,8 @@ def run_item(model, jobs: list[dict], batch_size: int, pad_id: int) -> list:
     rows: list = [None] * len(jobs)
     for s in range(0, len(order), batch_size):
         chunk = order[s:s + batch_size]
-        res = score_batch(model, [(jobs[k]["ids"], jobs[k]["n_prompt"], jobs[k]["fmt"] == "obs") for k in chunk],
-                          pad_id)
+        seqs = [(jobs[k]["ids"], jobs[k]["n_prompt"], jobs[k]["fmt"] in ("obs", "fail")) for k in chunk]
+        res = score_batch(model, seqs, pad_id)
         for k, r in zip(chunk, res):
             rows[k] = r
     return rows
@@ -242,14 +244,14 @@ def smoke(args, tok, model, recs, by_id, pairs) -> dict:
         d = 0.0
         for j, r0, r1 in zip(jobs, ref, rows):
             for job, x, y in zip(j, r0, r1):
-                a, b = pairs[job["fmt"]]
+                a, b = pairs["obs" if job["fmt"] == "fail" else job["fmt"]]
                 d = max(d, abs((x[0, a] - x[0, b]).item() - (y[0, a] - y[0, b]).item()))
         diffs[str(bs)] = round(d, 4)
     rep["max_abs_logodds_diff_vs_smallest_batch"] = diffs
     mass: dict = {}
     for j, rows in zip(jobs, ref):
         for job, lp in zip(j, rows):
-            a, b = pairs[job["fmt"]]
+            a, b = pairs["obs" if job["fmt"] == "fail" else job["fmt"]]
             mass.setdefault(f"{job['cond']}|{job['fmt']}", []).append(math.exp(lp[0, a].item()) + math.exp(lp[0, b].item()))
     rep["mass_mean"] = {k: round(sum(v) / len(v), 4) for k, v in sorted(mass.items())}
     rep["mass_min"] = {k: round(min(v), 4) for k, v in sorted(mass.items())}
@@ -275,7 +277,8 @@ def main() -> None:
     ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--mode", choices=("plain", "block", "chat"), default="plain")
     ap.add_argument("--groups", default="core", help="comma list of wf.lexsem.GROUPS names")
-    ap.add_argument("--formats", default="obs,yn")
+    ap.add_argument("--formats", default="obs,yn",
+                    help="obs, yn and optionally fail (the failure text, for the full two-candidate score)")
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=None)
