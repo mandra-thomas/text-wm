@@ -1,19 +1,21 @@
 """Lexical repetition, semantic identity, existence content and task relevance: item and condition builder for
 the lexsem diagnostic (notes/lexsem_design.md). Builds prompts only; nothing here scores.
 
-Every condition except the two anchors is the swapped task line followed, on the same line, by one sentence about
-an object, exactly where the interpretability pilot's stage 0 put its mention sentence (`rq1.goal_line`,
-"swapped_plus"). The sentence crosses two factors:
+A mention condition adds one sentence about an object to the swapped task's prompt. By default the sentence follows
+the swapped task line on the same line, exactly where the interpretability pilot's stage 0 put its mention sentence
+(`rq1.goal_line(t, "swapped_plus")`); the position arm also puts it at the end of the history (just before the
+"Action:" line) or just after the action line. The sentence crosses:
 
 - the reference form: the action object's exact ALFWorld name, a spaced spelling of a compound name (variant), a
-  different word for the same object (alias), the object-free description that rq1x froze (desc); and, as
-  controls, an unrelated word matched on token count and word frequency (ctrl) and the description of another
-  object type absent from the room (cdesc);
-- the existence content: asserts the object is in the room (assert), denies it (deny), names the word without any
-  claim (use), or makes a generic statement with no claim about this room (generic).
+  different word for the same object (alias), rq1x's object-free description (desc), the same word in an unrelated
+  sense (homonym); and, as controls, the name and the description of one other ALFWorld object type that is absent
+  from the room and from another class (ctrl, cdesc);
+- the existence content: asserts the object is in the room (assert), denies it (deny), says it is somewhere else
+  (elsewhere), only lists the word without any claim (use), or tells the reader to ignore it (ignore).
 
-Each mention condition has a control with the same carrier sentence and the control word or description in the
-reference's place, so position, recency, syntax and (for names) token count are matched within each pair.
+Every name carrier keeps the name's leading space and ends it at a word boundary, so the name's tokens are the
+same as in the action line (checked against both tokenizers when the tables were frozen, and by the scoring script
+at run time).
 """
 from __future__ import annotations
 
@@ -28,56 +30,68 @@ from wf.data.goals import interacted_objects, names_object
 
 # ---------------- frozen tables (fixed before any lexsem score exists) ----------------
 
-# Spaced spelling of the compound names among RQ2's goal objects. Token overlap with the name is reported, not
-# matched: under Qwen3's tokenizer "salt shaker" shares two of its three tokens with "saltshaker", "toilet paper"
-# none with "toiletpaper".
+# Spaced spelling of the compound names among RQ2's goal objects. Under Qwen3's tokenizer "salt shaker" shares two
+# of its three tokens with "saltshaker", "soap bar" one of two with "soapbar", "toilet paper" none with
+# "toiletpaper"; the overlap is reported, not matched.
 VARIANTS = {"soapbar": "soap bar", "peppershaker": "pepper shaker", "saltshaker": "salt shaker",
             "keychain": "key chain", "soapbottle": "soap bottle", "alarmclock": "alarm clock",
             "toiletpaper": "toilet paper"}
 # A different single word for the same object, sharing no word part with the name and naming no other ALFWorld
-# object. Only these eight of RQ2's 27 goal-object types have one.
+# object. Only these eight of RQ2's 27 goal-object types have one. Four of them occur inside the object's own rq1x
+# description (disc, blade, loaf, cushion), so the alias and description forms are not independent there.
 ALIASES = {"cd": "disc", "potato": "spud", "pan": "skillet", "cloth": "rag", "bread": "loaf", "knife": "blade",
            "pillow": "cushion", "cup": "tumbler"}
-
-# Token count of " <name>" (Qwen3-8B; Llama-3.1-8B gives the same counts for every entry) and Zipf frequency
-# (wordfreq, English; 0 means below its list). Computed 2026-11-24 from the pinned tokenizers; the scoring job
-# checks the token counts against the loaded tokenizer and refuses to run on a mismatch.
-OBJECT_TOKENS = {"soapbar": 2, "cd": 1, "apple": 1, "mug": 1, "potato": 1, "tomato": 1, "pan": 1, "bowl": 1, "egg": 1,
-                 "cloth": 1, "peppershaker": 3, "saltshaker": 3, "lettuce": 1, "book": 1, "pencil": 1, "plate": 1,
-                 "bread": 1, "vase": 1, "keychain": 2, "watch": 1, "knife": 1, "cup": 1, "soapbottle": 3,
-                 "spatula": 2, "alarmclock": 2, "pillow": 1, "toiletpaper": 3}
-OBJECT_ZIPF = {"soapbar": 0.0, "cd": 4.36, "apple": 4.76, "mug": 3.71, "potato": 4.11, "tomato": 3.85, "pan": 4.39,
-               "bowl": 4.63, "egg": 4.46, "cloth": 4.03, "peppershaker": 0.0, "saltshaker": 1.20, "lettuce": 3.56,
-               "book": 5.43, "pencil": 3.95, "plate": 4.55, "bread": 4.50, "vase": 3.54, "keychain": 2.76,
-               "watch": 5.34, "knife": 4.41, "cup": 5.11, "soapbottle": 0.0, "spatula": 2.86, "alarmclock": 0.0,
-               "pillow": 3.96, "toiletpaper": 1.21}
-# Unrelated control words: household-plausible nouns from tools, music, toys, outdoor gear and clothing, never an
-# ALFWorld object or receptacle, and excluding kitchen, bathroom, cleaning, writing and timekeeping items (which
-# relate to RQ2's goal objects). word -> (Qwen3 token count of " word", Zipf frequency).
-CONTROL_POOL = {
-    "umbrella": (1, 3.89), "whistle": (1, 3.88), "compass": (1, 3.74), "flashlight": (1, 3.46), "magnet": (1, 3.73),
-    "hammer": (1, 4.16), "wrench": (1, 3.37), "marble": (1, 3.96), "telescope": (1, 3.75), "accordion": (1, 3.09),
-    "trumpet": (1, 3.58), "violin": (1, 3.74), "globe": (1, 4.28), "lantern": (1, 3.61), "scarf": (1, 3.68),
-    "wallet": (1, 4.15), "backpack": (1, 3.78), "suitcase": (1, 3.55), "puzzle": (1, 3.96), "kite": (1, 3.55),
-    "trophy": (1, 4.17), "medal": (1, 4.39), "joystick": (1, 2.87), "headphones": (1, 3.88), "microphone": (1, 3.72),
-    "tripod": (1, 3.18), "rake": (1, 3.38), "shovel": (1, 3.50), "flute": (1, 3.52), "anchor": (1, 4.02),
-    "saddle": (1, 3.73), "helmet": (1, 4.02), "goggles": (1, 3.35), "bracelet": (1, 3.70), "ladder": (1, 4.03),
-    "dice": (1, 3.76), "map": (1, 4.76), "radio": (1, 5.01), "camera": (1, 4.87), "guitar": (1, 4.48),
-    "piano": (1, 4.31), "shirt": (1, 4.63), "hat": (1, 4.53), "flag": (1, 4.58), "coin": (1, 4.19), "tent": (1, 4.05),
-    "rope": (1, 4.06), "bike": (1, 4.53), "jacket": (1, 4.32), "drum": (1, 4.11),
-    "padlock": (2, 2.68), "screwdriver": (2, 3.13), "harmonica": (2, 2.97), "kazoo": (2, 2.35), "typewriter": (2, 3.26),
-    "abacus": (2, 2.65), "hanger": (2, 3.24), "earmuffs": (2, 2.17), "mitten": (2, 2.48),
-    "briefcase": (2, 3.09), "domino": (2, 3.23), "pushpin": (2, 1.19), "dartboard": (2, 1.97), "hairpin": (2, 2.78),
-    "birdhouse": (2, 2.32), "easel": (2, 2.68), "chisel": (2, 2.96), "bugle": (2, 2.92), "banjo": (2, 3.27),
-    "pinwheel": (2, 2.29), "lasso": (2, 2.74), "necktie": (2, 2.55), "bowtie": (2, 2.40), "locket": (2, 2.88),
-    "anklet": (2, 2.28), "hammock": (2, 3.14), "beanbag": (2, 2.36), "sandal": (2, 2.91), "slipper": (2, 3.08),
-    "mallet": (2, 3.00), "pliers": (2, 2.90), "gavel": (2, 2.66), "monocle": (2, 2.47),
-    "frisbee": (3, 2.96), "binoculars": (3, 3.10), "ukulele": (3, 3.01), "tambourine": (3, 2.64),
-    "xylophone": (3, 2.37), "birdcage": (3, 2.45), "mousetrap": (3, 2.32), "shoehorn": (3, 2.15),
-    "doorknob": (3, 2.65), "flyswatter": (3, 1.52), "shoelace": (3, 2.35), "snowglobe": (3, 1.71),
-    "metronome": (3, 2.62), "trowel": (3, 2.45), "cymbal": (3, 2.59), "slingshot": (3, 2.95),
+# The alias check's foil: an unrelated object the alias must not be said to name (forced-choice check, section 5).
+ALIAS_FOIL = {"cd": "apple", "potato": "book", "pan": "pillow", "cloth": "egg", "bread": "vase", "knife": "pillow",
+              "pillow": "kettle", "cup": "pencil"}
+# The same token in an unrelated sense, in a natural sentence with no claim about any room, and the control word
+# that replaces it (one token in both tokenizers, same total token count). Nine of RQ2's 27 goal-object types have
+# a natural homonym (a verb or another noun sense with the identical space-prefixed token).
+HOMONYMS = {
+    "mug": ("Thieves sometimes mug tourists near the station.", "rob"),
+    "watch": ("Many people watch football on Sundays.", "play"),
+    "pan": ("Critics often pan sequels to popular films.", "praise"),
+    "plate": ("The tectonic plate shifted during the earthquake.", "fault"),
+    "book": ("Remember to book a hotel for the trip.", "find"),
+    "pencil": ("We can pencil in a meeting for Friday.", "fit"),
+    "cup": ("She would cup her hands to catch the water.", "use"),
+    "bowl": ("He will bowl the final over of the match.", "play"),
+    "egg": ("His friends egg him on to sing.", "urge"),
 }
-N_NEAREST = 3  # the control word is drawn by item hash from the three closest in frequency at the same token count
+# Token count of " <name>" for every ALFWorld object with an rq1x description (Qwen3-8B; Llama-3.1-8B gives the
+# same counts). Computed 2026-11-25 from the pinned tokenizers; the scoring job checks them against the loaded one.
+NAME_TOKENS = {"alarmclock": 2, "apple": 1, "baseballbat": 2, "basketball": 1, "book": 1, "bowl": 1, "box": 1,
+               "bread": 1, "butterknife": 1, "candle": 1, "cd": 1, "cellphone": 1, "cloth": 1, "creditcard": 2,
+               "cup": 1, "dishsponge": 3, "egg": 1, "fork": 1, "glassbottle": 3, "handtowel": 3, "kettle": 1,
+               "keychain": 2, "knife": 1, "ladle": 2, "laptop": 1, "lettuce": 1, "mug": 1, "newspaper": 1, "pan": 1,
+               "pen": 1, "pencil": 1, "peppershaker": 3, "pillow": 1, "plate": 1, "plunger": 2, "pot": 1,
+               "potato": 1, "remotecontrol": 2, "saltshaker": 3, "scrubbrush": 2, "soapbar": 2, "soapbottle": 3,
+               "spatula": 2, "spoon": 1, "spraybottle": 3, "statue": 1, "teddybear": 3, "tennisracket": 3,
+               "tissuebox": 2, "toiletpaper": 3, "tomato": 1, "vase": 1, "watch": 1, "wateringcan": 2,
+               "winebottle": 3}
+# Coarse classes: the control object always comes from another class than the action's object, so that a
+# semantic-activation account does not see the control as a related entity.
+CLASSES = {
+    "food": ("apple", "bread", "egg", "lettuce", "potato", "tomato"),
+    "kitchenware": ("bowl", "butterknife", "cup", "fork", "glassbottle", "kettle", "knife", "ladle", "mug", "pan",
+                    "peppershaker", "plate", "pot", "saltshaker", "spatula", "spoon", "winebottle"),
+    "cleaning": ("cloth", "dishsponge", "handtowel", "plunger", "scrubbrush", "soapbar", "soapbottle", "spraybottle",
+                 "tissuebox", "toiletpaper"),
+    "devices": ("alarmclock", "cd", "laptop", "remotecontrol"),
+    "personal": ("cellphone", "creditcard", "keychain", "watch"),
+    "paper": ("book", "box", "newspaper", "pen", "pencil"),
+    "decor": ("candle", "pillow", "statue", "teddybear", "vase", "wateringcan"),
+    "sports": ("baseballbat", "basketball", "tennisracket"),
+}
+CLASS_OF = {o: c for c, objs in CLASSES.items() for o in objs}
+# ALFWorld object names that occur in the few-shot examples of set 1 (the prompt's examples): never a control, and
+# items whose action object is one of them are reported apart (design section 8).
+FEWSHOT_OBJECTS = frozenset({"candle", "handtowel", "soapbar", "soapbottle", "spraybottle"})
+# Lenient reader for the description check: answers that identify the object without its ALFWorld spelling.
+# Frozen 2026-11-25 after reading Qwen's rq1x answers (stated in the design note).
+LENIENT = {"soapbar": ("bar of soap", "soap bar"), "keychain": ("key ring", "keyring"),
+           "saltshaker": ("shaker",), "peppershaker": ("shaker",), "cup": ("tumbler",), "cd": ("compact disc",)}
+CHECK_ALIAS = 'Can the word "{alias}" refer to {art} {obj}? Answer Yes or No.'
 
 SEED = "lexsem|2026-11-24"
 N_LATER, N_STEP0 = 300, 150
@@ -88,36 +102,50 @@ CAP_LATER, CAP_STEP0 = 3, 2  # most items drawn from one game per stratum
 TEMPLATES = {
     "assert": "There is {art} {ref} somewhere in the room.",
     "deny": "There is no {ref} in this room.",
-    "use": 'The {unit} "{ref}" appears in this note.',
-    "generic": "{Art} {ref} is a common household item.",
-    # optional arms (design section 9); not in the core run
+    "use": "The following {unit} appears in this note: {ref}.",
+    "elsewhere": "There is {art} {ref} somewhere in the house next door.",
     "ignore": "Ignore the {ref}.",
     "reliable": "The room's inventory list says there is {art} {ref} in the room.",
     "unreliable": "A tester inserted this sentence at random: there is {art} {ref} in the room.",
 }
 ANCHORS = ("aligned", "swapped")
-# condition -> (reference form, content)
+# condition -> (reference form, content, position)
 MENTIONS = {
-    "name_assert": ("name", "assert"), "name_deny": ("name", "deny"), "name_use": ("name", "use"),
-    "name_generic": ("name", "generic"),
-    "ctrl_assert": ("ctrl", "assert"), "ctrl_deny": ("ctrl", "deny"), "ctrl_use": ("ctrl", "use"),
-    "ctrl_generic": ("ctrl", "generic"),
-    "desc_assert": ("desc", "assert"), "desc_use": ("desc", "use"),
-    "cdesc_assert": ("cdesc", "assert"), "cdesc_use": ("cdesc", "use"),
-    "variant_assert": ("variant", "assert"),  # compound names only
-    "alias_assert": ("alias", "assert"),  # objects in ALIASES only
+    "name_assert": ("name", "assert", "task"), "ctrl_assert": ("ctrl", "assert", "task"),
+    "name_deny": ("name", "deny", "task"), "ctrl_deny": ("ctrl", "deny", "task"),
+    "name_use": ("name", "use", "task"), "ctrl_use": ("ctrl", "use", "task"),
+    "name_elsewhere": ("name", "elsewhere", "task"), "ctrl_elsewhere": ("ctrl", "elsewhere", "task"),
+    "desc_assert": ("desc", "assert", "task"), "cdesc_assert": ("cdesc", "assert", "task"),
+    "desc_use": ("desc", "use", "task"), "cdesc_use": ("cdesc", "use", "task"),
+    "variant_assert": ("variant", "assert", "task"),  # compound names only
+    "alias_assert": ("alias", "assert", "task"),  # objects in ALIASES only
+    "homonym": ("homonym", "sentence", "task"), "ctrl_homonym": ("ctrl_homonym", "sentence", "task"),
+    "name_ignore": ("name", "ignore", "task"), "ctrl_ignore": ("ctrl", "ignore", "task"),
+    "name_assert_pre": ("name", "assert", "pre"), "ctrl_assert_pre": ("ctrl", "assert", "pre"),
+    "name_assert_post": ("name", "assert", "post"), "ctrl_assert_post": ("ctrl", "assert", "post"),
+    "name_reliable": ("name", "reliable", "task"), "name_unreliable": ("name", "unreliable", "task"),
 }
-OPTIONAL = {
-    "name_ignore": ("name", "ignore"), "ctrl_ignore": ("ctrl", "ignore"),
-    "name_reliable": ("name", "reliable"), "name_unreliable": ("name", "unreliable"),
+# Condition groups; the run's list is fixed in the design (section 10) from the smoke run's measured cost.
+GROUPS = {
+    "core": ANCHORS + ("name_assert", "ctrl_assert", "name_deny", "ctrl_deny", "name_use", "ctrl_use",
+                       "name_elsewhere", "ctrl_elsewhere", "desc_assert", "cdesc_assert", "desc_use", "cdesc_use",
+                       "variant_assert", "alias_assert", "homonym", "ctrl_homonym"),
+    "ignore": ("name_ignore", "ctrl_ignore"),
+    "position": ("name_assert_pre", "ctrl_assert_pre", "name_assert_post", "ctrl_assert_post"),
+    "reliability": ("name_reliable", "name_unreliable"),
+    # the reduced arm for the with-block yes/no format and for Llama: the content contrasts with the name
+    "names_only": ANCHORS + ("name_assert", "ctrl_assert", "name_deny", "ctrl_deny", "name_use", "ctrl_use",
+                             "name_elsewhere", "ctrl_elsewhere", "desc_assert", "cdesc_assert"),
 }
-CORE = ANCHORS + tuple(MENTIONS)
-# Each mention condition's control: same carrier, unrelated reference.
+CORE = GROUPS["core"]
+# Each mention condition's control: same carrier and position, the control object's reference in its place. The
+# spelling and alias conditions use the name's control (their token counts differ from it by one or two tokens).
 CONTROL_OF = {
-    "name_assert": "ctrl_assert", "name_deny": "ctrl_deny", "name_use": "ctrl_use", "name_generic": "ctrl_generic",
-    "desc_assert": "cdesc_assert", "desc_use": "cdesc_use", "variant_assert": "ctrl_assert",
-    "alias_assert": "ctrl_assert", "name_ignore": "ctrl_ignore", "name_reliable": "ctrl_assert",
-    "name_unreliable": "ctrl_assert",
+    "name_assert": "ctrl_assert", "name_deny": "ctrl_deny", "name_use": "ctrl_use",
+    "name_elsewhere": "ctrl_elsewhere", "desc_assert": "cdesc_assert", "desc_use": "cdesc_use",
+    "variant_assert": "ctrl_assert", "alias_assert": "ctrl_assert", "homonym": "ctrl_homonym",
+    "name_ignore": "ctrl_ignore", "name_assert_pre": "ctrl_assert_pre", "name_assert_post": "ctrl_assert_post",
+    "name_reliable": "name_unreliable",
 }
 FORMATS = ("obs", "yn")
 
@@ -128,31 +156,11 @@ def _article(word: str) -> str:
 
 def sentence(ref: str, content: str, phrase: bool = False) -> str:
     """One carrier sentence about `ref`. `phrase` says "phrase" instead of "word" in the use carrier."""
-    art = _article(ref)
-    return TEMPLATES[content].format(ref=ref, art=art, Art=art.capitalize(), unit="phrase" if phrase else "word")
+    return TEMPLATES[content].format(ref=ref, art=_article(ref), unit="phrase" if phrase else "word")
 
 
 def _h(text: str) -> int:
     return int(hashlib.sha256(text.encode()).hexdigest()[:12], 16)
-
-
-def _types_in(text: str) -> set[str]:
-    return set(re.findall(r"[a-z]+", (text or "").lower()))
-
-
-def control_word(t: dict) -> str:
-    """The item's unrelated control word: same token count as the action object's name, among the N_NEAREST
-    closest in Zipf frequency, picked by a hash of the item id; never a word in the item's history or action."""
-    obj = t["goal_object"]
-    if obj not in OBJECT_TOKENS:
-        raise KeyError(f"no frozen token count for {obj!r}")
-    seen = _types_in(t.get("history_text", "")) | _types_in(t.get("action", ""))
-    pool = sorted((abs(z - OBJECT_ZIPF[obj]), w) for w, (n, z) in CONTROL_POOL.items()
-                  if n == OBJECT_TOKENS[obj] and w not in seen)
-    near = [w for _, w in pool[:N_NEAREST]]
-    if not near:
-        raise ValueError(f"{t['id']}: no control word with {OBJECT_TOKENS[obj]} tokens")
-    return near[_h(f"{SEED}|ctrl|{t['id']}") % len(near)]
 
 
 def scene_types(t: dict) -> set[str]:
@@ -160,65 +168,95 @@ def scene_types(t: dict) -> set[str]:
     return {re.sub(r"\s+\d+$", "", inst) for inst in (t.get("scene_locations") or {})}
 
 
-def control_description(t: dict, count_tokens: Callable[[str], int] | None = None) -> str:
-    """Another ALFWorld object type whose description stands in for the action object's: not the goal or swapped
-    object, not in the room at reset, not named in the history or action; the closest in token count to the
-    item's own description (`count_tokens`, default words), ties broken by a hash of the item id."""
+def control_object(t: dict, count_tokens: Callable[[str], int] | None = None) -> str:
+    """The item's control object: an ALFWorld object type with an rq1x description, from another class than the
+    action's object, not the goal or swapped object, not in the room at reset, not named in the history, action or
+    few-shot examples, and with the same token count as the action object's name; among those, the closest in
+    description length (`count_tokens`, default words), ties broken by a hash of the item id."""
     count = count_tokens or (lambda s: len(s.split()))
-    own = rq1x.DESCRIPTIONS[t["goal_object"]]
+    obj = t["goal_object"]
     hist = t.get("history_text", "")
-    bad = {t["goal_object"], t.get("swapped_goal_object")} | scene_types(t) | interacted_objects(hist)
-    options = [o for o in sorted(rq1x.DESCRIPTIONS) if o not in bad and not names_object(hist, o)
+    bad = ({obj, t.get("swapped_goal_object")} | scene_types(t) | interacted_objects(hist) | FEWSHOT_OBJECTS)
+    options = [o for o in sorted(rq1x.DESCRIPTIONS) if o not in bad and CLASS_OF[o] != CLASS_OF[obj]
+               and NAME_TOKENS[o] == NAME_TOKENS[obj] and not names_object(hist, o)
                and not names_object(t["action"], o)]
     if not options:
-        raise ValueError(f"{t['id']}: no control description available")
-    target = count(" " + own)
+        raise ValueError(f"{t['id']}: no control object with {NAME_TOKENS[obj]} tokens")
+    target = count(" " + rq1x.DESCRIPTIONS[obj])
     return min(options, key=lambda o: (abs(count(" " + rq1x.DESCRIPTIONS[o]) - target),
-                                       _h(f"{SEED}|cdesc|{t['id']}|{o}")))
+                                       _h(f"{SEED}|ctrl|{t['id']}|{o}")))
 
 
 def references(t: dict, count_tokens: Callable[[str], int] | None = None) -> dict[str, str | None]:
     """The text each reference form puts in the sentence for this item (None where the form does not exist)."""
     obj = t["goal_object"]
-    cdesc_obj = control_description(t, count_tokens)
+    ctrl = control_object(t, count_tokens)
+    hom = HOMONYMS.get(obj)
     return {"name": obj, "variant": VARIANTS.get(obj), "alias": ALIASES.get(obj),
-            "desc": rq1x.DESCRIPTIONS[obj], "ctrl": control_word(t), "cdesc": rq1x.DESCRIPTIONS[cdesc_obj],
-            "cdesc_object": cdesc_obj}
+            "desc": rq1x.DESCRIPTIONS[obj], "ctrl": ctrl, "cdesc": rq1x.DESCRIPTIONS[ctrl],
+            "homonym": hom[0] if hom else None,
+            "ctrl_homonym": hom[0].replace(f" {obj} ", f" {hom[1]} ", 1) if hom else None}
 
 
-def task_lines(t: dict, conditions: tuple[str, ...] = CORE,
-               count_tokens: Callable[[str], int] | None = None) -> dict[str, str]:
-    """Each condition's task line for item `t`; conditions whose reference form the item lacks are left out."""
+def condition_sentence(refs: dict, cond: str) -> str | None:
+    form, content, _ = MENTIONS[cond]
+    ref = refs[form]
+    if ref is None:
+        return None
+    if content == "sentence":
+        return ref
+    return sentence(ref, content, phrase=form in ("desc", "cdesc"))
+
+
+def specs(t: dict, conditions: tuple[str, ...] = CORE,
+          count_tokens: Callable[[str], int] | None = None) -> dict[str, dict]:
+    """Each condition's prompt change for item `t`: its task line and, for the position arm, a sentence placed
+    before or after the action line. Conditions whose reference form the item lacks are left out."""
     if not t.get("swapped_task_line") or not t.get("swapped_goal_object"):
         raise ValueError(f"{t['id']}: needs a swapped task")
     refs = references(t, count_tokens)
     out = {}
     for c in conditions:
-        if c == "aligned":
-            out[c] = t["task_line"]
-        elif c == "swapped":
-            out[c] = t["swapped_task_line"]
+        if c in ANCHORS:
+            out[c] = {"task_line": t["task_line"] if c == "aligned" else t["swapped_task_line"]}
+            continue
+        s = condition_sentence(refs, c)
+        if s is None:
+            continue
+        pos = MENTIONS[c][2]
+        if pos == "task":
+            out[c] = {"task_line": f"{t['swapped_task_line']} {s}"}
         else:
-            form, content = {**MENTIONS, **OPTIONAL}[c]
-            ref = refs[form]
-            if ref is None:
-                continue
-            out[c] = f"{t['swapped_task_line']} {sentence(ref, content, phrase=form in ('desc', 'cdesc'))}"
+            out[c] = {"task_line": t["swapped_task_line"], pos: s}
     return out
 
 
-def messages(t: dict, line: str, fmt: str) -> list[dict[str, str]]:
-    """The study's observation prompt (fmt "obs", ends "Next observation:") or rq1v's yes/no prompt (fmt "yn")
-    with `line` as the task line; nothing else differs between conditions."""
-    msgs = rq1.build_messages(t, "aligned", task_line=line)
-    if fmt == "obs":
-        return msgs
-    if fmt != "yn":
-        raise ValueError(fmt)
+def messages(t: dict, spec: dict, fmt: str) -> list[dict[str, str]]:
+    """The study's observation prompt (fmt "obs", ends "Next observation:") or rq1v's yes/no prompt (fmt "yn") with
+    the condition's task line, and its sentence before or after the action line where the spec places one."""
+    msgs = rq1.build_messages(t, "aligned", task_line=spec["task_line"])
     last = msgs[-1]
-    if not last["content"].endswith("Next observation:"):
+    content = last["content"]
+    if not content.endswith("Next observation:"):
         raise ValueError(f"{t['id']}: prompt does not end with 'Next observation:'")
-    return msgs[:-1] + [{**last, "content": last["content"][: -len("Next observation:")] + rq1v.YN_QUESTION}]
+    if spec.get("pre") or spec.get("post"):
+        a = content.index("\n\nAction: ")
+        a_end = content.index("\n\n", a + 2)
+        if spec.get("pre"):
+            content = content[:a] + "\n" + spec["pre"] + content[a:]
+        else:
+            content = content[:a_end] + "\n\n" + spec["post"] + content[a_end:]
+    if fmt == "yn":
+        content = content[: -len("Next observation:")] + rq1v.YN_QUESTION
+    elif fmt != "obs":
+        raise ValueError(fmt)
+    return msgs[:-1] + [{**last, "content": content}]
+
+
+def check_reads(obj: str, answer: str) -> bool:
+    """rq1x's reader, plus the frozen lenient synonyms."""
+    squash = lambda s: re.sub(r"[^a-z]", "", s.lower())  # noqa: E731
+    return rq1x.check_says(obj, answer) or any(squash(s) in squash(answer) for s in LENIENT.get(obj, ()))
 
 
 # ---------------- items ----------------
@@ -238,7 +276,7 @@ def sample(primary: list[dict], n_later: int = N_LATER, n_step0: int = N_STEP0, 
     by = defaultdict(list)
     for t in primary:
         s = stratum(t)
-        if s and rq1x.desc_ok(t) and t["goal_object"] in OBJECT_TOKENS:
+        if s and rq1x.desc_ok(t) and t["goal_object"] in NAME_TOKENS:
             by[s].append(t)
     out = []
     for s, n, cap in (("later", n_later, CAP_LATER), ("step0", n_step0, CAP_STEP0)):
@@ -260,13 +298,13 @@ def sample(primary: list[dict], n_later: int = N_LATER, n_step0: int = N_STEP0, 
 
 def build(items: list[dict], conditions: tuple[str, ...] = CORE,
           count_tokens: Callable[[str], int] | None = None) -> list[dict]:
-    """One record per item: identifiers, stratum, the references used and every condition's task line."""
+    """One record per item: identifiers, stratum, the references used and every condition's prompt change."""
     recs = []
     for t in items:
-        refs = references(t, count_tokens)
         recs.append({"id": t["id"], "game_id": t["game_id"], "stratum": t.get("lexsem_stratum") or stratum(t),
                      "action": t["action"], "goal_object": t["goal_object"],
                      "swapped_goal_object": t["swapped_goal_object"], "history_len": t.get("history_len", 0),
-                     "o_plus": t["candidates"]["o_plus"], "references": refs,
-                     "lines": task_lines(t, conditions, count_tokens)})
+                     "fewshot_object": t["goal_object"] in FEWSHOT_OBJECTS,
+                     "o_plus": t["candidates"]["o_plus"], "references": references(t, count_tokens),
+                     "specs": specs(t, conditions, count_tokens)})
     return recs
