@@ -1,6 +1,8 @@
-# Option C: a closed-loop agent with a world-model verifier: results (2026-11-23)
+# Option C: a closed-loop agent with a world-model verifier: results (2026-11-23; updated 2026-11-24)
 
 **Status.** Exploratory study, frozen in procedure. The design and analysis were frozen before anything ran at the annotated tag `optionc-design-frozen-2026-11-22` (commit `54cb71e`, branch `optionc`; [optionc_design.md](optionc_design.md), review in [optionc_review1.md](optionc_review1.md)). The smoke run, the step-0 check and its analysis ran at that commit. After the step-0 check, and before any census episode existed, the pre-declared reallocation was exercised (commit `2a86683`, configuration and the test that pins it only; design note, final section). Both census runs and the analysis ran at `2a86683` in the clean checkout `text-wm-fix40` on ICE. Every number below is quoted from two files copied unchanged from the cluster: [optionc_step0_metrics.json](optionc_step0_metrics.json) (the step-0 analysis, job 7246046; SHA-256 `6e4512c7…`) and [optionc_metrics.json](optionc_metrics.json) (the main analysis, job 7252705; SHA-256 `1721ee72…`). Nothing here re-verdicts a frozen output or adds a test; where this note does arithmetic on the reported numbers (for example a rejection share from the counts of decision reasons), it says so, and anything not fixed by the design is labelled descriptive or exploratory.
+
+**Update (2026-11-24).** Both analyses were rerun at `01cad81` in `text-wm-fix40` (step-0 analysis job 7295369, main analysis job 7295370), after the argmax-rule run had finished and Stage 1a's scoring runs had been linked into the checkout. The two metrics files named above are now those reruns' outputs, copied unchanged (step-0 SHA-256 `f34686ad…`, main `eb01f354…`). Compared key by key with the earlier files, the reruns add exactly two things and change nothing else: each model's step-0 `stage1a_agreement` entry (section 3.1) and the argmax run (section 6.3). Every other number in this note is therefore unchanged. The update also adds why the step-0 scores differ from Stage 1a's (section 3.1, with a diagnostic), the step-0 classification computed in plain text (section 10.3), and the assessment of the Llama loop with the user's decision not to run it (section 13). The two follow-ups were specified, committed and pushed before any of their scores existed, in [optionc_followups_2026-11-24.md](optionc_followups_2026-11-24.md) (branch `optionc`, commit `0b7518e`; their code is in `scripts/optionc_followup/` there).
 
 ## 1. The question
 
@@ -74,9 +76,40 @@ For Qwen3-8B the yes/no readout reproduces the collapse: shown the real task, it
 
 "No gap" concerns only the acceptance of working proposals. The stated task does move the observation readout's scores, in both directions the earlier studies describe. The any-task drop (the mean aware-minus-blind score on working `go to` candidates) is −8.49 nats [−8.92, −8.09] under the observation readout, against −39.1 [−39.8, −38.4] under yes/no; under the observation readout the working `go to` scores stay far above zero (median 26.25 nats aware, 34.4 blind), so none is rejected, whereas under yes/no they are pushed below zero (median −22.5 aware, +19.25 blind). The naming lift (the mean aware-minus-swapped score on failing goal-object candidates) is +7.04 nats [6.45, 7.62] under the observation readout and +7.60 [7.10, 8.09] under yes/no. In acceptance terms the observation readout's aware arm accepts 77.2% of the failing step-0 candidates, against 18.8% task-blind, 28.8% swapped and 8.1% neutral; its AUC stays at 0.99 because the working candidates score even higher. So the observation readout removes the collapse but not the RQ2 bias: at step 0 it accepts most failing goal-object actions when the task names their object. This matters for reading the loop (section 5.3).
 
-For Llama-3.1-8B the yes/no gap is −10.4 points: not a collapse, but its interval reaches beyond −10, so the classification is "mixed (the yes/no interval does not settle it)". Its observation readout is not competent (its blind arm accepts every failing step-0 candidate), so Llama would have had no observation-readout run. Llama's loop runs (an optional Tier 3) were not submitted.
+For Llama-3.1-8B the yes/no gap is −10.4 points: not a collapse, but its interval reaches beyond −10, so the classification is "mixed (the yes/no interval does not settle it)". Its observation readout is not competent (its blind arm accepts every failing step-0 candidate), so Llama would have had no observation-readout run. Llama's loop runs (an optional Tier 3) were not submitted. *(2026-11-24: not run, by the user's decision; section 13.)* Its yes/no readout, the one a Llama loop would use, is competent: its blind arm has AUC 0.98 and accepts 5.0% of failing and 97.8% of working candidates.
 
-**One check promised by the design is missing from the metrics.** The design said the step-0 yes/no scores under the aware, swapped and neutral prompts, which are Stage 1a's prompts, would be compared with Stage 1a's saved scores and reported as the largest difference after rounding. The analysis computes this only when it finds Stage 1a's scoring runs, and those runs are not under the `text-wm-fix40` checkout's `runs/` folder, so the comparison was skipped without an error and `optionc_step0_metrics.json` has no `stage1a_agreement` entry. The rates themselves agree with the with-block rescoring of the same states reported in the Qwen pipeline audit (aware 7.5%, swapped 5.6%, blind 89.6%; [decisionsim_results.md](decisionsim_results.md), last section), but the score-by-score comparison was not made.
+**One check promised by the design is missing from the metrics.** The design said the step-0 yes/no scores under the aware, swapped and neutral prompts, which are Stage 1a's prompts, would be compared with Stage 1a's saved scores and reported as the largest difference after rounding. The analysis computes this only when it finds Stage 1a's scoring runs, and those runs are not under the `text-wm-fix40` checkout's `runs/` folder, so the comparison was skipped without an error and `optionc_step0_metrics.json` has no `stage1a_agreement` entry. The rates themselves agree with the with-block rescoring of the same states reported in the Qwen pipeline audit (aware 7.5%, swapped 5.6%, blind 89.6%; [decisionsim_results.md](decisionsim_results.md), last section), but the score-by-score comparison was not made. *(2026-11-24: now made; section 3.1.)*
+
+### 3.1 Agreement with Stage 1a's scores, and why they differ (added 2026-11-24)
+
+**What the rerun found.** With Stage 1a's scoring runs linked into the checkout, the step-0 analysis rerun (job 7295369) computed `stage1a_agreement`. It compares each step-0 yes/no score under the aware, swapped and neutral prompts with Stage 1a's saved score for the same prompt: 3,867 pairs per model, both rounded to 1/64 nat. Most pairs differ.
+
+| | Qwen3-8B | Llama-3.1-8B |
+|---|---|---|
+| Pairs compared | 3,867 | 3,867 |
+| Pairs that differ after rounding | 2,807 (72.6%) | 2,414 (62.4%) |
+| Largest difference after rounding (nats) | 2.0 | 1.125 |
+| Mean absolute difference before rounding (nats; computed here) | 0.289 | 0.101 |
+| Pairs on opposite sides of zero, so accepted by one and rejected by the other (computed here) | 6 | 36 |
+| GPU, Stage 1a / Option C (job records) | A100-PCIE-40GB / L40S | A40 / L40S |
+
+The differences are small next to the scores: the two sets correlate at r = 0.9997 for Qwen and 0.9992 for Llama (computed here). The mean signed differences are small next to the spread of the differences. For Qwen they are +0.008 nats under the aware prompt, +0.018 under the swapped one and +0.125 under the neutral one, against a standard deviation of 0.40. For Llama they are −0.06 to −0.03, against 0.13.
+
+Every difference is, to within 10⁻⁴, a whole multiple of 1/8 nat. That is what rounding the two logits to bf16 produces: bf16 numbers between 16 and 32 are spaced 1/8 apart, and between 32 and 64 they are spaced 1/4 apart. The working guess was the GPU: the scores are computed in bf16, and different GPUs can round the same computation differently.
+
+**What was checked, and what each check rules out.** Everything below was specified before the diagnostic ran ([optionc_followups_2026-11-24.md](optionc_followups_2026-11-24.md), section 1).
+
+- **Prompt text, item hashes, chat template, empty think block, model revision: ruled out.** Each run's own code was used to rebuild its prompts on CPU: the Option C checkout for Option C, and a copy of `wf/` at Stage 1a's scoring commit `eeeb7dd` for Stage 1a. Every rebuilt prompt matches the hash its run stored with its score (3,867 of 3,867 for each run and model). Across the two runs, the messages are identical for all 3,867 pairs, and so are the token ids the scorer reads, rendered by each code's own tokenizer at its pinned revision. The Qwen revision is `b968826d…` and the Llama revision `0e9e39f2…` in both. Each code's own template settings (thinking off) are the same, and every Qwen prompt ends with the empty think block in both runs.
+- **Software stack: ruled out.** Both jobs ran the same Python environment, `.envs/serve`, with torch 2.6.0 and transformers 4.51.3. Nothing in its `site-packages` is newer than 2026-10-28, earlier than both jobs. The newer `serve2` stack (transformers 5.x) was not involved.
+- **Batch composition, padding, dtype and code path: ruled out by reading the code.** Both runs make one unpadded forward pass of one prompt, with bf16 weights loaded by the same `open_scorer`. Both take the last position's logits from the full logits tensor and cast them to float32 before the log-softmax. Stage 1a used `score_one_token_pair`; Option C used `next_token_logprobs`. The step-0 run never turned on the last-position-only option, so these are the same computation. The only scorer change between the two commits adds that unused option.
+- **GPU type: established for Qwen3-8B by the diagnostic.** Option C's own step-0 scoring path was run on the Qwen prompts on an A100-PCIE-40GB, Stage 1a's GPU type (job 7300308, 8.6 minutes; the node, `atl1-1-03-007-35-0`, is also the one Stage 1a's job used). It reproduced Stage 1a's 3,867 scores exactly: all 3,867 identical, mean absolute difference 0.0 before rounding. It differed from Option C's L40S scores exactly as Stage 1a does (1,060 identical, mean absolute difference 0.289, largest 2.0, 6 acceptance flips). The rescoring ran on the very node Stage 1a used, so on its own it cannot separate the GPU type from the individual card. But reruns on different L40S nodes reproduce each other at 99.2% (the reference below), so it is the hardware type that matters.
+- **GPU type for Llama-3.1-8B: consistent, not yet established.** The prompt, revision, stack and code-path checks above hold for Llama too, and its differences have the same form: all multiples of 1/8 nat, with small mean offsets. The matching rescoring on an A40, Stage 1a's GPU type for Llama (job 7300309), had not run when this was written, because all four A40s on the cluster were allocated to other jobs for several hours. If it reproduces Stage 1a's Llama scores exactly, the cause is established for both models.
+
+**How this compares with the project's reference.** The wave B diagnostic quotes, as the size of a change of GPU type in the old stack, Qwen yes/no scores differing by 0.035 nats per score with 91% identical, against 0.248 nats and 30% identical for the stack change. Recomputed here, that reference compares `rq1v_score` with `size_score_qwen3-8b` (14,582 scores) and gives the same 0.035 and 90.9%. But seven of `rq1v_score`'s eight shards and both `size_score` shards ran on L40S GPUs. Split by GPU, the 12,869 scores where both runs used L40S GPUs agree 99.2% (0.003 nats per score). The 1,713 scores from the one shard that ran on an A40 agree only 28.6% (0.273 nats per score, largest 2.25).
+
+So the 0.035 figure mostly measures reruns on the *same* GPU type. A true change of GPU type moves Qwen's yes/no scores by about as much as the stack change did, and as much as is seen here (27.4% identical, 0.289 nats). This qualifies the wave B diagnostic's "about seven times the change measured across GPU types": against an A40-versus-L40S change in the same stack (0.273 nats), the stack change's 0.248 nats is about the same size per score. *(This is a reading of the archived records, not a re-verdict of the wave B check.)*
+
+**What it means for Option C.** Nothing in the step-0 check changes. The classification is computed within one run on one GPU type, and the acceptance rates agree with Stage 1a's (aware 7.5%, swapped 5.6%, blind 89.6%). For Qwen, 6 of 3,867 scores (0.16%) change sides of zero between the GPU types. For Llama, 36 do (0.9%; its scores sit closer to zero). Comparisons *across* runs made on different GPU types carry per-score noise of a few tenths of a nat. That is negligible next to the multi-nat task effects, but it is enough to move individual near-zero accept/reject calls.
 
 ## 4. The reallocation, and why
 
@@ -170,6 +203,55 @@ So the label means this: the aware yes/no verifier costs the agent about one inv
 
 For completeness, the exact decomposition on the 125 swap games (descriptive; the identity holds for every outcome) splits the aware-minus-blind invalid-action difference of +1.01 [+0.23, +1.84] into aware minus swapped +0.70 [+0.07, +1.46] and swapped minus blind +0.30 [−0.31, +0.99]. The success decomposition is aware minus swapped −6.4 points [−12.0, −1.6] (p 0.042) and swapped minus blind +2.4 [−4.0, +8.8]. Read naively, the swapped verifier did better than the aware one despite obstructing (54.4% success against 47.8%), and swapped minus none is +10.4 points [+3.2, +18.4] (p 0.014). These are uncorrected contrasts at one seed among many reported, and they are exactly the comparisons the obstruction check says not to interpret as attribution. One mechanical point explains why obstruction need not cost success under this rule: a rejected working proposal usually ends in an abstention, which executes the proposal anyway, so the swapped verifier's obstruction shows up mostly as abstentions (9.08 per episode, like the aware verifier's 9.12) rather than as lost progress.
 
+### 6.3 The argmax rule (Tier 2, yes/no readout, one seed; added 2026-11-24)
+
+**What ran.** `optionc_qwen3-8b_yn_argmax` is the pre-registered secondary rule, Stage 1a's rule 2, kept as the continuity check with the gate. It differs from the accepted-only rule in one place. When the verifier rejects the proposal, every sampled alternative is scored and the one with the highest rounded score is executed *whatever its sign*. So the verifier can swap in an action it itself predicts to fail. Only when the samples contain no other action is the proposal executed. Readout (yes/no), verifier, agent, games and arms (task-blind, task-aware and swapped at one seed, matched-state scoring on the aware steps) are those of the yes/no secondary. The no-verifier reference episodes come from the primary run, so comparisons with no verifier are paired by game but not by common random numbers. It ran at `2a86683` (jobs 7253142–7253145, four shards on L40S GPUs, every shard "shard complete", 393 episodes), and its analysis is the rerun job 7295370.
+
+| Yes/no readout, argmax rule (one seed per verifier arm) | No verifier (from the primary run) | Task-blind | Task-aware | Swapped (125 games) |
+|---|---|---|---|---|
+| Success | 45.5% [36.6, 53.7] | 53.7% [45.5, 62.7] | 53.0% [44.0, 61.9] | 54.4% [45.6, 63.2] |
+| Invalid actions per episode | 4.80 [3.87, 5.79] | 3.12 [2.40, 3.93] | 3.04 [2.36, 3.82] | 2.90 [2.22, 3.66] |
+| Invalid actions in the first 10 steps | 0.45 [0.30, 0.61] | 0.28 [0.19, 0.38] | 0.51 [0.38, 0.65] | 0.42 [0.29, 0.55] |
+| Overrides per episode; harm; help; harm minus help | 0 | 4.51; 0.46; 1.46; −1.01 | 6.84; 0.72; 1.53; −0.81 | 6.98; 0.69; 1.48; −0.79 |
+| Proposal executed after a rejection with no other action (per episode) | 0 | 3.60 | 4.59 | 5.51 |
+| Proposals rejected (share of verified steps, from the reason counts) | | 38.1% | 53.1% | 58.3% |
+| Working proposals accepted, per step | | 72.4% | 53.1% | 47.0% |
+| First proposal rejected; first proposal overridden | | 10.4%; 6.7% | 92.5%; 47.8% | 93.6%; 44.8% |
+| Episodes; steps | 134; 2,987 | 134; 2,854 | 134; 2,885 | 125; 2,678 |
+
+The rejection shares are computed here from each arm's decision-reason counts. For the aware arm these are 1,354 proposals accepted, 916 replaced by the highest-scored alternative and 615 rejected with no other action, out of 2,885 steps.
+
+**Verdicts.**
+
+- **Success: no reliable difference.** Aware minus blind is −0.7 points [−9.0, +7.5] (p 1.0, 29 games differ).
+- **Invalid actions per episode: no reliable difference**, −0.07 [−0.85, +0.71] (p 0.88).
+- **Override harm minus help (key secondary): no reliable difference**, +0.19 per episode [−0.20, +0.60] (p 0.37).
+- **Invalid actions in the first 10 steps (key secondary): harm, attribution not identifiable in the loop (the swapped verifier obstructs the real task)**, +0.23 per episode [+0.10, +0.37] (p 0.002, 43 games differ).
+
+The obstruction check fired. The aware verifier accepted 63.5% [56.0, 70.9] of the agent's working real-goal proposals (271 steps, 95 games), the swapped verifier 38.9% [32.4, 45.7] (247 steps, 83 games), a gap of 24.6 points against the 10-point margin. The blind verifier accepted 54.0% [49.0, 59.4] (265 steps, 100 games). These are secondary tests of a one-seed secondary run, uncorrected.
+
+**How the early harm arises (descriptive).** Under this rule the step-0 collapse has a direct cost. The aware verifier rejected 92.5% of first proposals, which always work, and replaced 47.8% of them with the highest-scored alternative, against 6.7% for the blind verifier. In the accepted-only run the same rejections ended in abstentions and no first move was overridden. Over the whole episode the aware verifier overrides 2.32 more times per episode than the blind one [+1.49, +3.13]. Its overrides harm a working proposal 0.26 times more often [+0.08, +0.45] (p 0.007), while rescuing a failing one about as often (+0.07 [−0.32, +0.47]). That shows up as more failing actions early in the episode (+0.23 in the first 10 steps) but not over the whole episode or in success.
+
+**Against no verifier (descriptive).** Under this rule every verifier helps:
+
+- the blind verifier raises success by 8.2 points [+0.7, +15.7] (p 0.037, 27 games differ) and removes 1.68 invalid actions per episode [−2.53, −0.84];
+- the aware verifier raises success by 7.5 points [−1.5, +16.4] (p 0.13);
+- the swapped verifier raises success by 10.4 points [+1.6, +19.2] (p 0.042).
+
+These are uncorrected contrasts at one seed among many reported.
+
+**Decomposition on the 125 swap games (descriptive).** The first-10-step difference of +0.24 [+0.10, +0.40] splits into aware minus swapped +0.12 [+0.03, +0.22] (p 0.025) and swapped minus blind +0.12 [−0.03, +0.27]. These are the comparisons the obstruction check says not to read as attribution.
+
+**Matched states (descriptive).** On identical states of the aware episodes, the aware prompt accepted failing goal-object proposals more often than the blind prompt (15.0% against 12.0%, +3.0 points [+0.9, +6.0], p 0.064, 167 steps in 31 games) and than the swapped prompt (19.1% against 13.0%, +6.1 [+2.6, +11.5], p 0.007, 131 steps in 28 games). It rejected 17.0 points more working proposals than the blind prompt ([+14.8, +19.2], 2,368 steps, 134 games). It rejected fewer working goal-object proposals than either the blind prompt (−10.7 [−15.8, −6.0]) or the swapped prompt (−24.8 [−31.3, −18.5]). These are the same three patterns as in the accepted-only yes/no run (section 7). Of the 134 pairs of aware and blind episodes, 17 (12.7%) never diverge. The others first execute different actions at a median step index of 1, counting from 0, so typically at the first or second action. In the primary run, by contrast, the 65 diverging pairs first diverged at a median step of 23.
+
+**Against the prediction.** The design predicted (prediction 6) that under this rule the aware-minus-blind success difference would be more negative than under the accepted-only rule, between −10 and −2 points (central −5). It also predicted that at step 0 the aware verifier would override at least 80% of proposals, mostly to another working `go to`, so that step-0 harm would be small and the cost would come later. Neither held:
+
+- success differs by −0.7 points, less negative than the accepted-only yes/no run's −4.5;
+- the aware verifier overrode 47.8% of first moves, not 80% or more;
+- the measurable cost is early (the first 10 steps), not later.
+
+Stage 1a's large harm under this rule came from its candidate menus, which were rich in failing goal-object actions. The agent's own samples contain few such actions. Of the aware verifier's 6.84 overrides per episode, 0.72 replaced a working proposal with a failing action, so most of its replacements, including those of wrongly rejected first moves, did not cost a failed step.
+
 ## 7. Matched-state analysis (descriptive)
 
 At every step of the aware episodes, the same proposal was scored under the aware, blind and swapped prompts. The table gives, for each kind of step, how often each prompt would make the stated call, and the paired difference with its game interval. "Accept failing goal" is the RQ2 bias seen in the loop; "reject working" is the any-task rejection.
@@ -208,8 +290,8 @@ The design logged eight predictions before any data. They were written when yes/
 | 3. Verifier value: blind raises success over none by 0 to 8 points (central +3) and lowers invalid actions (central −1) | Observation: +1.7 points, −1.08 invalid; yes/no: +6.7 points, −1.73 invalid; neither success gain reliable | Yes on point estimates (success gains not distinguishable from zero) |
 | 4. Primary: aware minus blind between −8 and +2 points (central −2), most likely "no reliable difference"; invalid actions between 0 and +1 (central +0.3) | Observation (primary after reallocation): −1.2 points, "no reliable difference", invalid +0.08. Yes/no: −4.5 points, "no reliable difference", invalid +1.12 ("harm") | Yes for the primary run; for yes/no, success yes, invalid actions slightly above the predicted range |
 | 5. Attribution: the obstruction check fires, so success-level attribution "not identifiable"; at matched states aware accepts more failing goal-object proposals than swapped, and both concrete-task prompts reject more working proposals than blind | Fires under yes/no (19.0-point gap), clear under observation (7.3); matched states as predicted under yes/no; under observation the naming shift holds but the aware prompt rejects fewer working proposals | Yes for yes/no; partly for observation |
-| 6. Argmax rule more negative (−10 to −2 points) | Running (Tier 2, submitted 2026-11-23; section 11) | Not yet tested |
-| 7. Llama-3.1-8B in the loop: within 3 points, "no reliable difference" | Not run (optional Tier 3) | Not tested |
+| 6. Argmax rule more negative (−10 to −2 points, central −5); at step 0 the aware verifier overrides at least 80% of proposals, with small step-0 harm and the cost later | −0.7 points [−9.0, +7.5], "no reliable difference"; first proposals overridden 47.8%; the measurable cost is early (invalid actions in the first 10 steps +0.23, "harm, attribution not identifiable") (section 6.3) | No |
+| 7. Llama-3.1-8B in the loop: within 3 points, "no reliable difference" | Not run (Tier 3; the user's decision of 2026-11-24, section 13) | Not tested |
 | 8. Observation readout: smaller aware-minus-blind difference than yes/no in success and invalid actions | −1.2 against −4.5 points; +0.08 against +1.12 invalid actions (separate runs and seed counts, so a description, not a test) | Yes, descriptively |
 
 ## 10. Interpretation
@@ -237,17 +319,52 @@ The practical reading is the one Stage 1b reached for Qwen: showing a yes/no ver
 
 Both readouts were scored through Qwen3's thinking-off template, which places an empty `<think></think>` block before the verifier's answer, as Stage 1a did. The Qwen pipeline audit ([qwen_effect_audit_pipeline.md](qwen_effect_audit_pipeline.md), section 7) found that this block about doubles Qwen's effects. At Stage 1a's step-0 states the real-task yes/no verifier accepts 7.5% of first moves with the block and 26.1% in plain text (97.8% task-blind), and its step-0 harm under the argmax fallback is 71.6 points with the block against 38.8 in plain text. On the RQ2 items the first-token effect, the quantity closest to the observation readout, is 2.52 nats with the block and 1.07 without.
 
-For Option C this means three things. The step-0 classification would very probably be unchanged in plain text: a 26.1% against 97.8% acceptance gap is far below the −30-point collapse threshold, although the step-0 check's interval rule was not computed in that format. The yes/no step-0 collapse costs nothing in this loop under either format, because the aware verifier abstains at step 0 rather than overriding. But the later-step any-task rejection that drives the yes/no secondary's invalid-action harm was never rescored without the block, so its size in plain text is unknown; and the observation readout's naming shift on failing goal-object proposals is probably smaller in plain text. Neither caveat changes a verdict; both limit how far the sizes carry beyond this prompt format.
+For Option C this means three things. ~~The step-0 classification would very probably be unchanged in plain text: a 26.1% against 97.8% acceptance gap is far below the −30-point collapse threshold, although the step-0 check's interval rule was not computed in that format.~~ *(Replaced 2026-11-24 by the computed result below: the classification is unchanged in plain text.)* The yes/no step-0 collapse costs nothing under the accepted-only rule in either format, because the aware verifier abstains at step 0 rather than overriding. *(Under the argmax rule it does cost something; section 6.3.)* But the later-step any-task rejection that drives the yes/no secondary's invalid-action harm was never rescored without the block, so its size in plain text is unknown; and the observation readout's naming shift on failing goal-object proposals is probably smaller in plain text. Neither caveat changes a verdict; both limit how far the sizes carry beyond this prompt format.
+
+**The step-0 classification in plain text (computed 2026-11-24; exploratory).**
+
+*What was done.* The specification was committed and pushed before the score, in [optionc_followups_2026-11-24.md](optionc_followups_2026-11-24.md), section 2. Every one of the step-0 check's 10,378 Qwen3-8B scores was recomputed without the chat template, and so without the empty think block. That covers the 134 step-0 states, every candidate, the aware, blind, swapped and neutral prompts, and both readouts. The job was 7300307, in the fresh checkout `text-wm-fix50` at `0b7518e`, on an L40S, the GPU type of the logged with-block scores; it took about 20 minutes.
+
+The prompts are Option C's own, and their hashes equal the logged run's on all 10,378. They are rendered in the Qwen pipeline audit's plain-text format: the system text, then each example with its answer after one space, then the query. The yes/no readout is read exactly as the audit read it, comparing " Yes" with " No" after one space. The observation readout is Option C's, read at the token where the reply " Nothing happens." would begin, which is " Nothing" in every prompt.
+
+The frozen analysis code (`wf.optionc.step0_report`) was then applied unchanged. Two checks hold:
+
+- run on the logged with-block scores, it reproduces the frozen classification, gaps and competence results exactly;
+- the job's with-block rescoring of the first 3 states' 192 jobs equals the logged scores exactly (largest raw difference 0.0).
+
+In plain text the two answers stay on the model's usual path. " Yes" and " No" hold 99.9% of the next-token probability (median; minimum 99.6%). " Nothing" and " You" hold a median of 96.7% for the observation readout (below 50% in 0.6% of prompts).
+
+*Result: the classification is unchanged, "question-specific (supports the task-success reading)".*
+
+| Step 0, Qwen3-8B, 134 states | Yes/no, with the block | Yes/no, plain text | Observation, with the block | Observation, plain text |
+|---|---|---|---|---|
+| Working first moves accepted: aware; blind | 7.5%; 89.6% | 27.6% [20.1, 35.8]; 99.3% [97.8, 100] | 100%; 100% | 100%; 100% |
+| Working first moves accepted: swapped; neutral | 5.6%; 89.6% | 24.8%; 100% | 100%; 100% | 100%; 100% |
+| Paired gap, aware − blind (points) | −82.1 [−88.1, −74.6]; 110 games non-zero | −71.6 [−79.1, −64.2]; 96 games non-zero | 0.0 [0.0, 0.0]; none non-zero | 0.0 [0.0, 0.0]; none non-zero |
+| Gap state | collapse | collapse | no gap | no gap |
+| Blind arm: AUC; failures accepted; successes accepted | 1.00; 0.0%; 97.2% | 1.00; 1.5%; 99.8% | 1.00; 18.8%; 100% | 1.00; 62.7%; 100% |
+| Blind arm competent | yes | yes | yes | yes |
+| Failing candidates accepted: aware; blind; swapped; neutral | 0.8%; 0.0%; 0.0%; 0.0% | 2.0%; 1.5%; 0.3%; 1.1% | 77.2%; 18.8%; 28.8%; 8.1% | 86.6%; 62.7%; 49.2%; 30.5% |
+| Naming lift, aware − swapped on failing goal-object candidates (nats) | +7.60 [7.10, 8.09] | +3.43 [3.20, 3.65] | +7.04 [6.45, 7.62] | +1.67 [1.52, 1.82] |
+| Any-task drop, aware − blind on working `go to` candidates (nats) | −39.1 [−39.8, −38.4] | −6.93 [−7.12, −6.75] | −8.49 [−8.92, −8.09] | −1.47 [−1.57, −1.36] |
+
+*What it shows.*
+
+- **The yes/no collapse survives in plain text.** It is smaller: the real-task verifier accepts 27.6% of the agent's working first moves against 7.5% with the block. The gap's interval still lies entirely below the −30-point threshold. The 27.6% agrees with the audit's 26.1% for Stage 1a's identical real-task prompt, measured there on an A40.
+- **The observation readout still shows no gap in any game, and its blind arm is still competent.** So the step-0 check would have classified Qwen3-8B the same way in plain text, and the pre-declared reallocation would have been licensed in either format. The expectation stated before the score (about 70% confidence) held.
+- **Plain text shrinks every score by the factors the audit reported.** The naming lift falls to 45% of its with-block size on yes/no (3.43 against 7.60 nats) and to 24% on the observation readout (1.67 against 7.04). The any-task drop falls to 18% and 17%. In acceptance terms the observation readout becomes a weaker screen in plain text: task-blind, it accepts 62.7% of the failing step-0 candidates instead of 18.8%, though its AUC stays 1.00. The real task still raises that acceptance, to 86.6% against 49.2% under the swapped task.
+
+*What this does not cover.* The loop's later steps were not rescored, so whether the yes/no secondary's later-step any-task rejection (and with it its invalid-action harm) survives in plain text remains unknown, as stated above.
 
 ### 10.4 What would change the conclusion
 
-A different agent would: one whose candidate lists put determined goal-object failures above its working actions more often, as Stage 1a's menus did. So would the argmax rule, which can execute an action the verifier rejects, and a verifier that ranks rather than screens. On the yes/no side, an anchored or plain-text format that weakens the any-task rejection might remove the invalid-action harm. More games would tighten the success intervals (the 140 solvable `valid_seen` games would roughly halve the variance, per the design), but more seeds would add little under the observation readout, since most seed pairs never diverge.
+A different agent would: one whose candidate lists put determined goal-object failures above its working actions more often, as Stage 1a's menus did. So might a verifier that ranks rather than screens. The argmax rule, which can execute an action the verifier rejects, was listed here as a candidate. It has now run with the yes/no readout (section 6.3), and it did not change success either: with this agent's own samples it adds an early cost of about a quarter of an invalid action per episode. On the yes/no side, an anchored or plain-text format that weakens the any-task rejection might remove the invalid-action harm. More games would tighten the success intervals (the 140 solvable `valid_seen` games would roughly halve the variance, per the design), but more seeds would add little under the observation readout, since most seed pairs never diverge.
 
 ## 11. What was not run, and what the metrics do not carry
 
-- **The argmax rule (Tier 2, `optionc_qwen3-8b_yn_argmax`)** was part of the committed plan at one seed, as the continuity check with Stage 1a's rule 2. The plan runs it after Tier 1, so it had not been submitted when this note was written. It was submitted on 2026-11-23 at the same commit, `2a86683` (jobs 7253142–7253145), and its result will be added here when the analysis has run. Until then, prediction 6 is untested.
-- **Llama-3.1-8B in the loop (Tier 3, optional)** was not run. Its step-0 classification is "mixed" and its observation readout not competent.
-- **Stage 1a score agreement at step 0** was promised by the design but skipped by the analysis because Stage 1a's scoring runs are not in this checkout (section 3).
+- **The argmax rule (Tier 2, `optionc_qwen3-8b_yn_argmax`)** was part of the committed plan at one seed, as the continuity check with Stage 1a's rule 2. The plan runs it after Tier 1, so it had not been submitted when this note was first written. *(2026-11-24: it has now run and been analysed; section 6.3.)*
+- **Llama-3.1-8B in the loop (Tier 3, optional): not run. Decided 2026-11-24 by the user**, because the step-0 check's competence result made its inferential value doubtful and the remaining allocation (about 58 GPU-hours of the committed budget) was too large without a convincing justification. Section 13 gives the assessment behind the decision. It agrees with the outcome and corrects two facts behind the reasons: the readout that failed competence is the observation readout, which a Llama loop would not use, and the loop itself would cost about 19 GPU-hours by the design.
+- **Stage 1a score agreement at step 0** was promised by the design but skipped by the analysis because Stage 1a's scoring runs are not in this checkout (section 3). *(2026-11-24: computed in the rerun, and the disagreement explained; section 3.1.)*
 - **How often the swap object is later named by an executed action** was to be reported according to the design; it is not in the metrics.
 
 ## 12. Provenance and cost
@@ -262,9 +379,56 @@ All jobs ran on ICE (`ssh ice`) in the checkout `/storage/ice1/2/1/gmat3/text-wm
 | `optionc_qwen3-8b_obs` (primary; 4 shards, 1,063 episodes, 23,657 steps) | `2a86683` | 7247952–7247955 | L40S | 4.42 |
 | `optionc_qwen3-8b_yn` (secondary; 4 shards, 393 episodes, 8,460 steps) | `2a86683` | 7247956–7247959, resumed 7251605 and 7251606 | L40S; the two resumed shards on A40 | 7.18 |
 | `optionc_analysis` | `2a86683` | 7252705 | CPU | |
+| `optionc_qwen3-8b_yn_argmax` (Tier 2; 4 shards, 393 episodes, 8,417 steps) | `2a86683` | 7253142–7253145 | L40S | 7.89 |
+| `optionc_step0_analysis`, `optionc_analysis` (reruns, 2026-11-24: Stage 1a's runs linked, argmax run added) | `01cad81` | 7295369, 7295370 | CPU | |
+| Follow-ups of 2026-11-24 (section 3.1 diagnostic; section 10.3 plain text), checkout `text-wm-fix50` | `0b7518e` | 7300307 (plain text), 7300308 (Qwen rescoring), 7300309 (Llama rescoring, queued when written) | L40S; A100-PCIE-40GB; A40 | 0.34; 0.14; pending |
 
 **The two resumed shards.** Yes/no shards 0 and 2 (jobs 7247956 and 7247958, both on node `atl1-1-03-004-21-0`) stopped after 52 and 20 minutes with a `ConnectionError` while sending an action to the job's local ALFWorld game server ("Connection reset by peer" and "Remote end closed connection without response"). They were resumed from their saved episodes and cache as jobs 7251605 (shard 0) and 7251606 (shard 2), at the same commit, and completed. Resumption skips saved episodes and reuses every cached agent reply and verifier score, so the common-random-numbers pairing within a game is kept; scores computed after the resume came from an A40 instead of an L40S, which can move a near-zero score across a 1/64-nat rounding step. The episode records do not mark which GPU played them. The resumption is already recorded in [deviations.md](deviations.md) (2026-11-23).
 
 **Gates.** The smoke gate passed (no format errors, the cache check replayed the first game's 7 episodes identically with every model call disabled, 1.26 seconds per step). Every census shard passed its run-order gate with no override (smoke passed, step-0 analysis reported, cost rule held), its tokenization check (Yes 9454 and No 2753; Nothing 23780 and You 2610 single tokens), and the last-position-logits check (8 prompts, largest raw difference 0.0, so the faster path was adopted); every observation shard passed the observation-readout gate. Format errors were 0% of proposals in every shard.
 
 **Cost.** The committed budget was about 70 to 80 GPU-hours for Tiers 1 and 2; after the reallocation the configs carried upper bounds of 58 GPU-hours (observation) and 28 (yes/no), and the smoke-based cost rule projected 10.3 and 3.4. The study used 12.3 GPU-hours in all (0.73 before the census, 4.42 for the primary run, 7.18 for the secondary, including the two attempts that stopped). Per step, the observation run took 0.32 to 0.50 seconds and the yes/no run 2.2 to 2.7 seconds, against the design's assumption of 4.8 to 5.3; the yes/no run cost more than its projection because its verifier rejects about half of all proposals and each rejection triggers a 20-sample request, and more than the three-seed observation run because there later seeds reused almost every cached step.
+
+**The argmax run (added 2026-11-24).** Every shard passed its run-order gate with no override: the cost rule projected 3.42 GPU-hours against the configuration's upper bound of 30. Every shard also passed its tokenization check, adopted the last-position logits (8 prompts, largest raw difference 0.0) and had 0% format errors. It took 2.5 to 3.2 seconds per step and 7.89 GPU-hours. With it, Option C has used about 20.2 GPU-hours of the committed 70 to 80, before the follow-ups of sections 3.1 and 10.3 (0.48 GPU-hours for the two jobs that have run).
+
+## 13. Tier 3, Llama-3.1-8B as the verifier in the loop: assessment and decision (2026-11-24)
+
+**Decision (the user, 2026-11-24): not run.** The user's stated reasons were that the step-0 check's failed competence result makes its inferential value doubtful, and that the allocation is too large without a convincing justification. This assessment was written to inform that decision and agrees with the outcome. It corrects two factual points behind the reasons, so the record is accurate; neither point changes the recommendation.
+
+### What Tier 3 is
+
+Tier 3 is the run `optionc_llama3.1-8b_yn` in the frozen design. The agent stays the same RQ3 Qwen3-8B ReAct agent. Only the verifier changes: Llama-3.1-8B-Instruct, read through the **yes/no** readout, under the accepted-only rule. It has the task-blind, task-aware and swapped arms at one seed each, matched-state scoring on the aware steps, and reuses the primary run's no-verifier episodes. The primary contrast would be the same as in the main study: success of the task-aware verifier minus the task-blind one, paired by game over the 134 games.
+
+### Two factual corrections to the stated reasons
+
+**The failed competence check concerns a readout Tier 3 would not use.** At the step-0 check, Llama's *observation* readout failed the competence rule: its task-blind arm accepted every failing step-0 candidate (100%), although its AUC was 0.995. Its *yes/no* readout, the one Tier 3 uses, passed: under the task-blind prompt it had AUC 0.98, accepted 5.0% of failing candidates and 97.8% of working ones. Llama's classification is "mixed (the yes/no interval does not settle it)". That label is not a competence failure. It means the yes/no gap between the aware and blind arms (−10.4 points [−15.7, −5.2]) is neither a collapse (an interval entirely below −30) nor clearly no gap (an interval entirely within ±10). So a Llama loop would be interpretable as a yes/no-verifier experiment. The non-competent observation readout only rules out a Llama observation-readout run, which was never planned, and it means Llama gets no "question-specific" reading of its yes/no result.
+
+**The cost is about 19 GPU-hours by the design, not 58.** The 58 GPU-hours figure is the budget left in the committed 70 to 80 GPU-hours. Option C has used about 20.2 GPU-hours: 12.3 for the smoke, the step-0 check and Tier 1, and 7.9 for the argmax run, from accounting. The design's estimate for Tier 3 is 19 GPU-hours (range 13 to 28), and the run's configuration carries an upper bound of 28. The closest measured analogues are much cheaper. The Qwen yes/no secondary, with the same arms, seed count and matched-state scoring, took 7.2 GPU-hours. The argmax run took 7.9. Llama's yes/no verifier rejects fewer proposals than Qwen's, at step 0 accepting 89.6% of working first moves under the task against Qwen's 7.5%, so it would trigger fewer 20-sample requests. My estimate is therefore about 5 to 8 GPU-hours. That is an extrapolation from the Qwen runs, not a measurement.
+
+### What a Llama loop would test that the Qwen runs did not
+
+The central question is whether task-induced distortion of a world model's predictions changes what an agent achieves. The Qwen runs answered it in two configurations. Each has a limit as a test of the naming bias:
+
+- **Qwen's yes/no verifier.** Its task effect is dominated by the any-task rejection: told any concrete task, it says No to good actions. The loop could not attribute its invalid-action harm to naming the object, because the obstruction check fired.
+- **Qwen's observation readout, the primary run.** It carries a large naming bias with no collapse. On identical states it accepted 27.5 points more of the agent's failing goal-object proposals when shown the real task than when task-blind. Yet aware and blind episodes differed in success in only 3 of 134 games.
+
+Llama's yes/no verifier is a second verifier of the observation readout's kind: a strong naming bias with little any-task rejection. At step 0 the task-aware Llama accepted 52.4% of the failing step-0 candidates against 5.0% task-blind. Its naming lift, the mean aware-minus-swapped score on failing goal-object candidates, was +3.34 nats [3.00, 3.68]. It still accepted 89.6% of working first moves. So Tier 3 would be a cross-model replication of the primary run's situation, with a different verifier family and a different readout. It would show whether "a naming-biased verifier without the collapse leaves success unchanged" holds beyond Qwen.
+
+### Why its inferential value is low anyway
+
+The reason the primary run found nothing is on the agent's side, not the verifier's. This greedy agent rarely proposes the failures that RQ2 measures. Failing goal-object proposals appeared in about 20 to 30 of the 134 games: 298 of 8,937 task-aware steps, in 22 games, in the primary run. A verifier can change outcomes only through those steps, and through rejections of working steps, which Llama rarely makes. That constraint does not depend on which model verifies. Stage 1b already measured Llama-3.1-8B as a verifier on this agent's own candidates and found "no reliable difference" (+0.17 points [−0.92, +1.27] per decision), with harm on encounter states concentrated in one looping game.
+
+At one seed, the design's precision table gives a 95% half-width of about 5.2 to 7.5 points of success and power of about 0.5 only for a 10-point loss. The likely result is "no reliable difference" with an interval of roughly ±6 points. The design's own prediction 7 was "within 3 points, no reliable difference". That would add a second, wider null beside a primary null that is already tighter (−1.2 points [−3.0, 0.0]).
+
+### What each outcome would imply
+
+- **No reliable difference** (most likely; I would put it at 75 to 85%): consistent with the Qwen observation-readout result and with Stage 1b. It would add little, because the interval would be about twice as wide as the primary run's and the explanation (few opportunities) is already known.
+- **Harm, attributable or unresolved:** the naming bias reaching success through a second verifier family. This would be the informative outcome, but at one seed only a large loss would register, which neither Stage 1b nor the primary run makes plausible.
+- **Harm, attribution not identifiable:** likely if any harm appears, since the swapped yes/no prompt obstructed the real task's progress steps for Qwen, and Llama's swapped arm also rejects working moves (it accepted 84.8% of working first moves). It would repeat the Qwen yes/no secondary's ambiguity.
+- **Help:** possible if a task-aware Llama rescues more of the agent's failing repeats. It would be a fact about verifier value, not about the bias.
+
+### Recommendation
+
+**Do not run Tier 3**, in agreement with the user's decision. The reason is not readout competence, since the yes/no readout Tier 3 uses passed. The reasons are that the expected result is a one-seed null that cannot exclude effects of the size anyone predicts, and that the limiting factor is the agent, which a different verifier does not change.
+
+If a cross-model check is wanted later, a cheaper and more informative option is **decision-level only**. Score the logged aware-episode states of the primary run (the agent's proposals and the alternatives the verifier scored) with Llama's aware, blind and swapped yes/no prompts, never acting on them. This repeats the matched-state analysis for a second verifier. By the step-0 check's throughput (about 10,000 scores in 14 minutes on an L40S), and allowing for the longer histories of later steps, it would take about 1 to 3 GPU-hours. It answers whether Llama's verdicts on this agent's real decisions move with the task, which is the step before outcomes. The budget that would change the success-level answer is on the agent's side instead: more games (the 140 solvable `valid_seen` games would roughly halve the variance), or a planner that ranks many candidates or falls back to the best-scored action, which is where Stage 1a's harm came from.
