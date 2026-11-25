@@ -91,3 +91,25 @@ with the deviation tag, and the commits each thinking shard's jobs ran at (`metr
 confirmatory run (the core and extension scoring, the environment check and the rescoring) continues to run from the
 frozen checkout `text-wm-fix47`, at the freeze tag.
 
+
+## The thinking smoke run at the deviation tag (2026-11-24, recorded before the full arm is submitted)
+
+The smoke ran as job 7299373 (one L40S, 7 minutes) from checkout `text-wm-fix49` at `textcraft-r3-deviation-t1-2026-11-23`
+(98dfbbf). It is read for its gates, format and timing only. No L value, arm difference or effect was read.
+
+- **Freeze check.** The job started under the D-T1 exemption and recorded the deviation commit. In the same checkout,
+  `deviation_commit()` finds the one deviation tag with no problems, and the core, rescoring and environment-check run
+  ids are still refused there.
+- **Start checks (float32).** Prompt problems: 0. The shortest prompt of the first batch was left-padded with 105
+  tokens. Padded against alone over its 20 most probable tokens, the difference is 0.000018 nats on average and 0.000067
+  at most, against the limits of 0.01 and 0.05. **Passed.**
+- **Generation.** 16 traces in 2 batches, with the pinned revision. 10 of the 16 were closed at the 2,048-token cap
+  (`forced_reason` "cap"), and the median length is 2,048 new tokens.
+- **Scoring.** 16 scores, none missing or non-finite, no boundary problems.
+- **Timing.** About 88 seconds per batch of 8, including the bf16 load. The full arm's 567 batches therefore need about
+  13.9 hours of generation, plus about 1 hour of scoring: about 7.5 hours per shard across two shards, within the
+  design's 9 to 22 GPU-hours.
+
+Format note for the results: on this sample, most traces (10 of 16) reach the cap and are budget-forced. The thinking
+block reports every readout on all traces and on the unforced ones (design 14.S10). If the full arm shows a similar
+share, the unforced subset will be small and selected.
