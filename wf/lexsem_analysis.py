@@ -29,6 +29,10 @@ MASS_FIRST, MASS_FIRST_GAP, MASS_YN = 0.7, 0.1, 0.9  # gate 2
 MIN_RECOG = {"later": 100, "step0": 50}  # gate 5
 STEP0_BRIDGE_BLOCK = (0.29, 0.23, 0.37)  # stage 0 with the think block, same items (section 8)
 REF_FRACTION = 0.5  # a ratio is read only if its reference's interval lies above zero and above half its estimate
+# Numerical floor (nats) of a paired effect under the run's fixed environment (design section 7). A ratio's zones
+# are only resolvable if a quarter of its reference exceeds the floor; otherwise the contrast is "below numerical
+# resolution" and does not enter the readings. Set from the measured paired-effect sensitivity before the freeze.
+NUMERICAL_FLOOR = 0.13
 READOUT_LABELS = {"first": "first-token observation", "yn": "yes/no", "full2c": "full two-candidate"}
 # What every score file must share (section 10, decided by the user 2026-11-25): GPU type, stack, dtype, scoring.
 ENV_REQUIRED = {"gpu_contains": "L40S", "dtype": "bfloat16", "unbatched": True}
@@ -112,6 +116,8 @@ def ratio(boot: Boot, games: list[str], num: np.ndarray, den: np.ndarray) -> tup
     out["num_den_correlation"] = float(np.corrcoef(num_dr[ok], den_dr[ok])[0, 1]) if min(sd) > 0 else None
     lo, est = den_iv["ci"][0], den_iv["estimate"]
     out["reference_ok"] = bool(lo > 0 and lo >= REF_FRACTION * est)
+    out["resolvable"] = bool(abs(est) * 0.25 > NUMERICAL_FLOOR)
+    out["numerator_within_floor"] = bool(-NUMERICAL_FLOOR <= num_iv["ci"][0] and num_iv["ci"][1] <= NUMERICAL_FLOOR)
     return out, draws
 
 
@@ -177,7 +183,7 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
     g = np.array([value(r, "aligned", readout) - value(r, "swapped", readout) for r in base])
     G, _ = mean(boot, games, g)
     out["G"] = G
-    gate1 = G["ci"][0] > 0 and G["ci"][0] >= 0.5 * G["estimate"]
+    gate1 = G["ci"][0] > 0 and G["ci"][0] >= 0.5 * G["estimate"] and 0.25 * G["estimate"] > NUMERICAL_FLOOR
     out["gate_goal_effect"] = "passed" if gate1 else "failed: nats only, no reading"
     gate2 = mass_gate(recs, readout)
     out["gate_mass"] = gate2
@@ -232,13 +238,16 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
         if not iv["reference_ok"]:
             iv["ratio_not_read"] = ("the name assertion's net effect on these items has an interval that includes zero "
                                     "or a lower bound below half its estimate: absolute effects only")
+        elif not iv["resolvable"]:
+            iv["ratio_not_read"] = (f"below numerical resolution: a quarter of the reference is not above the "
+                                    f"{NUMERICAL_FLOOR} nats floor: absolute effects only")
         if form in ("desc", "alias"):
             snum = np.array([value(r, cond, ro) - value(r, ctrl, ro) for r in s_all])
             sden = np.array([value(r, "name_assert", ro) - value(r, "ctrl_assert", ro) for r in s_all])
             iv["all_items"] = ratio(boot, [r["game_id"] for r in s_all], snum, sden)[0]
         rho[c], rho_draws[c], items_by[c] = iv, dr, s
         deltas[c] = mean(boot, gs, num)[0]
-        if c in R.PREDICTIONS and iv["reference_ok"]:
+        if c in R.PREDICTIONS and iv["reference_ok"] and iv["resolvable"]:
             rho_iv[c] = tuple(iv["ci"])
     out["delta_nats"] = deltas
     out["relative_lift"] = rho
@@ -547,7 +556,11 @@ def stage0_paired(index_path: str, block: list[dict], B: int, seed: int) -> dict
 
 def run(scores_path: str, out_path: str | None = None, items_path: str | None = None, checks_path: str | None = None,
         block_path: str | None = None, llama_path: str | None = None, B: int = B_DEFAULT, seed: int = SEED,
-        expect_commit: str | None = None, stage0_index: str | None = None, require_env: bool = True) -> dict:
+        expect_commit: str | None = None, stage0_index: str | None = None, require_env: bool = True,
+        floor: float | None = None) -> dict:
+    global NUMERICAL_FLOOR
+    if floor is not None:
+        NUMERICAL_FLOOR = floor
     sp = Path(scores_path)
     if require_env:
         problems = check_env([sp] + [Path(x) for x in (block_path, llama_path) if x and Path(x).exists()])
@@ -566,7 +579,8 @@ def run(scores_path: str, out_path: str | None = None, items_path: str | None = 
     recs = attach(load_scores(sp), items)
     has_fail = any("fail" in v for r in recs for v in r["scores"].values())
     readouts = ("first", "yn", "you", "nothing", "success_text") + (("full2c",) if has_fail else ())
-    report = {"recognition_checks": "read" if checks is not None else "absent: every item counted as recognised",
+    report = {"numerical_floor_nats": NUMERICAL_FLOOR,
+              "recognition_checks": "read" if checks is not None else "absent: every item counted as recognised",
               "qwen_plain": run_model(recs, readouts, checks, B, seed),
               "full_two_candidate": "scored" if has_fail else "not scored"}
     for name, path in (("block_yes_no", block_path), ("llama_yes_no", llama_path)):

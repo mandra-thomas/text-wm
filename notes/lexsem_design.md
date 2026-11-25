@@ -177,6 +177,8 @@ Further estimands: the unnormalized versions (log p(" You"), log p(" Nothing"), 
 
 **A small or poorly estimated reference.** A ratio is read only if its reference (the denominator: $G$ for the mention lift, the name assertion's net effect on the same items for a relative lift) has an interval that lies above zero and whose lower end is at least half its estimate. Otherwise only the absolute effects are reported for that contrast, and it does not enter the account readings. The threshold, fixed before scoring, keeps the reference's coefficient of variation at or below about 0.26 (the interval's lower half-width at most 50% of the estimate, so the standard error at most about a quarter of it). At that precision the ratio's first-order bias, roughly the squared coefficient of variation, is under 7%, the reference almost never crosses zero in a bootstrap draw (so the ratio's interval is bounded), and the same rule already governs $G$ (gate 1). In addition, relative lifts are read only if $A$'s lower bound is at least 0.25, that is, only if there is a mention lift that is not about zero to decompose. (An earlier draft required 0.5; the simulation in section 10 showed that this made every decomposition unreadable whenever the true lift was half the goal effect or less, which is plausible at step 0, while the reference rule already guards the ratios' stability.)
 
+**Numerical floor.** Small references and every equivalence-style reading ("about zero", "no effect beyond 0.25") need the effects to be resolvable above numerical noise, and that noise is not assumed to be independent rounding. The run fixes GPU type, stack, revision, dtype and unbatched scoring, which removes the largest measured sources (batch shape changed readouts by up to 0.375 nats in plain text and 1.25 nats with the think block in the first smoke; the newer stack shifts yes/no scores by about 0.2 nats per score; attention implementation differs by 0.275 nats on yes/no for one wave-B model on this stack). The remaining floor for a paired effect under the fixed environment is taken from the measured paired-effect sensitivity before the freeze (section 11); until then the analysis uses a provisional 0.13 nats, the per-readout batch-row noise the interpretability pilot measured on the same GPU type. A ratio's zones are read only if a quarter of its reference exceeds the floor (a 0.25 band narrower than the floor cannot be resolved), and the goal-effect gate requires the same of $G$; otherwise only absolute effects are reported, marked "below numerical resolution".
+
 **Equal-width bands do not give equal power.** The predicted zones are bounded and equally wide (section 9), but power still depends on the reference size, the noise of each condition and the correlation of contrasts. Section 10 validates the whole procedure by simulation across a grid of those.
 
 **Components under about a third of the lift are usually missed.** This limitation stands; the wording "no other component larger than about a quarter of the mention lift was detected" is used only when every contrast is consistent with one account.
@@ -186,7 +188,7 @@ Further estimands: the unnormalized versions (log p(" You"), log p(" Nothing"), 
 1. **Goal effect**: $G$'s interval above zero, lower end at least half the estimate; otherwise nats only.
 2. **Readout mass**: first-token mass at least 0.7 and within 0.1 of the swapped condition's (a failing condition is read on log p(" You") and flagged); yes/no mass at least 0.9 (otherwise invalid in yes/no).
 3. **A lift to decompose**: relative lifts read only if $A$'s lower bound is at least 0.25.
-4. **Reference**: the small-reference rule of section 7, per contrast.
+4. **Reference**: the small-reference rule of section 7, per contrast, and the numerical floor (a quarter of the reference above the floor).
 5. **Precision**: a relative lift with half-width above 0.25 is "imprecise" and counts as undecided.
 6. **Recognition**: description and alias contrasts on recognised items only; not assessable below 100 later or 50 step-0 items.
 7. **Environment**: every score file must record the same GPU type (L40S), stack, model revision, dtype (bf16) and unbatched scoring (section 11), or the analysis refuses to run.
@@ -207,12 +209,15 @@ Further estimands: the unnormalized versions (log p(" You"), log p(" Nothing"), 
 
 An account is contradicted overall if any contrast contradicts it, except that the alias and the homonym never do so alone; consistent if every contrast is consistent; otherwise undecided.
 
-**Readings, one line per readout and stratum:**
+**Readings, one line per readout and stratum.** No outcome identifies a mechanism or a mixture. Rejecting the pure accounts says only that none of them alone produces the pattern; a mechanism not on the list may explain any of the patterns below. Every reading that names an account carries the clause "a mechanism not on the list with the same predictions is not excluded".
 
-- one account consistent, the others contradicted: "only X fits: no other component larger than about a quarter of the mention lift was detected";
-- one account undecided, the others contradicted: "X not contradicted, not shown consistent";
-- all contradicted: "no single proposed account fits; mixtures and unlisted mechanisms are not distinguished";
-- otherwise: "not distinguished between …", naming every account not contradicted, with no preference.
+| Outcome pattern | Reading (as the rules print it) | What it does not mean |
+|---|---|---|
+| One account consistent with every contrast, the others contradicted | "only X fits: no other component larger than about a quarter of the mention lift was detected; a mechanism not on the list with the same predictions is not excluded" | not that X is the mechanism; not that the lift is pure X (components under a quarter to a third are missed); an unlisted mechanism with X's predictions fits equally |
+| One account undecided, the others contradicted | "X not contradicted, not shown consistent (the other accounts are contradicted); a mechanism not on the list …" | not support for X; uneven mixtures with X as the majority, partial-strength versions of X, and (for semantic) an unlisted uniform lift all produce this |
+| Every proposed account contradicted | "no single proposed account fits; mixtures and unlisted mechanisms are not distinguished" | not that a mixture of the proposed accounts explains the lift; an unlisted mechanism produces the same reading |
+| Two or three accounts not contradicted | "not distinguished between X and Y; a mechanism not on the list …" | no preference among them, and no support for either |
+| $A$ too small, reference poorly estimated, or below numerical resolution | "not assessable" or "absolute effects only" | not evidence against any account |
 
 Evidence is read in two forms: literal claim about this room (as above), and including pragmatic cues, contradicted only if the denial contradicts it too.
 

@@ -199,3 +199,15 @@ def test_environment_check(tmp_path):
     with pytest.raises(SystemExit, match="GPU"):
         _run(p)
     assert _run(p, require_env=False)["qwen_plain"]
+
+
+def test_numerical_floor_makes_small_references_unreadable(tmp_path):
+    p = plant(tmp_path, {"evidence": 1})
+    ok = _run(p)["qwen_plain"]["first"]["later"]["relative_lift"]["name_use"]
+    assert ok["resolvable"] and "ratio_not_read" not in ok
+    try:
+        low = _run(p, floor=5.0)["qwen_plain"]["first"]["later"]
+    finally:
+        LA.NUMERICAL_FLOOR = 0.13
+    assert "below numerical resolution" in low["relative_lift"]["name_use"]["ratio_not_read"]
+    assert low["accounts"]["evidence"]["per_contrast"] == {}

@@ -32,6 +32,8 @@ PREDICTIONS = {
 # homonym (not a pure lexical isolate; section 5).
 NOT_ALONE = {"alias_assert", "homonym"}
 NO_SINGLE = "no single proposed account fits; mixtures and unlisted mechanisms are not distinguished"
+# Appended to every reading that names or lists proposed accounts: none identifies a mechanism (design section 2).
+OMITTED = "; a mechanism not on the list with the same predictions is not excluded"
 PRECISION_LIMIT = 0.25  # half-width above which a contrast is "imprecise" and counts as undecided
 A_GATE = 0.25  # lower bound of A needed before relative lifts are read (a lift that is not about zero)
 
@@ -87,9 +89,9 @@ def single_account_reading(rho: dict[str, tuple[float, float]], a_interval: tupl
         a = standing[0]
         if st[a]["overall"] == "consistent":
             return (f"only {a} fits: no other component larger than about a quarter of the mention lift was "
-                    f"detected")
-        return f"{a} not contradicted, not shown consistent (the other accounts are contradicted)"
-    return "not distinguished between " + " and ".join(standing)
+                    f"detected" + OMITTED)
+        return f"{a} not contradicted, not shown consistent (the other accounts are contradicted)" + OMITTED
+    return "not distinguished between " + " and ".join(standing) + OMITTED
 
 
 def mention_reading(lo: float, hi: float) -> str:
