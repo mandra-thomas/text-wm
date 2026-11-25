@@ -4,12 +4,14 @@
 Each mutant is applied alone to a copy of the repo, and tests/test_tau_*.py must fail. A timeout counts as
 inconclusive, never as caught. Usage:
 
-    python scripts/tau_mutation_check.py [shard/shards] [--out results.json]
+    python scripts/tau_mutation_check.py [shard/shards] [--out=results.json] [--results=FILE.jsonl] [--legacy-any-exit]
 
 Before any mutant, the unmutated copy must pass the tests (otherwise every mutant would look killed). Mutants run
-one at a time (serially) in one copy; a shard i/n takes MUTANTS[i::n], a deterministic split. For each killed
-mutant the first failing test's id and its error line are recorded (pytest -x --tb=line -rf), so every kill can be
-audited.
+one at a time (serially) in one copy, made without bytecode caches, and pytest runs with PYTHONDONTWRITEBYTECODE=1;
+a shard i/n takes MUTANTS[i::n], a deterministic split. For each killed mutant the first failing test's id and its
+error line are recorded (pytest -x --tb=line -rf), so every kill can be audited. The kill rule is the strict one of
+scripts/mutation_check.py (below). --results appends one JSON line per mutant as it finishes, and a rerun skips
+mutants already recorded there under the same rule, so an interrupted shard resumes.
 
 Four groups: the original 29; review 1's 27 (prefixed R1-, adapted where the code they hit was rewritten in the
 amendments of 2026-11-20: A1 now hits the user cluster in cluster_of, A3 the Holm-adjusted p in verdicts, A5 the
@@ -28,12 +30,14 @@ sets verify.json's flag to false directly.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -354,59 +358,163 @@ MUTANTS = [
 ]
 
 
-def _run(python: str, work: Path, timeout: int) -> tuple[str, str]:
-    """(outcome, the first failing test's id and error line); never silent about what killed a mutant."""
+# Kill rules: the same as scripts/mutation_check.py (notes/testing.md, "Mutation runner: strict kill rule", 2026-11-23;
+# this runner since 2026-11-24). "strict", the default: a mutant is killed only when pytest exits 1 (tests ran and
+# failed) and at least one named test FAILED. Any other non-zero exit is "error-only": a collection or import error,
+# a usage or internal error, or a run whose only named problems are ERRORs in setup or teardown (then the run is
+# repeated without -x, and a named failure further on still counts). A timeout is inconclusive, never a kill.
+# "any-exit" (--legacy-any-exit): any non-zero exit is a kill, the rule of every log of this runner before 2026-11-24.
+STRICT, ANY_EXIT = "strict", "any-exit"
+
+
+def _pytest(python: str, work: Path, timeout: int, stop_first: bool = True) -> tuple[int | None, str, str]:
+    cmd = [python, "-m", "pytest", "-q", *(["-x"] if stop_first else []), "-p", "no:cacheprovider", "--tb=line", "-rfE",
+           *TESTS]
+    # No bytecode (2026-11-24, as scripts/mutation_check.py since cc1db87). A .pyc is trusted when its source's mtime,
+    # in whole seconds, and size match. A file restored within the second its same-length mutant was compiled would
+    # be read back from the mutant's .pyc, so every later mutant would "die" against code that is still broken.
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     try:
-        r = subprocess.run([python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--tb=line", "-rfE", *TESTS],
-                           cwd=work, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, cwd=work, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
+        return None, "", ""
+    return r.returncode, r.stdout, r.stderr
+
+
+def _classify(rc: int | None, stdout: str, stderr: str, rule: str = STRICT) -> tuple[str, str]:
+    """(outcome, the first failing test's id and error line); never silent about what killed a mutant."""
+    if rc is None:
         return "timeout", ""
-    if r.returncode == 0:
+    if rc == 0:
         return "survived", ""
-    lines = r.stdout.splitlines()
-    test = next((x.split(" ", 1)[1].split(" - ")[0] for x in lines if x.startswith(("FAILED ", "ERROR "))), "")
+    lines = stdout.splitlines()
     err = next((x.strip() for x in lines if x.startswith("E ") or ": assert" in x or "Error" in x), "")
+    failed = next((x.split(" ", 1)[1].split(" - ")[0] for x in lines if x.startswith("FAILED ")), "")
+    if rule == STRICT and not (rc == 1 and failed):
+        errored = next((x.split(" ", 1)[1].split(" - ")[0] for x in lines if x.startswith("ERROR ")), "")
+        first = f", first error {errored}" if errored else " (no failing test named)"
+        return "error", f"pytest exit {rc}{first} | {err[:200]}"
+    test = failed if rule == STRICT else next(
+        (x.split(" ", 1)[1].split(" - ")[0] for x in lines if x.startswith(("FAILED ", "ERROR "))), "")
     if not test:
-        tail = (r.stdout + r.stderr).strip().splitlines()
+        tail = (stdout + stderr).strip().splitlines()
         test = "no test id (collection or import error)"
         err = err or (tail[-1] if tail else "")
     return "killed", f"{test} | {err[:200]}"
 
 
-def main() -> int:
-    args = [a for a in sys.argv[1:] if not a.startswith("--out")]
-    out_path = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--out=")), None)
+def _run(python: str, work: Path, timeout: int, rule: str = STRICT) -> tuple[str, str, int | None]:
+    """(outcome, the first failing test's id and error line, pytest's exit code)."""
+    rc, out, err = _pytest(python, work, timeout)
+    outcome, by = _classify(rc, out, err, rule)
+    if rule == STRICT and outcome == "error" and rc == 1 and "\nERROR " in "\n" + out:
+        # -x stopped at a setup or teardown error; a later test may still fail by name, so run on without -x.
+        rc2, out2, err2 = _pytest(python, work, timeout, stop_first=False)
+        outcome2, by2 = _classify(rc2, out2, err2, rule)
+        if outcome2 == "killed":
+            return outcome2, by2 + " (run without -x after a setup error)", rc2
+    return outcome, by, rc
+
+
+def _fresh_copy(root: Path, work: Path) -> None:
+    """Copy the repository without bytecode caches, git data, environments and run outputs."""
+    skip = (".git", ".venv", "runs", "runs_mock", "__pycache__", ".pytest_cache", "pace.env")
+    shutil.copytree(root, work, ignore=lambda folder, names: [n for n in names if n in skip or n.endswith(".pyc")])
+    for cache in sorted(work.rglob("__pycache__"), reverse=True):  # none should be left; make sure
+        shutil.rmtree(cache)
+
+
+def mutant_key(mutant: tuple[str, str, str, str]) -> str:
+    """The key scripts/mutation_check.py gives the same mutant, so records of the two runners can be matched."""
+    return hashlib.sha256("\x00".join(mutant).encode("utf-8")).hexdigest()[:16]
+
+
+def _read_results(path: Path | None, rule: str) -> dict[str, dict]:
+    """Records already written under this rule, by mutant key (resume); a cut-off last line is ignored."""
+    done: dict[str, dict] = {}
+    if path and path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("rule") == rule:
+                done[rec["key"]] = rec
+    return done
+
+
+def _git(root: Path, *args: str) -> str:
+    try:
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=60).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    args = [a for a in argv if not a.startswith("--")]
+    out_path = next((a.split("=", 1)[1] for a in argv if a.startswith("--out=")), None)
+    res_arg = next((a.split("=", 1)[1] for a in argv if a.startswith("--results=")), None)
+    res_path = Path(res_arg) if res_arg else None
+    rule = ANY_EXIT if "--legacy-any-exit" in argv else STRICT
     shard, shards = map(int, args[0].split("/")) if args else (0, 1)
     chosen = MUTANTS[shard::shards]
     only = os.environ.get("MUTANTS_MATCHING")  # "a|b": only mutants whose name contains a or b
     if only:
         chosen = [m for m in chosen if any(o in m[0] for o in only.split("|"))]
     timeout = int(os.environ.get("MUTATION_TIMEOUT", "900"))
-    results: dict[str, list] = {"killed": [], "survived": [], "timeout": [], "not applied": []}
+    done = _read_results(res_path, rule)
+    if res_path and res_path.exists():
+        text = res_path.read_text(encoding="utf-8")
+        if text and not text.endswith("\n"):  # a run cut off mid-record: start the next on its own line
+            with res_path.open("a", encoding="utf-8") as f:
+                f.write("\n")
+    meta = {"root": str(ROOT), "root_commit": _git(ROOT, "rev-parse", "HEAD"),
+            "root_dirty": bool(_git(ROOT, "status", "--porcelain", "--untracked-files=no"))}
+    results: dict[str, list] = {"killed": [], "error": [], "survived": [], "timeout": [], "not applied": []}
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp) / "repo"
-        shutil.copytree(ROOT, work, ignore=lambda folder, names: [n for n in names if n in (".git", ".venv", "runs", "runs_mock", "__pycache__", ".pytest_cache", "pace.env")])
-        base, why = _run(sys.executable, work, timeout)
-        if base != "survived":
-            print(f"BASELINE FAILS ({base}): {why}; no mutant is run", flush=True)
+        _fresh_copy(ROOT, work)
+        rc, out, err = _pytest(sys.executable, work, timeout)
+        if rc != 0:
+            base, why = _classify(rc, out, err, rule)
+            print(f"BASELINE FAILS (pytest exit {rc}, {base}): {why}; no mutant is run", flush=True)
             return 2
         print("baseline: the unmutated copy passes", flush=True)
-        for name, rel, good, bad in chosen:
-            path = work / rel
-            src = path.read_text(encoding="utf-8")
-            if src.count(good) != 1:
-                results["not applied"].append(name)
-                print(f"NOT APPLIED  {name}", flush=True)
-                continue
-            path.write_text(src.replace(good, bad), encoding="utf-8")
-            outcome, by = _run(sys.executable, work, timeout)
-            path.write_text(src, encoding="utf-8")
-            results[outcome].append([name, by] if outcome == "killed" else name)
-            print(f"{outcome:<12} {name}" + (f"  <- {by}" if by else ""), flush=True)
-    print(f"\n{len(results['killed'])}/{len(chosen)} killed; survived={results['survived']}; "
+        for mutant in chosen:
+            name, rel, good, bad = mutant
+            key = mutant_key(mutant)
+            rec = done.get(key)
+            if rec is None:
+                path = work / rel
+                src = path.read_text(encoding="utf-8")
+                n = src.count(good)
+                rec = {"name": name, "file": rel, "key": key, "rule": rule, **meta, "occurrences": n}
+                start = time.time()
+                if n != 1:
+                    rec.update(outcome="not applied", by=f"correct text found {n} times")
+                else:
+                    path.write_text(src.replace(good, bad), encoding="utf-8")
+                    try:
+                        outcome, by, code = _run(sys.executable, work, timeout, rule)
+                    finally:
+                        path.write_text(src, encoding="utf-8")
+                    rec.update(outcome=outcome, by=by, returncode=code, targets=TESTS)
+                rec["seconds"] = round(time.time() - start, 1)
+                if res_path:
+                    with res_path.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(rec) + "\n")
+            outcome, by = rec["outcome"], rec.get("by", "")
+            results[outcome].append([name, by] if outcome in ("killed", "error") else name)
+            label = {"error": "ERROR-ONLY", "not applied": "NOT APPLIED"}.get(outcome, outcome)
+            print(f"{label:<12} {name}" + (f"  <- {by}" if by and outcome != "not applied" else ""), flush=True)
+    named = " by a named failing test" if rule == STRICT else ""
+    print(f"\nrule {rule}: {len(results['killed'])}/{len(chosen)} killed{named}; "
+          f"error-only (not counted as killed)={[n for n, _ in results['error']]}; survived={results['survived']}; "
           f"timeout={results['timeout']}; not applied={results['not applied']}")
     if out_path:
-        Path(out_path).write_text(json.dumps({"shard": f"{shard}/{shards}", "n": len(chosen), **results}, indent=1))
+        Path(out_path).write_text(json.dumps({"shard": f"{shard}/{shards}", "n": len(chosen), "rule": rule, **results},
+                                             indent=1))
     return 0 if len(results["killed"]) == len(chosen) else 1
 
 
