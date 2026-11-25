@@ -918,8 +918,8 @@ def _token_compare(mock_root, tag, ok=True, **side_changes):
     on the left and transformers 5 on the right (review 2, S4); `side_changes`: {"left": {...}, "right": {...}}."""
     commit = (mock_root / f"family_rescore_{tag}" / "shard_00_of_01" / "git_sha").read_text().strip()
     pin = C.REVISIONS[families.spec_for(tag).hf_id]
-    left = {"transformers": "4.51.3", "tokenizers": "0.21.4", "revision": pin, "git_sha": commit}
-    right = {"transformers": "5.23.0", "tokenizers": "0.23.3", "revision": pin, "git_sha": commit}
+    left = {"transformers": "4.51.3", "tokenizers": "0.21.4", "revision": pin, "git_sha": commit, "git_dirty": False}
+    right = {"transformers": "5.23.0", "tokenizers": "0.23.3", "revision": pin, "git_sha": commit, "git_dirty": False}
     left.update(side_changes.get("left") or {})
     right.update(side_changes.get("right") or {})
     return {"ok": ok, "model": tag, "n_compared": 9, "left": left, "right": right}
@@ -1011,7 +1011,9 @@ def test_dry_run_scores_every_wave_b_model_and_reads_the_family(mock_root, monke
     dep = rep["environment_dependent_pairs"]
     assert key in dep and dep[key]["environment_dependent_references"] == ["qwen3-8b"]
     assert dep[key]["reading_serve2"] == rep["primary_family"]["comparison_readings"][key]
-    assert all("qwen3-8b" in k for k in dep) and "gemma4-e4b-it vs gemma2-9b-it" not in dep
+    # Llama's original runs are not mocked here: its pairs are listed with the reference marked, never dropped
+    assert all(("qwen3-8b" in k) or dep[k]["references_without_original"] == ["llama3.1-8b"] for k in dep)
+    assert any(k.endswith(" vs llama3.1-8b") for k in dep) and "gemma4-e4b-it vs gemma2-9b-it" not in dep
     assert "qwen3.5-9b vs qwen3-8b" in rep["comparisons_original_environment"]
     assert "qwen3.5-9b vs qwen3.5-9b-plain" not in rep["comparisons_original_environment"]
     assert rep["amendments"]["serve2_rescoring"] == families.RESCORE_AMENDMENT
@@ -1210,7 +1212,8 @@ def test_rescore_check_token_provenance(mock_root, monkeypatch):
     tokf = mock_root / "rescore_tokens" / f"compare_{q}.json"
     bad = [{"left": {"transformers": "5.23.0"}}, {"left": {"tokenizers": "0.23.3"}}, {"right": {"transformers": "4.51.3"}},
            {"left": {"revision": "0" * 40}}, {"right": {"revision": "0" * 40}}, {"left": {"git_sha": "0" * 40}},
-           {"right": {"git_sha": "0" * 40}}, {"right": {"transformers": None}}]
+           {"right": {"git_sha": "0" * 40}}, {"right": {"transformers": None}},
+           {"left": {"git_dirty": True}}, {"right": {"git_dirty": True}}, {"right": {"git_dirty": None}}]
     for change in bad:
         tokf.write_text(json.dumps(_token_compare(mock_root, q, True, **change)))
         r = _check(q)
@@ -1260,7 +1263,7 @@ def test_rescore_check_every_shard_counts(mock_root, monkeypatch):
     (mock_root / "rescore_tokens").mkdir(exist_ok=True)
     commit = (mock_root / f"family_rescore_{tag}" / "shard_00_of_02" / "git_sha").read_text().strip()
     pin = C.REVISIONS["Qwen/Qwen3-32B"]
-    side = {"revision": pin, "git_sha": commit}
+    side = {"revision": pin, "git_sha": commit, "git_dirty": False}
     (mock_root / "rescore_tokens" / f"compare_{tag}.json").write_text(json.dumps(
         {"ok": True, "model": tag, "left": {"transformers": "4.51.3", "tokenizers": "0.21.4", **side},
          "right": {"transformers": "5.23.0", **side}}))
@@ -1407,6 +1410,7 @@ def test_token_dump_encodes_the_rescoring_prompts(mock_root, monkeypatch):
 
     # the commit as wf.util.git_sha reports it (fixed here: the mutation runner's copy of the repo has no .git)
     monkeypatch.setattr(wf.util, "git_sha", lambda: "c0ffee")
+    monkeypatch.setattr(wf.util, "git_dirty", lambda: True)  # re-review N4: recorded as it is (here: dirty)
 
     class StubTok:
         def __init__(self):
@@ -1429,12 +1433,14 @@ def test_token_dump_encodes_the_rescoring_prompts(mock_root, monkeypatch):
         spec = families.spec_for(tag)
         assert tok.prompts == [families.family_messages(spec, t, a) for t, a in jobs], tag
         assert all(s == {"enable_thinking": False, **spec.template_kwargs} for s in tok.settings)
-        assert rec["git_sha"] == "c0ffee" and "tokenizers" in rec and rec["transformers"] == "5.23.0"
+        assert rec["git_sha"] == "c0ffee" and rec["git_dirty"] is True and "tokenizers" in rec
+        assert rec["transformers"] == "5.23.0"
     left = {"model": "m", "revision": "r", "records": {"a": [1, "x"]}, "transformers": "4.51.3", "tokenizers": "0.21.4",
-            "git_sha": "abc"}
-    c = et.compare(left, {**left, "transformers": "5.23.0", "tokenizers": "0.23.3"})
+            "git_sha": "abc", "git_dirty": False}
+    c = et.compare(left, {**left, "transformers": "5.23.0", "tokenizers": "0.23.3", "git_dirty": True})
     assert c["ok"] is True and c["left"]["git_sha"] == "abc" and c["left"]["tokenizers"] == "0.21.4"
     assert c["right"]["transformers"] == "5.23.0" and c["right"]["tokenizers"] == "0.23.3"
+    assert c["left"]["git_dirty"] is False and c["right"]["git_dirty"] is True
 
 
 def test_analysis_waits_for_incomplete_rescorings(mock_root, monkeypatch):
@@ -1489,19 +1495,28 @@ def test_environment_dependent_pairs_carry_both_readings():
         return {"item_share_difference": {"differs": differs, "matches": matches}}
     report = {"environment_sensitivity": {"qwen3-8b": {"environment_dependent": True},
                                           "gemma2-9b-it": {"environment_dependent": False}},
+              "reference": {"qwen3-8b": {}, "gemma2-9b-it": {}, "llama3.1-8b": {}},
               "primary_family": {"comparison_readings": {"qwen3.5-9b vs qwen3-8b": "matches"}},
-              "comparisons": {"qwen3.5-9b vs qwen3-8b": comp(False, True), "gemma4-e4b-it vs gemma2-9b-it": comp(True, False),
-                              "ministral3-8b-it vs qwen3-8b": comp(True, False), "qwen3.5-9b vs qwen3.5-9b-plain": comp(True, False)},
+              "comparisons": {"qwen3.5-9b vs qwen3-8b": comp(True, True), "gemma4-e4b-it vs gemma2-9b-it": comp(True, False),
+                              "ministral3-8b-it vs qwen3-8b": comp(True, False), "qwen3.5-9b vs qwen3.5-9b-plain": comp(True, False),
+                              "gemma4-e4b-it vs llama3.1-8b": comp(False, True)},
               "comparisons_original_environment": {"qwen3.5-9b vs qwen3-8b": comp(True, False),
                                                    "gemma4-e4b-it vs gemma2-9b-it": comp(True, False),
                                                    "ministral3-8b-it vs qwen3-8b": comp(False, False)}}
     out = families.environment_dependent_pairs(report)
-    assert set(out) == {"qwen3.5-9b vs qwen3-8b", "ministral3-8b-it vs qwen3-8b"}
+    assert set(out) == {"qwen3.5-9b vs qwen3-8b", "ministral3-8b-it vs qwen3-8b", "gemma4-e4b-it vs llama3.1-8b"}
     a = out["qwen3.5-9b vs qwen3-8b"]
     assert a["reading_serve2"] == "matches" and a["reading_original_environment"] == "differs"
-    assert a["environment_dependent_references"] == ["qwen3-8b"]
+    # re-review N3: the unadjusted serve2 reading beside the original, and the "within the margin" case kept
+    assert a["reading_serve2_unadjusted"] == "differs, within the margin"
+    assert a["environment_dependent_references"] == ["qwen3-8b"] and a["references_without_original"] == []
     b = out["ministral3-8b-it vs qwen3-8b"]  # not planned: the unadjusted serve2 reading
-    assert b["reading_serve2"] == "differs" and b["reading_original_environment"] == "inconclusive (no difference detected)"
+    assert b["reading_serve2"] == "differs" == b["reading_serve2_unadjusted"]
+    assert b["reading_original_environment"] == "inconclusive (no difference detected)"
+    # a reference without original-environment scores is listed, not dropped
+    c = out["gemma4-e4b-it vs llama3.1-8b"]
+    assert c["references_without_original"] == ["llama3.1-8b"] and c["environment_dependent_references"] == []
+    assert c["reading_original_environment"] is None and c["reading_serve2"] == "matches"
 
 
 def test_serve2_job_runs_a_rescoring_only_on_its_pinned_gpu_and_qwen3_32b_node_local():

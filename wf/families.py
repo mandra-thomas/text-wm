@@ -1151,7 +1151,8 @@ RESCORE_AMENDMENT = (
     "(design section 8; corrected after review 2, 2026-11-24). The check stays FAILED: Qwen3-8B's yes/no per-score "
     "difference was 0.248 nats, about seven times the archived cross-GPU difference (0.035), and Mistral 7B passed "
     "narrowly (0.069 against 0.07). A float64 diagnostic showed that the float64 logits themselves changed between "
-    "the environments (median relative change 0.44%, about the bf16 unit roundoff 2^-8), so the hidden state differs "
+    "the environments (median relative change 0.44%, about the bf16 unit roundoff 2^-8 of the logit, "
+    "which at these logits is about one bf16 step), so the hidden state differs "
     "(inferred, not measured); Qwen's large readout logits make that about a quarter of a nat; bf16 rounding is not "
     "the cause. This amendment replaces the gate; it does not satisfy it. Every older model used in a wave B "
     "comparison is rescored in serve2 on every item and condition (RESCORE_MODELS), and every comparison, planned or "
@@ -1212,7 +1213,9 @@ def _token_provenance(trec: dict[str, Any], tag: str, commit: str | None) -> dic
     return {"left_is_study_stack": all(left.get(k) == v for k, v in TOKEN_STUDY_STACK.items()),
             "right_is_transformers_5": major >= 5,
             "pinned_revision_both_sides": left.get("revision") == pin and right.get("revision") == pin,
-            "at_rescoring_commit": bool(commit) and left.get("git_sha") == commit and right.get("git_sha") == commit}
+            "at_rescoring_commit": bool(commit) and left.get("git_sha") == commit and right.get("git_sha") == commit,
+            # re-review N4: both dumps from a clean working tree, as every run requires
+            "clean_tree_both_sides": left.get("git_dirty") is False and right.get("git_dirty") is False}
 
 
 def rescore_check(tag: str, run: str, tokens: str | None, primary: list[dict], successes: list[dict]) -> dict[str, Any]:
@@ -1339,24 +1342,35 @@ def environment_sensitivity(serve2: dict[str, Any], original: dict[str, Any]) ->
 
 
 def _unadjusted_reading(c: dict[str, Any]) -> str:
-    """A comparison's item-share reading without the Holm adjustment (descriptive)."""
+    """A comparison's item-share reading without the Holm adjustment (descriptive), with the family's four readings:
+    "differs, within the margin" when the difference's 95% CI excludes zero and its 90% CI lies within the margin
+    (re-review N3)."""
     s = c["item_share_difference"]
-    return "differs" if s["differs"] else "matches" if s["matches"] else "inconclusive (no difference detected)"
+    if s["differs"]:
+        return "differs, within the margin" if s["matches"] else "differs"
+    return "matches" if s["matches"] else "inconclusive (no difference detected)"
 
 
 def environment_dependent_pairs(report: dict[str, Any]) -> dict[str, Any]:
     """Review 2, S2: every comparison involving an environment-dependent reference, with its serve2 reading (the
-    primary family's for a planned pair, else unadjusted), which stands, and its original-environment reading."""
+    primary family's for a planned pair, else unadjusted), which stands, the serve2 reading without the Holm adjustment
+    and the original-environment reading (unadjusted), so the last two are like for like (re-review N3). A
+    comparison with a reference that has no original-environment scores is listed too (references_without_original),
+    never silently left out."""
     sens = report.get("environment_sensitivity") or {}
+    refs = set(report.get("reference") or {})
     readings = report["primary_family"]["comparison_readings"]
     out = {}
     for key, c in (report.get("comparisons") or {}).items():
-        deps = [t for t in key.split(" vs ") if (sens.get(t) or {}).get("environment_dependent")]
+        tags = key.split(" vs ")
+        deps = [t for t in tags if (sens.get(t) or {}).get("environment_dependent")]
+        missing = [t for t in tags if t in refs and t not in sens]
         orig = (report.get("comparisons_original_environment") or {}).get(key)
-        if deps and orig is not None:
-            out[key] = {"environment_dependent_references": deps,
+        if deps or missing:
+            out[key] = {"environment_dependent_references": deps, "references_without_original": missing,
                         "reading_serve2": readings.get(key) or _unadjusted_reading(c),
-                        "reading_original_environment": _unadjusted_reading(orig),
+                        "reading_serve2_unadjusted": _unadjusted_reading(c),
+                        "reading_original_environment": _unadjusted_reading(orig) if orig is not None else None,
                         "basis": "the serve2 reading stands; the original-environment one is reported beside it"}
     return out
 

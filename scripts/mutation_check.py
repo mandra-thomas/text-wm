@@ -602,10 +602,10 @@ MUTANTS = [
     ('families wave B review2 left side not the study stack', 'wf/families.py', '"left_is_study_stack": all(left.get(k) == v for k, v in TOKEN_STUDY_STACK.items()),', '"left_is_study_stack": True,'),
     ('families wave B review2 right side not transformers 5', 'wf/families.py', '"right_is_transformers_5": major >= 5,', '"right_is_transformers_5": True,'),
     ('families wave B review2 right revision not checked', 'wf/families.py', '"pinned_revision_both_sides": left.get("revision") == pin and right.get("revision") == pin,', '"pinned_revision_both_sides": left.get("revision") == pin,'),
-    ('families wave B review2 token commit not checked', 'wf/families.py', '"at_rescoring_commit": bool(commit) and left.get("git_sha") == commit and right.get("git_sha") == commit}', '"at_rescoring_commit": True}'),
-    ('families wave B review2 token commit one side only', 'wf/families.py', '"at_rescoring_commit": bool(commit) and left.get("git_sha") == commit and right.get("git_sha") == commit}', '"at_rescoring_commit": bool(commit) and left.get("git_sha") == commit}'),
+    ('families wave B review2 token commit not checked', 'wf/families.py', '"at_rescoring_commit": bool(commit) and left.get("git_sha") == commit and right.get("git_sha") == commit,', '"at_rescoring_commit": True,'),
+    ('families wave B review2 token commit one side only', 'wf/families.py', '"at_rescoring_commit": bool(commit) and left.get("git_sha") == commit and right.get("git_sha") == commit,', '"at_rescoring_commit": bool(commit) and left.get("git_sha") == commit,'),
     ('families wave B review2 dump without its commit', 'wf/tools/envcheck_tokens.py', '"tokenizers": tokenizers_version, "git_sha": git_sha(),', '"tokenizers": tokenizers_version, "git_sha": None,'),
-    ('families wave B review2 comparison drops the commit', 'wf/tools/envcheck_tokens.py', '"left": {k: left.get(k) for k in ("transformers", "tokenizers", "tokenizer_class", "revision", "n", "git_sha")},', '"left": {k: left.get(k) for k in ("transformers", "tokenizers", "tokenizer_class", "revision", "n")},'),
+    ('families wave B review2 comparison drops the commit', 'wf/tools/envcheck_tokens.py', '("transformers", "tokenizers", "tokenizer_class", "revision", "n", "git_sha",\n                                                "git_dirty")},', '("transformers", "tokenizers", "tokenizer_class", "revision", "n",\n                                                "git_dirty")},'),
     ('families wave B review2 reference tie not checked', 'wf/families.py', 'm["checks"]["reference_reads_this_rescoring"] = refs.get(t) == rescore_reference(t, given[t]["run"])', 'm["checks"]["reference_reads_this_rescoring"] = True'),
     ('families wave B review2 extra references allowed', 'wf/families.py', '"pass": not missing and not unexpected and all(m["pass"] for m in models.values())}', '"pass": not missing and all(m["pass"] for m in models.values())}'),
     ('families wave B review2 reference tie on the model only', 'wf/families.py', '    return {"model": tag + RESCORE_SUFFIX, "runs": {run: list(ENVCHECK_ARMS)}}', '    return {"model": tag + RESCORE_SUFFIX, "runs": {run: list(ENVCHECK_ARMS)}} if False else None'),
@@ -616,6 +616,12 @@ MUTANTS = [
     ('families wave B review2 environment-dependent pairs not computed', 'wf/families.py', '        report["environment_dependent_pairs"] = environment_dependent_pairs(report)', '        report["environment_dependent_pairs"] = {}'),
     ('families wave B review2 serve2 reading taken from the original', 'wf/families.py', '"reading_serve2": readings.get(key) or _unadjusted_reading(c),', '"reading_serve2": _unadjusted_reading(orig),'),
     ('families wave B review2 sensitivity without the competence detail', 'wf/families.py', '"auc_neutral_yes_no": b["competence"]["checks"]["auc_neutral"]["value"],', '"auc_neutral_yes_no": None,'),
+    # Wave B re-review (2026-11-25): N3 and N4
+    ('families wave B rereview N3 within-margin reading dropped', 'wf/families.py', 'return "differs, within the margin" if s["matches"] else "differs"', 'return "differs"'),
+    ('families wave B rereview N3 unadjusted serve2 reading is the adjusted one', 'wf/families.py', '"reading_serve2_unadjusted": _unadjusted_reading(c),', '"reading_serve2_unadjusted": readings.get(key) or _unadjusted_reading(c),'),
+    ('families wave B rereview N3 reference without original dropped', 'wf/families.py', '        if deps or missing:\n', '        if deps:\n'),
+    ('families wave B rereview N4 dirty tree accepted', 'wf/families.py', '"clean_tree_both_sides": left.get("git_dirty") is False and right.get("git_dirty") is False}', '"clean_tree_both_sides": left.get("git_dirty") is False}'),
+    ('families wave B rereview N4 dump without its tree state', 'wf/tools/envcheck_tokens.py', '"git_dirty": git_dirty(),', '"git_dirty": False,'),
 ]
 
 
