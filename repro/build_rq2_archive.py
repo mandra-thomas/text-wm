@@ -142,6 +142,7 @@ def build(source: Path, out: Path, forbid: tuple[str, ...] = ()) -> dict:
     members["rq2_release/MANIFEST.json"] = (json.dumps(manifest, indent=1, sort_keys=True) + "\n").encode()
     members["rq2_release/README.md"] = (docs / "README.md").read_bytes()
     members["rq2_release/DATA_LICENSES.md"] = (REPO / "DATA_LICENSES.md").read_bytes()
+    members["rq2_release/LICENSE"] = (REPO / "LICENSE").read_bytes()
     for name in LICENCE_FILES:
         members[f"rq2_release/licenses/{name}"] = (REPO / "licenses" / name).read_bytes()
 

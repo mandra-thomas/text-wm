@@ -61,7 +61,7 @@ Three environments are used. Each has a different kind of state, action and repl
 
 ### 2.1 ALFWorld
 
-**What it is.** ALFWorld is a text version of household tasks. In this repository "ALFWorld" means, specifically, ALFWorld as served by the AgentGym server that ships with Word2World (checkout `e8dc240`), with Word2World's renamed actions (`put` is called `move`, and there is a `help` action) and alfworld 0.3.3. Only solvable games are used: 134 of the 195 in AgentGym's `valid_unseen` list; the rest crash on reset and `wf/env/server.py` filters them out. The environment ends every episode at 50 steps (`notes/rq2_results.md`, "Methods").
+**What it is.** ALFWorld is a text version of household tasks. In this repository "ALFWorld" means, specifically, ALFWorld as served by the AgentGym server that ships with Word2World (checkout `e8dc240`), with game data from Word2World's download script, which are ALFWorld's own files in the action wording ALFWorld introduced in version 0.4.0 (`put` is called `move`, and there is a `help` action), and alfworld 0.3.3. Only solvable games are used: 134 of the 195 in AgentGym's `valid_unseen` list; the rest crash on reset and `wf/env/server.py` filters them out. The environment ends every episode at 50 steps (`notes/rq2_results.md`, "Methods").
 
 **State, action and reply.** The state is the room: which receptacles exist, what is in or on each, which are open, where the agent stands and what it holds. The agent sees only what observations have revealed. Here is a real item from the confirmatory collection, stored as the golden test fixture `tests/golden/default_prompt.json` (item `t_002295`, game `valid_unseen/191`, real server text). Its history is:
 

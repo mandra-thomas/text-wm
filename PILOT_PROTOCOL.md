@@ -29,7 +29,7 @@ alwaysApply: true
 
 | Item | Value |
 | --- | --- |
-| Environment | ALFWorld via the AgentGym stack released with Word2World (`put` is renamed `move`; a `help` action exists; use their data download, not the original ALFWorld download) |
+| Environment | ALFWorld via the AgentGym stack released with Word2World (`put` is `move` and a `help` action exists, ALFWorld's own wording since version 0.4.0; use the Word2World data download, which supplies ALFWorld's files in that version, not an ALFWorld download older than 0.4.0) |
 | Splits | `train` (pilot, 2,179 games), `valid_seen` (140 games), `valid_unseen` (134 games). These counts are the **solvable** universe (see §5.1). |
 | Agent | `Qwen/Qwen3-8B`, ReAct prompt, temperature 0, thinking disabled, step cap `STEP_CAP` (default 30; confirm the stack's default in Tier 0 and record it). ALFWorld itself ends every episode at 50 steps (`ENV_STEP_LIMIT`). |
 | Primary world model | `Qwen/Qwen3-8B`, few-shot next-observation prompt, thinking disabled, scored by teacher forcing |
