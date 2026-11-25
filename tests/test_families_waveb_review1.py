@@ -447,7 +447,8 @@ def test_envcheck_fails_on_the_wrong_gpu_type(mock_root, monkeypatch):
 def test_serve2_job_stops_an_envcheck_on_another_gpu_type():
     text = (ROOT / "pace" / "family_score_serve2.sbatch").read_text()
     assert 'family_envcheck_*) TAG=""; ENVTAG="${RUN#family_envcheck_}"' in text
-    check = text[text.index('if [[ -n "${ENVTAG}" ]]'):text.index('LOCAL_CACHE=""')]
+    # the environment check's own block only (since the section 8 amendment the rescorings' GPU check follows it)
+    check = text[text.index('if [[ -n "${ENVTAG}" ]]'):text.index('if [[ -n "${RESCORETAG}" ]]')]
     assert "from wf.families import ENVCHECK_GPU" in check and "if have != [want]:" in check and "sys.exit" in check
     assert text.index('if [[ -n "${ENVTAG}" ]]') < text.index('run_wf "${RUN}"')
     assert "--constraint=gpu-a40" in text and "--constraint=gpu-l40s" in text

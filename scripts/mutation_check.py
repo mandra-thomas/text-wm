@@ -636,8 +636,12 @@ KILLERS: dict[str, str] = {}  # mutant name -> the first test that failed on it 
 
 def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900, name: str = "") -> str:
     try:
+        # No bytecode (ported from main's cc1db87, 2026-11-24): a .pyc records the source's mtime in whole seconds and
+        # its size, so a same-length file restored within a second of its mutated version's run would be read from
+        # the stale cache, and every later mutant would "die" against code that is still broken.
+        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-rfE", "-p", "no:cacheprovider", "--tb=no",
-                                 *targets], cwd=work, capture_output=True, text=True, timeout=timeout)
+                                 *targets], cwd=work, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return "timeout"
     # Strict rule (2026-11-22, families wave B review 1): a mutant is killed only when pytest exits 1 (tests ran and
@@ -672,7 +676,7 @@ def main() -> int:
         work = Path(tmp) / "repo"
         def skip(folder: str, names: list[str]) -> list[str]:
             top = {".git", ".venv", ".envs", "runs", "runs_mock", "docs"} if Path(folder) == ROOT else set()
-            return [n for n in names if n in top or n in ("__pycache__", ".pytest_cache") or n.endswith(".pdf")]
+            return [n for n in names if n in top or n in ("__pycache__", ".pytest_cache", "pace.env") or n.endswith(".pdf")]
 
         shutil.copytree(ROOT, work, ignore=skip)
         for name, rel, good, bad in chosen:

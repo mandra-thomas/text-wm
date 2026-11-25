@@ -1399,10 +1399,14 @@ def test_gate_records_the_loading_check(monkeypatch, tmp_path):
         assert rec["strict_load"] is strict and rec["loading"] == {"ok": True}
 
 
-def test_token_dump_encodes_the_rescoring_prompts(mock_root):
+def test_token_dump_encodes_the_rescoring_prompts(mock_root, monkeypatch):
     """Review 2, M3: the token comparison encodes exactly the prompts the rescoring scores (Gemma 2 folded), with each
     model's template settings, and records its commit and tokenizer stack (S4)."""
+    import wf.util
     from wf.tools import envcheck_tokens as et
+
+    # the commit as wf.util.git_sha reports it (fixed here: the mutation runner's copy of the repo has no .git)
+    monkeypatch.setattr(wf.util, "git_sha", lambda: "c0ffee")
 
     class StubTok:
         def __init__(self):
@@ -1425,7 +1429,7 @@ def test_token_dump_encodes_the_rescoring_prompts(mock_root):
         spec = families.spec_for(tag)
         assert tok.prompts == [families.family_messages(spec, t, a) for t, a in jobs], tag
         assert all(s == {"enable_thinking": False, **spec.template_kwargs} for s in tok.settings)
-        assert rec["git_sha"] and rec["git_sha"] != "unknown" and "tokenizers" in rec and rec["transformers"] == "5.23.0"
+        assert rec["git_sha"] == "c0ffee" and "tokenizers" in rec and rec["transformers"] == "5.23.0"
     left = {"model": "m", "revision": "r", "records": {"a": [1, "x"]}, "transformers": "4.51.3", "tokenizers": "0.21.4",
             "git_sha": "abc"}
     c = et.compare(left, {**left, "transformers": "5.23.0", "tokenizers": "0.23.3"})

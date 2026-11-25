@@ -4,7 +4,8 @@ to a JSONL checkpoint as it finishes, so a stopped run resumes where it was (add
 
     python scripts/mutation_batch.py OUT.jsonl SHARD/N "name prefix or exact name" [...]
 
-Each argument after the shard selects every mutant whose name starts with it (an exact name selects one). A mutant
+Each argument after the shard selects every mutant whose name starts with it (an exact name selects one); an argument
+starting with @ names a file of such arguments, one per line. A mutant
 already in OUT.jsonl is skipped. Each mutant runs alone (MUTANTS_MATCHING set to its exact name, which must match no
 other mutant's name as a substring, else it is recorded as "ambiguous" and not run).
 """
@@ -28,7 +29,9 @@ LINE = re.compile(r"^(killed|SURVIVED|survived|NOT APPLIED|broken|timeout|TIMEOU
 def main() -> int:
     out, shard = Path(sys.argv[1]), sys.argv[2]
     k, n = map(int, shard.split("/"))
-    prefixes = sys.argv[3:]
+    prefixes = []
+    for a in sys.argv[3:]:
+        prefixes += [x for x in Path(a[1:]).read_text().splitlines() if x.strip()] if a.startswith("@") else [a]
     names = [m[0] for m in mutation_check.MUTANTS]
     chosen = [x for x in names if any(x.startswith(p) for p in prefixes)][k::n]
     done = set()
@@ -42,7 +45,9 @@ def main() -> int:
         if others:
             rec = {"name": name, "outcome": "ambiguous", "others": others}
         else:
-            env = {**os.environ, "MUTANTS_MATCHING": name}
+            # one mutant per runner process, each on a fresh copy without __pycache__; and no bytecode at all (the
+            # runner sets it for pytest too), so a stale compiled mutant can never be read
+            env = {**os.environ, "MUTANTS_MATCHING": name, "PYTHONDONTWRITEBYTECODE": "1"}
             r = subprocess.run([sys.executable, str(ROOT / "scripts" / "mutation_check.py")], cwd=ROOT, env=env,
                                capture_output=True, text=True)
             outcome, killer = "unknown", None
@@ -53,6 +58,7 @@ def main() -> int:
             rec = {"name": name, "outcome": outcome, "killer": killer, "exit": r.returncode,
                    "tail": r.stdout.strip().splitlines()[-1:] if r.stdout.strip() else r.stderr.strip().splitlines()[-3:]}
         rec["seconds"] = round(time.time() - t0)
+        rec["no_bytecode"] = True  # PYTHONDONTWRITEBYTECODE=1 in the runner and its pytest runs (main's cc1db87 fix)
         with out.open("a") as f:
             f.write(json.dumps(rec) + "\n")
     return 0

@@ -232,6 +232,32 @@ The total is about 11 to 19 GPU-hours, of which about 5 to 9 are on 80 GB cards,
 
 Under the strict mutation rule (killed only when pytest exits 1 and names a failing test), all 33 new mutants are killed, by 14 different tests. The 135 earlier wave B mutants, rerun on the amended code, are all killed too; one of them was retargeted first, because the line it mutates now reads the rescorings' gate. The list is in `notes/families_waveb_mutants.txt`. Full local suite: 948 passed, 77 skipped.
 
+**After review 2 (2026-11-24).** Mutants were run one at a time through the same strict runner (`scripts/mutation_batch.py`), each result checkpointed to `notes/families_waveb_review2_mutants.jsonl` as it finished.
+
+**The bytecode fix.** These counts are from a rerun with the runner's bytecode fix, ported from main (cc1db87): tests run with `PYTHONDONTWRITEBYTECODE=1`, so a stale compiled mutant can never be read. Each mutant also runs alone, on a fresh copy without `__pycache__`.
+
+- The first count of this round was made before the fix was in. It credited each of its 73 mutants to the same test as the rerun, so it was unaffected in practice, but it is superseded.
+- The counts reported for the amendment's first version (33 new and 135 earlier mutants, above) were made without the fix, several mutants to a copy. Every wave B mutant is therefore rerun with the fix (`notes/families_waveb_mutants_recheck_2026-11-24.jsonl`).
+
+The file holds 74 results:
+
+| Mutant set | Killed |
+|---|---|
+| The reviewer's 13 survivors (`R2 …`), rebuilt on the fixed code | 13 of 13 |
+| Breaking each review 2 fix in turn | 25 of 25 |
+| All 33 earlier rescoring mutants, rerun (they include the 4 the reviewer could not finish) | 33 of 33 |
+| Two earlier wave B mutants on lines this round touched ("environment gate not applied"; review 1's "job does not stop on the wrong GPU", retargeted to the environment check's own line) | 2 of 2 |
+| Review 1's "plain gate allows a shared first token" (picked up by the selection) | 1 of 1 |
+
+The kills come from 26 different tests; no test is credited with more than 16 of them.
+
+The other 132 wave B mutants were rerun with the fix too: 132 of 132 killed, by 74 different tests, and no test is credited with more than 8. So **every wave B mutant, 206 in all, is killed by a named failing test under the strict rule with the bytecode fix**, by 97 different tests. Full local suite at this state: 965 passed, 77 skipped.
+
+Two corrections were made during the run:
+
+- **Spurious kills.** Fifteen kills were first credited to `test_token_dump_encodes_the_rescoring_prompts`, which failed in the runner's copy of the repository for a reason unrelated to the mutants: the copy has no `.git`, so the dump's commit read "unknown". The test now fixes the commit, the fifteen were rerun, and each was killed by its own test.
+- **One survivor.** Review 1's "job does not stop on the wrong GPU" survived the whole suite once, because its test also read the new rescoring block. The test now reads only the environment check's own block, and the mutant is killed.
+
 ## 9. Measures and analysis
 
 Everything in wave A's "Measures" section and its three amendments applies unchanged: the size series' block per model; the item share toward Yes (primary), R, ΔL, the standardised effect d and the two-candidate format (secondary); argmax answers and flips; first-token coverage; one (item, condition) population for every model; game-clustered bootstrap CIs and sign-flip permutation p-values; paired comparisons on shared items with the difference test and the ±0.05 equivalence test (TOST); readings "differs", "matches", "differs, within the margin", "inconclusive (no difference detected)"; the 0.3-nat noise floor for ΔL differences.
