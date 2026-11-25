@@ -10,6 +10,22 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided or found 2026-11-24
+
+- **Mutation runners wrote bytecode (TextCraft and τ-bench); all their mutants rerun; no tally changed.**
+  - **Defect.** `wf/textcraft/mutation_check.py` and `scripts/tau_mutation_check.py` let pytest write `.pyc` files while testing mutants. Python trusts a `.pyc` when the source's mtime in whole seconds and its size match. A file restored within the second its same-length mutant was compiled could therefore keep running the mutant's code, and every later mutant would be "killed" by code that was still broken. This can only over-credit kills. It was seen on another branch, where one shard credited 38 mutants to an unrelated constants test.
+  - **Fix.** Both runners now run pytest with `PYTHONDONTWRITEBYTECODE=1` on a copy made without `__pycache__`, as `scripts/mutation_check.py` has done since cc1db87. They also now use that runner's strict kill rule by default.
+  - **Earlier tallies made with the unfixed runners.**
+    - TextCraft round 1: the runs of 75, 146 and 193 mutants (`textcraft_design.md` §11 to §13; 193 of 193 at the freeze), plus the 2 tie-couple mutants of 7495cb8.
+    - τ-bench: the runs of 86, 133 and 155 mutants (`tau_design.md`; 155 of 155 at the freeze).
+    - The authorization experiment's 87 at its freeze tag: both runners there lack the setting. Its 2026-11-23 strict recheck ran on the main runner, which already had it.
+    - `scripts/mutation_check.py` wrote bytecode before cc1db87 too. Its earlier tallies are outside this entry, apart from the three rechecked on 2026-11-23.
+  - **New tallies, under the strict rule with the fix.**
+    - TextCraft: 195 of 195 killed by a named test.
+    - Authorization experiment: 87 of 87, with the same outcome and killing test for every mutant as the 2026-11-23 recheck.
+    - τ-bench: 153 of 155. "failed return writes first" and "every task achievable" were error-only: the item build failed in a fixture's setup, which the old any-exit rule had counted as a kill. Two new tests, which change no study code, kill both by name.
+  - No mutant survived or timed out. Records: `mutation_textcraft_nobytecode_2026-11-24.jsonl`, `mutation_tau_nobytecode_2026-11-24.jsonl` and `mutation_tau_auth_nobytecode_2026-11-24.jsonl` (`testing.md`, 2026-11-24).
+
 ## Documentation corrections, 2026-11-23
 
 A documentation consistency pass, prompted by the reader's guide (`GUIDE.md`). No verdict, threshold, rule or confirmatory result changed, and no metrics file was edited. Each corrected note keeps the old text, struck through or quoted, beside a dated correction line. Numbers and statements corrected:

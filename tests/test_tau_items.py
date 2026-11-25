@@ -24,6 +24,20 @@ def test_hash_is_the_designs():
     assert I.h("a", 1) == int(hashlib.sha256(b"20260924|a|1").hexdigest()[:16], 16)
 
 
+def test_achievable_returns_a_working_witness_or_none():
+    # Without the build: a task with no working witness is not achievable, and an achievable task's witness works.
+    # Added 2026-11-24: the mutant "every task achievable" was otherwise caught only by the build erroring in the
+    # `built` fixture's setup, which the strict mutation rule does not count as a kill.
+    db, env = base_db(), fresh_env()
+    delivered = next(o for _, o in sorted(db["orders"].items()) if o["status"] == "delivered")
+    assert all(env.fork().call(c["name"], c["arguments"]).startswith("Error")
+               for c in I.witness_calls(db, env, "cancel", delivered["order_id"], None))
+    assert I.achievable(db, env, "cancel", delivered["order_id"], None) is None
+    pending = next(o for _, o in sorted(db["orders"].items()) if o["status"] == "pending")
+    w = I.achievable(db, env, "cancel", pending["order_id"], None)
+    assert w is not None and not env.fork().call(w["name"], w["arguments"]).startswith("Error")
+
+
 def test_every_item_fails_as_its_class_says_and_has_a_success_twin(built):
     gen = built["generated"]
     assert len(gen) > 3000

@@ -1749,8 +1749,11 @@ def classify(returncode: int | None, stdout: str, rule: str = STRICT) -> tuple[s
 
 def _pytest(python: str, work: Path, targets: list[str], timeout: int, stop_first: bool = True) -> tuple[int | None, str, str]:
     cmd = [python, "-m", "pytest", "-q", "-rfE", "-p", "no:cacheprovider", "--tb=line", *(["-x"] if stop_first else []), *targets]
-    # No bytecode: a .pyc records the source's mtime in whole seconds and its size, so a same-length mutant written
-    # within a second of an earlier run of the same file would be read from the stale cache and look like a survivor.
+    # No bytecode: a .pyc is trusted when its source's mtime, in whole seconds, and its size match. A file rewritten
+    # with text of the same length within the second its previous text was compiled is read from the stale cache. A
+    # restored file can then keep running a mutant's code, so later mutants "die" against code that is still broken
+    # (seen on another branch, notes/deviations.md 2026-11-24); in principle a mutant could also run the original's
+    # code and look like a survivor.
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     try:
         r = subprocess.run(cmd, cwd=work, capture_output=True, text=True, timeout=timeout, env=env)
