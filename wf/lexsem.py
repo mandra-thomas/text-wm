@@ -133,7 +133,10 @@ GROUPS = {
     "ignore": ("name_ignore", "ctrl_ignore"),
     "position": ("name_assert_pre", "ctrl_assert_pre", "name_assert_post", "ctrl_assert_post"),
     "reliability": ("name_reliable", "name_unreliable"),
-    # the reduced arm for the with-block yes/no format and for Llama: the content contrasts with the name
+    # the with-block yes/no arm (decided by the user, 2026-11-25): the anchors and the name's assertion, denial and
+    # listed word with their controls, which carry the content contrasts and the stage-0 bridge
+    "block8": ANCHORS + ("name_assert", "ctrl_assert", "name_deny", "ctrl_deny", "name_use", "ctrl_use"),
+    # the Llama yes/no arm: the content contrasts with the name, the elsewhere sentence and the description
     "names_only": ANCHORS + ("name_assert", "ctrl_assert", "name_deny", "ctrl_deny", "name_use", "ctrl_use",
                              "name_elsewhere", "ctrl_elsewhere", "desc_assert", "cdesc_assert"),
 }
@@ -185,6 +188,20 @@ def control_object(t: dict, count_tokens: Callable[[str], int] | None = None) ->
     target = count(" " + rq1x.DESCRIPTIONS[obj])
     return min(options, key=lambda o: (abs(count(" " + rq1x.DESCRIPTIONS[o]) - target),
                                        _h(f"{SEED}|ctrl|{t['id']}|{o}")))
+
+
+def scene_prevalence(collected: list[dict]) -> dict[str, float]:
+    """Share of rooms (games) whose scene at reset holds each object type: the prior probability of existence used
+    in the control audit."""
+    scenes: dict[str, set[str]] = {}
+    for t in collected:
+        scenes.setdefault(t["game_id"], scene_types(t))
+    n = len(scenes) or 1
+    count: dict[str, int] = defaultdict(int)
+    for objs in scenes.values():
+        for o in objs:
+            count[o] += 1
+    return {o: c / n for o, c in count.items()}
 
 
 def references(t: dict, count_tokens: Callable[[str], int] | None = None) -> dict[str, str | None]:

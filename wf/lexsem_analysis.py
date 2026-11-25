@@ -28,6 +28,10 @@ B_DEFAULT = 2000
 MASS_FIRST, MASS_FIRST_GAP, MASS_YN = 0.7, 0.1, 0.9  # gate 2
 MIN_RECOG = {"later": 100, "step0": 50}  # gate 5
 STEP0_BRIDGE_BLOCK = (0.29, 0.23, 0.37)  # stage 0 with the think block, same items (section 8)
+REF_FRACTION = 0.5  # a ratio is read only if its reference's interval lies above zero and above half its estimate
+READOUT_LABELS = {"first": "first-token observation", "yn": "yes/no", "full2c": "full two-candidate"}
+# What every score file must share (section 10, decided by the user 2026-11-25): GPU type, stack, dtype, scoring.
+ENV_REQUIRED = {"gpu_contains": "L40S", "dtype": "bfloat16", "unbatched": True}
 # contrast -> (condition, its control); the rules read the ones in R.PREDICTIONS
 CONTRASTS = {c: (c, k) for c, k in lexsem.CONTROL_OF.items() if c != "name_reliable"}
 
@@ -86,16 +90,29 @@ def interval(point: float, draws: np.ndarray) -> dict:
             "n_draws_undefined": int(len(draws) - len(d))}
 
 
+def mean(boot: Boot, games: list[str], x: np.ndarray) -> tuple[dict, np.ndarray]:
+    n, nd = boot.sums(games, x)
+    k, kd = boot.sums(games, np.ones_like(x))
+    return {**interval(n / k if k else math.nan, nd / kd), "n_items": len(games)}, nd / kd
+
+
 def ratio(boot: Boot, games: list[str], num: np.ndarray, den: np.ndarray) -> tuple[dict, np.ndarray]:
+    """A ratio of means with its numerator and denominator (in nats) from the same draws, their correlation across
+    draws, and whether the denominator is well enough estimated for the ratio to be read (REF_FRACTION)."""
     n, nd = boot.sums(games, num)
     d, dd = boot.sums(games, den)
     with np.errstate(divide="ignore", invalid="ignore"):
         draws = nd / dd
-    return {**interval(n / d if d else math.nan, draws), "n_items": len(games)}, draws
-
-
-def mean(boot: Boot, games: list[str], x: np.ndarray) -> tuple[dict, np.ndarray]:
-    return ratio(boot, games, x, np.ones_like(x))
+    out = {**interval(n / d if d else math.nan, draws), "n_items": len(games)}
+    num_iv, num_dr = mean(boot, games, num)
+    den_iv, den_dr = mean(boot, games, den)
+    out["numerator_nats"], out["denominator_nats"] = num_iv, den_iv
+    ok = np.isfinite(num_dr) & np.isfinite(den_dr)
+    sd = (np.std(num_dr[ok]), np.std(den_dr[ok])) if ok.any() else (0.0, 0.0)
+    out["num_den_correlation"] = float(np.corrcoef(num_dr[ok], den_dr[ok])[0, 1]) if min(sd) > 0 else None
+    lo, est = den_iv["ci"][0], den_iv["estimate"]
+    out["reference_ok"] = bool(lo > 0 and lo >= REF_FRACTION * est)
+    return out, draws
 
 
 def agreement(boot: Boot, games: list[str], g: np.ndarray, m: np.ndarray) -> dict:
@@ -187,8 +204,8 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
     A, A_draws = ratio(boot, games_a, m_a, g_a)
     A["readout_used"] = ro_a
     out["A"] = A
-    out["mention_reading"] = R.mention_reading(*A["ci"])
-    out["relevance"] = R.relevance_reading(*A["ci"])
+    out["mention_reading"] = R.mention_reading(*A["ci"]) if gate1 else "not read: goal-effect gate failed"
+    out["relevance"] = R.relevance_reading(*A["ci"]) if gate1 else "not read: goal-effect gate failed"
     rho_draws = {}
     for c, (cond, ctrl) in CONTRASTS.items():
         if cond == "name_assert" or not any(cond in r["scores"] for r in base):
@@ -212,13 +229,16 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
         iv, dr = ratio(boot, gs, num, den)
         iv["readout_used"] = ro
         iv["category"] = _cat(iv)
+        if not iv["reference_ok"]:
+            iv["ratio_not_read"] = ("the name assertion's net effect on these items has an interval that includes zero "
+                                    "or a lower bound below half its estimate: absolute effects only")
         if form in ("desc", "alias"):
             snum = np.array([value(r, cond, ro) - value(r, ctrl, ro) for r in s_all])
             sden = np.array([value(r, "name_assert", ro) - value(r, "ctrl_assert", ro) for r in s_all])
             iv["all_items"] = ratio(boot, [r["game_id"] for r in s_all], snum, sden)[0]
         rho[c], rho_draws[c], items_by[c] = iv, dr, s
         deltas[c] = mean(boot, gs, num)[0]
-        if c in R.PREDICTIONS:
+        if c in R.PREDICTIONS and iv["reference_ok"]:
             rho_iv[c] = tuple(iv["ci"])
     out["delta_nats"] = deltas
     out["relative_lift"] = rho
@@ -254,6 +274,8 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
         mm = np.array([value(r, cond, ro) - value(r, ctrl, ro) for r in s])
         agr[c] = agreement(boot, gs, gg, mm)
     out["item_agreement"] = agr
+    if "homonym" in rho_iv:
+        out["homonym_reading"] = R.homonym_reading(*rho_iv["homonym"])
     # optional arms
     if "name_ignore" in rho and "estimate" in rho["name_ignore"]:
         out["ignore"] = {"relative_lift": rho["name_ignore"],
@@ -269,14 +291,15 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
         gg = np.array([value(r, "aligned", readout) - value(r, "swapped", readout) for r in s])
         rec_iv = ratio(boot, gs, net["assert_pre"] - net["assert"], gg)[0]
         vis_iv = ratio(boot, gs, net["assert_post"] - net["assert_pre"], gg)[0]
+        rec_m, vis_m = ("recency, with the region change, matters",
+                        "visibility to the action's tokens, with the region change, matters")
         out["position"] = {
-            "recency": {**rec_iv, "reading": R.difference_reading(*rec_iv["ci"], "recency matters",
-                                                                   "no recency effect beyond 0.25",
-                                                                   "recency matters")},
-            "visibility": {**vis_iv, "reading": R.difference_reading(*vis_iv["ci"],
-                                                                      "visibility to the action's tokens matters",
-                                                                      "no visibility effect beyond 0.25",
-                                                                      "inconclusive")}}
+            "recency": {**rec_iv, "reading": R.difference_reading(*rec_iv["ci"], rec_m,
+                                                                   "no recency effect beyond 0.25", rec_m)},
+            "visibility": {**vis_iv, "reading": R.difference_reading(*vis_iv["ci"], vis_m,
+                                                                      "no visibility effect beyond 0.25", vis_m)},
+            "confounds": "task line to history end also changes the prompt region; history end to after the action "
+                         "also moves the sentence next to the reply label"}
     else:
         out["position"] = "not scored"
     s = _paired(base, ("name_reliable", "name_unreliable"), readout)
@@ -287,7 +310,10 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
         iv = ratio(boot, gs, d, gg)[0]
         out["reliability"] = {**iv, "reading": R.difference_reading(*iv["ci"], "the unreliable source lifts more",
                                                                      "no reliability effect beyond 0.25",
-                                                                     "the reliable source lifts more")}
+                                                                     "the reliable source lifts more"),
+                              "scope": "qualitative responsiveness to stated reliability, on items whose history "
+                                       "already settles the outcome; settledness is not crossed (the pool has no "
+                                       "unsettled items); not a test of quantitatively correct Bayesian updating"}
     else:
         out["reliability"] = "not scored"
     # the stage-0 bridge, as stage 0 defined it (minus the plain swapped task), and net of the control
@@ -320,8 +346,29 @@ def load_checks(path: str | Path | None) -> dict | None:
 
 def attach(scores: list[dict], items: list[dict]) -> list[dict]:
     meta = {r["id"]: r for r in items}
-    return [{**s, "goal_object": meta[s["id"]]["goal_object"], "fewshot_object": meta[s["id"]]["fewshot_object"],
-             "stratum": meta[s["id"]]["stratum"], "game_id": meta[s["id"]]["game_id"]} for s in scores]
+    out = []
+    for s in scores:
+        m = meta[s["id"]]
+        refs = m.get("references", {})
+        out.append({**s, "goal_object": m["goal_object"], "fewshot_object": m["fewshot_object"],
+                    "stratum": m["stratum"], "game_id": m["game_id"],
+                    "prevalence_gap": (refs["target_prevalence"] - refs["ctrl_prevalence"]
+                                       if "ctrl_prevalence" in refs else None)})
+    return out
+
+
+def prevalence_covariate(recs: list[dict], ro: str, boot: Boot) -> dict | str:
+    """Control audit covariate (descriptive): does the name assertion's net effect vary with how much more often the
+    action's object than the control object occurs in ALFWorld rooms? Correlation and slope across items."""
+    rs = [r for r in _paired(recs, ("name_assert", "ctrl_assert"), ro) if r.get("prevalence_gap") is not None]
+    if len(rs) < 10:
+        return "not available"
+    gs = [r["game_id"] for r in rs]
+    gap = np.array([r["prevalence_gap"] for r in rs])
+    net = np.array([value(r, "name_assert", ro) - value(r, "ctrl_assert", ro) for r in rs])
+    res = agreement(boot, gs, gap, net)
+    return {"correlation": res["correlation"], "slope_nats_per_unit_gap": res["slope"],
+            "mean_gap": float(gap.mean())}
 
 
 def run_model(recs: list[dict], readouts: tuple[str, ...], checks: dict | None, B: int, seed: int) -> dict:
@@ -334,13 +381,18 @@ def run_model(recs: list[dict], readouts: tuple[str, ...], checks: dict | None, 
         for s in strata:
             rs = [r for r in recs if r["stratum"] == s]
             out[ro][s] = analyse(rs, ro, boots[s], checks, s)
+            out[ro][s]["prevalence_covariate"] = prevalence_covariate(rs, ro, boots[s])
             out[ro][s]["without_fewshot_objects"] = analyse([r for r in rs if not r["fewshot_object"]], ro,
                                                             boots[s], checks, s)
         out[ro]["step"] = step_comparison(recs, ro, joint, checks, out[ro])
     if "first" in out and "you" in readouts:
         out["normalization_flags"] = flags(out["first"], out["you"])
-    if "first" in out and "yn" in out:
-        out["readout_flags"] = flags(out["first"], out["yn"])
+    # each readout keeps its own reading; disagreements are reported, none decides for the others
+    out["readings_by_readout"] = {READOUT_LABELS[ro]: {s: out[ro][s].get("single_account_reading") for s in strata}
+                                  for ro in readouts if ro in READOUT_LABELS}
+    pairs = [(a, b) for a in ("first", "yn", "full2c") for b in ("first", "yn", "full2c") if a < b]
+    out["readout_disagreements"] = {f"{READOUT_LABELS[a]} vs {READOUT_LABELS[b]}": flags(out[a], out[b])
+                                    for a, b in pairs if a in out and b in out}
     return out
 
 
@@ -410,10 +462,94 @@ def flags(a: dict, b: dict) -> dict:
     return out
 
 
+def check_env(paths: list[Path]) -> list[str]:
+    """Every score file must come with an environment record, and all must share GPU type, torch, transformers,
+    dtype and unbatched scoring, with each model at its pinned revision."""
+    from wf.constants import REVISIONS
+
+    problems, seen = [], set()
+    for p in paths:
+        e = p.parent / f"{p.stem}_env.json"
+        if not e.exists():
+            problems.append(f"{p.name}: no environment record")
+            continue
+        env = json.loads(e.read_text())
+        if ENV_REQUIRED["gpu_contains"] not in env.get("gpu", ""):
+            problems.append(f"{p.name}: GPU {env.get('gpu')}")
+        if env.get("dtype") != ENV_REQUIRED["dtype"] or env.get("unbatched") is not True:
+            problems.append(f"{p.name}: dtype {env.get('dtype')}, unbatched {env.get('unbatched')}")
+        if REVISIONS.get(env.get("model")) != env.get("revision"):
+            problems.append(f"{p.name}: revision {env.get('revision')} is not the pinned one")
+        seen.add((env.get("torch"), env.get("transformers")))
+    if len(seen) > 1:
+        problems.append(f"score files come from different stacks: {sorted(seen)}")
+    return problems
+
+
+def bridge_compare(plain: list[dict], block: list[dict], B: int, seed: int) -> dict:
+    """The stage-0 bridge in plain text against the same prompts rescored with the think block in this run (same
+    items, stack, GPU type and draws): (name assertion minus swapped) over the goal effect, yes/no."""
+    by = {r["id"]: r for r in block}
+    out = {}
+    for s in ("later", "step0"):
+        rs = [r for r in plain if r["stratum"] == s and r["id"] in by]
+        rs = [r for r in rs if all(value(x, c, "yn") is not None for x in (r, by[r["id"]])
+                                   for c in ("aligned", "swapped", "name_assert"))]
+        if not rs:
+            continue
+        boot = Boot([r["game_id"] for r in rs], B, seed)
+        gs = [r["game_id"] for r in rs]
+        res, dr = {}, {}
+        for name, src in (("plain", lambda r: r), ("block", lambda r: by[r["id"]])):
+            num = np.array([value(src(r), "name_assert", "yn") - value(src(r), "swapped", "yn") for r in rs])
+            den = np.array([value(src(r), "aligned", "yn") - value(src(r), "swapped", "yn") for r in rs])
+            res[name], dr[name] = ratio(boot, gs, num, den)
+        diff = interval(res["plain"]["estimate"] - res["block"]["estimate"], dr["plain"] - dr["block"])
+        reading = R.difference_reading(*diff["ci"], "plain text lower than the block format",
+                                       "the same in both formats (within 0.25)", "plain text higher than the block format")
+        out[s] = {**res, "plain_minus_block": diff, "reading": reading}
+        if s == "step0" and reading == "plain text higher than the block format":
+            out[s]["stage0_reading"] = "stage 0's low step-0 share belongs to the block format"
+    return out
+
+
+def stage0_paired(index_path: str, block: list[dict], B: int, seed: int) -> dict:
+    """Archived stage-0 scores (original stack) against the same prompts rescored here (serve2): the difference in
+    paired effects (goal effect, mention effect), not only per score."""
+    st = {}
+    for line in Path(index_path).read_text().splitlines():
+        r = json.loads(line)
+        if r["fmt"] == "yn" and r["goal"] in ("aligned", "swapped", "swapped_plus"):
+            st.setdefault(r["id"], {})[r["goal"]] = r["d"]
+    out = {}
+    for s in ("later", "step0"):
+        rs = [r for r in block if r["stratum"] == s and len(st.get(r["id"], {})) == 3
+              and all(value(r, c, "yn") is not None for c in ("aligned", "swapped", "name_assert"))]
+        if not rs:
+            continue
+        boot = Boot([r["game_id"] for r in rs], B, seed)
+        gs = [r["game_id"] for r in rs]
+        a = {r["id"]: st[r["id"]] for r in rs}
+        new_g = np.array([value(r, "aligned", "yn") - value(r, "swapped", "yn") for r in rs])
+        old_g = np.array([a[r["id"]]["aligned"] - a[r["id"]]["swapped"] for r in rs])
+        new_m = np.array([value(r, "name_assert", "yn") - value(r, "swapped", "yn") for r in rs])
+        old_m = np.array([a[r["id"]]["swapped_plus"] - a[r["id"]]["swapped"] for r in rs])
+        per = np.array([abs(value(r, c, "yn") - a[r["id"]][o]) for r in rs
+                        for c, o in (("aligned", "aligned"), ("swapped", "swapped"), ("name_assert", "swapped_plus"))])
+        out[s] = {"goal_effect_new_minus_archived": mean(boot, gs, new_g - old_g)[0],
+                  "mention_effect_new_minus_archived": mean(boot, gs, new_m - old_m)[0],
+                  "mean_abs_per_score_difference": float(per.mean()), "n_items": len(rs)}
+    return out
+
+
 def run(scores_path: str, out_path: str | None = None, items_path: str | None = None, checks_path: str | None = None,
         block_path: str | None = None, llama_path: str | None = None, B: int = B_DEFAULT, seed: int = SEED,
-        expect_commit: str | None = None) -> dict:
+        expect_commit: str | None = None, stage0_index: str | None = None, require_env: bool = True) -> dict:
     sp = Path(scores_path)
+    if require_env:
+        problems = check_env([sp] + [Path(x) for x in (block_path, llama_path) if x and Path(x).exists()])
+        if problems:
+            raise SystemExit("environment check failed: " + "; ".join(problems))
     items_path = items_path or sp.parent / f"{sp.stem}_items.jsonl"
     checks_path = checks_path or sp.parent / f"{sp.stem}_check.json"
     if expect_commit:
@@ -431,10 +567,19 @@ def run(scores_path: str, out_path: str | None = None, items_path: str | None = 
               "qwen_plain": run_model(recs, readouts, checks, B, seed),
               "full_two_candidate": "scored" if has_fail else "not scored"}
     for name, path in (("block_yes_no", block_path), ("llama_yes_no", llama_path)):
-        report[name] = (run_model(attach(load_scores(path), items), ("yn",), checks, B, seed) if path
-                        and Path(path).exists() else "not scored")
+        if not path or not Path(path).exists():
+            report[name] = "not scored"
+            continue
+        own = load_checks(Path(path).parent / f"{Path(path).stem}_check.json")  # each model's own recognition
+        report[name] = run_model(attach(load_scores(path), items), ("yn",), own if own is not None else checks, B,
+                                 seed)
     if isinstance(report["llama_yes_no"], dict):
         report["model_comparison_yes_no"] = flags(report["qwen_plain"]["yn"], report["llama_yes_no"]["yn"])
+    if block_path and Path(block_path).exists():
+        block = attach(load_scores(block_path), items)
+        report["bridge_plain_vs_block"] = bridge_compare(recs, block, B, seed)
+        report["archived_stage0_vs_rescored"] = (stage0_paired(stage0_index, block, B, seed) if stage0_index
+                                                  else "not computed")
     if out_path:
         Path(out_path).write_text(json.dumps(report, indent=1, default=float))
     return report
@@ -450,11 +595,10 @@ def main() -> None:
     ap.add_argument("--llama")
     ap.add_argument("--B", type=int, default=B_DEFAULT)
     ap.add_argument("--expect-commit")
+    ap.add_argument("--stage0-index")
     a = ap.parse_args()
-    rep = run(a.scores, a.out, a.items, a.checks, a.block, a.llama, a.B, SEED, a.expect_commit)
-    for s in ("later", "step0"):
-        x = rep["qwen_plain"]["first"][s]
-        print(s, x.get("mention_reading"), "|", x.get("single_account_reading"))
+    rep = run(a.scores, a.out, a.items, a.checks, a.block, a.llama, a.B, SEED, a.expect_commit, a.stage0_index)
+    print(json.dumps(rep["qwen_plain"]["readings_by_readout"], indent=1))
 
 
 if __name__ == "__main__":

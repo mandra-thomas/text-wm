@@ -17,8 +17,8 @@ Per item, condition and format, one sequence:
   token's log-probability (the model's probability of the whole success observation, and the token split).
 - yn: rq1v's anchored yes/no prompt; the log-probabilities of "Yes" and "No".
 
-The sequences of an item are scored in right-padded batches (`--batch-size`); only the needed positions go through
-the output layer. Output is one JSON line per item, appended as each item finishes; a rerun skips finished items.
+Every sequence is scored alone and unpadded through the full model, as every stored project score was made (decided by
+the user, 2026-11-25). Output is one JSON line per item, appended as each item finishes; a rerun skips finished items.
 
     python scripts/lexsem/score.py --mode plain --groups core --out runs/lexsem/qwen3-8b_plain.jsonl
     python scripts/lexsem/score.py --mode plain --groups core,ignore,position --smoke 5 --out runs/lexsem/smoke.json
@@ -107,29 +107,21 @@ def sequence(tok, msgs, mode: str, continuation: str | None) -> tuple[list[int],
     return p + tok(continuation, add_special_tokens=False)["input_ids"], len(p)
 
 
-def score_batch(model, seqs: list[tuple[list[int], int, bool]], pad_id: int) -> list:
-    """Right-padded batch; per sequence, float32 log-softmax rows at the reply's first position and (when the third
-    element is True) at every continuation position. Returns one tensor (positions x vocab) per sequence."""
+def score_one(model, ids: list[int], n_prompt: int, continuation: bool) -> "torch.Tensor":
+    """One unpadded sequence through the full model, as every stored project score was made (LogoddsScorer): the
+    model's bf16 logits, a float32 log-softmax at the reply's first position and, with `continuation`, at every
+    position of the continuation. Returns positions x vocabulary on the CPU."""
     import torch
 
     dev = next(model.parameters()).device
-    T = max(len(s) for s, _, _ in seqs)
-    ids = torch.full((len(seqs), T), pad_id, dtype=torch.long, device=dev)
-    mask = torch.zeros((len(seqs), T), dtype=torch.long, device=dev)
-    for i, (s, _, _) in enumerate(seqs):
-        ids[i, : len(s)] = torch.tensor(s, device=dev)
-        mask[i, : len(s)] = 1
-    base, head = model.get_decoder(), model.get_output_embeddings()
     with torch.no_grad():
-        h = base(input_ids=ids, attention_mask=mask).last_hidden_state
-        out = []
-        for i, (s, n_p, cont) in enumerate(seqs):
-            pos = list(range(n_p - 1, len(s) - 1)) if cont else [n_p - 1]
-            out.append(torch.log_softmax(head(h[i, pos]).float(), dim=-1).cpu())
-    return out
+        logits = model(input_ids=torch.tensor([ids], device=dev)).logits[0]
+    pos = list(range(n_prompt - 1, len(ids) - 1)) if continuation else [n_prompt - 1]
+    return torch.log_softmax(logits[pos].float(), dim=-1).cpu()
 
 
-def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...]) -> list[dict]:
+def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...], fail_conds: frozenset = frozenset()) \
+        -> list[dict]:
     """Every (condition, format) sequence of one item, with the token-identity check of design section 5: a name or
     homonym condition must add exactly one copy of the name's token sequence to the swapped prompt, every other
     condition none."""
@@ -139,7 +131,7 @@ def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...]) -> l
     base = count_occurrences(prompt_ids(tok, lexsem.messages(t, rec["specs"]["swapped"], "obs"), mode), name_ids)
     jobs = []
     for c, spec in rec["specs"].items():
-        for fmt in formats:
+        for fmt in formats + (("fail",) if c in fail_conds else ()):
             msgs = lexsem.messages(t, spec, "obs" if fmt == "fail" else fmt)
             cont = {"obs": rec["o_plus"], "fail": FAILURE_TEXT}.get(fmt)
             ids, n_p = sequence(tok, msgs, mode, cont)
@@ -168,16 +160,8 @@ def readouts(jobs: list[dict], rows: list, pairs: dict, tok) -> dict:
     return out
 
 
-def run_item(model, jobs: list[dict], batch_size: int, pad_id: int) -> list:
-    order = sorted(range(len(jobs)), key=lambda k: len(jobs[k]["ids"]))
-    rows: list = [None] * len(jobs)
-    for s in range(0, len(order), batch_size):
-        chunk = order[s:s + batch_size]
-        seqs = [(jobs[k]["ids"], jobs[k]["n_prompt"], jobs[k]["fmt"] in ("obs", "fail")) for k in chunk]
-        res = score_batch(model, seqs, pad_id)
-        for k, r in zip(chunk, res):
-            rows[k] = r
-    return rows
+def run_item(model, jobs: list[dict]) -> list:
+    return [score_one(model, j["ids"], j["n_prompt"], j["fmt"] in ("obs", "fail")) for j in jobs]
 
 
 def manipulation_check(tok, model, recs: list[dict]) -> list[dict]:
@@ -208,65 +192,69 @@ def manipulation_check(tok, model, recs: list[dict]) -> list[dict]:
         res = {}
         for target in (obj, lexsem.ALIAS_FOIL[obj]):
             q = lexsem.CHECK_ALIAS.format(alias=alias, art=lexsem._article(target), obj=target)
-            lp = score_batch(model, [(ids(q), len(ids(q)), False)], tok.eos_token_id)[0]
+            lp = score_one(model, ids(q), len(ids(q)), False)
             res[target] = lp[0, yes].item() - lp[0, no].item()
         out.append({"form": "alias", "object": obj, "text": alias, "yes_minus_no": res,
                     "passed": res[obj] > 0 > res[lexsem.ALIAS_FOIL[obj]]})
     return out
 
 
-def smoke(args, tok, model, recs, by_id, pairs) -> dict:
-    """Timing and validity only: seconds per sequence at each batch size, batched against one-at-a-time readouts,
-    the two readout tokens' probability mass per condition, the failure text's tail after "Nothing". No effect
-    (no difference between conditions) is computed or written."""
+def environment(model_id: str, rev: str, mode: str) -> dict:
+    """What the analysis checks is shared by every score file (design section 10): GPU type, stack, revision, dtype,
+    unbatched scoring."""
+    import platform
+
+    import torch
+    import transformers
+
+    return {"gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu", "torch": torch.__version__,
+            "transformers": transformers.__version__, "python": platform.python_version(), "model": model_id,
+            "revision": rev, "dtype": "bfloat16", "unbatched": True, "mode": mode}
+
+
+def needs_check(conds: tuple[str, ...]) -> bool:
+    from wf import lexsem
+
+    return any(lexsem.MENTIONS[c][0] in ("desc", "alias") for c in conds if c in lexsem.MENTIONS)
+
+
+def smoke(args, tok, model, recs, by_id, pairs, fail_conds) -> dict:
+    """Timing and validity only, scored exactly as the full run scores: seconds per sequence by format, the two
+    readout tokens' probability mass per condition (mean and minimum), the token checks (run by item_jobs), and the
+    failure text's tail after "Nothing". No effect (no difference between conditions) is computed or written."""
     import math
 
     import torch
 
-    pad = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
     recs = recs[: args.smoke]
-    jobs = [item_jobs(by_id[r["id"]], r, tok, args.mode, tuple(args.formats.split(","))) for r in recs]
-    rep: dict = {"mode": args.mode, "model": args.model, "n_items": len(recs),
-                 "n_sequences": sum(len(j) for j in jobs),
-                 "mean_tokens": sum(len(x["ids"]) for j in jobs for x in j) / sum(len(j) for j in jobs),
-                 "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu", "timing": {}}
-    rows_by_bs = {}
-    for bs in [int(x) for x in args.batch_sizes.split(",")]:
+    fmts = tuple(args.formats.split(","))
+    jobs = [item_jobs(by_id[r["id"]], r, tok, args.mode, fmts, fail_conds) for r in recs]
+    flat = [j for js in jobs for j in js]
+    rep: dict = {"mode": args.mode, "model": args.model, "n_items": len(recs), "n_sequences": len(flat),
+                 "mean_tokens": round(sum(len(x["ids"]) for x in flat) / len(flat), 1),
+                 "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"}
+    times: dict = {}
+    rows = []
+    for j in flat:
         torch.cuda.synchronize()
         t0 = time.time()
-        rows_by_bs[bs] = [run_item(model, j, bs, pad) for j in jobs]
+        rows.append(score_one(model, j["ids"], j["n_prompt"], j["fmt"] in ("obs", "fail")))
         torch.cuda.synchronize()
-        dt = time.time() - t0
-        rep["timing"][str(bs)] = {"seconds": round(dt, 2), "s_per_sequence": round(dt / rep["n_sequences"], 4)}
-    ref = rows_by_bs[min(rows_by_bs)]
-    diffs = {}
-    for bs, rows in rows_by_bs.items():
-        d = 0.0
-        for j, r0, r1 in zip(jobs, ref, rows):
-            for job, x, y in zip(j, r0, r1):
-                a, b = pairs["obs" if job["fmt"] == "fail" else job["fmt"]]
-                d = max(d, abs((x[0, a] - x[0, b]).item() - (y[0, a] - y[0, b]).item()))
-        diffs[str(bs)] = round(d, 4)
-    rep["max_abs_logodds_diff_vs_smallest_batch"] = diffs
+        times.setdefault(j["fmt"], []).append(time.time() - t0)
+    rep["s_per_sequence"] = {f: round(sum(v) / len(v), 4) for f, v in times.items()}
+    rep["n_by_format"] = {f: len(v) for f, v in times.items()}
     mass: dict = {}
-    for j, rows in zip(jobs, ref):
-        for job, lp in zip(j, rows):
-            a, b = pairs["obs" if job["fmt"] == "fail" else job["fmt"]]
-            mass.setdefault(f"{job['cond']}|{job['fmt']}", []).append(math.exp(lp[0, a].item()) + math.exp(lp[0, b].item()))
+    tails = []
+    for j, lp in zip(flat, rows):
+        a, b = pairs["obs" if j["fmt"] == "fail" else j["fmt"]]
+        if j["fmt"] == "fail":
+            cont = j["ids"][j["n_prompt"]:]
+            tails.append(sum(lp[k, cont[k]].item() for k in range(1, len(cont))))
+            continue
+        mass.setdefault(f"{j['cond']}|{j['fmt']}", []).append(math.exp(lp[0, a].item()) + math.exp(lp[0, b].item()))
     rep["mass_mean"] = {k: round(sum(v) / len(v), 4) for k, v in sorted(mass.items())}
     rep["mass_min"] = {k: round(min(v), 4) for k, v in sorted(mass.items())}
-    if "obs" in args.formats:
-        from wf import lexsem
-
-        tails = []
-        for r in recs:
-            t = by_id[r["id"]]
-            for c in ("aligned", "swapped"):
-                msgs = lexsem.messages(t, r["specs"][c], "obs")
-                ids, n_p = sequence(tok, msgs, args.mode, "Nothing happens.")
-                lp = score_batch(model, [(ids, n_p, True)], pad)[0]
-                cont = ids[n_p:]
-                tails.append(sum(lp[k, cont[k]].item() for k in range(1, len(cont))))
+    if tails:
         rep["failure_text_after_first_token_nats"] = {"min": round(min(tails), 4), "max": round(max(tails), 4),
                                                        "n": len(tails)}
     return rep
@@ -277,53 +265,59 @@ def main() -> None:
     ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--mode", choices=("plain", "block", "chat"), default="plain")
     ap.add_argument("--groups", default="core", help="comma list of wf.lexsem.GROUPS names")
-    ap.add_argument("--formats", default="obs,yn",
-                    help="obs, yn and optionally fail (the failure text, for the full two-candidate score)")
-    ap.add_argument("--batch-size", type=int, default=16)
+    ap.add_argument("--formats", default="obs,yn", help="obs and/or yn, for every condition")
+    ap.add_argument("--fail-groups", default="", help="groups whose conditions also get the failure-text sequence")
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--smoke", type=int, default=0, help="timing and validity only, on this many items")
-    ap.add_argument("--batch-sizes", default="1,8,16,32", help="smoke only")
     args = ap.parse_args()
 
     from wf import lexsem, rq1x
     from wf.rq2 import load_items
 
     conds = tuple(dict.fromkeys(c for g in args.groups.split(",") for c in lexsem.GROUPS[g]))
+    fail_conds = frozenset(c for g in args.fail_groups.split(",") if g for c in lexsem.GROUPS[g]) & set(conds)
     tok, model, rev = load(args.model)
     bad = token_checks(tok)
     if bad:
         raise SystemExit("frozen token counts disagree with the loaded tokenizer: " + "; ".join(bad))
     pairs = readout_ids(tok, args.mode)
     count = lambda s: len(tok(s, add_special_tokens=False)["input_ids"])  # noqa: E731
-    items = lexsem.sample(rq1x.rq1x_sets(load_items())["primary"])
+    collected = load_items()
+    items = lexsem.sample(rq1x.rq1x_sets(collected)["primary"])
     if sample_digest([t["id"] for t in items]) != EXPECTED_SAMPLE_DIGEST:
         raise SystemExit("the rebuilt sample differs from the frozen one")
     recs = lexsem.build(items, conds, count_tokens=count)
+    prev = lexsem.scene_prevalence(collected)  # the control audit's covariate (design section 5)
+    for r in recs:
+        r["references"]["target_prevalence"] = prev.get(r["goal_object"], 0.0)
+        r["references"]["ctrl_prevalence"] = prev.get(r["references"]["ctrl"], 0.0)
     by_id = {t["id"]: t for t in items}
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    fmts = tuple(args.formats.split(","))
+    env = environment(args.model, rev, args.mode)
     if args.smoke:
         t0 = time.time()
-        rep = smoke(args, tok, model, recs, by_id, pairs)
-        rep.update({"revision": rev, "groups": args.groups, "formats": args.formats, "wall_s": round(time.time() - t0, 1)})
+        rep = smoke(args, tok, model, recs, by_id, pairs, fail_conds)
+        rep.update({"environment": env, "revision": rev, "groups": args.groups, "formats": args.formats, "fail_groups": args.fail_groups,
+                    "wall_s": round(time.time() - t0, 1)})
         out.write_text(json.dumps(rep, indent=1))
-        print(json.dumps(rep["timing"]), flush=True)
+        print(json.dumps({k: rep[k] for k in ("n_sequences", "s_per_sequence", "wall_s")}), flush=True)
         return
+    (out.parent / f"{out.stem}_env.json").write_text(json.dumps(env, indent=1))
     (out.parent / f"{out.stem}_items.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
     check = out.parent / f"{out.stem}_check.json"
-    if not check.exists():
+    if needs_check(conds) and not check.exists():
         check.write_text(json.dumps(manipulation_check(tok, model, recs), indent=1))
-    pad =tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
     done = {json.loads(x)["id"] for x in out.open()} if out.exists() else set()
     t0 = time.time()
     for k, r in enumerate(recs[: args.limit]):
         if r["id"] in done:
             continue
-        jobs = item_jobs(by_id[r["id"]], r, tok, args.mode, tuple(args.formats.split(",")))
+        jobs = item_jobs(by_id[r["id"]], r, tok, args.mode, fmts, fail_conds)
         rec = {"id": r["id"], "game_id": r["game_id"], "stratum": r["stratum"], "model": args.model,
-               "revision": rev, "mode": args.mode,
-               "scores": readouts(jobs, run_item(model, jobs, args.batch_size, pad), pairs, tok)}
+               "revision": rev, "mode": args.mode, "scores": readouts(jobs, run_item(model, jobs), pairs, tok)}
         with out.open("a") as f:
             f.write(json.dumps(rec) + "\n")
         if k % 25 == 0:

@@ -24,12 +24,16 @@ PREDICTIONS = {
     "desc_assert": {"lexical": {ZERO}, "semantic": {FULL}, "evidence": {FULL}},
     "desc_use": {"lexical": {ZERO}, "semantic": {PART, FULL}, "evidence": {ZERO}},
     "alias_assert": {"lexical": {ZERO}, "semantic": {FULL}, "evidence": {FULL}},
-    "homonym": {"lexical": {PART, FULL}, "semantic": {ZERO}, "evidence": {ZERO}},
+    # A homonym in an unrelated sense may still activate the object's concept, so semantic activation allows a
+    # partial lift; the homonym never decides a reading alone (design section 5).
+    "homonym": {"lexical": {PART, FULL}, "semantic": {ZERO, PART}, "evidence": {ZERO}},
 }
-# Contrasts that may not decide an account's reading on their own (frequency confound; section 8).
-NOT_ALONE = {"alias_assert"}
+# Contrasts that may not decide an account's reading on their own: the alias (rarer words than the names) and the
+# homonym (not a pure lexical isolate; section 5).
+NOT_ALONE = {"alias_assert", "homonym"}
+NO_SINGLE = "no single proposed account fits; mixtures and unlisted mechanisms are not distinguished"
 PRECISION_LIMIT = 0.25  # half-width above which a contrast is "imprecise" and counts as undecided
-A_GATE = 0.5  # lower bound of A needed before relative lifts are read
+A_GATE = 0.25  # lower bound of A needed before relative lifts are read (a lift that is not about zero)
 
 
 def category(lo: float, hi: float, zones=LEVEL_ZONES) -> set[str]:
@@ -61,7 +65,7 @@ def account_statuses(rho: dict[str, tuple[float, float]]) -> dict[str, dict]:
         if decisive:
             overall = "contradicted"
         elif contra:
-            overall = "undecided (alias only)"
+            overall = "undecided (alias or homonym only)"
         elif per and all(s == "consistent" for s in per.values()):
             overall = "consistent"
         else:
@@ -73,12 +77,12 @@ def account_statuses(rho: dict[str, tuple[float, float]]) -> dict[str, dict]:
 def single_account_reading(rho: dict[str, tuple[float, float]], a_interval: tuple[float, float]) -> str:
     """The frozen wording of the single-account reading for one stratum and readout."""
     if a_interval[0] < A_GATE:
-        return "not assessable: no mention lift of at least half the goal effect to decompose"
+        return "not assessable: no mention lift above a quarter of the goal effect to decompose"
     st = account_statuses(rho)
     contra = [a for a in ACCOUNTS if st[a]["overall"] == "contradicted"]
     standing = [a for a in ACCOUNTS if a not in contra]
     if not standing:
-        return "no single account of the mention lift; read the mixture estimates"
+        return NO_SINGLE
     if len(standing) == 1:
         a = standing[0]
         if st[a]["overall"] == "consistent":
@@ -214,3 +218,16 @@ def agreement_reading(lo: float, hi: float) -> str:
     if hi < 0.5:
         return "weak item tracking"
     return "intermediate"
+
+
+def homonym_reading(lo: float, hi: float) -> str:
+    """Descriptive reading of the homonym's relative lift. A lift means the lexical form lifts without the intended
+    sense in context; it is not proof of lexical-only processing, since the original concept may also be activated."""
+    cat = category(lo, hi)
+    if (hi - lo) / 2 > PRECISION_LIMIT:
+        return "imprecise"
+    if cat <= {PART, FULL, "above"}:
+        return "the lexical form lifts without the intended sense in context"
+    if cat <= {ZERO, NEG}:
+        return "the lexical form without the intended sense does not lift"
+    return "undecided"

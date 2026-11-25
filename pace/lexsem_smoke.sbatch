@@ -12,9 +12,8 @@
 #SBATCH --error=logs/lexsem_smoke_%j.err
 #
 # Lexsem smoke run (notes/lexsem_design.md section 11): timing and validity figures only, on 5 items. No effect is
-# computed or written. Three passes: Qwen3-8B in plain text with every condition group and both formats at batch
-# sizes 1, 8, 16 and 32; Qwen3-8B in its thinking-off chat format (the empty think block), the reduced condition
-# set, yes/no; Llama-3.1-8B in its chat template, the reduced set, yes/no.
+# computed or written. The three runs of pace/lexsem.sbatch, scored exactly as there (one unpadded sequence at a time),
+# on 5 items each.
 
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
@@ -28,10 +27,9 @@ nvidia-smi --query-gpu=name,memory.total --format=csv || true
 activate_serve
 python -c "import torch, transformers; print('torch', torch.__version__, 'transformers', transformers.__version__)"
 S=scripts/lexsem/score.py
-python "${S}" --mode plain --groups core,ignore,position,reliability --smoke 5 --batch-sizes 1,8,16,32 \
+python "${S}" --mode plain --groups core,ignore,position,reliability --formats obs,yn --fail-groups core --smoke 5 \
   --out "${D}/smoke_qwen_plain.json"
-python "${S}" --mode block --groups names_only --formats yn --smoke 5 --batch-sizes 1,16 \
-  --out "${D}/smoke_qwen_block.json"
+python "${S}" --mode block --groups block8 --formats yn --smoke 5 --out "${D}/smoke_qwen_block.json"
 python "${S}" --model meta-llama/Llama-3.1-8B-Instruct --mode chat --groups names_only --formats yn --smoke 5 \
-  --batch-sizes 1,16 --out "${D}/smoke_llama_chat.json"
+  --out "${D}/smoke_llama_chat.json"
 echo "=== lexsem smoke END $(date) ==="

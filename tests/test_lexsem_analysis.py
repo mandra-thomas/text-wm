@@ -8,6 +8,7 @@ import pytest
 from wf import lexsem
 from wf import lexsem_analysis as LA
 from wf import lexsem_rules as R
+from wf.constants import REVISIONS
 
 OBJECTS = ("mug", "pan", "saltshaker", "apple", "soapbar")  # homonym, alias + homonym, spelling, plain, few-shot
 A_TRUE = 0.95
@@ -27,7 +28,8 @@ def _yn(y):
 
 
 def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), games=40, deny_mass=None,
-          trap=False, fail=False, desc_fail=False, commit=None, name="qwen"):
+          trap=False, fail=False, desc_fail=False, commit=None, name="qwen", a_true=A_TRUE, model="Qwen/Qwen3-8B",
+          gpu="NVIDIA L40S"):
     """Per-item scores from a planted mixture: every mention condition's net lift is its planted relative lift times
     A times the item's goal effect, on top of its control."""
     rng = random.Random(seed)
@@ -43,7 +45,7 @@ def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), 
             if c in lexsem.ANCHORS or not c.startswith(("ctrl", "cdesc")):
                 continue
             y[c] = b + 0.2 + rng.gauss(0, noise)
-        y["name_assert"] = y["ctrl_assert"] + A_TRUE * g + rng.gauss(0, noise)
+        y["name_assert"] = y["ctrl_assert"] + a_true * g + rng.gauss(0, noise)
         for c in conds + conds:  # twice, so a condition whose control is itself a mention condition is filled
             if c in y or c in lexsem.ANCHORS:
                 continue
@@ -57,7 +59,7 @@ def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), 
             ctrl = lexsem.CONTROL_OF.get(c, "ctrl_assert")
             if ctrl not in y:
                 continue
-            y[c] = y[ctrl] + rho.get(c, 1.0) * A_TRUE * g + rng.gauss(0, noise)
+            y[c] = y[ctrl] + rho.get(c, 1.0) * a_true * g + rng.gauss(0, noise)
         rec = {}
         for c, v in y.items():
             m = deny_mass if (deny_mass and c == "name_deny") else 0.9
@@ -71,7 +73,8 @@ def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), 
                                   "toks": [" Nothing", " happens", "."], "n_prompt": 600}
         gid = f"valid_unseen/{i % games}"
         items.append({"id": f"t{i:04d}", "game_id": gid, "stratum": st, "goal_object": obj,
-                      "fewshot_object": obj in lexsem.FEWSHOT_OBJECTS})
+                      "fewshot_object": obj in lexsem.FEWSHOT_OBJECTS,
+                      "references": {"target_prevalence": rng.random(), "ctrl_prevalence": rng.random()}})
         scores.append({"id": f"t{i:04d}", "game_id": gid, "stratum": st, "scores": rec})
     p = tmp_path / f"{name}.jsonl"
     p.write_text("".join(json.dumps(s) + "\n" for s in scores))
@@ -81,6 +84,9 @@ def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), 
     (tmp_path / f"{name}_check.json").write_text(json.dumps(checks))
     if commit:
         (tmp_path / f"{name}_commit.txt").write_text(commit + "\n")
+    env = {"gpu": gpu, "torch": "2.14.1", "transformers": "5.23.0", "model": model, "revision": REVISIONS[model],
+           "dtype": "bfloat16", "unbatched": True}
+    (tmp_path / f"{name}_env.json").write_text(json.dumps(env))
     return p
 
 
@@ -91,8 +97,8 @@ def _run(p, **kw):
 @pytest.mark.parametrize("weights,expected", [
     ({"evidence": 1}, "only evidence fits"),
     ({"lexical": 1}, "only lexical fits"),
-    ({"semantic": .5, "evidence": .5}, "no single account"),
-    ({"lexical": .5, "semantic": .5}, "no single account"),
+    ({"semantic": .5, "evidence": .5}, "no single proposed account"),
+    ({"lexical": .5, "semantic": .5}, "no single proposed account"),
 ])
 def test_core_package_reads_planted_accounts_without_optional_arms(tmp_path, weights, expected):
     rep = _run(plant(tmp_path, weights))
@@ -122,17 +128,23 @@ def test_mixture_weights_and_item_agreement(tmp_path):
 def test_optional_arms_are_read_when_present(tmp_path):
     p = plant(tmp_path, {"evidence": 1}, groups=("core", "ignore", "position", "reliability"), fail=True)
     block = plant(tmp_path, {"evidence": 1}, groups=("names_only",), name="block")
-    llama = plant(tmp_path, {"semantic": 1}, groups=("names_only",), name="llama")
+    llama = plant(tmp_path, {"semantic": 1}, groups=("names_only",), name="llama",
+                  model="meta-llama/Llama-3.1-8B-Instruct")
     rep = _run(p, block_path=str(block), llama_path=str(llama))
     x = rep["qwen_plain"]["first"]["later"]
     assert x["ignore"]["reading"] == "contradicts relevance as a hint"  # planted: ignore lifts fully
-    assert x["position"]["recency"]["reading"] == "no recency effect beyond 0.25"
+    assert x["position"]["recency"]["reading"] == "no recency effect beyond 0.25" and "confounds" in x["position"]
     assert x["position"]["visibility"]["reading"] == "no visibility effect beyond 0.25"
     assert x["reliability"]["reading"] == "no reliability effect beyond 0.25"
     assert rep["full_two_candidate"] == "scored" and "A" in rep["qwen_plain"]["full2c"]["later"]
     assert rep["block_yes_no"]["yn"]["later"]["single_account_reading"].startswith("only evidence fits")
     assert "name_use" in rep["model_comparison_yes_no"]["later"]  # Qwen evidence-like, Llama semantic-like
     assert "reading" in rep["qwen_plain"]["yn"]["step0"]["bridge"]
+    assert rep["bridge_plain_vs_block"]["step0"]["reading"] == "the same in both formats (within 0.25)"
+    q = rep["qwen_plain"]
+    assert set(q["readings_by_readout"]) == {"first-token observation", "yes/no", "full two-candidate"}
+    assert len(q["readout_disagreements"]) == 3
+    assert "scope" in x["reliability"] and "homonym_reading" in x
 
 
 def test_mass_gate_falls_back_to_the_unnormalized_readout(tmp_path):
@@ -168,3 +180,22 @@ def test_recognition_gate_and_commit_check(tmp_path):
     assert _run(p, expect_commit="abc123")["qwen_plain"]
     with pytest.raises(SystemExit, match="frozen commit"):
         _run(p, expect_commit="def456")
+
+
+def test_ratios_carry_their_numerator_and_denominator_and_need_a_well_estimated_reference(tmp_path):
+    x = _run(plant(tmp_path, {"evidence": 1}))["qwen_plain"]["first"]["later"]
+    iv = x["relative_lift"]["desc_assert"]
+    assert iv["reference_ok"] and "numerator_nats" in iv and "denominator_nats" in iv
+    assert iv["num_den_correlation"] is not None
+    cov = _run(plant(tmp_path, {"evidence": 1}, name="cov"))["qwen_plain"]["first"]["later"]["prevalence_covariate"]
+    assert abs(cov["correlation"]["estimate"]) < 0.3  # planted: the net effect does not depend on the gap
+    weak = _run(plant(tmp_path, {"evidence": 1}, a_true=0.03, noise=0.3, name="weak"))["qwen_plain"]["first"]["later"]
+    assert all("ratio_not_read" in v for v in weak["relative_lift"].values() if "reference_ok" in v)
+    assert weak["single_account_reading"].startswith("not assessable")
+
+
+def test_environment_check(tmp_path):
+    p = plant(tmp_path, {"evidence": 1}, gpu="NVIDIA A40")
+    with pytest.raises(SystemExit, match="GPU"):
+        _run(p)
+    assert _run(p, require_env=False)["qwen_plain"]

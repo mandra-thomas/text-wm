@@ -210,6 +210,16 @@ def test_token_identity_check_passes_the_frozen_carriers_and_refuses_a_quoted_na
         lscore.item_jobs(t, rec, _Tok(), "plain", ("obs",))
 
 
+def test_failure_text_only_for_the_chosen_conditions(mock_score):
+    t = _pan()
+    rec = lexsem.build([t], lexsem.GROUPS["core"] + lexsem.GROUPS["ignore"])[0]
+    core = frozenset(lexsem.GROUPS["core"])
+    jobs = lscore.item_jobs(t, rec, _Tok(), "plain", ("obs", "yn"), core)
+    assert {j["cond"] for j in jobs if j["fmt"] == "fail"} == set(rec["specs"]) & core
+    j = next(j for j in jobs if j["fmt"] == "fail")
+    assert _Tok().decode([]) == "" and len(j["ids"]) > j["n_prompt"]
+
+
 # ---------------- the rules ----------------
 
 def _iv(points, half=0.0):
@@ -220,11 +230,11 @@ def _iv(points, half=0.0):
     ({"lexical": 1}, "only lexical fits"),
     ({"semantic": 1}, "only semantic fits"),
     ({"evidence": 1}, "only evidence fits"),
-    ({"lexical": .5, "evidence": .5}, "no single account"),
-    ({"semantic": .5, "evidence": .5}, "no single account"),  # read "only evidence" by the first rules (M2)
-    ({"lexical": .5, "semantic": .5}, "no single account"),  # read "only lexical" by the first rules (M2)
-    ({"semantic": .3, "evidence": .7}, "no single account"),
-    ({"lexical": .7, "semantic": .3}, "no single account"),
+    ({"lexical": .5, "evidence": .5}, "no single proposed account"),
+    ({"semantic": .5, "evidence": .5}, "no single proposed account"),  # read "only evidence" by the first rules (M2)
+    ({"lexical": .5, "semantic": .5}, "no single proposed account"),  # read "only lexical" by the first rules (M2)
+    ({"semantic": .3, "evidence": .7}, "no single proposed account"),
+    ({"lexical": .7, "semantic": .3}, "no single proposed account"),
 ])
 def test_planted_scenarios_without_noise(weights, expected):
     assert R.single_account_reading(_iv(R.planted(weights)), (0.9, 1.0)).startswith(expected)
@@ -232,13 +242,13 @@ def test_planted_scenarios_without_noise(weights, expected):
 
 def test_rule_wording_and_gates():
     pts = R.planted({"evidence": 1})
-    assert R.single_account_reading(_iv(pts), (0.3, 0.6)).startswith("not assessable")
+    assert R.single_account_reading(_iv(pts), (0.1, 0.6)).startswith("not assessable")
     wide = R.single_account_reading(_iv(pts, 0.3), (0.9, 1.0))  # every contrast imprecise
     assert wide.startswith("not distinguished between lexical and semantic and evidence")
     near = R.single_account_reading(_iv(R.planted({"semantic": .15, "evidence": .85}), 0.12), (0.9, 1.0))
     assert near.startswith("evidence not contradicted, not shown consistent")
     alias_only = {**_iv(R.planted({"semantic": 1})), "alias_assert": (-0.1, 0.1)}
-    assert R.account_statuses(alias_only)["semantic"]["overall"] == "undecided (alias only)"
+    assert R.account_statuses(alias_only)["semantic"]["overall"] == "undecided (alias or homonym only)"
 
 
 def test_other_readings():
