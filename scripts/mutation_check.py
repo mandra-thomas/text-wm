@@ -890,8 +890,11 @@ KILLERS: dict[str, str] = {}  # mutant name -> the first test that failed on it 
 
 def _run_tests(python: str, work: Path, targets: list[str], timeout: int = 900, name: str = "") -> str:
     try:
+        # No bytecode cache (2026-11-24, TextCraft round 3 D-T1/D-G1 run): a stale .pyc of a restored module made one
+        # shard credit 38 later mutants to a test that failed only because of the earlier mutant.
         result = subprocess.run([python, "-m", "pytest", "-q", "-x", "-rfE", "-p", "no:cacheprovider", "--tb=no",
-                                 *targets], cwd=work, capture_output=True, text=True, timeout=timeout)
+                                 *targets], cwd=work, capture_output=True, text=True, timeout=timeout,
+                                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
     except subprocess.TimeoutExpired:
         return "timeout"
     # Strict rule (2026-11-22, families wave B review 1): a mutant is killed only when pytest exits 1 (tests ran and
