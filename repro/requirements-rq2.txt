@@ -1,0 +1,12 @@
+# Exact versions for rerunning the RQ2 headline analysis on a CPU, with Python 3.11.
+# numpy, scipy and PyYAML are the versions of the study's environment (notes/reproducing.md, section 1).
+# requests and tqdm are imported by the package but play no part in the numbers. Tested 2026-11-25.
+numpy==2.2.6
+scipy==1.17.1
+PyYAML==6.0.3
+requests==2.34.2
+tqdm==4.70.1
+certifi==2026.11.20
+charset-normalizer==3.5.3
+idna==3.20
+urllib3==2.8.0

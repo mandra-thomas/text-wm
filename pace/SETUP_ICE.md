@@ -26,8 +26,8 @@ cd Word2World
 git checkout e8dc240269fb222de3c242b09c70bfbf0b4ac1c9   # the commit the study used (runs/env.json)
 bash scripts/env_setup/uv_agentgym_rl.sh
 bash scripts/env_setup/uv_alfworld.sh
-# Remove any pre-existing stock ALFWorld data first: Word2World's data renames actions (put -> move)
-# and adds help, which the code expects. Then:
+# Remove any pre-existing ALFWorld data older than 0.4.0 first: the code expects ALFWorld's 0.4.0 action
+# wording (put -> move, plus help), which Word2World's download supplies as ALFWorld's own files. Then:
 python scripts/download_data/download_data.py
 # Confirm server script exists:
 ls scripts/env_server/start_alfworld.sh

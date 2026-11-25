@@ -51,7 +51,7 @@ On these items, almost all of the aligned-versus-swapped difference comes from n
 
 ### What "ALFWorld" means here
 
-The environment is ALFWorld served by the AgentGym server that ships with Word2World (checkout `e8dc240`), not the original ALFWorld release. It uses Word2World's renamed-action data: `put` is called `move`, and there is a `help` action. The server runs alfworld 0.3.3 and TextWorld 1.7.0 (versions in `reproducing.md`). AgentGym's `valid_unseen` list has 195 games, of which 134 are solvable; the rest crash on reset, and `wf/env/server.py` leaves them out (`PILOT_PROTOCOL.md`, §5.1). ALFWorld itself ends every episode at 50 steps (`ENV_STEP_LIMIT`). To any command that is not admissible at that moment, the server replies "Nothing happens.", so every failing action in this study has that same reply.
+The environment is ALFWorld served by the AgentGym server that ships with Word2World (checkout `e8dc240`), not the original ALFWorld release. Its game data came through Word2World's download script but are ALFWorld's own files (byte-identical to ALFWorld's GitHub release files; checked 2026-11-25), with the action wording ALFWorld introduced in version 0.4.0 (pull request #94): `put` is called `move`, and there is a `help` action. The server runs alfworld 0.3.3 and TextWorld 1.7.0 (versions in `reproducing.md`). AgentGym's `valid_unseen` list has 195 games, of which 134 are solvable; the rest crash on reset, and `wf/env/server.py` leaves them out (`PILOT_PROTOCOL.md`, §5.1). ALFWorld itself ends every episode at 50 steps (`ENV_STEP_LIMIT`). To any command that is not admissible at that moment, the server replies "Nothing happens.", so every failing action in this study has that same reply.
 
 ### How the histories were produced
 
