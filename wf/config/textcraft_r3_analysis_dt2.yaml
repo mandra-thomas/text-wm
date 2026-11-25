@@ -1,0 +1,10 @@
+run_id: textcraft_r3_analysis_dt2
+# TextCraft round 3, deviation D-T2 (2026-11-25, notes/textcraft_r3_deviation_analysis_config.md): the analysis run
+# that is read. The frozen wf/config/textcraft_r3_analysis.yaml is kept unchanged; it names gemma4-12b-it and round 2's
+# scores, which the filed gates contradict, so the analysis refuses it. Here both keys are null: the analysis takes the
+# Gemma slot from r3_gates.gemma_slot (design 14.M3) and B3's older scores from the environment check's outcome
+# (r3_analysis.b3_source, design 14.S5), exactly as the frozen code does for a null value. Every other key as frozen.
+manifest: wf/textcraft/data/r2_manifest.json
+gemma_core: null  # from the filed smoke records: gemma4-e4b-it (12B failed attention agreement), itself "not scored"
+b3_old_scores: null  # from the environment check: "rescore" (the check failed; textcraft_r3_rescore_* were run)
+r2_runs_root: null

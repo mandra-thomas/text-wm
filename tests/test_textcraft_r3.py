@@ -10,6 +10,7 @@ import re
 import statistics
 import types
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -1749,6 +1750,59 @@ def _no_tests(rec, path=""):
             _no_tests(v, path)
 
 
+# ---------------- deviation D-T2 (notes/textcraft_r3_deviation_analysis_config.md) ----------------
+
+# Byte copies of the freeze commit's analysis and gates (tests/ is outside the protected code paths), so the frozen code
+# can be run beside the current code in any checkout, the mutation runner's copy without .git included.
+FREEZE_COMMIT = "0d6f46003ac75eb29d59db4f3e6ca1437d0cf20d"
+FROZEN_DIR = Path(__file__).resolve().parent / "golden" / "textcraft_r3_frozen"
+FROZEN_SHA256 = {"r3_analysis": "0565777b6d0a51f9e68843c7a7d6dc3695a88ba7cd027b1851c35d13d9ac924e",
+                 "r3_gates": "f43201a4b6ecb9209d3bf9bd4a68f60088ae58d61a67e646f7d6490e707ca849"}
+# The metrics keys that carry or decide a confirmatory verdict; they must be byte-identical between the freeze code
+# and the code the analysis runs at, and between any interim and the final analysis (the deviation note's list).
+CONFIRMATORY_KEYS = ("A3", "A3x", "B3", "per_model", "model_states", "gemma_core", "gemma_slot", "fallback_used",
+                     "environment_check", "environment_rule", "declared_not_run", "missing_scores",
+                     "round2_analysis_read", "freeze_commit")
+EXPECTED_TO_DIFFER = ("exploratory", "inference_map", "deviation_t1")
+
+
+def _frozen_provenance(probs):
+    """provenance_problems without the exploratory runs' keys, which no family reads."""
+    return {k: v for k, v in probs.items() if k != "think" and not k.startswith("r3x:")}
+
+
+def _frozen_analysis():
+    """The freeze commit's r3_analysis, importing the freeze commit's r3_gates, loaded from the byte copies; every other
+    module is the current one (unchanged since the freeze). Draw counts follow the current module (the `fast` fixture)."""
+    import hashlib
+    import sys
+
+    import wf.textcraft as pkg
+
+    mods = {}
+    for name in ("r3_gates", "r3_analysis"):
+        src = (FROZEN_DIR / f"{name}.py.txt").read_bytes()
+        assert hashlib.sha256(src).hexdigest() == FROZEN_SHA256[name], name
+        mod = types.ModuleType(f"wf.textcraft._{name}_frozen")
+        mod.__file__ = str(Path(G.__file__).with_name(f"{name}.py"))  # its config and data paths resolve as at the tag
+        sys.modules[mod.__name__] = mod
+        saved = pkg.r3_gates
+        pkg.r3_gates = mods.get("r3_gates", saved)  # the frozen analysis binds the frozen gates
+        try:
+            exec(compile(src, str(FROZEN_DIR / f"{name}.py.txt"), "exec"), mod.__dict__)
+        finally:
+            pkg.r3_gates = saved
+        mods[name] = mod
+    fz = mods["r3_analysis"]
+    assert fz.G is mods["r3_gates"] and fz.G is not G
+    fz.B_DRAWS, fz.DESC_DRAWS = Z.B_DRAWS, Z.DESC_DRAWS
+    return fz
+
+
+def _dumps(x):
+    return json.dumps(x, sort_keys=True, default=str)
+
+
 def test_dg1_the_exploratory_block_cannot_enter_any_family(mock_runs, small, fast, monkeypatch):
     from wf.textcraft import r3x as X
 
@@ -1764,11 +1818,20 @@ def test_dg1_the_exploratory_block_cannot_enter_any_family(mock_runs, small, fas
     records = small
     shots = P.fewshot_examples(P.FEWSHOT)
     states = {X.TAG: {"state": Z.NOT_SCORED}}
+    # a real environment result, so B3 is computed: the check failed, and B3 reads the older models' serve2 rescores
+    old = {o: _planted(small, o) for o, _n in R3.pairs(R3.GEMMA_FALLBACK)}
+    env = {"status": "fail"}
     kw = dict(states=states, gemma=R3.GEMMA_FALLBACK)
-    base = Z.analyse(records, shots, scores, {"b_draws": 300}, **kw)
-    with_x = Z.analyse(records, shots, scores, {"b_draws": 300}, **kw, xscores={X.TAG: xs})
+    args = (records, shots, scores, {"b_draws": 300}, None, old, env)
+    frozen = _frozen_analysis().analyse(*args, **kw)  # the freeze commit's code, which has no exploratory run
+    base = Z.analyse(*args, **kw)
+    with_x = Z.analyse(*args, **kw, xscores={X.TAG: xs})
     for fam in ("A3", "A3x", "B3"):
-        assert json.dumps(with_x[fam], sort_keys=True, default=str) == json.dumps(base[fam], sort_keys=True, default=str)
+        assert _dumps(with_x[fam]) == _dumps(base[fam]) == _dumps(frozen[fam]), fam
+    assert with_x["B3"]["old_scores"] == "rescore"
+    scored_pairs = {"qwen3-8b->qwen3.5-9b", "mistral-7b-v0.3->ministral3-8b-it"}
+    assert set(with_x["B3"]["differences"]) == scored_pairs
+    assert sum(not v["padded"] for v in with_x["B3"]["family"].values()) == 20  # 2 pairs x 5 contrasts x 2 tests
     assert with_x["A3"]["verdicts"][X.TAG]["contrasts"] == {c: Z.NOT_SCORED for c in A.CONTRASTS}
     assert X.TAG in with_x["A3"]["not_scored"] and with_x["A3"]["family_size"] == 30
     assert with_x["B3"]["readings"][f"gemma2-9b-it->{X.TAG}"]["parent_penalty"] == Z.NOT_SCORED
@@ -1781,7 +1844,8 @@ def test_dg1_the_exploratory_block_cannot_enter_any_family(mock_runs, small, fas
     assert block["standardized"] == json.loads(json.dumps(Z.strip_tests(block["standardized"])))
     _no_tests(block)
     # a score from the exploratory run passed as a core model's would be the only way in, and the run never files one
-    assert not list(root.glob(f"textcraft_r3_score_{X.TAG}/shard_*/scoring.jsonl")) or True
+    assert not list(root.glob(f"textcraft_r3_score_{X.TAG}/shard_*/scoring.jsonl"))
+    assert list(root.glob(f"{X.RUN_ID}/shard_*/scoring.jsonl"))
     # the analysis run reads the exploratory run into its block only
     monkeypatch.setattr(Z, "golden_tokens_check", lambda *a: {"ok": True})
     Z.run_textcraft_r3_analysis({"run_id": "textcraft_r3_analysis", "manifest": man})
@@ -1789,3 +1853,166 @@ def test_dg1_the_exploratory_block_cannot_enter_any_family(mock_runs, small, fas
     assert m["exploratory"][f"r3x_{X.TAG}"]["state"] == "scored (exploratory)"
     _no_tests(m["exploratory"][f"r3x_{X.TAG}"])
 
+
+
+def test_dt2_the_frozen_copies_are_the_freeze_commits_files():
+    import hashlib
+    import subprocess
+
+    from wf.util import REPO_ROOT
+
+    for name, sha in FROZEN_SHA256.items():
+        assert hashlib.sha256((FROZEN_DIR / f"{name}.py.txt").read_bytes()).hexdigest() == sha
+    try:
+        at_tag = {n: subprocess.check_output(["git", "show", f"{FREEZE_COMMIT}:wf/textcraft/{n}.py"], cwd=REPO_ROOT,
+                                             stderr=subprocess.DEVNULL) for n in FROZEN_SHA256}
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("no git history with the freeze commit in this copy")
+    for name, src in at_tag.items():
+        assert (FROZEN_DIR / f"{name}.py.txt").read_bytes() == src, name
+
+
+def test_dt2_the_corrected_config_takes_both_values_from_the_gates():
+    from wf.runs import load_config
+
+    frozen, dt2 = load_config("textcraft_r3_analysis"), load_config("textcraft_r3_analysis_dt2")
+    # the frozen original, unchanged
+    assert frozen == {"run_id": "textcraft_r3_analysis", "manifest": "wf/textcraft/data/r2_manifest.json",
+                      "gemma_core": "gemma4-12b-it", "b3_old_scores": "round2", "r2_runs_root": None}
+    # the correction: the same keys, the two gate-determined ones null (the code then takes them from the gates)
+    assert dt2 == {**frozen, "run_id": "textcraft_r3_analysis_dt2", "gemma_core": None, "b3_old_scores": None}
+    assert "textcraft_r3_analysis_dt2" in RUNNERS
+    # a null value is the frozen code's "derive it": b3_source and the Gemma check accept it and return the gates' value
+    for status, want in (("pass", "round2"), ("fail", "rescore"), ("not run (GPU types)", "rescore"), ("waiting", "waiting")):
+        assert Z.b3_source(status, dt2) == _frozen_analysis().b3_source(status, dt2) == want
+
+
+def _replay_runs(mock_runs, small, think_and_r3x=True):
+    """Round 3's state as filed, in mock: round 2 scored and analysed; the two core models scored; both Gemma 4 smoke
+    runs filed a failed attention-agreement gate; the environment check and the serve2 rescoring of the three older
+    models; no extension model; and (optionally) the thinking arm and the exploratory E4B run."""
+    from wf.textcraft import r3x as X
+
+    man = _manifest(mock_runs, small)
+    for tag in R.TAGS:
+        assert S2.run_textcraft_r2_score({"run_id": f"textcraft_r2_score_{tag}", "model": tag, "manifest": man}) == 0
+    A.run_textcraft_r2_analysis({"run_id": "textcraft_r2_analysis", "manifest": man, "models": list(R.TAGS)})
+    for tag in ("qwen3.5-9b", "ministral3-8b-it"):
+        assert S.run_textcraft_r3_score({"run_id": f"textcraft_r3_score_{tag}", "model": tag, "manifest": man}) == 0
+    for tag in (R3.GEMMA_CORE, R3.GEMMA_FALLBACK):
+        d = mock_runs / "runs" / f"textcraft_r3_smoke_{tag}" / "shard_00_of_01"
+        d.mkdir(parents=True)
+        (d / "tokenization_checks.json").write_text(json.dumps({"ok": False, "attention_agreement": {"ok": False}}))
+    for tag in R3.ENVCHECK_MODELS:
+        plan = {"models": {tag: {"runnable": True, "n_r2_shards": 1, "jobs": [{"job": 0, "gpu": "mock", "r2_shards": [0]}]}}}
+        assert S.run_textcraft_r3_envcheck({"run_id": f"textcraft_r3_envcheck_{tag}", "model": tag, "manifest": man,
+                                            "plan": plan}) == 0
+    for tag in R3.RESCORE_MODELS:
+        assert S.run_textcraft_r3_rescore({"run_id": f"textcraft_r3_rescore_{tag}", "model": tag, "manifest": man}) == 0
+    if think_and_r3x:
+        assert K.run_textcraft_r3_think({"run_id": "textcraft_r3_think_qwen3.5-9b", "manifest": man}) == 0
+        assert X.run_textcraft_r3x({"run_id": X.RUN_ID, "model": X.TAG, "manifest": man, "n_shards": 1}) == 0
+    return man
+
+
+def test_dt2_the_corrected_analysis_matches_the_frozen_code_on_a_replay(mock_runs, small, fast, monkeypatch):
+    """The analysis as it will run (deviation D-T2: the current code, run id textcraft_r3_analysis_dt2, both keys null)
+    against the freeze commit's code on the same filed runs: every confirmatory key byte-identical; the only differences
+    are the exploratory E4B block, one inference-map line and the deviation record. The literal frozen config is
+    refused."""
+    import shutil
+
+    from wf.runs import load_config
+
+    man = _replay_runs(mock_runs, small)
+    root = mock_runs / "runs"
+    frozen_root = mock_runs / "runs_frozen"
+    shutil.copytree(root, frozen_root)
+    fz = _frozen_analysis()
+    # the environment check fails (as filed): part 1 fails for every model, so B3 reads the rescores
+    monkeypatch.setattr(Z, "golden_tokens_check", lambda *a: {"ok": False})
+    monkeypatch.setattr(fz, "golden_tokens_check", lambda *a: {"ok": False})
+    # the frozen config as committed is refused, by the current code and by the frozen code
+    literal = {**load_config("textcraft_r3_analysis"), "manifest": man}
+    for mod in (Z, fz):
+        assert mod.run_textcraft_r3_analysis(literal) == 1
+        assert "but the fallback rule gives 'gemma4-e4b-it'" in (root / "textcraft_r3_analysis" / "STATUS.md").read_text()
+    shutil.rmtree(root / "textcraft_r3_analysis")
+    cfg = {**load_config("textcraft_r3_analysis_dt2"), "manifest": man}
+    assert Z.run_textcraft_r3_analysis(cfg) == 0
+    new = json.loads((root / "textcraft_r3_analysis_dt2" / "metrics.json").read_text())
+    monkeypatch.setenv("RUNS_DIR", str(frozen_root))
+    assert fz.run_textcraft_r3_analysis({**cfg, "run_id": "textcraft_r3_analysis"}) == 0
+    old = json.loads((frozen_root / "textcraft_r3_analysis" / "metrics.json").read_text())
+    for k in CONFIRMATORY_KEYS:
+        assert _dumps(new[k]) == _dumps(old[k]), k
+    assert _dumps(_frozen_provenance(new["provenance_problems"])) == _dumps(_frozen_provenance(old["provenance_problems"]))
+    differ = {k for k in set(new) | set(old) if _dumps(new.get(k)) != _dumps(old.get(k))}
+    assert differ <= set(EXPECTED_TO_DIFFER), differ
+    shared = set(new["exploratory"]) & set(old["exploratory"])
+    assert set(new["exploratory"]) - shared == {"r3x_gemma4-e4b-it"} and "thinking_arm" in shared
+    assert all(_dumps(new["exploratory"][k]) == _dumps(old["exploratory"][k]) for k in shared)
+    # the gates' values, taken by the code from the filed records
+    assert new["gemma_core"] == R3.GEMMA_FALLBACK and new["fallback_used"]
+    assert new["model_states"][R3.GEMMA_FALLBACK]["state"] == Z.NOT_SCORED
+    assert new["environment_check"]["status"] == "fail" and new["B3"]["old_scores"] == "rescore"
+    assert set(new["B3"]["differences"]) == {"qwen3-8b->qwen3.5-9b", "mistral-7b-v0.3->ministral3-8b-it"}
+    assert sum(not v["padded"] for v in new["B3"]["family"].values()) == 20
+    assert new["A3"]["not_scored"] == [R3.GEMMA_FALLBACK] and "H3_P" in new["A3"]
+    assert new["A3x"]["waiting"] == list(R3.EXTENSION)  # no extension model in the replay
+
+
+def test_dt2_a_second_deviation_tag_leaves_d_t1_intact(tmp_path, monkeypatch):
+    """With real git: a freeze tag, D-T1's tag and a D-T2 tag on three commits. deviation_commit still finds exactly
+    D-T1's commit; thinking and exploratory shards made there are accepted by the analysis (at the D-T2 commit, which
+    the analysis does not check), every other run only at the freeze commit; a thinking run cannot start at D-T2's
+    commit, which changes code outside D-T1's."""
+    import shutil
+    import subprocess
+
+    if shutil.which("git") is None:
+        pytest.skip("no git")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=repo, stderr=subprocess.DEVNULL).decode().strip()
+
+    def commit(files, tag):
+        for f, text in files.items():
+            (repo / f).parent.mkdir(parents=True, exist_ok=True)
+            (repo / f).write_text(text)
+        git("add", "-A")
+        git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", tag)
+        git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "tag", "-a", tag, "-m", tag)
+        return git("rev-parse", "HEAD")
+
+    git("init", "-q")
+    frz = commit({"wf/textcraft/r3_think.py": "a\n", "wf/runs.py": "a\n", "notes/n.md": "a\n"},
+                 "textcraft-r3-design-frozen-2026-11-23")
+    t1 = commit({"wf/textcraft/r3_think.py": "b\n", "notes/t1.md": "b\n"}, "textcraft-r3-deviation-t1-2026-11-23")
+    t2 = commit({"wf/runs.py": "c\n", "wf/config/textcraft_r3_analysis_dt2.yaml": "c\n", "notes/t2.md": "c\n"},
+                "textcraft-r3-deviation-t2-2026-11-25")
+    run_git = lambda args: git(*args)  # noqa: E731
+    assert git("tag", "-l", G.DEVIATION_TAG_PREFIX + "*") == "textcraft-r3-deviation-t1-2026-11-23"
+    assert G.freeze_commit(run_git) == frz
+    dev = G.deviation_commit(run_git, frz)
+    assert dev == {"commit": t1, "tag": "textcraft-r3-deviation-t1-2026-11-23", "problems": []}
+    l40 = ["NVIDIA L40S"]
+    at = lambda name, c: _shard(tmp_path, name, [{"gpu": l40, "git_sha": c}])  # noqa: E731
+    ok = {"think": [at("think/shard_00_of_02", t1), at("think/shard_01_of_02", t1)],
+          "r3x:gemma4-e4b-it": [at("r3x/shard_00_of_02", t1)],
+          "envcheck:qwen3-8b": [at("env/shard_00_of_01", frz)], "rescore:qwen3-8b": [at("res/shard_00_of_02", frz)]}
+    assert Z.other_commit_problems(ok, frz, dev, run_git=run_git) == {}
+    bad = {"think": [at("think2/shard_00_of_02", t2)], "r3x:gemma4-e4b-it": [at("r3x2/shard_00_of_02", t2)],
+           "rescore:qwen3-8b": [at("res2/shard_00_of_02", t1)]}
+    assert set(Z.other_commit_problems(bad, frz, dev, run_git=run_git)) == set(bad)
+    assert set(Z.provenance_problems({"qwen3.5-9b": [at("core/shard_00_of_02", t1)]}, {}, frz, run_git=run_git)) == {"qwen3.5-9b"}
+    # job start: a thinking run at D-T2's commit is refused; at D-T1's it starts under D-T1
+    monkeypatch.setenv("WF_MOCK_SCORE", "0")
+    clean = lambda: False  # noqa: E731
+    with pytest.raises(SystemExit, match="not the freeze tag"):
+        G.require_freeze_commit(run_git, clean, run_id="textcraft_r3_think_qwen3.5-9b")
+    git("checkout", "-q", t1)
+    out = G.require_freeze_commit(run_git, clean, run_id="textcraft_r3_think_qwen3.5-9b")
+    assert (out["deviation"], out["deviation_commit"], out["head"]) == ("D-T1", t1, t1)

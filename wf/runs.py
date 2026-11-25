@@ -1470,6 +1470,9 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "textcraft_r3_analysis": lambda cfg: _lazy("textcraft.r3_analysis", "run_textcraft_r3_analysis")(cfg),
     # 2026-11-23, deviation D-G1 (notes/textcraft_r3_deviation_gemma_e4b.md): exploratory, outside every family.
     "textcraft_r3x_gemma4-e4b-it": lambda cfg: _lazy("textcraft.r3x", "run_textcraft_r3x")(cfg),
+    # 2026-11-25, deviation D-T2 (notes/textcraft_r3_deviation_analysis_config.md): the same analysis, with the
+    # Gemma slot and B3's older scores taken from the gates (wf/config/textcraft_r3_analysis_dt2.yaml).
+    "textcraft_r3_analysis_dt2": lambda cfg: _lazy("textcraft.r3_analysis", "run_textcraft_r3_analysis")(cfg),
 }
 
 
