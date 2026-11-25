@@ -1,0 +1,14 @@
+run_id: bridge_score_llama3.1-8b
+# Natural ALFWorld bridge (notes/bridge_design.md): the 1,500-item sample, every arm and readout, on L40S only.
+# Sharded by game: WF_SHARD / WF_N_SHARDS. Resume only on L40S (the run refuses another GPU type).
+model: meta-llama/Llama-3.1-8B-Instruct
+tag: llama3.1-8b
+formats: {chat: sample}
+items: sample
+gpu_type: L40S
+n_shards: 3
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

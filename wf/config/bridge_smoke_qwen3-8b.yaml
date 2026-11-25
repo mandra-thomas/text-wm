@@ -1,0 +1,15 @@
+run_id: bridge_smoke_qwen3-8b
+# Smoke run of the natural bridge (design §9): 20 items of the subset, every arm, readout and question, the
+# cached routine against a full forward pass on one item, timing. Never read by the analysis.
+model: Qwen/Qwen3-8B
+tag: qwen3-8b
+formats: {plain: sample, block: subset}
+items: smoke
+gpu_type: L40S
+n_shards: 1
+reference_agreement: true
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]

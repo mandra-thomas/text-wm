@@ -1469,6 +1469,11 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "interp_pilot_patch": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_patch")(cfg),
     "interp_pilot_ablate": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_ablate")(cfg),
     "interp_pilot_analysis": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_analysis")(cfg),
+    # 2026-11-25, natural ALFWorld bridge (wf/bridge.py, notes/bridge_design.md): scoring per model (main run on L40S,
+    # smoke, cross-GPU rescore of the 300-item subset) and the frozen analysis.
+    **{f"bridge_{kind}_{tag}": (lambda cfg: _lazy("bridge", "run_bridge_score")(cfg))
+       for kind in ("score", "smoke", "rescore") for tag in ("qwen3-8b", "llama3.1-8b")},
+    "bridge_analysis": lambda cfg: _lazy("bridge_analysis", "run_bridge_analysis")(cfg),
 }
 
 
