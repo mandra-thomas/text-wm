@@ -45,6 +45,7 @@ which H3 predicted to be negative. The primary set is the game–schedule units 
 - **The error matching fell short.** Episodes received 1.8–2.2 false failures against 2.3–2.5 false successes (the false successes are the per-game means in `rq3_metrics.json`, `delivered_covariate_primary.mean_fs_delivered`: 2.33 discarded, 2.46 retained).
 - **A false success was cheap to correct.** The valid-or-not oracle did as well as perfect foresight, so the next real observation corrected a false success.
 - **Above all, the errors were injected.** They were not the world models' own predictions, so the experiment does not test what the goal leak found in RQ2 costs an agent.
+- **The agent was shown the admissible actions.** *(revised 2026-11-25)* Its prompt included ALFWorld's admissible-action list (`wf/scoring/prompts.py`, `agent_react_messages`), so a free feasibility check was already in front of it, and the valid-or-not verdict did as well as perfect foresight. The null therefore means "not detected in this setup".
 
 ## Checks
 

@@ -241,6 +241,7 @@ so with $e = 0.043$ Llama's overall upper bound of 1.27 points would allow up to
 
 - **What this licenses:** for this agent (the RQ3 Qwen3-8B ReAct agent, thinking off), its own candidate lists, the yes/no prompt and the "highest-ranked accepted, else rank 1" rule, showing two susceptible verifiers the task does not reliably change how often the chosen action fails; the overall effect is below about 1.3 points per decision for Llama and 0.5 for Mistral, and below about 2 points per encounter state for Mistral.
 - **What it does not license:** that the bias is harmless where it can act for Llama (its conditional interval reaches 12.5 points); that it is harmless for other agents, rules or planners; anything about end-to-end task success, since nothing is executed after the choice.
+- **The agent saw the admissible actions** *(revised 2026-11-25)*. Its prompt included ALFWorld's admissible-action list, and every failing candidate in either list lay outside it (above, "What ran"). The nulls therefore mean "not detected in this setup"; an agent without the list may propose such failures more often.
 - **Scope:** susceptible verifiers only, one agent, one environment, one prompt format, one rule. Stage 1b's priority pair differs from Stage 1a's co-primary pair, so only Llama is primary in both.
 - **The task-blind arm** keeps the few-shot examples' own task lines, as in every arm.
 - **Everything here is exploratory**: the design note labels the whole stage exploratory, and the frozen verdicts are exploratory verdicts reached by rules fixed before the data.
