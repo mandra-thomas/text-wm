@@ -24,6 +24,64 @@ The goal effect **ΔL** is the mean of L(aligned) − L(swapped), in nats. A cor
 | RQ1 | Direction of errors in written predictions: false-success rate minus false-failure rate (A) |
 | RQ3 | Cost to an agent of injected false successes against false failures, with predictions dropped or kept |
 
+## Reproduce the headline result (CPU, about 3 minutes)
+
+The headline is the preregistered RQ2 test: ΔL = 6.121 nats for Qwen3-8B and 1.646 for Llama-3.1-8B-Instruct, both "supported (strong)", on 4,666 items from 125 games ([notes/rq2_confirmatory_metrics.json](notes/rq2_confirmatory_metrics.json)). These commands rerun that analysis from the saved model scores. They need Python 3.11, `git`, `curl` and a few hundred MB of disk (mostly numpy and scipy), but no GPU, no model weights and no game server.
+
+```bash
+# 1. The code, at the tested release tag
+git clone https://github.com/mandra-thomas/text-wm.git
+cd text-wm
+git checkout repro-rq2-2026-11-25
+
+# 2. A Python 3.11 environment with the pinned versions
+python3.11 -m venv .venv
+. .venv/bin/activate
+pip install -r repro/requirements-rq2.txt
+
+# 3. The inputs (3.5 MB), checked against the checksum committed here, unpacked into runs/
+curl -LO https://github.com/mandra-thomas/text-wm/releases/download/repro-rq2-2026-11-25/rq2-headline-inputs.tar.gz
+sha256sum -c repro/SHA256SUMS    # on macOS without sha256sum: shasum -a 256 -c repro/SHA256SUMS
+tar -xzf rq2-headline-inputs.tar.gz -C runs
+
+# 4. The preregistered analysis
+python -m wf.runs rq2_analysis
+
+# 5. Compare with the committed result
+python repro/compare_rq2_metrics.py runs/rq2_analysis/metrics.json notes/rq2_confirmatory_metrics.json
+```
+
+Step 4 prints each model's ΔL, interval, Holm-adjusted p-value and verdict, and writes `runs/rq2_analysis/metrics.json`. Step 5 checks every number in that file against the committed one. It skips only the `provenance` block, which a rerun adds to record where it ran. It prints `MATCH` and exits 0 when every string and count is equal and every float agrees to a relative difference of 10⁻¹². In our tests one float, an intra-class correlation, differs in its 17th significant digit, and everything else is bit-identical. Without the compare script, this one-liner prints the two headline values: `python -c "import json; print({m: v['delta_L_nats'] for m, v in json.load(open('runs/rq2_analysis/metrics.json'))['per_model'].items()})"`.
+
+What the download holds:
+
+- **Items.** The 12,987 collected and replay-verified items, from which the analysis selects its 4,666.
+- **Scores.** Both models' per-item scores under the aligned and swapped task lines.
+- **Written predictions.** Their short written predictions.
+- **Manifest.** A file listing every file's SHA-256, both as shipped and in the original run folder.
+
+One field of each item, Word2World's starting-layout text, is left out because its source declares no licence. The analysis does not read it ([DATA_LICENSES.md](DATA_LICENSES.md)). [repro/build_rq2_archive.py](repro/build_rq2_archive.py) is the script that built the archive from the confirmatory run folders. Everything else in this README needs the cluster: the model scoring that produced these files took about 4 GPU-hours, and the item collection about 22 (see [notes/reproducing.md](notes/reproducing.md)).
+
+**Where the code for each reported result is.** Commits and tags are on GitHub; "main" means the code is also on `main`. Only the RQ2 inputs are public. The other studies' run data are kept off GitHub ([notes/reproducing.md](notes/reproducing.md), section 2).
+
+| Result | Code to check out | On main? |
+| --- | --- | --- |
+| RQ2, confirmatory (headline) | tag `repro-rq2-2026-11-25`; items collected at `f8d20c1`, scored and analysed at `ddeabc2` | yes |
+| RQ1 and H1 at the final parser; audit and shared-spot analyses; the `_v2` exploratory reruns | `28b4d30` (scores at the commits in [notes/reproducing.md](notes/reproducing.md), section 3) | yes |
+| RQ3, confirmatory | `ddeabc2` | yes |
+| Exploratory ALFWorld follow-ups (object-free goals, thinking mode, dissociation, yes/no, mechanism diagnostic, size series) | the commits in [notes/reproducing.md](notes/reproducing.md), section 3 | yes |
+| Qwen3-8B effect-size audits | `scripts/qwen_audit/`; plans at `62be254` and `8810f24` | yes |
+| Model families, wave A | scored at `65eb591`, analysed at `ca76bb9` | yes |
+| Mechanism battery | tag `mechanism2-design-frozen-2026-11-22` (`6eab8af`) | yes |
+| Decision simulation, Stage 1a / Stage 1b | tags `decisionsim-stage1a-frozen-2026-11-21` (`eeeb7dd`) / `decisionsim-stage1b-frozen-2026-11-22` (`2a05707`) | yes |
+| TextCraft, round 1 | tag `textcraft-design-frozen-2026-11-20` (`5a3702a`) | yes |
+| TextCraft, round 2 | tag `textcraft-r2-design-frozen-2026-11-23` (`4ccf84b`) | no, branch `textcraft-r2` |
+| τ-bench retail | tag `taubench-design-frozen-2026-11-21` (`c737cd6`) | yes |
+| τ-bench model families | tag `tau-families-design-frozen-2026-11-23` (`a078a8d`) | no, branch `tau-families` |
+| τ-bench authorization | tag `tau-auth-design-frozen-2026-11-22` (`f70b285`) | no, branch `tau-auth` |
+| Option C (closed-loop verifier) | frozen at tag `optionc-design-frozen-2026-11-22` (`54cb71e`); runs and main analysis at `2a86683`, argmax analysis at `01cad81` | no, branch `optionc` |
+| Interpretability pilot | tag `interp-deviation-analysis-fix-2026-11-24` (`c73147e`); needs `pip install -e ".[interp]"` | yes |
+
 ## Results recorded in this repository
 
 **Audit and reruns (2026-11-20).** A documentation and rigor audit led to seven CPU analysis reruns at 28b4d30. No verdict changed. The RQ2 result is the same with the shared-spot items (none was excluded by that rule alone), the RQ1 numbers are now at the final parser, and the headline ratios have intervals. Every changed number, old and new, is listed in [notes/deviations.md](notes/deviations.md), "Changes from the 2026-11-20 audit".
@@ -112,7 +170,7 @@ The two models differ in where the effect lands:
 | Closed-loop agent with a world-model verifier (Option C): does a verifier shown the agent's task lower its success? | runs `optionc_smoke`, `optionc_step0_<model>`, `optionc_step0_analysis`, `optionc_qwen3-8b_obs`, `optionc_qwen3-8b_yn`, `optionc_analysis` (code on branch `optionc`) | Done (exploratory; design frozen before anything ran at tag `optionc-design-frozen-2026-11-22`, commit `54cb71e`). Step-0 check: Qwen3-8B 'question-specific (supports the task-success reading)' (yes/no: the task-aware verifier accepts 82 points fewer of the agent's working first moves than the blind one, [−88, −75]; observation readout: no gap in any game, competent), so the pre-declared reallocation was exercised before any census episode (commit `2a86683`): the observation readout became the primary run (no verifier, blind and aware at three seeds, swapped at one) and yes/no a one-seed secondary. Primary (observation readout, accepted-only rule): success 'no reliable difference', aware minus blind −1.2 points [−3.0, 0.0] (p 0.23; only 3 of 134 games differ, 84% of seed pairs play identical episodes); both key secondaries and invalid actions 'no reliable difference'; obstruction check clear. Secondary (yes/no, one seed): success 'no reliable difference', −4.5 points [−11.2, +2.2]; invalid actions 'harm, attribution not identifiable in the loop (the swapped verifier obstructs the real task)', +1.12 per episode [+0.33, +1.96], with the same label for invalid actions in the first 10 steps and override harm minus help, through more abstentions and fewer rescues rather than more overrides (worse than the task-blind verifier, still better than none). Matched states: the real task raises acceptance of failing goal-object proposals under both readouts (+27.5 points observation, +3.3 yes/no, against blind). Argmax rule (yes/no readout, the highest-scored candidate is taken; jobs 7253142–7253145, submitted after the Tier 1 analysis; analysis job 7295370 at `01cad81`): success 'no reliable difference', −0.7 points [−9.0, +7.5], with 29 of 134 games differing; invalid actions per episode 'no reliable difference', −0.07 [−0.85, +0.71]; invalid actions in the first 10 steps 'harm, attribution not identifiable in the loop (the swapped verifier obstructs the real task)', +0.23 [+0.10, +0.37]. The design's prediction for this rule (a loss of 2 to 10 points) is not supported. The Llama loop was not run. The first runs used 12.3 GPU-hours. Results in `notes/optionc_results.md`. *(The verifier uses Qwen3's thinking-off format with the empty think block, as Stage 1a did; see the results note, section 10.3.)* |
 | ScienceWorld | not in this repository | Paused. A pre-specified feasibility probe found almost no determined failures on the task's own object (99.6% of the few found were one generic parser reply), so it cannot replicate the main test; a set of control items on unrelated objects is available |
 
-Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring shard reports `shard complete`. Run output is not tracked by git, so a fresh clone has none; the data live on ICE (see [notes/reproducing.md](notes/reproducing.md)). Real runs refuse mock files and work saved at another commit.
+Analyses need no GPU: run `python -m wf.runs <run>_analysis` once every scoring shard reports `shard complete`. Run output is not tracked by git, so a fresh clone has none. The data live on ICE (see [notes/reproducing.md](notes/reproducing.md)), apart from the RQ2 inputs, which are public (section "Reproduce the headline result" above). Real runs refuse mock files and work saved at another commit.
 
 Two cautions for reading the numbers. The two-candidate score s = σ(L), sometimes logged as "P(success)" or "Δp", is not the model's probability that the action succeeds; it compares one success wording with "Nothing happens.". And the game-bootstrap 95% intervals are slightly narrow: in simulation they covered the true value 93–95% of the time ([notes/testing.md](notes/testing.md)). The preregistered verdicts also rest on the permutation test, which was calibrated.
 
@@ -128,6 +186,7 @@ Two cautions for reading the numbers. The two-candidate score s = σ(L), sometim
 - [notes/testing.md](notes/testing.md): test suite, mutation check, item verification and calibration of the statistics.
 - [notes/reproducing.md](notes/reproducing.md): software and model versions, where the data are, which run, commit and GPU produced each result, how to rerun everything, and licences.
 - [notes/extensions.md](notes/extensions.md): the pre-pilot list of extensions, archived.
+- [LICENSE](LICENSE) (MIT, the project's code) and [DATA_LICENSES.md](DATA_LICENSES.md): upstream licences, model-output terms and what the public data release contains.
 
 The filed proposal and preregistration are not in this repository.
 
@@ -147,12 +206,16 @@ Pilot A and Pilot B refuse to run without `runs/FILED.txt`, and that marker must
 No GPU, models or ALFWorld server needed.
 
 ```bash
+python3.11 -m venv .venv && . .venv/bin/activate   # run_mock_pipeline.sh uses .venv/bin/python if present
 pip install -e ".[dev]"
+python -m wf.textcraft.freeze --fetch  # rebuilds TextCraft's recipe file from AgentGym (pinned SHA-256, seconds)
 pytest -q
 bash pace/run_mock_pipeline.sh     # Tier 0 and the pilots, in order, on the simulator
 python -m wf.runs t0_smoke --mock  # one run
 python scripts/mutation_check.py   # breaks the code on purpose; the tests must notice
 ```
+
+The recipe file is not committed. Without it the TextCraft tests skip (about 53 of them) instead of running. `freeze --fetch` downloads it from AgentGym at the pinned commit and refuses a file whose SHA-256 differs. The interpretability, scorer-precision and some model-family tests also skip unless torch, transformers and scikit-learn are installed (`pip install -e ".[dev,interp]"`).
 
 Mock runs use `wf/env/sim.py`, which reproduces the AgentGym server's behaviour behind the real client. They write only to `runs_mock/` or a temp folder and refuse any other `RUNS_DIR`. Mock records are marked, real runs refuse them, and cluster jobs refuse to start in mock mode.
 
@@ -254,6 +317,8 @@ Logs are in `logs/`, named by job id.
 | `tests/` | Unit, regression, adversarial and crash-and-resume tests |
 | `scripts/` | Mutation check, statistics calibration, few-shot set drawing, RQ1 prompt check, vLLM smoke test |
 | `notes/` | Results, decision log, metrics copies, testing and reproduction notes |
+| `repro/` | The public RQ2 release: pinned requirements, the archive's committed checksum, the comparison script, the archive builder and the release notes |
+| `licenses/` | Copies of the upstream MIT licences that the data release carries (see `DATA_LICENSES.md`) |
 
 ## Things worth knowing
 
