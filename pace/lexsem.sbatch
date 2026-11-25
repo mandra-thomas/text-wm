@@ -12,10 +12,11 @@
 #SBATCH --error=logs/lexsem_%j.err
 #
 # Lexsem diagnostic (notes/lexsem_design.md). Submit only from the commit of the design's freeze tag.
-# The cost estimate (about 19 GPU-minutes for the Qwen core) assumes an L40S; an A40 takes about twice as long.
+# The cost in notes/lexsem_design.md section 10 assumes an L40S; an A40 takes about twice as long.
 #   LX_MODEL  Hugging Face id (default Qwen/Qwen3-8B)
-#   LX_MODE   plain (default; Qwen without the empty think block) or chat (the optional Llama arm)
-#   LX_CONDS  core (default) or a comma list of condition names (quote it in --export)
+#   LX_MODE   plain (default), block (Qwen's thinking-off chat format) or chat (Llama)
+#   LX_GROUPS condition groups of wf.lexsem.GROUPS, colon-separated (default core)
+#   LX_FORMATS obs:yn (default) or yn
 #   LX_NAME   output name under runs/lexsem/ (default qwen3-8b_plain)
 # Example:
 #   bash pace/submit.sh lexsem.sbatch --export=ALL
@@ -34,5 +35,6 @@ activate_serve
 nvidia-smi --query-gpu=name --format=csv,noheader | head -1 | tr ' ' '_' >"${D}/${NAME}_gpu.txt"
 git rev-parse HEAD >"${D}/${NAME}_commit.txt"
 python scripts/lexsem/score.py --model "${LX_MODEL:-Qwen/Qwen3-8B}" --mode "${LX_MODE:-plain}" \
-  --conditions "${LX_CONDS:-core}" --out "${D}/${NAME}.jsonl"
+  --groups "$(echo "${LX_GROUPS:-core}" | tr ':' ',')" --formats "$(echo "${LX_FORMATS:-obs:yn}" | tr ':' ',')" \
+  --batch-size "${LX_BATCH:-16}" --out "${D}/${NAME}.jsonl"
 echo "=== lexsem ${NAME} END $(date) ==="
