@@ -6,6 +6,10 @@ The design says plainly what this run is for (section M, amendments C1 and D6). 
 
 ## Summary
 
+*Independent audit (2026-11-24), section 13: no bug changes any number in this note, but the audit qualifies the history-share, H4-cosine, "after arrival", step-0 and routing readings below, and reports a stage-0 mention control this note omitted (after step 0, naming the object without making it the goal reproduces nearly all of the effect).*
+
+*(revised 2026-11-25)* Read the summary below with section 13. The audit's classification is: replication achieved, causal localization partial, computational mechanism and semantic interpretation not achieved (section 13.4). The path described under "Patching" is where the difference is used, largely forced by prompt order; no edge was tested and the group shares are not additive, so it is not a demonstrated flow. The low history share reflects that most histories do not name the object, and this design cannot detect the history being used as evidence. "After arrival" holds only with percentile intervals. The 0.44 cosine is confounded with object mention. The mention control's sentence asserts that the object exists, so it cannot separate a lexical account from the task as evidence of existence (section 13.5). The items whose history mentions the object are 7.0% of later failures and 6.2% of all failures (section 13.2); the "about 3%" below is their weight in the patching sample, which keeps only items with an effect of at least 1 nat.
+
 The pilot asks where, inside Qwen3-8B, the agent's task gets into the model's yes/no prediction of whether an ALFWorld action will succeed, for actions whose failure the history already decides. The yes/no log-odds rise by 2.78 nats on average when the task names the action's object instead of another object in the room. The tooling reproduced this item by item on all 4,958 items. Both reproduction gates passed, with mean effects within 0.005 nats of the logged scores.
 
 **Patching** (100 items with a clear effect, from one half of the games) traces the difference along one path. It starts at the object's name in the task line (the only tokens that differ), moves by about layers 11 to 18 into the *action line*, and mostly into the action's own object word. From about layer 19 it reaches the final template tokens and the answer position, which carry essentially all of it from layer 22 on. The history after the task line carries almost none of it. Its largest noising share is 0.031 [0.010, 0.066] over all items, read as **"low (below 0.15)"**. That reading describes the typical item. On the 25 sampled items whose history mentions the action's object, the mention tokens carry 0.34 [0.15, 0.54] under noising and 0.75 [0.47, 1.10] under denoising, against 0.02 for a position-matched control. Those items are about 3% of the population.
@@ -381,6 +385,8 @@ These are things this note noticed in the outputs. They are not readouts and dec
 
 ### 11.1 What they show
 
+*(revised 2026-11-25)* The route ("travels from … to the answer position"), the history share, the onset reading and the 0.44 cosine in this subsection are qualified by section 13.3: the route is largely forced by prompt order and no edge was tested, the history share cannot detect evidence use, "after arrival" depends on the interval method, and the cosine is confounded with object mention. Section 13.4 gives the audit's classification.
+
 The tooling works on the real model. It reproduces the scored yes/no and first-token effects item by item. Its prefix, batch and rounding checks held, random directions do nothing, and the cross-fitted estimates agree between folds (between-fold cosines of the task direction 0.95 to 0.997 from layer 8 on).
 
 In Qwen3-8B's yes/no format, the task's influence on the answer travels from the object's name in the task line into the action line, almost entirely into the action's own object word, by about layer 13 to 15. Through the question it reaches the answer position between layers 19 and 22. From layer 22 on, the answer position alone carries over 90% of it. For the typical item, the history after the task line plays almost no part (history share 0.031, "low"). One direction at the answer position carries most of the effect after step 0 once the effect has arrived there: 0.81 at layer 24 and 0.90 at layer 28. Removing that direction keeps 93% of the model's ability to tell working from failing actions on neutral prompts, although it shifts all neutral readouts up.
@@ -423,3 +429,182 @@ What would *not* change them is more bootstrap resamples or rerunning the same i
 | Metrics | `runs/interp_pilot_analysis/metrics.json`, 1,386,852 bytes, SHA-256 `32c15ec3409f5cab6e48bbd74babc927ff741a9971ec796dbfe68c7a143ab185`; extract in `notes/interp_metrics.json` |
 | Failed analysis attempts | jobs 7251609 (scikit-learn import), 7252128 (the crash of deviation 1), 7253221 (dependency commit check); no outputs |
 | Tests | `pytest tests -k interp` at this branch: 105 passed (local CPU environment with scikit-learn 1.9.1, torch 2.2.2, transformers 4.51.3, numpy 1.26.4) |
+
+## 13. Independent audit (2026-11-24)
+
+An independent audit of the minimal pilot was made on 2026-11-24, from the code on `main` at `d3584a5`, the frozen design with its five amendments, the deviation note, and copies of the run outputs (the stage-0 index, the patching and ablation records, the analysis metrics, the three item collections and the logged `rq1v` scores). From the stage-0 activation store it streamed, read only, the answer-position residuals of all 19,540 yes/no prompts at layers 16, 20, 22, 24, 28 and 35. Everything was recomputed on CPU, with the project's own functions wherever one exists. This section reports what the audit found that bears on statements in this note.
+
+Unlike the rest of the note, the numbers in this section are recomputed, not quoted from `metrics.json`. Each was recomputed a second time for this section from the same copies, and the two computations agree unless the text says otherwise. A few figures could not be re-checked; they are marked "audit's figure, not re-checked". The recomputation scripts are not part of the repository.
+
+### 13.1 Scope and checks
+
+**What was checked.** Every module of `wf/interp/` that the pilot uses (prompts, hooks, patching, run, pilot, analysis, directions, lens), the design note end to end, and the run outputs listed above. Checked and found correct: the token grouping and the pairing of suffix positions; the batch structure with one clean row per batch; the signs of noising and denoising; the weighted ratio-of-sums game bootstrap; the history share; the direct-path share formula; the mean-ablation edit at the answer position; and the onset and direct-path exclusion logic as amendments C2, D1 and E1 specify it.
+
+**No bug changes a reported number.** Three independent reproductions agree with the run:
+
+- the project's own `group_curve`, run on the patching records, reproduces the history share exactly: 0.0313, interval 0.009 to 0.066 (noising, later stratum, weighted, layer 9);
+- a CPU re-implementation of the last-layer mean ablation, applied to the stored float16 residuals through the final normalisation and readout, removes 0.497 of the effect on the 20 step-0 ablation items and 0.907 on the 55 later ones, against the GPU's recorded 0.499 and 0.890;
+- the float32 readout recomputed from the stored last-layer residual matches the logged readout to within 5e-6 nats.
+
+**Omissions and errors found.** None of these changes a reading of the minimal pilot.
+
+- *The equal-length subset is never reported.* Sections 5 and 11 of the design promise patching results for the items whose two object names have the same number of tokens, separately from all items, because on the other items the suffix positions are shifted by one or two tokens, which rotary position encoding sees, and the span cannot be patched. Thirty of the 100 patching items have names of unequal length. The analysis reports only the early-span share on the equal-length items, not the other measures.
+- *The denoising placebo flags can never be true.* This is Observation 4. It is a plain code error in `analysis.patch_summary` (`above_placebo_floor`): for denoising the removed effect is negative by construction and is compared with a positive floor. No rule reads the flags. The fix is to compare the sign-corrected removed effect.
+- *The design text describes the early-span share the wrong way round.* The design (section 5, the summary measures) says "a large drop means the information leaves the object's name in the first third of the network". The measure is the span's noising fraction at layer 11 minus that at layer 23, so it is large when the information is still at the name at layer 11 and gone by layer 23, that is, when it leaves in the *second* third. The definition in section 2.2 of this note is correct; the design's gloss of it is not. The values (0.31 noising, 0.56 denoising) say that a third to a half of the effect is still at the name at the end of the first third. No reading depends on this in the minimal pilot; the full pilot uses the measure for H6.
+- *The random-pair null of 0.016 is mislabelled.* The analysis reports `null_random_pair_sd` (0.016, the spread of the cosine between two random unit vectors in 4,096 dimensions) as the null for the H4 cosine. It is not a null for cosines between estimated mean differences (section 13.3, "The H4 cosine").
+
+**Smaller points.**
+
+- *Batch-noise tolerance.* The 0.132-nat batch noise sets the identical-prefix tolerance at 0.66 nats, a lax check, and the check ran on the first item only. This is not consequential here, because the clean rows of every batch agree exactly (`clean_spread` 0).
+- *Population weights.* They are applied correctly inside every bootstrap draw. In the later patching stratum they range from 0.123 to 1.859, which leaves an effective sample of about 48 of the 70 items, mostly the 45 items without an object mention.
+- *Maximum over layers.* Re-choosing the layer in every bootstrap draw (A6) accounts for the choice of layer, but the percentile interval of a maximum is still biased upward when several layers are close. For the object-mention share under denoising the point is 0.752, the bootstrap median 0.776, and 6% of draws exceed 1. Together with five dominant items (section 13.3, "The route map"), this is why that interval reaches 1.10. A share above 1 can also occur legitimately when a patch overshoots the source value.
+- *Two different item sets.* Patching uses items with an effect of at least 1 nat, ablation uses unfiltered items, and arrival and onset are compared across the two (D9 says so).
+
+### 13.2 The stage-0 mention control the note omitted
+
+Stage 0 scored every failure under a fourth prompt, the "swapped plus mention" prompt: the swapped task line followed by one sentence naming the action's object, not as the goal. The sentence is built by `wf/rq1.py`'s `mention_sentence` and reads, for the running example,
+
+> There is a saltshaker somewhere in the room.
+
+The **mention effect** of an item is the change it makes to the readout of the swapped prompt:
+
+$$
+\Delta D_{\text{mention}} = D(\text{swapped plus mention}) - D(\text{swapped}).
+$$
+
+The note uses this prompt only to build the ablation's mention direction (section 5.2) and the goal-role row (section 6). It never reports the behavioural comparison itself. From the stage-0 index, over all 4,666 failures, with "neutral" the task "explore the room":
+
+| Stratum | Items | Goal effect (nats) | Mention effect (nats) | Mention over goal | Aligned minus neutral | Neutral minus swapped |
+|---|---|---|---|---|---|---|
+| Step 0 | 514 | 7.70 | 2.21 | 0.29 | 6.12 | 1.58 |
+| Later, history does not name the object | 3,861 | 2.29 | 2.26 | 0.99 | 2.25 | 0.03 |
+| Later, history names the object | 291 | 0.97 | 0.61 | 0.63 | −0.35 | 1.31 |
+| All | 4,666 | 2.80 | 2.15 | 0.77 | 2.52 | 0.28 |
+
+"History names the object" uses the project's own `mentions_action_object` (the history after the task line contains the action's object word). Later failures of that kind are 291 of 4,152, or 7.0%.
+
+**After step 0.** For the 3,861 later failures whose history does not name the object, 83% of all failures, the mention sentence raises the Yes log-odds by 2.26 nats, against 2.29 for making the object the goal. The neutral-minus-swapped column shows that for these items the swapped task does nothing relative to a neutral one (0.03 nats). The whole effect is the difference between the object's name appearing in the task region and not appearing. The ablation's own mention direction agrees: its cosine with the task direction is 0.90 to 0.91 at layers 24 to 35 in both folds (from the ablation run's stored cosines). Items whose history already names the object have a much smaller goal effect (0.97 nats), as one more occurrence of a name already present would predict.
+
+**Under the neutral task alone.** Among later failures under the neutral task, those whose history names the action's object read 3.6 nats more "Yes" than those whose history does not (mean readout −23.3 against −26.9 nats). So with no task manipulation at all, the object's name having occurred in the prompt goes with a higher predicted chance of success.
+
+**At step 0.** The mention reproduces only 29% of the effect (2.21 against 7.70 nats). The aligned task raises the readout by 6.1 nats over the neutral task, and the swapped task lowers it by 1.6. Whatever produces the step-0 effect in this format is mostly not the mere presence of the name.
+
+**Format caveat for the step-0 rows.** All of these readouts use Qwen3's thinking-off chat template, whose empty `<think></think>` block sits just before the answer. [qwen_effect_audit_pipeline.md](qwen_effect_audit_pipeline.md), section 7, rescored the two-candidate format on all 4,666 items without that block. The block about doubles the effect in nats (6.12 against 3.31), and the step-0 concentration exists only with it: 10.99 nats at step 0 with the block, 2.73 without, slightly below the later steps. The yes/no readout used here has the same block and was not rescored without it on these items. So the size of the step-0 figures in nats, and the contrast between step 0 and the later steps in the table above, should be read as properties of this format, which may shrink or vanish without the block. The later-step comparison of mention with goal (2.26 against 2.29) compares two arms within one format, so a stretching of the scale would act on both; this was not checked without the block.
+
+**What this bears on.** Observation 5 leaves open whether the history's mention tokens mark a belief change or a second lexical route, and Observation 7 notes that object-free described goals keep 61% of Qwen's effect, so "the name is not the whole story". The mention control does not settle either, but it shows that after step 0 a sentence that names the object, without making it the goal, is enough to produce the whole effect. Section 13.5 states what it does and does not establish.
+
+### 13.3 Qualifications of the readings
+
+Each paragraph names the statement in this note that it qualifies, then gives the evidence.
+
+**The history share** (Summary; sections 4.1 and 11.1, "the history after the task line plays almost no part"; Observation 5). The share is low mainly because most histories do not contain the object's name, not because the history is neglected. Recomputed with `group_curve`, noising, later stratum:
+
+| Subset | Items | History share, largest over layers, with 95% interval | Layer |
+|---|---|---|---|
+| All later items, population-weighted (as reported) | 70 | 0.031 [0.009, 0.066] | 9 |
+| All later items, unweighted | 70 | 0.149 [0.042, 0.287] | 16 |
+| Later items whose history does not name the object | 45 | 0.028 [0.007, 0.062] | 9 |
+| Later items whose history names the object | 25 | 0.40 [0.23, 0.72] | 17 |
+| The same 25 items, denoising | 25 | 0.74 [0.41, 1.15] | 13 |
+
+On the items whose history contains the word, the whole history's noising share is in the design's "high" band (lower bound at least 0.3). The pooled 0.031 is close to the product of the mention rate and that conditional share. There are also three structural limits. First, everything before the task line, including the room description that decides most step-0 failures, is shared prefix and never differs between the two prompts, so no patch can attribute anything to it. Second, history tokens after the task line contain the same text in both prompts; they can differ only by what they took from the task line through attention. Third, a model that reads the unchanged evidence at the action or answer positions, but weighs it differently under the two tasks, shows a history share of zero, because the activations at the history positions are the same in both prompts. Aligned-against-swapped patching therefore cannot detect the history being used as evidence. The run's own behavioural numbers say the evidence is used heavily: the neutral success-versus-failure gap is 29 nats, against a goal effect of 2.8. Section 11.2 already notes that a low share does not mean the state representation is untouched; this adds that it does not mean the history is unused either. Testing whether the task changes how the evidence is used would need the task crossed with counterfactual histories.
+
+**The H4 cosine of 0.44** (Summary; section 6; section 11.1, "shares a substantial component with the model's neutral success direction"). The cosine is confounded with object mention. Of the 292 determined successes, 88% have a history after the task line that names the action's object (100% for take, move, clean, cool, heat and examine; the audit identifies take, move, clean, cool and heat as the verbs whose within-verb contrast forms the success direction), against 7% of the 4,152 later failures. A take succeeds only where the agent is at the object's receptacle, which usually means it has just seen the object there. So the success direction is partly a "this object's name has already appeared" direction, which is the feature the aligned task adds. Cosines recomputed from the stage-0 residuals, readout direction projected out, fold 0 and fold 1:
+
+| Layer | Task with success (as in section 6) | Mention with success | Neutral minus swapped, with success | Task with a "history names the object" contrast among failures only | Task with success re-estimated against mention-matched failures |
+|---|---|---|---|---|---|
+| 16 | 0.51; 0.45 | 0.40; 0.33 | −0.09; −0.14 | 0.19; 0.35 | 0.33; 0.07 |
+| 20 | 0.59; 0.58 | 0.55; 0.54 | −0.11; −0.05 | 0.36; 0.50 | 0.56; 0.50 |
+| 24 | 0.28; 0.26 | 0.21; 0.18 | 0.26; 0.23 | 0.62; 0.61 | 0.17; 0.12 |
+| 28 | 0.41; 0.39 | 0.29; 0.27 | 0.12; 0.12 | 0.68; 0.67 | 0.29; 0.26 |
+
+The fourth column is the key control. It contrasts, among failures only and so with no success involved, those whose history names the object with those whose history does not, within verb, under the neutral task. That contrast has cosines of 0.19 to 0.68 with the task direction (0.19 to 0.50 at the H4 layers 16 and 20, and more than the success direction itself at layers 24 and 28). Re-estimating the success direction against the 117 to 174 failures whose history also names the object lowers the cosine at layer 16 (fold mean 0.48 to 0.20) but hardly at layer 20 (0.59 to 0.53); with so few matched failures this is noisy. Three further checks bear on the baseline:
+
+- *The null.* Mean differences of two random halves of the later failures' neutral residuals have cosines with the task and success directions of up to about 0.3 in size at layers 16 and 20 (0.19 to 0.34 across folds and draws). The residual stream is strongly anisotropic, so the 0.016 random-pair spread is not the relevant baseline for cosines between estimated mean differences.
+- *A Yes-raising direction without object content.* The within-cell answer direction of C3 raises "Yes" without a success or verb contrast. Its cosine with the task direction is 0.01 to 0.19 at layers 16 and 20. So sharing the output pathway does not explain the 0.44; the mention confound does.
+- *A task-line edit that does not raise "Yes"* (neutral minus swapped) is not aligned with the success direction at the H4 layers (−0.14 to −0.05), so the cosine is not an artefact of any task edit.
+
+Two facts about the H4 layers also limit the reading. The mean aligned-minus-swapped difference at the answer position has norm 0.51 at layer 16 and 5.2 at layer 20, against 24 at layer 24 and a mean residual norm of 63 at layer 16, and patching the whole answer-position residual at layers 4 to 18 changes the effect by at most 0.02. At those layers the task direction is consistently estimated (between-fold cosine 0.97) but causally inert at that position. And projecting out the readout direction does nothing there: the final readout direction has cosines of at most 0.05 in size with both directions at layers 4 to 20, so raw and projected cosines agree to three decimals (0.4793 and 0.4793 at layer 12, fold 0). The projection removes a confound that is absent at those layers and leaves the mention confound in place. Removing the eight largest-magnitude dimensions, or standardising every dimension, changes the cosines by at most about 0.03, so a few massive-activation dimensions do not drive them. The cross-fold cosine (0.42) is about the same as the within-fold one, so shared estimation noise is not the cause either.
+
+**"After arrival" in the later stratum** (Summary; section 5.1; Observation 1). The reading depends on the interval method. Lower bounds of the 95% interval of the removed share, recomputed from the ablation records with the run's weights and its seed, later stratum (55 failures in 32 games):
+
+| Layer | Point | Bootstrap SE | Percentile (as run) | Percentile, four other seeds | Normal | Basic | Percentile at 90% |
+|---|---|---|---|---|---|---|---|
+| 24 | 0.808 | 0.142 | 0.566 | 0.558 to 0.584 | 0.529 | 0.497 | 0.602 |
+| 28 | 0.899 | 0.159 | 0.638 | 0.627 to 0.653 | 0.588 | 0.551 | 0.677 |
+
+Under percentile intervals, as run, the onset is layer 28 and the reading "after arrival". Under normal or basic bootstrap intervals, which are as standard, layer 28 also falls below 0.6, so there is no onset and the reading is "inconclusive". Across seeds, layer 24's percentile bound ranges from 0.558 to 0.584. (The audit's own run gave 0.557 to 0.584 and a 90% bound of 0.597 at layer 24. This recomputation, with the run's seed, gives 0.602, and 0.594 to 0.616 across five seeds; so at 90% the reading could equally be "at or before arrival".) The onset rule is also asymmetric: "after arrival" is returned whenever the arrival layer fails to *pass*, so a wide interval at the arrival layer (here 0.57 to 1.12) produces a substantive reading rather than "inconclusive". A symmetric rule would return "after arrival" only when the arrival layer's upper bound is below 0.6. Finally, the ablation grid hides the arrival. The answer position's noising fraction goes from 0.47 at layer 21 to 0.91 at layer 22 (section 4.2), but ablation ran only at layers 4, 8, …, 28, so the arrival is rounded up to 24 and a lag of under four layers cannot be seen. One concern the reading survives: later layers do not re-read the effect from the context tokens after layer 23 (at layers 24 and 28 patching the action line removes at most 0.01 of the effect and the question at most 0.05, while the answer position alone carries 0.94 to 0.97), so the removals at 24 and 28 are not depressed by re-reading. That concern is real at layer 20, where the question carries 0.54.
+
+**The step-0 "inconclusive"** (Summary; sections 5.1 and 5.3; Observation 2; the second bullet of section 11.3). It largely reflects the pooled direction, as Observation 2 suggested. The direction is estimated on all of the other fold's failures, 89% of them later items, and the step-0 and later mean differences point in different directions. Norms and cosines of the fold-1 mean differences at the answer position:
+
+| Layer | Norm, step-0 mean difference | Norm, later mean difference | Cosine, step-0 with later | Cosine, pooled with step-0 | Cosine, pooled with later |
+|---|---|---|---|---|---|
+| 24 | 50.6 | 23.8 | 0.41 | 0.60 | 0.98 |
+| 28 | 76.2 | 35.5 | 0.51 | 0.68 | 0.98 |
+| 35 | 142.9 | 61.3 | 0.58 | 0.74 | 0.98 |
+
+Last-layer removal on CPU, with fold-1 directions and midpoints applied to fold-0 items:
+
+| Items | Pooled direction (as run) | Step-0 direction | Later direction |
+|---|---|---|---|
+| All fold-0 step-0 failures (246) | 0.536 | 0.943 | 0.342 |
+| The 20 step-0 ablation items | 0.497 (GPU 0.499) | 0.882 | 0.317 |
+| All fold-0 later failures (2,083) | 1.056 | 0.855 | 0.886 |
+| The 55 later ablation items | 0.907 (GPU 0.890) | 0.691 | 0.774 |
+
+A step-0-specific direction removes 0.88 to 0.94 of the step-0 effect at the last layer, against 0.50 for the pooled one. The edit itself is correct (CPU and GPU agree). The second "what would change the picture" bullet of section 11.3 is therefore answered at the last layer: the step-0 removal does not stay near 0.5 with a step-0 direction. Whether the onset then appears at layer 24 or 28 at step 0 needs the depth profile rerun with a step-0 direction, which has not been done.
+
+**The route map** (Summary; section 4.2; section 11.1, "travels from the object's name … into the action's own object word … through the question … to the answer position"). Only the residual stream after each decoder layer was patched, by single token groups; attention and MLP outputs, heads and paths were not. Three qualifications apply.
+
+*It is largely forced by prompt order.* Because the model is causal, the only later positions that can encode which object the action concerns are the action's object tokens (and, where present, history copies of the word). Any account in which the answer depends on how the action's object relates to the task's object (lexical repetition, goal relevance, a belief that the goal object is available, a plan-like "this is the next step") must compute that relation at or after those tokens and then carry it to the question and the answer position. Step 0, where mention reproduces 29% of the effect, routes through the same token at the same layers as the later items, where it reproduces 99%. The map locates where the difference is used, not what it means. The temporal order of the peaks, and the strong layer-15 necessity of the action line (0.86, or 0.81 for its object word alone, with the task-line name intact at every layer), say more than that the difference is decodable there, and are consistent with a route. But no edge of the route was tested: whether the template reads the question or the action directly at layers 19 to 21 is open, and the synergy described next argues against a simple relay. The question group's peak of 0.54 makes it a substantial part of the route, which "through the question" understates.
+
+*Single-group shares are not additive.* At a fixed layer the span, rest of the task line, history, action, question and final groups partition the positions that differ. If their effects added, their fractions would sum to 1. On the 70 equal-length items, weighted ratio-of-sums fractions sum as follows.
+
+| Layers | Noising, step 0 | Noising, later | Denoising, step 0 | Denoising, later |
+|---|---|---|---|---|
+| 9 to 12 | 0.62 to 0.75 | 0.52 to 0.79 | 1.07 to 1.23 | 1.12 to 1.30 |
+| 18 to 22 | 1.17 to 1.36 | 1.10 to 1.22 | 0.70 to 0.83 | 0.79 to 0.89 |
+| 23 and later | 1.00 to 1.07 | 0.98 to 1.01 | 0.94 to 1.00 | 0.99 to 1.03 |
+
+Below 1 under noising and above 1 under denoising at layers 9 to 12 is redundancy: either the task-line name or the action's object word suffices. The reverse at layers 18 to 22 is synergy: the question and template tokens are each needed. Noising and denoising disagree in opposite directions exactly where the route places its hand-offs, so a group's share there is not its part of the effect. (The audit's table gives noising sums at layers 9 to 12 of 0.62 to 0.81 at step 0 and 0.52 to 0.84 later; this recomputation gives the slightly lower upper ends shown. The other cells agree.)
+
+*The mean curves describe most items but not the mention items.* Item by item, the action-object noising fraction at layer 15 lies between 0.46 and 1.45 (10th to 90th percentile) for later items without a mention and between 0.60 and 1.08 at step 0, never negative. For the 25 mention items it runs from −0.54 to 1.02, and seven are negative. The pooled 0.75 denoising share of the history's mention tokens is dominated by five items with effects of 8.8 to 26.5 nats, which carry about three fifths of the summed effect (61% in the audit, 63% in this recomputation). On Observation 5's open question, the pattern of those mention tokens (close to sufficient under denoising, 0.75, but only partly necessary under noising, 0.34, because the task-line name remains as a second source) is the redundancy signature seen at layers 9 to 12. The audit reads it as a relay from the nearest earlier copy of the word; the data give no reason to call it a belief about the object.
+
+**The H4 intervention rows** (Summary; section 6, "in this model and format"; the third bullet of section 11.3). The rows are empty by construction, not because of the model alone. The H4 layers are defined as strictly before the answer-position arrival, while the gates require an answer-position edit to carry at least 30% of the effect, which by the definition of arrival cannot happen before it: patching the entire answer-position residual moves at most 0.02 of the effect up to layer 18, 0.10 at 19 and 0.25 at 20, and a single-direction edit can hardly do more than replacing the whole residual. The gates censor layers rather than bias the ratios. Ungated, the ratios at layers 4 to 16 are noise. At layer 20, the one pre-arrival layer with signal, steering along the readout-free success direction gains 0.88 (later) and 1.35 (step 0) of what steering along the task direction gains, and the task direction without its success component removes 0.06 (later) and 0.00 (step 0) of what the task direction removes. On its face that is the H4 pattern, but it is a ratio of shares of only 0.13 to 0.30, it swings between adjacent layers (later stratum: perp-over-task 0.06, 0.69 and −0.02 at layers 20, 24 and 28; steering ratio 0.88, 0.13 and 0.62), and the success direction is confounded with mention. Taking the ungated layer-20 numbers as H4 evidence would trade a censoring problem for a confound. Reading H4 where the effect lives at those depths, at the action's object tokens at layers 13 to 18, would need those positions' residuals captured, which stage 0 did not do.
+
+**The hidden-state probe** (section 7, "the probe at the receptacle token moves toward 'the object is there'"). The probe is in effect trained on failures only, and its label ("the object was at the receptacle at reset") is correlated with the object having been seen, and so named, in the history. It shares the H4 cosine's mention confound, and its shift should not be read as a belief shift.
+
+**The two-candidate format** (section 1.1, "it also does not explain the 6.12-nat headline effect"; section 11.2). Every one of the 4,666 success candidates names the action's object ("You pick up the saltshaker 1 from the shelf 2."), while "Nothing happens." never does. From the logged scores, the two-candidate effect splits into the first token ("You" against "Nothing", 2.51 nats) and the rest of the success text after "You" (3.61 nats), which is the same at step 0 (3.55) and later (3.62) and is 59% of the 6.12-nat headline (audit's figures, not re-checked here; they match the 3.60-nat tail of `qwen_effect_audit_forensic.md`). A constant boost to later tokens that contain the object's name is what output copying predicts, but per-token log-probabilities were not saved, so that is an inference. This rules out pure *output* copying as the source of the yes/no effect (2.80) and of the first-token term (2.51), since neither answer token contains the object. It does not rule out *input-side* lexical matching, which section 13.2 shows is sufficient after step 0.
+
+### 13.4 The audit's classification
+
+The audit classified what the minimal pilot achieved on four levels.
+
+| Level | Classification | Basis |
+|---|---|---|
+| Replication of the behavioural effect | achieved | 2.782 against 2.783 nats logged; item correlation 0.998; both gates passed |
+| Causal localization, token group by layer | largely achieved for step-0 items and for later items without an object mention; partial otherwise | the mention items' routes differ item by item; the single-direction claim holds after step 0 only, with a fragile onset; no components were patched |
+| Computational mechanism | not achieved | no heads, blocks or paths were identified, the design's own standard (A8) |
+| Semantic interpretation | not achieved | see below |
+
+After step 0, the run's own data favour an object-mention, or lexical, account: naming the object without making it the goal reproduces nearly the whole effect (section 13.2), the task line otherwise does nothing relative to a neutral task, the history's share appears only where the history repeats the word, and the H4 cosine tracks mention. Step 0 remains open. The audit listed four accounts that each reproduce every patching and ablation result of this run: lexical repetition, in which a repeated object name reads as evidence of success (it fits the later steps and not the step-0 excess); goal relevance or plan consistency at the action, routed through the same token (it fits step 0 better); a belief that a named goal object is available, a weak form of H2 (the receptacle-token probe shift is compatible with it); and a mixture of these by stratum. The pilot excludes none of them.
+
+### 13.5 Interpretation scope
+
+**Scope of the mention result.** For Qwen3-8B on later ALFWorld steps, ordinary mention of the action's object is sufficient to reproduce the goal effect. That does not by itself establish literal lexical repetition (the same token string recurring) as the mechanism. It does not rule out semantic activation of the entity, task relevance, or the task being used as evidence about the state. And in one respect the control cannot separate these accounts at all: the mention sentence, "There is a saltshaker somewhere in the room.", asserts that the object exists in the room. The aligned task carries the same existence information. So the mention result cannot distinguish a lexical or entity-mention account from one in which the task is used as evidence that the object exists; a mention that neither asserts nor presupposes existence would be needed for that. The result also does not generalize beyond Qwen3-8B on later steps: no other model was examined here, and at step 0 the mention reproduces only 29% of the effect, measured in a format whose empty think block shapes the step-0 numbers (section 13.2).
+
+### 13.6 What the audit implies for the full pilot's design
+
+The audit recommended, before the full pilot touches fold 1 and in a dated amendment:
+
+- report the mention-control table of section 13.2 and the history share split by mention status;
+- make the onset rule symmetric, so that "after arrival" requires the arrival layer's upper bound to be below 0.6, and ablate at layers 21, 22, 23 and 25 so that a lag of under four layers can be seen;
+- estimate the ablation direction and midpoint per stratum;
+- read the H4 cosine against matched nulls (random-split mean differences, a failures-only mention contrast, a Yes-raising direction without object content) with a mention-matched success contrast, and read the H4 intervention rows at the action's object position rather than the answer position;
+- correct the design's description of the early-span share and report the equal-length subset;
+- add lexical-discrimination arms to stage 0: the task object named with a different surface form (a synonym or different tokenisation), a mention in an irrelevant role, and the mention sentence placed after the action line. A repetition account predicts a drop with the surface-form change; a goal-semantics account does not;
+- to test whether the task changes how the evidence is used, cross the task with counterfactual histories.
+
+### 13.7 Status of these readings
+
+**Note.** These are post hoc readings of a calibration run. The minimal pilot gives no verdict about any hypothesis (section M, C1, D6), so nothing in this section changes a frozen verdict; the frozen readings reported in sections 4 to 6 stand as computed. The audit's findings bear on the design of the full pilot, which has not been run.

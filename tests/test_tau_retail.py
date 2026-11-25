@@ -195,6 +195,25 @@ def test_failed_writes_leave_the_database_unchanged():
             assert env.state.sha256() == before
 
 
+def test_failed_returns_past_the_status_check_leave_the_database_unchanged():
+    # A return refused after the status check (another payment method, an unknown one, an item not in the order) must
+    # write nothing. Added 2026-11-24: the mutant "failed return writes first" was otherwise caught only by the item
+    # builder's fixture erroring in setup, which the strict mutation rule does not count as a kill.
+    o = _order(lambda o: o["status"] == "delivered" and any(
+        m["source"] != "gift_card" and p != o["payment_history"][0]["payment_method_id"] for p, m in _user(o)["payment_methods"].items()))
+    pm = next(p for p, m in _user(o)["payment_methods"].items() if m["source"] != "gift_card" and p != o["payment_history"][0]["payment_method_id"])
+    ok = {"order_id": o["order_id"], "item_ids": [o["items"][0]["item_id"]], "payment_method_id": o["payment_history"][0]["payment_method_id"]}
+    for change in ({"payment_method_id": pm}, {"payment_method_id": "no_such_payment_method"}, {"item_ids": ["123"]}):
+        env = fresh_env()
+        before = env.state.sha256()
+        assert env.call("return_delivered_order_items", {**ok, **change}).startswith("Error: ")
+        assert env.state.sha256() == before, change
+    env = fresh_env()  # the unchanged arguments succeed, so the refusals above are the checks under test
+    before = env.state.sha256()
+    assert not env.call("return_delivered_order_items", ok).startswith("Error: ")
+    assert env.state.sha256() != before
+
+
 def test_forks_never_change_their_parent_or_the_pristine_database():
     before = pristine_sha256()
     parent = fresh_env()

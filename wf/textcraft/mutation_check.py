@@ -1,19 +1,27 @@
 """Put deliberate bugs into the TextCraft pipeline, one at a time, and confirm the TextCraft tests notice.
 
-    python -m wf.textcraft.mutation_check [jobs] [log.json]   # jobs: parallel workers, each with its own copy
+    python -m wf.textcraft.mutation_check [jobs] [log.json] [--results FILE.jsonl] [--legacy-any-exit]
 
-Each worker takes a fixed share (every jobs-th mutant in list order), so a run is reproducible; the killing test of
-each mutant (the first failing test, pytest stops there) is printed and, given a path, logged as JSON.
+jobs: parallel workers, each with its own copy. Each worker takes a fixed share (every jobs-th mutant in list order),
+so a run is reproducible; the killing test of each mutant (the first failing test, pytest stops there) is printed
+and, given a path, logged as JSON at the end. --results appends one JSON line per mutant as it finishes, and a rerun
+skips mutants already recorded there under the same rule, so an interrupted run resumes.
 
-Works on a copy of the repository, so the working tree is never touched. Each mutant runs against
-tests/test_textcraft_*.py; a timeout is reported as inconclusive, never as caught (as scripts/mutation_check.py).
+Works on a copy of the repository made without bytecode caches, so the working tree is never touched, and pytest
+runs with PYTHONDONTWRITEBYTECODE=1. Each mutant runs against tests/test_textcraft_*.py. The kill rule is the strict
+one of scripts/mutation_check.py (below); a timeout is reported as inconclusive, never as caught.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -272,76 +280,193 @@ MUTANTS = [
 ]
 
 
-def _run_tests(work: Path, timeout: int) -> tuple[str, str]:
-    """(outcome, the first failing test: the one that killed the mutant, as pytest's short summary names it)."""
+# Kill rules: the same as scripts/mutation_check.py (notes/testing.md, "Mutation runner: strict kill rule", 2026-11-23;
+# this runner since 2026-11-24). "strict", the default: a mutant is killed only when pytest exits 1 (tests ran and
+# failed) and at least one named test FAILED. Any other non-zero exit is "error-only": a collection or import error,
+# a usage or internal error, or a run whose only named problems are ERRORs in setup or teardown (then the run is
+# repeated without -x, and a named failure further on still counts). A timeout is inconclusive, never a kill.
+# "any-exit" (--legacy-any-exit): any non-zero exit is a kill, the rule of every log of this runner before 2026-11-24.
+FAILED_RE = re.compile(r"^FAILED (\S+::\S+)", re.MULTILINE)
+ERROR_RE = re.compile(r"^ERROR (\S+)", re.MULTILINE)
+STRICT, ANY_EXIT = "strict", "any-exit"
+TARGETS = "tests/test_textcraft_*.py"
+
+
+def classify(returncode: int | None, stdout: str, rule: str = STRICT) -> tuple[str, str]:
+    """(outcome, detail) of one pytest run: killed, error, survived or timeout (returncode None)."""
+    if returncode is None:
+        return "timeout", "no result within the time limit"
+    if returncode == 0:
+        return "survived", ""
+    failed = FAILED_RE.findall(stdout)
+    if rule == ANY_EXIT:  # the old report: the first FAILED or ERROR line's id
+        first = next((line.split(" ", 2)[1] for line in stdout.splitlines() if line.startswith(("FAILED ", "ERROR "))), "")
+        return "killed", first
+    if returncode == 1 and failed:
+        return "killed", failed[0]
+    errors = ERROR_RE.findall(stdout)
+    if errors:
+        return "error", f"pytest exit {returncode}, no named test failed (first error {errors[0]})"
+    return "error", f"pytest exit {returncode} (no failing test named)"
+
+
+def _pytest(work: Path, timeout: int, stop_first: bool = True) -> tuple[int | None, str, str]:
     tests = sorted(str(p.relative_to(work)) for p in (work / "tests").glob("test_textcraft_*.py"))
+    cmd = [sys.executable, "-m", "pytest", "-q", *(["-x"] if stop_first else []), "-rfE", "-p", "no:cacheprovider",
+           "--tb=no", *tests]
+    # No bytecode (2026-11-24, as scripts/mutation_check.py since cc1db87). A .pyc is trusted when its source's mtime,
+    # in whole seconds, and size match. A file restored within the second its same-length mutant was compiled would
+    # be read back from the mutant's .pyc, so every later mutant would "die" against code that is still broken.
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     try:
-        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-rfE", "-p", "no:cacheprovider", "--tb=no", *tests],
-                           cwd=work, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, cwd=work, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
-        return "timeout", ""
-    killer = next((line.split(" ", 2)[1] for line in r.stdout.splitlines() if line.startswith(("FAILED ", "ERROR "))), "")
-    return ("killed" if r.returncode != 0 else "survived"), killer
+        return None, "", ""
+    return r.returncode, r.stdout, r.stderr
 
 
-def _skip(folder: str, names: list[str]) -> list[str]:
-    top = {".git", ".venv", "runs", "runs_mock", "docs"} if Path(folder) == ROOT else set()
-    return [n for n in names if n in top or n in ("__pycache__", ".pytest_cache") or n.endswith(".pdf")]
+def _run_tests(work: Path, timeout: int, rule: str = STRICT) -> dict:
+    """Outcome, the killing test (the first failing test, as pytest's short summary names it) and the exit code."""
+    rc, out, _ = _pytest(work, timeout)
+    outcome, by = classify(rc, out, rule)
+    if rule == STRICT and outcome == "error" and rc == 1 and not FAILED_RE.search(out):
+        # -x stopped at a setup or teardown error; a later test may still fail by name, so run on without -x.
+        rc2, out2, _ = _pytest(work, timeout, stop_first=False)
+        outcome2, by2 = classify(rc2, out2, rule)
+        if outcome2 == "killed":
+            return {"outcome": outcome2, "by": by2 + " (run without -x after a setup error)", "returncode": rc2}
+    return {"outcome": outcome, "by": by, "returncode": rc}
 
 
-def _one(args: tuple[Path, tuple[str, str, str, str], int]) -> tuple[str, str, str]:
+def _fresh_copy(root: Path, work: Path) -> None:
+    """Copy the repository without bytecode caches, git data, environments and run outputs."""
+    def skip(folder: str, names: list[str]) -> list[str]:
+        top = {".git", ".venv", ".envs", "runs", "runs_mock", "docs"} if Path(folder) == root else set()
+        return [n for n in names if n in top or n in ("__pycache__", ".pytest_cache", "pace.env")
+                or n.endswith((".pdf", ".pyc"))]
+
+    shutil.copytree(root, work, ignore=skip)
+    for cache in sorted(work.rglob("__pycache__"), reverse=True):  # none should be left; make sure
+        shutil.rmtree(cache)
+
+
+def mutant_key(mutant: tuple[str, str, str, str]) -> str:
+    """The key scripts/mutation_check.py gives the same mutant, so records of the two runners can be matched."""
+    return hashlib.sha256("\x00".join(mutant).encode("utf-8")).hexdigest()[:16]
+
+
+def _read_results(path: Path | None, rule: str) -> dict[str, dict]:
+    """Records already written under this rule, by mutant key (resume); a cut-off last line is ignored."""
+    done: dict[str, dict] = {}
+    if path and path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("rule") == rule:
+                done[rec["key"]] = rec
+    return done
+
+
+def _git(root: Path, *args: str) -> str:
+    try:
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=60).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+LABELS = {"killed": "killed", "error": "ERROR-ONLY", "survived": "SURVIVED", "timeout": "TIMEOUT",
+          "not applied": "NOT APPLIED"}
+
+
+def _one(work: Path, mutant: tuple[str, str, str, str], timeout: int, rule: str, meta: dict) -> dict:
     """Apply one mutant in this worker's own copy, run the tests, restore the file."""
-    work, (name, rel, good, bad), timeout = args
+    name, rel, good, bad = mutant
     path = work / rel
     source = path.read_text(encoding="utf-8")
-    if source.count(good) != 1:
-        return name, "NOT APPLIED", ""
-    path.write_text(source.replace(good, bad), encoding="utf-8")
-    try:
-        outcome, killer = _run_tests(work, timeout)
-    finally:
-        path.write_text(source, encoding="utf-8")
-    return name, {"killed": "killed", "survived": "SURVIVED", "timeout": "TIMEOUT"}[outcome], killer
+    n = source.count(good)
+    rec = {"name": name, "file": rel, "key": mutant_key(mutant), "rule": rule, **meta, "occurrences": n}
+    start = time.time()
+    if n != 1:
+        rec.update(outcome="not applied", by=f"correct text found {n} times")
+    else:
+        path.write_text(source.replace(good, bad), encoding="utf-8")
+        try:
+            rec.update(_run_tests(work, timeout, rule), targets=[TARGETS])
+        finally:
+            path.write_text(source, encoding="utf-8")
+    rec["seconds"] = round(time.time() - start, 1)
+    return rec
 
 
-def _worker(args: tuple[Path, list, int]) -> list[tuple[str, str, str]]:
-    work, mutants, timeout = args
+def _worker(args: tuple[Path, list, int, str, dict, dict, str | None]) -> list[dict]:
+    work, mutants, timeout, rule, meta, done, results = args
     out = []
     for m in mutants:
-        out.append(_one((work, m, timeout)))
-        print(f"{out[-1][1]:<12} {out[-1][0]}  <- {out[-1][2] or '-'}", flush=True)
+        rec = done.get(mutant_key(m))
+        if rec is None:
+            rec = _one(work, m, timeout, rule, meta)
+            if results:
+                with open(results, "a", encoding="utf-8") as f:  # one short append per record
+                    f.write(json.dumps(rec) + "\n")
+        out.append(rec)
+        print(f"{LABELS[rec['outcome']]:<12} {rec['name']}  <- {rec.get('by') or '-'}", flush=True)
     return out
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Each of `jobs` workers (argument 1, default 1) runs a fixed share of the mutants (every jobs-th, in list order)
-    in its own copy of the repo; with a second argument, the outcome and killing test of every mutant are written to
-    that path as JSON."""
-    import json
+    """Each of `jobs` workers runs a fixed share of the mutants (every jobs-th, in list order) in its own copy of the
+    repo; with a log path, the outcome and killing test of every mutant are written to it as JSON at the end."""
+    import argparse
     import multiprocessing
 
-    argv = sys.argv[1:] if argv is None else argv
-    jobs = int(argv[0]) if argv else 1
-    log = Path(argv[1]) if len(argv) > 1 else None
-    timeout = 900
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("jobs", nargs="?", type=int, default=1, help="parallel workers, each with its own copy")
+    ap.add_argument("log", nargs="?", type=Path, default=None, help="JSON summary of every mutant, written at the end")
+    ap.add_argument("--legacy-any-exit", action="store_true",
+                    help="count any non-zero pytest exit as a kill (the rule before 2026-11-24; to reproduce old logs)")
+    ap.add_argument("--results", type=Path, default=None,
+                    help="JSONL file: one record appended per mutant as it finishes; mutants already in it are skipped")
+    args = ap.parse_args(sys.argv[1:] if argv is None else argv)
+    rule = ANY_EXIT if args.legacy_any_exit else STRICT
+    jobs = args.jobs
+    timeout = int(os.environ.get("MUTATION_TIMEOUT", "900"))
+    done = _read_results(args.results, rule)
+    if args.results and args.results.exists():
+        text = args.results.read_text(encoding="utf-8")
+        if text and not text.endswith("\n"):  # a run cut off mid-record: start the next on its own line
+            with args.results.open("a", encoding="utf-8") as f:
+                f.write("\n")
+    meta = {"root": str(ROOT), "root_commit": _git(ROOT, "rev-parse", "HEAD"),
+            "root_dirty": bool(_git(ROOT, "status", "--porcelain", "--untracked-files=no"))}
+    results = str(args.results) if args.results else None
     with tempfile.TemporaryDirectory() as tmp:
         works = [Path(tmp) / f"repo{k}" for k in range(jobs)]
         for w in works:
-            shutil.copytree(ROOT, w, ignore=_skip)
-        baseline, _ = _run_tests(works[0], timeout)
-        if baseline != "survived":
-            print(f"the unmutated tests do not pass ({baseline}); nothing to measure")
+            _fresh_copy(ROOT, w)
+        rc, out, err = _pytest(works[0], timeout)
+        if rc != 0:
+            print(f"the unmutated tests do not pass (pytest exit {rc}); nothing to measure\n"
+                  + "\n".join((out + err).strip().splitlines()[-20:]))
             return 1
-        shares = [(works[k], MUTANTS[k::jobs], timeout) for k in range(jobs)]
-        with multiprocessing.get_context("spawn").Pool(jobs) as pool:
-            done = {name: (r, k) for share in pool.map(_worker, shares) for name, r, k in share}
-    if log is not None:
-        log.write_text(json.dumps([{"mutant": name, "outcome": done[name][0], "killed_by": done[name][1]}
-                                   for name, *_ in MUTANTS], indent=1) + "\n", encoding="utf-8")
-    results = [(name, done[name][0]) for name, *_ in MUTANTS]
-    killed = sum(r == "killed" for _, r in results)
-    print(f"\n{killed}/{len(MUTANTS)} killed; others: {[(n, r) for n, r in results if r != 'killed']}")
-    return 0 if killed == len(MUTANTS) else 1
+        shares = [(works[k], MUTANTS[k::jobs], timeout, rule, meta, done, results) for k in range(jobs)]
+        if jobs == 1:
+            recs = _worker(shares[0])
+        else:
+            with multiprocessing.get_context("spawn").Pool(jobs) as pool:
+                recs = [r for share in pool.map(_worker, shares) for r in share]
+    by_name = {r["name"]: r for r in recs}
+    if args.log is not None:
+        args.log.write_text(json.dumps([{"mutant": name, "outcome": LABELS[by_name[name]["outcome"]],
+                                         "killed_by": by_name[name].get("by", ""),
+                                         "returncode": by_name[name].get("returncode")}
+                                        for name, *_ in MUTANTS], indent=1) + "\n", encoding="utf-8")
+    others = [(name, LABELS[by_name[name]["outcome"]]) for name, *_ in MUTANTS if by_name[name]["outcome"] != "killed"]
+    killed = len(MUTANTS) - len(others)
+    named = " by a named failing test" if rule == STRICT else ""
+    print(f"\nrule {rule}: {killed}/{len(MUTANTS)} killed{named}; others: {others}")
+    return 0 if not others else 1
 
 
 if __name__ == "__main__":
