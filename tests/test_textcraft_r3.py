@@ -52,6 +52,13 @@ def small(records):
 
 
 @pytest.fixture
+def bf16_attention(monkeypatch):
+    """The frozen attention rule (bf16, read from each job's own check), for the tests of the frozen procedure; D-G2
+    (2026-11-25) reads it in float32 and is tested on its own."""
+    monkeypatch.setattr(G, "ATTENTION_PRECISION", "bf16")
+
+
+@pytest.fixture
 def fast(monkeypatch):
     monkeypatch.setattr(A, "B_DRAWS", 300)
     monkeypatch.setattr(A, "N_FLIPS", 300)
@@ -939,7 +946,7 @@ def _yn(mass, top="Yes", special=False):
     return {"condition": "yn_aligned", "logp_plus": lp, "logp_minus": lp, "top_token": top, "top_token_special": special}
 
 
-def test_gemma_slot_rule(tmp_path):
+def test_gemma_slot_rule(tmp_path, bf16_attention):
     run = f"textcraft_r3_smoke_{R3.GEMMA_CORE}"
     assert G.gemma_slot(tmp_path)["slot"] == "waiting"
     _gate_rec(tmp_path, run, {"ok": True}, [_yn(0.9)] * 4)
@@ -968,7 +975,7 @@ def test_structural_tokens():
         assert not G.structural(t, False)
 
 
-def test_the_fallback_model_runs_only_when_the_rule_fired(mock_runs, small):
+def test_the_fallback_model_runs_only_when_the_rule_fired(mock_runs, small, bf16_attention):
     man = _manifest(mock_runs, small)
     cfg = {"run_id": "textcraft_r3_smoke_gemma4-e4b-it", "model": "gemma4-e4b-it", "smoke": True, "manifest": man}
     with pytest.raises(SystemExit):
@@ -1763,7 +1770,7 @@ FROZEN_SHA256 = {"r3_analysis": "0565777b6d0a51f9e68843c7a7d6dc3695a88ba7cd027b1
 CONFIRMATORY_KEYS = ("A3", "A3x", "B3", "per_model", "model_states", "gemma_core", "gemma_slot", "fallback_used",
                      "environment_check", "environment_rule", "declared_not_run", "missing_scores",
                      "round2_analysis_read", "freeze_commit")
-EXPECTED_TO_DIFFER = ("exploratory", "inference_map", "deviation_t1")
+EXPECTED_TO_DIFFER = ("exploratory", "inference_map", "deviation_t1", "deviation_g2")  # D-G2 adds its record
 
 
 def _frozen_provenance(probs):
@@ -1915,7 +1922,8 @@ def _replay_runs(mock_runs, small, think_and_r3x=True):
     return man
 
 
-def test_dt2_the_corrected_analysis_matches_the_frozen_code_on_a_replay(mock_runs, small, fast, monkeypatch):
+def test_dt2_the_corrected_analysis_matches_the_frozen_code_on_a_replay(mock_runs, small, fast, monkeypatch,
+                                                                       bf16_attention):
     """The analysis as it will run (deviation D-T2: the current code, run id textcraft_r3_analysis_dt2, both keys null)
     against the freeze commit's code on the same filed runs: every confirmatory key byte-identical; the only differences
     are the exploratory E4B block, one inference-map line and the deviation record. The literal frozen config is
@@ -2016,3 +2024,213 @@ def test_dt2_a_second_deviation_tag_leaves_d_t1_intact(tmp_path, monkeypatch):
     git("checkout", "-q", t1)
     out = G.require_freeze_commit(run_git, clean, run_id="textcraft_r3_think_qwen3.5-9b")
     assert (out["deviation"], out["deviation_commit"], out["head"]) == ("D-T1", t1, t1)
+
+
+# ---------------- deviation D-G2 (2026-11-25, notes/textcraft_r3_deviation_attention_float32.md) ----------------
+
+
+def _f32(root, tag, ok=True, dtype="torch.float32", rec_tag=None):
+    d = root / f"textcraft_r3_attnf32_{tag}" / "shard_00_of_01"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / G.ATTN_F32_FILE).write_text(json.dumps({"tag": rec_tag or tag, "ok": ok, "dtype_loaded": dtype, "problems": [],
+                                                  "yes_no_mean_abs_diff": 1e-5, "n_items": 5}))
+    return d
+
+
+def test_dg2_the_float32_record_and_the_model_states(tmp_path):
+    assert G.ATTENTION_PRECISION == "float32" and set(G.f32_tags()) == {"gemma4-12b-it", "gemma4-e4b-it", "gemma4-31b-it"}
+    t12, t31 = R3.GEMMA_CORE, "gemma4-31b-it"
+    assert G.attention_f32(tmp_path, t12)["filed"] is False
+    _f32(tmp_path, t12)
+    assert G.attention_f32(tmp_path, t12)["ok"] is True
+    for kw in ({"ok": False}, {"dtype": "torch.bfloat16"}, {"rec_tag": "gemma4-e4b-it"}):
+        _f32(tmp_path, t12, **kw)
+        assert G.attention_f32(tmp_path, t12)["ok"] is False
+    # 12B's filed smoke record: the gate passed, the bf16 attention check failed
+    bf16_fail = {"ok": False, "attention_agreement": {"ok": False}}
+    root = tmp_path / "runs"
+    _gate_rec(root, f"textcraft_r3_smoke_{t12}", bf16_fail)
+    assert G.model_state(root, t12)["state"] == "waiting"  # no float32 record yet
+    _f32(root, t12, ok=False)
+    assert G.model_state(root, t12)["state"] == "not scored" and "float32" in G.model_state(root, t12)["reasons"][0]
+    _f32(root, t12, ok=True)
+    assert G.model_state(root, t12)["state"] == "waiting"
+    _gate_rec(root, f"textcraft_r3_score_{t12}", {"ok": True, "attention_agreement": {"ok": True, "deviation": "D-G2"}})
+    assert G.model_state(root, t12)["state"] == "scored"
+    # a loading failure or a tokenization-gate failure is read as frozen
+    _gate_rec(root, f"textcraft_r3_smoke2_{t12}", {"ok": False, "loading_failed": "x"})
+    assert G.model_state(root, t12)["state"] == "not scored"
+    # 31B passed its bf16 check: its attention is still read from the float32 record, waiting until it is filed
+    _gate_rec(root, f"textcraft_r3_smoke_{t31}", {"ok": True, "attention_agreement": {"ok": True}})
+    _gate_rec(root, f"textcraft_r3_score_{t31}", {"ok": True, "attention_agreement": {"ok": True}})
+    assert G.model_state(root, t31)["state"] == "waiting"
+    _f32(root, t31)
+    assert G.model_state(root, t31)["state"] == "scored"
+    # records without an attention check (mock, or models without it) are read as frozen
+    _gate_rec(root, "textcraft_r3_score_qwen3.5-9b", {"ok": True})
+    assert G.model_state(root, "qwen3.5-9b")["state"] == "scored"
+
+
+def test_dg2_the_gemma_slot_in_float32(tmp_path, monkeypatch):
+    run, run2 = f"textcraft_r3_smoke_{R3.GEMMA_CORE}", f"textcraft_r3_smoke2_{R3.GEMMA_CORE}"
+    _gate_rec(tmp_path, run, {"ok": False, "attention_agreement": {"ok": False}})  # as filed: no scores
+    assert G.gemma_slot(tmp_path)["slot"] == "waiting"  # no float32 record
+    _f32(tmp_path, R3.GEMMA_CORE, ok=False)
+    out = G.gemma_slot(tmp_path)
+    assert out["slot"] == R3.GEMMA_FALLBACK and "float32" in out["triggers"][0]
+    _f32(tmp_path, R3.GEMMA_CORE, ok=True)
+    out = G.gemma_slot(tmp_path)
+    assert out["slot"] == "waiting" and "smoke rerun" in out["reason"]  # the format diagnostic needs the rerun
+    _gate_rec(tmp_path, run2, {"ok": True, "attention_agreement": {"ok": True}}, [_yn(0.9)] * 4)
+    assert G.gemma_slot(tmp_path)["slot"] == R3.GEMMA_CORE
+    _gate_rec(tmp_path, run2, {"ok": True, "attention_agreement": {"ok": True}}, [_yn(0.1, "<|channel>", True)] * 4)
+    out = G.gemma_slot(tmp_path)
+    assert out["slot"] == R3.GEMMA_FALLBACK and "format mismatch" in out["triggers"][0]
+    _gate_rec(tmp_path, run2, {"ok": True, "attention_agreement": {"ok": True}}, [_yn(0.1, "No")] * 4)
+    assert G.gemma_slot(tmp_path)["slot"] == R3.GEMMA_CORE  # low mass alone does not fire (S9)
+    _gate_rec(tmp_path, run2, {"ok": False, "loading_failed": "x"}, [])
+    assert G.gemma_slot(tmp_path)["slot"] == R3.GEMMA_FALLBACK
+    _gate_rec(tmp_path, run2, {"ok": True, "attention_agreement": {"ok": True}}, [])
+    assert G.gemma_slot(tmp_path)["slot"] == "waiting"  # filed but no scores yet
+    # under the frozen rule (bf16) the same records give E4B
+    monkeypatch.setattr(G, "ATTENTION_PRECISION", "bf16")
+    assert G.gemma_slot(tmp_path)["slot"] == R3.GEMMA_FALLBACK
+
+
+def test_dg2_the_job_reads_the_float32_record(tmp_path, monkeypatch):
+    from wf.textcraft import r3_tokcheck as T
+
+    monkeypatch.setenv("RUNS_DIR", str(tmp_path / "runs"))
+    monkeypatch.setattr(T, "gate", lambda *a, **k: {"ok": True, "problems": []})
+    monkeypatch.setattr(T, "reference_encoder", lambda spec: None)
+    monkeypatch.setattr(T, "golden_problems", lambda *a: [])
+    monkeypatch.setattr(FAM, "weights_check", lambda spec: None)
+    monkeypatch.setattr(FAM, "_attn_loaded", lambda m: ["sdpa"])
+    calls = []
+    monkeypatch.setattr(S, "attention_agreement", lambda *a: calls.append(1) or {"ok": True, "problems": []})
+    scorer = types.SimpleNamespace(mock=False, load_info={}, _model=types.SimpleNamespace(dtype="torch.bfloat16"))
+    spec = R3.MODELS[R3.GEMMA_CORE]
+    d = tmp_path / "shard"
+    d.mkdir()
+    assert S.run_gate(d, scorer, spec, spec.tag, [], [], [], {}) is False  # no float32 record: refused
+    assert calls == [] and "D-G2" in json.dumps(json.loads((d / "tokenization_checks.json").read_text()))
+    _f32(tmp_path / "runs", R3.GEMMA_CORE, ok=True)
+    assert S.run_gate(d, scorer, spec, spec.tag, [], [], [], {}) is True and calls == []
+    # the placement variant reads its model's record
+    assert S.run_gate(d, scorer, FAM.first_turn_spec(spec), spec.tag + FAM.FIRST_TURN, [], [], [], {}) is True
+    _f32(tmp_path / "runs", R3.GEMMA_CORE, ok=False)
+    assert S.run_gate(d, scorer, spec, spec.tag, [], [], [], {}) is False
+    # a model without the check is untouched, and the frozen rule runs the bf16 check in the job
+    assert S.run_gate(d, scorer, R3.MODELS["qwen3.5-9b"], "qwen3.5-9b", [], [], [], {}) is True and calls == []
+    monkeypatch.setattr(G, "ATTENTION_PRECISION", "bf16")
+    assert S.run_gate(d, scorer, spec, spec.tag, [], [], [], {}) is True and calls == [1]
+
+
+def test_dg2_12b_is_not_scored_once_the_rule_gives_e4b(mock_runs, small):
+    man = _manifest(mock_runs, small)
+    root = mock_runs / "runs"
+    cfg = {"run_id": f"textcraft_r3_score_{R3.GEMMA_CORE}", "model": R3.GEMMA_CORE, "manifest": man, "n_shards": 2}
+    _gate_rec(root, f"textcraft_r3_smoke_{R3.GEMMA_CORE}", {"ok": False, "attention_agreement": {"ok": False}})
+    _f32(root, R3.GEMMA_CORE, ok=False)
+    with pytest.raises(SystemExit, match="Gemma slot rule gives"):
+        S.run_textcraft_r3_score(cfg)
+    _f32(root, R3.GEMMA_CORE, ok=True)
+    _gate_rec(root, f"textcraft_r3_smoke2_{R3.GEMMA_CORE}", {"ok": None}, [_yn(0.9)] * 4)
+    assert S.run_textcraft_r3_score(cfg) == 0
+    # the smoke rerun is a registered run with the smoke's config, in its own folder
+    from wf.runs import load_config
+
+    c = load_config(f"textcraft_r3_smoke2_{R3.GEMMA_CORE}")
+    assert c["smoke"] is True and c["model"] == R3.GEMMA_CORE and f"textcraft_r3_smoke2_{R3.GEMMA_CORE}" in RUNNERS
+
+
+def test_dg2_the_float32_check_run(mock_runs, small):
+    from wf.runs import load_config
+    from wf.textcraft import r3_g2 as F
+
+    man = _manifest(mock_runs, small)
+    for t in G.f32_tags():
+        assert f"textcraft_r3_attnf32_{t}" in RUNNERS and load_config(f"textcraft_r3_attnf32_{t}")["model"] == t
+    cfg = {"run_id": f"textcraft_r3_attnf32_{R3.GEMMA_CORE}", "model": R3.GEMMA_CORE, "manifest": man}
+    assert F.run_textcraft_r3_attnf32(cfg) == 0
+    rec = json.loads((mock_runs / "runs" / cfg["run_id"] / "shard_00_of_01" / G.ATTN_F32_FILE).read_text())
+    assert rec["deviation"] == "D-G2" and rec["tag"] == R3.GEMMA_CORE
+    assert G.attention_f32(mock_runs / "runs", R3.GEMMA_CORE)["ok"] is False  # a mock record never passes
+    with pytest.raises(SystemExit, match="final"):
+        F.run_textcraft_r3_attnf32(cfg)
+    for bad in ({**cfg, "model": "qwen3.5-9b", "run_id": "textcraft_r3_attnf32_qwen3.5-9b"},
+                {**cfg, "run_id": "textcraft_r3_attnf32_gemma4-31b-it"}):
+        with pytest.raises(SystemExit):
+            F.run_textcraft_r3_attnf32(bad)
+
+
+def _git_g2(head="g2", g2_diff="wf/textcraft/r3_gates.py\nwf/textcraft/r3_g2.py\nwf/runs.py\nnotes/x.md", n_g2=1):
+    """Freeze tag at c1, D-T1's tag at dev, D-G2's tag(s) at g2; HEAD at `head`."""
+    def run(args):
+        if args[:2] == ["tag", "-l"]:
+            if args[2].startswith(G.G2_TAG_PREFIX):
+                return "\n".join(f"{G.G2_TAG_PREFIX}2026-11-2{k}" for k in range(5, 5 + n_g2))
+            if args[2].startswith(G.DEVIATION_TAG_PREFIX):
+                return f"{G.DEVIATION_TAG_PREFIX}2026-11-23"
+            return "textcraft-r3-design-frozen-2026-11-23"
+        if args[0] == "rev-parse":
+            a = args[1]
+            return "c1" if "frozen" in a else "dev" if "deviation-t1" in a else "g2" if "deviation-g2" in a else head
+        if args[0] == "diff":
+            x, y = args[2], args[3]
+            if x == y:
+                return ""
+            if {x, y} == {"c1", "g2"}:
+                return g2_diff
+            if {x, y} == {"c1", "dev"}:
+                return "wf/textcraft/r3_think.py"
+            return "wf/x.py"
+        raise AssertionError(args)
+    return run
+
+
+def test_dg2_only_its_runs_start_at_its_commit(monkeypatch):
+    monkeypatch.setenv("WF_MOCK_SCORE", "0")
+    clean = lambda: False  # noqa: E731
+    for rid in ("textcraft_r3_attnf32_gemma4-12b-it", "textcraft_r3_attnf32_gemma4-31b-it",
+                "textcraft_r3_smoke2_gemma4-12b-it", "textcraft_r3_score_gemma4-12b-it", "textcraft_r3_score_gemma4-e4b-it",
+                "textcraft_r3_placement_gemma4-12b-it"):
+        out = G.require_freeze_commit(_git_g2(), clean, run_id=rid)
+        assert (out["deviation"], out["deviation_commit"]) == ("D-G2", "g2"), rid
+    for rid in ("", "textcraft_r3_score_qwen3.5-9b", "textcraft_r3_score_gemma4-31b-it", "textcraft_r3_score_qwen3.8-27b",
+                "textcraft_r3_smoke_gemma4-12b-it", "textcraft_r3_envcheck_qwen3-8b", "textcraft_r3_rescore_gemma2-9b-it",
+                "textcraft_r3_think_qwen3.5-9b", "textcraft_r3x_gemma4-e4b-it", "textcraft_r3_analysis_dg2"):
+        with pytest.raises(SystemExit, match="not the freeze tag"):
+            G.require_freeze_commit(_git_g2(), clean, run_id=rid)
+    # D-T1's runs still start at D-T1's commit, and D-G2's runs do not
+    assert G.require_freeze_commit(_git_g2(head="dev"), clean, run_id="textcraft_r3_think_qwen3.5-9b")["deviation"] == "D-T1"
+    with pytest.raises(SystemExit):
+        G.require_freeze_commit(_git_g2(head="dev"), clean, run_id="textcraft_r3_score_gemma4-12b-it")
+    # a D-G2 commit changing other code, or two D-G2 tags, refuses its runs too
+    for g in (_git_g2(g2_diff="wf/textcraft/r3_gates.py\nwf/textcraft/r2_score.py"), _git_g2(n_g2=2)):
+        with pytest.raises(SystemExit):
+            G.require_freeze_commit(g, clean, run_id="textcraft_r3_score_gemma4-12b-it")
+    assert G.g2_commit(_git_g2())["commit"] == "g2" and G.deviation_commit(_git_g2())["commit"] == "dev"
+
+
+def test_dg2_the_analysis_accepts_its_shards_at_its_commit_only(tmp_path):
+    l40 = ["NVIDIA L40S"]
+    g = _git_g2()
+    s12 = _shard(tmp_path, "s12/shard_00_of_02", [{"gpu": l40, "git_sha": "g2"}])
+    sq = _shard(tmp_path, "sq/shard_00_of_02", [{"gpu": l40, "git_sha": "g2"}])
+    rev = lambda t: [{"model_revision": R3.spec_for(t).revision}]  # noqa: E731
+    probs = Z.provenance_problems({R3.GEMMA_CORE: [s12], "qwen3.5-9b": [sq]},
+                                  {R3.GEMMA_CORE: rev(R3.GEMMA_CORE), "qwen3.5-9b": rev("qwen3.5-9b")}, "c1", run_git=g,
+                                  dirty_of=lambda p: False, g2="g2")
+    assert R3.GEMMA_CORE not in probs and any("not the freeze tag" in x for x in probs["qwen3.5-9b"])
+    probs = Z.provenance_problems({R3.GEMMA_CORE: [s12]}, {R3.GEMMA_CORE: rev(R3.GEMMA_CORE)}, "c1", run_git=g,
+                                  dirty_of=lambda p: False, g2=None)
+    assert any("not the freeze tag" in x for x in probs[R3.GEMMA_CORE])
+    a = _shard(tmp_path, "a/shard_00_of_01", [{"gpu": ["NVIDIA A100 80GB PCIe"], "git_sha": "g2"}])
+    e = _shard(tmp_path, "e/shard_00_of_01", [{"gpu": l40, "git_sha": "g2"}])
+    t = _shard(tmp_path, "t/shard_00_of_01", [{"gpu": l40, "git_sha": "g2"}])
+    cp = Z.other_commit_problems({"attnf32:gemma4-12b-it": [a], "smoke2:gemma4-12b-it": [a], "envcheck:qwen3-8b": [e],
+                                  "think": [t]}, "c1", {"commit": "dev", "problems": []}, run_git=g,
+                                 g2={"commit": "g2", "problems": []})
+    assert set(cp) == {"envcheck:qwen3-8b", "think"}
+

@@ -444,3 +444,22 @@ The previous budget of 60 GPU-hours covers the lower and middle of this range; a
 
 `wf/config/textcraft_r3_envcheck_plan.json`, written by `python -m wf.textcraft.r3_gates plan` (14.M4, item 1): for Qwen3-8B, Mistral-7B-v0.3 and Gemma-2-9B-it, one job on `NVIDIA L40S` covering round-2 shards 0 to 3, 300 of 300 seeded records comparable. Nothing under `wf/` changed except this file, so the ICE CPU gate of 14.T was not rerun. Full local suite with the plan file in place: **1,243 passed, 29 skipped**.
 
+
+## 15. Deviations after the freeze
+
+Each deviation has its own dated note. Where they differ from sections 1 to 14, the notes govern. Every hypothesis,
+family, test, threshold, Holm size, margin and reading rule is unchanged.
+
+- **D-T1** (2026-11-23), [textcraft_r3_deviation_thinking_padding.md](textcraft_r3_deviation_thinking_padding.md):
+  the thinking arm's padded-against-alone start check runs in float32.
+- **D-G1** (2026-11-23), [textcraft_r3_deviation_gemma_e4b.md](textcraft_r3_deviation_gemma_e4b.md): an exploratory
+  Gemma 4 E4B run, outside every family.
+- **D-T2** (2026-11-25), [textcraft_r3_deviation_analysis_config.md](textcraft_r3_deviation_analysis_config.md): the
+  analysis config takes the Gemma slot and B3's older scores from the gates.
+- **D-G2** (2026-11-25), [textcraft_r3_deviation_attention_float32.md](textcraft_r3_deviation_attention_float32.md):
+  the attention-agreement criterion of section 4 (and 14.M3) is evaluated in float32, by
+  `textcraft_r3_attnf32_<tag>`, with the same function, items, arms and limits, for every Gemma 4 model. Gemma 4 12B's
+  smoke is rerun (`textcraft_r3_smoke2_gemma4-12b-it`) so that the fallback rule's format diagnostic has rows. The
+  Gemma slot then follows the frozen rule: 12B unless a trigger fires, else E4B. The analysis that is read is
+  `textcraft_r3_analysis_dg2`, at D-G2's tag. D-G2 was decided before the round-3 analysis ran and before any round-3
+  score was read.

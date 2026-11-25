@@ -1473,6 +1473,12 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     # 2026-11-25, deviation D-T2 (notes/textcraft_r3_deviation_analysis_config.md): the same analysis, with the
     # Gemma slot and B3's older scores taken from the gates (wf/config/textcraft_r3_analysis_dt2.yaml).
     "textcraft_r3_analysis_dt2": lambda cfg: _lazy("textcraft.r3_analysis", "run_textcraft_r3_analysis")(cfg),
+    # 2026-11-25, deviation D-G2 (notes/textcraft_r3_deviation_attention_float32.md): the attention-agreement check in
+    # float32, Gemma 4 12B's smoke rerun, and the analysis that reads them.
+    **{f"textcraft_r3_attnf32_{tag}": (lambda cfg: _lazy("textcraft.r3_g2", "run_textcraft_r3_attnf32")(cfg))
+       for tag in ("gemma4-12b-it", "gemma4-e4b-it", "gemma4-31b-it")},
+    "textcraft_r3_smoke2_gemma4-12b-it": lambda cfg: _lazy("textcraft.r3_score", "run_textcraft_r3_score")(cfg),
+    "textcraft_r3_analysis_dg2": lambda cfg: _lazy("textcraft.r3_analysis", "run_textcraft_r3_analysis")(cfg),
 }
 
 

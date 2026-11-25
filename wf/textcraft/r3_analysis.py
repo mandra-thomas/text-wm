@@ -653,7 +653,8 @@ def provenance_problems(folders: dict[str, list[Path]], scores: dict[str, list[d
                         mock_run: bool = False, run_git: Callable[[list[str]], str] | None = None,
                         gpus_of: Callable[[Path], list[list[str] | None]] | None = None,
                         commits_of: Callable[[Path], list[str]] | None = None,
-                        dirty_of: Callable[[Path], bool] | None = None) -> dict[str, list[str]]:
+                        dirty_of: Callable[[Path], bool] | None = None,
+                        g2: str | None = None) -> dict[str, list[str]]:
     """{tag: problems} for every round-3 run read: every job of every shard at the freeze tag's commit (or a
     code-identical one; S12); every job of every shard of a model on the identical GPU list, of its pinned type (each
     job's own list from jobs.jsonl; M1); every score with its model's pinned revision, and no other. A mock run checks
@@ -667,8 +668,11 @@ def provenance_problems(folders: dict[str, list[Path]], scores: dict[str, list[d
             bad = [p.name for p in ps if dirty_of(p)]
             if bad:
                 out[tag].append(f"{tag}: shards {bad} ran with uncommitted changes (git_dirty)")
-        cp = G.commit_problems({t: [c for p in ps for c in commits_of(p)] for t, ps in folders.items()}, tag_commit,
-                               **({"run_git": run_git} if run_git else {}))
+        kw = {"run_git": run_git} if run_git else {}
+        cp = {}
+        for t, ps in folders.items():  # D-G2: only Gemma 4 12B's and E4B's shards may also come from D-G2's commit
+            also = g2 if R3.base_tag(t) in G2_FAMILY_TAGS else None
+            cp.update(G.commit_problems({t: [c for p in ps for c in commits_of(p)]}, tag_commit, also=also, **kw))
         for t, probs in cp.items():
             out[t] += probs
         for tag, ps in folders.items():
@@ -688,7 +692,8 @@ def provenance_problems(folders: dict[str, list[Path]], scores: dict[str, list[d
 
 def other_commit_problems(other: dict[str, list[Path]], tag_commit: str | None, dev: dict[str, Any],
                           commits_of: Callable[[Path], list[str]] | None = None,
-                          run_git: Callable[[list[str]], str] | None = None) -> dict[str, list[str]]:
+                          run_git: Callable[[list[str]], str] | None = None,
+                          g2: dict[str, Any] | None = None) -> dict[str, list[str]]:
     """S12 for the runs outside the families (environment check, rescoring, thinking arm, exploratory runs): every job
     at the freeze tag's commit; the thinking arm's (key "think", D-T1) and the exploratory runs' (keys "r3x:<tag>",
     D-G1) also at the deviation commit `dev["commit"]`, and only those."""
@@ -696,14 +701,21 @@ def other_commit_problems(other: dict[str, list[Path]], tag_commit: str | None, 
     kw = {"run_git": run_git} if run_git else {}
     cs = {k: [c for p in ps for c in commits_of(p)] for k, ps in other.items()}
     exempt = lambda k: k == "think" or k.startswith("r3x:")  # noqa: E731
-    cp = G.commit_problems({k: v for k, v in cs.items() if not exempt(k)}, tag_commit, **kw)
+    g2_run = lambda k: k.startswith(("attnf32:", "smoke2:"))  # noqa: E731  D-G2's runs, at D-G2's commit
+    cp = G.commit_problems({k: v for k, v in cs.items() if not exempt(k) and not g2_run(k)}, tag_commit, **kw)
     for k in [k for k in cs if exempt(k)]:
         cp.update(G.commit_problems({k: cs[k]}, tag_commit, also=dev.get("commit"), **kw))
         if dev.get("problems"):
             cp.setdefault(k, []).extend(dev["problems"])
+    g2 = g2 or {"commit": None, "problems": []}
+    for k in [k for k in cs if g2_run(k)]:
+        cp.update(G.commit_problems({k: cs[k]}, tag_commit, also=g2.get("commit"), **kw))
+        if g2.get("problems"):
+            cp.setdefault(k, []).extend(g2["problems"])
     return cp
 
 
+G2_FAMILY_TAGS = ("gemma4-12b-it", "gemma4-e4b-it")  # D-G2: the Gemma slot's models, whose scoring needs D-G2's code
 R3X_TAGS = ("gemma4-e4b-it",)  # D-G1: the models with an exploratory textcraft_r3x_<tag> run
 R3X_KIND = ("exploratory (D-G1): outside every family; no p-values; never feeds A3, A3x, B3, H3-P, R2 or the "
             "replication reading; printed beside the confirmatory 'not scored'")
@@ -997,6 +1009,11 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
     tps = [p for p, _s in load_run(run_folder("think", "qwen3.5-9b"), root)]
     if tps:
         other["think"] = tps
+    for t in G.f32_tags():  # D-G2: the float32 attention checks and 12B's smoke rerun, checked for their commit
+        for kind in ("attnf32", "smoke2"):
+            ps = sorted(p for p in (root / f"textcraft_r3_{kind}_{t}").glob("shard_*") if p.is_dir())
+            if ps:
+                other[f"{kind}:{t}"] = ps
     xruns = {t: load_run(f"textcraft_r3x_{t}", root) for t in R3X_TAGS}  # D-G1
     for t, xr in xruns.items():
         if xr:
@@ -1004,7 +1021,8 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
     tag_commit = None if mock_run else G.freeze_commit()
     # D-T1: the thinking arm's shards may also run at the deviation commit; every other run only at the freeze tag's
     dev = {"commit": None, "problems": []} if mock_run else G.deviation_commit(tag_commit=tag_commit)
-    probs = provenance_problems(folders, scores, tag_commit, mock_run)
+    g2 = {"commit": None, "problems": []} if mock_run else G.g2_commit(tag_commit=tag_commit)  # D-G2
+    probs = provenance_problems(folders, scores, tag_commit, mock_run, g2=g2["commit"])
     for k, ps in (other.items() if not mock_run else ()):  # review 2, S2
         bad = [p.name for p in ps if G.shard_dirty(p)]
         if bad:
@@ -1013,7 +1031,7 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
         if not dec["valid"]:
             probs.setdefault(t, []).extend(dec["problems"])
     if not mock_run:
-        cp = other_commit_problems(other, tag_commit, dev)
+        cp = other_commit_problems(other, tag_commit, dev, g2=g2)
         for k, v in cp.items():
             probs.setdefault(k, []).extend(v)
         for k, ps in other.items():  # the fallback rescoring runs on exactly one L40S per job (design 14.M4)
@@ -1103,6 +1121,10 @@ def run_textcraft_r3_analysis(cfg: dict) -> int:
     metrics["deviation_t1"] = {"commit": dev["commit"], "problems": dev["problems"],  # which commit each thinking shard ran at
                                "think_shard_commits": think_shard_commits(other.get("think", [])),
                                "r3x_shard_commits": {t: think_shard_commits(other.get(f"r3x:{t}", [])) for t in xscores}}
+    metrics["deviation_g2"] = {"commit": g2["commit"], "problems": g2["problems"], "precision": G.ATTENTION_PRECISION,
+                               "attention_f32": {t: G.attention_f32(root, t) for t in G.f32_tags()},
+                               "shard_commits": {k: think_shard_commits(ps) for k, ps in other.items()
+                                                 if k.startswith(("attnf32:", "smoke2:"))}}
     write_json(d / "metrics.json", metrics)
     lines = [f"Gemma slot: {gemma} (triggers {slot.get('triggers')})"]
     for fam in ("A3", "A3x"):

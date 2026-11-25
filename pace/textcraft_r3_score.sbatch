@@ -50,6 +50,10 @@ RUN="${TC3_RUN:?set TC3_RUN, e.g. textcraft_r3_score_qwen3.5-9b}"
 case "${RUN}" in
   textcraft_r3_score_*) TAG="${RUN#textcraft_r3_score_}" ;;
   textcraft_r3_smoke_*) TAG="${RUN#textcraft_r3_smoke_}" ;;
+  # D-G2 (notes/textcraft_r3_deviation_attention_float32.md): 12B's smoke rerun, and the float32 attention check
+  # (--constraint=A100-80GB --mem=128G; for gemma4-31b-it --gres=gpu:a100:2 --mem=256G)
+  textcraft_r3_smoke2_*) TAG="${RUN#textcraft_r3_smoke2_}" ;;
+  textcraft_r3_attnf32_*) TAG="${RUN#textcraft_r3_attnf32_}" ;;
   textcraft_r3_placement_*) TAG="${RUN#textcraft_r3_placement_}" ;;
   textcraft_r3_nopreserve_*) TAG="${RUN#textcraft_r3_nopreserve_}" ;;
   textcraft_r3_think_smoke_*|textcraft_r3_think_*) TAG="qwen3.5-9b" ;;

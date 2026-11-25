@@ -1,0 +1,11 @@
+run_id: textcraft_r3_analysis_dg2
+# TextCraft round 3, deviations D-T2 and D-G2 (2026-11-25, notes/textcraft_r3_deviation_analysis_config.md and
+# notes/textcraft_r3_deviation_attention_float32.md): the analysis run that is read, superseding textcraft_r3_analysis_dt2
+# (same keys; it runs at D-G2's tag, whose gates read the attention agreement in float32). The frozen wf/config/textcraft_r3_analysis.yaml is kept unchanged; it names gemma4-12b-it and round 2's
+# scores, which the filed gates contradict, so the analysis refuses it. Here both keys are null: the analysis takes the
+# Gemma slot from r3_gates.gemma_slot (design 14.M3) and B3's older scores from the environment check's outcome
+# (r3_analysis.b3_source, design 14.S5), exactly as the frozen code does for a null value. Every other key as frozen.
+manifest: wf/textcraft/data/r2_manifest.json
+gemma_core: null  # from the gates (D-G2: 12B's float32 attention record and its smoke rerun; E4B if the rule fires)
+b3_old_scores: null  # from the environment check: "rescore" (the check failed; textcraft_r3_rescore_* were run)
+r2_runs_root: null

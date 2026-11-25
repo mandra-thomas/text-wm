@@ -1,0 +1,9 @@
+run_id: textcraft_r3_smoke2_gemma4-12b-it
+# TextCraft round 3, deviation D-G2 (notes/textcraft_r3_deviation_attention_float32.md): Gemma 4 12B's smoke run, rerun
+# because the filed one (textcraft_r3_smoke_gemma4-12b-it) stopped at its bf16 attention check before any score, so the
+# format diagnostic of the fallback rule (design 14.M3, S9) has no rows. Same 20 seeded records, every arm, one shard,
+# the same gates, with the float32 attention record as its attention gate. The filed smoke record stays as filed.
+manifest: wf/textcraft/data/r2_manifest.json
+model: gemma4-12b-it
+smoke: true
+n_shards: 1

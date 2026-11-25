@@ -151,7 +151,16 @@ def run_gate(d: Path, scorer, spec, tag: str, records: list[dict], all_records: 
     if weights is not None:
         write_json(d / "weights_check.json", weights)
         rec["weights_check"] = {k: weights.get(k) for k in ("ok", "hf_id", "revision", "n_files", "total_bytes")}
-    if rec["ok"] and spec.attn_agreement_check:
+    if rec["ok"] and spec.attn_agreement_check and G.ATTENTION_PRECISION == "float32":
+        # D-G2: the attention agreement is the float32 check filed by textcraft_r3_attnf32_<model>, not a bf16 check here
+        from wf.util import runs_root
+
+        f32 = G.attention_f32(runs_root(), R3.base_tag(tag))
+        rec["attention_agreement"] = {**f32, "ok": bool(f32["ok"]), "deviation": "D-G2"}
+        rec["ok"] = rec["attention_agreement"]["ok"]
+        if not rec["ok"]:
+            rec["problems"] = rec["problems"] + f32["problems"] + ["attention agreement (float32, D-G2) not passed"]
+    elif rec["ok"] and spec.attn_agreement_check:
         rec["attention_agreement"] = attention_agreement(scorer, spec, records, shots)
         rec["ok"] = rec["attention_agreement"]["ok"]
         if not rec["ok"]:
@@ -266,6 +275,13 @@ def run_textcraft_r3_score(cfg: dict) -> int:
         if slot["slot"] != R3.GEMMA_FALLBACK:
             raise SystemExit(f"{tag} runs only if the Gemma fallback fired; the rule gives {slot['slot']!r} "
                              f"(triggers {slot['triggers']})")
+    if tag == R3.GEMMA_CORE and not cfg.get("smoke") and G.ATTENTION_PRECISION == "float32":
+        from wf.util import runs_root
+
+        slot = G.gemma_slot(runs_root())  # D-G2: 12B is not scored once the slot rule, read in float32, gives E4B
+        if slot["slot"] == R3.GEMMA_FALLBACK:
+            raise SystemExit(f"{tag} is not scored: the Gemma slot rule gives {slot['slot']!r} "
+                             f"({slot.get('triggers') or slot.get('reason')})")
     select = smoke_subset if cfg.get("smoke") else (lambda rs: rs)
     return score_shard(cfg, tag, R3.MODELS[tag], select)
 

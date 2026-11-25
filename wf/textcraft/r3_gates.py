@@ -40,6 +40,21 @@ DEVIATION_FILES = ("wf/textcraft/r3_think.py", "wf/textcraft/r3_gates.py", "wf/t
                    "wf/textcraft/r3x.py", "wf/runs.py", "wf/config/textcraft_r3x_gemma4-e4b-it.yaml",
                    "wf/config/textcraft_r3x_e4b_attention.json", "pace/textcraft_r3x.sbatch", "wf/textcraft/r3_score.py")
 CODE_PATHS = ("wf/", "scripts/", "pace/")  # a commit that differs from the tag only outside these is code-identical
+# Deviation D-G2 (2026-11-25, notes/textcraft_r3_deviation_attention_float32.md): the attention-agreement criterion
+# (eager against SDPA, wave B's limits unchanged) is evaluated in float32, by the run textcraft_r3_attnf32_<tag>, and
+# no longer in bf16 inside each job. The runs it needs may start at the commit of the annotated tag
+# textcraft-r3-deviation-g2-*, and only if that commit changes no code outside the deviations' files.
+ATTENTION_PRECISION = "float32"  # D-G2; the frozen rule read the bf16 check filed by each job ("bf16")
+G2_TAG_PREFIX = "textcraft-r3-deviation-g2-"
+G2_RUNS = ("textcraft_r3_attnf32_", "textcraft_r3_smoke2_gemma4-12b-it", "textcraft_r3_score_gemma4-12b-it",
+           "textcraft_r3_score_gemma4-e4b-it", "textcraft_r3_placement_gemma4-12b-it")
+G2_FILES = DEVIATION_FILES + (
+    # D-T2 (the analysis config) and D-G2 (the float32 attention check, the 12B smoke rerun, the analysis config)
+    "wf/config/textcraft_r3_analysis_dt2.yaml", "wf/config/textcraft_r3_analysis_dg2.yaml",
+    "wf/config/textcraft_r3_smoke2_gemma4-12b-it.yaml", "wf/config/textcraft_r3_attnf32_gemma4-12b-it.yaml",
+    "wf/config/textcraft_r3_attnf32_gemma4-e4b-it.yaml", "wf/config/textcraft_r3_attnf32_gemma4-31b-it.yaml",
+    "wf/textcraft/r3_g2.py", "pace/textcraft_r3_score.sbatch")
+ATTN_F32_FILE = "attention_f32.json"  # filed by textcraft_r3_attnf32_<tag> in its shard folder
 PLAN_FILE = Path(__file__).resolve().parents[1] / "config" / "textcraft_r3_envcheck_plan.json"
 UNOBTAINABLE = "gpu_unobtainable.json"  # filed in an envcheck run folder when a planned GPU type was not obtainable
 UNOBTAINABLE_DAYS = 7
@@ -132,27 +147,35 @@ def commit_problems(commits: dict[str, list[str]], tag_commit: str | None,
     return out
 
 
-def deviation_commit(run_git: Callable[[list[str]], str] = _git, tag_commit: str | None = None) -> dict[str, Any]:
+def deviation_commit(run_git: Callable[[list[str]], str] = _git, tag_commit: str | None = None,
+                     prefix: str = DEVIATION_TAG_PREFIX, files: tuple[str, ...] = DEVIATION_FILES) -> dict[str, Any]:
     """D-T1's deviation commit: {"commit": the one textcraft-r3-deviation-t1-* tag's commit or None, "problems"}. None
     with a problem when there is more than one such tag, or when the commit changes code (wf/, scripts/, pace/)
-    outside DEVIATION_FILES relative to the freeze tag's commit."""
+    outside DEVIATION_FILES relative to the freeze tag's commit. With `prefix` and `files`, the same for another
+    deviation's tag (D-G2: g2_commit)."""
     try:
-        tags = [t for t in run_git(["tag", "-l", DEVIATION_TAG_PREFIX + "*"]).splitlines() if t.strip()]
+        tags = [t for t in run_git(["tag", "-l", prefix + "*"]).splitlines() if t.strip()]
     except Exception:  # noqa: BLE001 - no git: no deviation
         return {"commit": None, "problems": []}
     if not tags:
         return {"commit": None, "problems": []}
     if len(tags) > 1:
-        return {"commit": None, "problems": [f"more than one D-T1 deviation tag: {tags}"]}
+        return {"commit": None, "problems": [f"more than one deviation tag {prefix}*: {tags}"]}
     tag_commit = tag_commit or freeze_commit(run_git)
     if tag_commit is None:
         return {"commit": None, "problems": ["a deviation tag but no freeze tag"]}
     commit = run_git(["rev-parse", f"{tags[0]}^{{commit}}"])
     changed = [p for p in run_git(["diff", "--name-only", tag_commit, commit]).splitlines() if p.strip()]
-    outside = sorted(p for p in changed if p.startswith(CODE_PATHS) and p not in DEVIATION_FILES)
+    outside = sorted(p for p in changed if p.startswith(CODE_PATHS) and p not in files)
     if outside:
-        return {"commit": None, "problems": [f"deviation tag {tags[0]} changes code outside D-T1's files: {outside}"]}
+        return {"commit": None, "problems": [f"deviation tag {tags[0]} changes code outside its deviation's files: "
+                                             f"{outside}"]}
     return {"commit": commit, "tag": tags[0], "problems": []}
+
+
+def g2_commit(run_git: Callable[[list[str]], str] = _git, tag_commit: str | None = None) -> dict[str, Any]:
+    """D-G2's deviation commit (the one textcraft-r3-deviation-g2-* tag), as deviation_commit."""
+    return deviation_commit(run_git, tag_commit, prefix=G2_TAG_PREFIX, files=G2_FILES)
 
 
 def _dirty() -> bool:
@@ -176,12 +199,14 @@ def require_freeze_commit(run_git: Callable[[list[str]], str] = _git, dirty: Cal
     out: dict[str, Any] = {"checked": True, "head": head, "tag_commit": tag}
     if not code_identical(head, tag, run_git):
         dev = deviation_commit(run_git, tag) if run_id.startswith(DEVIATION_RUNS) else None
+        name = "D-G1" if run_id.startswith("textcraft_r3x_") else "D-T1"
+        if run_id.startswith(G2_RUNS):  # D-G2: the float32 attention check and the Gemma 4 runs that depend on it
+            dev, name = g2_commit(run_git, tag), "D-G2"
         if dev is None or dev["commit"] is None or not code_identical(head, dev["commit"], run_git):
             why = f"; {dev['problems']}" if dev and dev["problems"] else ""
             raise SystemExit(f"this checkout is at {head[:12]}, not the freeze tag's {tag[:12]} (or a code-identical "
                              f"commit){why}")
-        out.update({"deviation": "D-G1" if run_id.startswith("textcraft_r3x_") else "D-T1",
-                    "deviation_commit": dev["commit"], "deviation_tag": dev["tag"]})
+        out.update({"deviation": name, "deviation_commit": dev["commit"], "deviation_tag": dev["tag"]})
     if dirty():
         raise SystemExit("this checkout has uncommitted changes to tracked files: round-3 jobs run from a clean checkout")
     return out
@@ -204,16 +229,49 @@ def refuse_after_gate_failure(folder: Path) -> None:
 
 
 def gate_records(root: Path, tag: str) -> list[tuple[str, dict]]:
-    """(run/shard, tokenization_checks.json) of every filed smoke and score shard of `tag`."""
+    """(run/shard, tokenization_checks.json) of every filed smoke and score shard of `tag` (and, D-G2, of the 12B
+    smoke rerun textcraft_r3_smoke2_<tag>)."""
     out = []
-    for kind in ("smoke", "score"):
+    for kind in ("smoke", "smoke2", "score"):
         for f in sorted((Path(root) / f"textcraft_r3_{kind}_{tag}").glob("shard_*/tokenization_checks.json")):
             out.append((f"{f.parent.parent.name}/{f.parent.name}", json.loads(f.read_text(encoding="utf-8"))))
     return out
 
 
-def gate_failure(rec: dict) -> str | None:
-    """Why a filed gate record stops the model (loading, gate or attention agreement), or None."""
+def f32_tags() -> tuple[str, ...]:
+    """The models whose frozen spec carries the attention-agreement check (the Gemma 4 models)."""
+    return tuple(t for t, s in R3.MODELS.items() if s.attn_agreement_check)
+
+
+def attention_f32(root: Path, tag: str) -> dict[str, Any]:
+    """D-G2: the float32 eager-against-SDPA check of `tag`, as filed by textcraft_r3_attnf32_<tag> (the frozen function
+    r3_score.attention_agreement on a float32 copy of the model, wave B's limits unchanged). {"filed", "ok",
+    "problems"}: ok only when the record is filed, its model was loaded in float32 and the frozen rule passed."""
+    f = Path(root) / f"textcraft_r3_attnf32_{tag}" / "shard_00_of_01" / ATTN_F32_FILE
+    if not f.exists():
+        return {"filed": False, "ok": None, "problems": [f"no float32 attention record for {tag} ({f})"]}
+    rec = json.loads(f.read_text(encoding="utf-8"))
+    probs = list(rec.get("problems", []))
+    if rec.get("tag") != tag:
+        probs.append(f"the float32 record is for {rec.get('tag')!r}, not {tag}")
+    if rec.get("dtype_loaded") != "torch.float32":
+        probs.append(f"the check ran in {rec.get('dtype_loaded')}, not float32")
+    ok = rec.get("ok") is True and not probs
+    return {"filed": True, "ok": ok, "problems": probs, "precision": "float32", "record": str(f),
+            **{k: rec.get(k) for k in ("yes_no_mean_abs_diff", "two_candidate_mean_abs_diff", "max_abs_diff", "n_items")}}
+
+
+def gate_failure(rec: dict, tag: str | None = None, root: Path | None = None) -> str | None:
+    """Why a filed gate record stops the model (loading, gate or attention agreement), or None. D-G2: for a Gemma 4
+    model (given `tag` and `root`) the attention component of a record that reached the attention check is read from
+    the float32 record instead of the bf16 one (None while that record is not filed; model_state then waits)."""
+    att = rec.get("attention_agreement")
+    if (ATTENTION_PRECISION == "float32" and tag is not None and root is not None and R3.base_tag(tag) in f32_tags()
+            and att is not None and not rec.get("loading_failed")):
+        f = attention_f32(root, R3.base_tag(tag))
+        if not f["filed"] or f["ok"]:
+            return None
+        return "attention agreement failed (float32, D-G2)"
     if rec.get("ok") is not False:
         return None
     if rec.get("loading_failed"):
@@ -228,9 +286,12 @@ def model_state(root: Path, tag: str) -> dict[str, Any]:
     """"not scored" once any filed smoke or score gate record of the model failed; "scored" when the score run has
     a gate record and none failed; "waiting" otherwise."""
     recs = gate_records(root, tag)
-    fails = [(where, gate_failure(r)) for where, r in recs if gate_failure(r)]
+    fails = [(where, gate_failure(r, tag, root)) for where, r in recs if gate_failure(r, tag, root)]
     if fails:
         return {"state": "not scored", "reasons": [f"{w}: {why}" for w, why in fails]}
+    if (ATTENTION_PRECISION == "float32" and tag in f32_tags()  # D-G2: the attention check waits for its float32 record
+            and any(r.get("attention_agreement") is not None for _w, r in recs) and not attention_f32(root, tag)["filed"]):
+        return {"state": "waiting", "reasons": [f"D-G2: the float32 attention record of {tag} is not filed"]}
     if any(w.startswith(f"textcraft_r3_score_{tag}/") for w, _r in recs):
         return {"state": "scored"}
     return {"state": "waiting"}
@@ -258,13 +319,14 @@ def smoke_diagnostic(rows: list[dict]) -> dict[str, Any]:
             "structural_share": sum(tops) / len(tops) if tops else float("nan"), "n_top_tokens": len(tops)}
 
 
-def fallback_triggers(rec: dict | None, rows: list[dict]) -> list[str]:
+def fallback_triggers(rec: dict | None, rows: list[dict], root: Path | None = None) -> list[str]:
     """The fallback rule's triggers on Gemma 4 12B's filed smoke record (design 14.M3, with S9): the loading check,
     the tokenization gate, the attention agreement, or a format mismatch (median yes/no mass below one half AND on
-    most smoke yes/no prompts the most probable next token is a structural or template marker)."""
+    most smoke yes/no prompts the most probable next token is a structural or template marker). With `root`, the
+    attention agreement is read in float32 (D-G2)."""
     out = []
     if rec is not None:
-        why = gate_failure(rec)
+        why = gate_failure(rec, R3.GEMMA_CORE, root)
         if why:
             out.append(why)
     diag = smoke_diagnostic(rows)
@@ -285,9 +347,40 @@ def gemma_slot(root: Path) -> dict[str, Any]:
 
     rec = json.loads(gate.read_text(encoding="utf-8"))
     rows = read_jsonl(d / "scoring.jsonl") if (d / "scoring.jsonl").exists() else []
+    if ATTENTION_PRECISION == "float32":  # D-G2
+        return _gemma_slot_f32(Path(root), rec, rows)
     trig = fallback_triggers(rec, rows)
     return {"slot": R3.GEMMA_FALLBACK if trig else R3.GEMMA_CORE, "triggers": trig,
             "diagnostic": smoke_diagnostic(rows)}
+
+
+def _gemma_slot_f32(root: Path, rec: dict, rows: list[dict]) -> dict[str, Any]:
+    """D-G2: the same rule with the attention agreement read from 12B's float32 record. The filed smoke stopped at its
+    bf16 attention check, before any score, so the format diagnostic (S9) is read from the smoke rerun
+    textcraft_r3_smoke2_gemma4-12b-it (same 20 records and arms, with the float32 attention record as its attention
+    gate). "waiting" until the float32 record, and (if it passes) the rerun, are filed."""
+    from wf.util import read_jsonl
+
+    f = attention_f32(root, R3.GEMMA_CORE)
+    if not f["filed"]:
+        return {"slot": "waiting", "triggers": [], "reason": "D-G2: Gemma 4 12B's float32 attention record is not filed",
+                "attention_f32": f}
+    trig = fallback_triggers(rec, [], root)  # loading, gate and (float32) attention on the filed smoke record
+    if not trig and not rows:
+        d2 = root / f"textcraft_r3_smoke2_{R3.GEMMA_CORE}" / "shard_00_of_01"
+        if not (d2 / "tokenization_checks.json").exists():
+            return {"slot": "waiting", "triggers": [], "attention_f32": f,
+                    "reason": "D-G2: Gemma 4 12B's smoke rerun (textcraft_r3_smoke2) is not filed"}
+        rec2 = json.loads((d2 / "tokenization_checks.json").read_text(encoding="utf-8"))
+        rows = read_jsonl(d2 / "scoring.jsonl") if (d2 / "scoring.jsonl").exists() else []
+        if rec2.get("ok") is not False and not rows:
+            return {"slot": "waiting", "triggers": [], "attention_f32": f,
+                    "reason": "D-G2: Gemma 4 12B's smoke rerun has no scores yet"}
+        trig = fallback_triggers(rec2, rows, root)
+    elif not trig:
+        trig = fallback_triggers(None, rows)
+    return {"slot": R3.GEMMA_FALLBACK if trig else R3.GEMMA_CORE, "triggers": trig,
+            "diagnostic": smoke_diagnostic(rows), "attention_f32": f, "deviation": "D-G2"}
 
 
 # ---------------- declarations filed by the operator (review 2, S4 and S6) ----------------

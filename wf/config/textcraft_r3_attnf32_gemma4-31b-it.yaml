@@ -1,0 +1,7 @@
+run_id: textcraft_r3_attnf32_gemma4-31b-it
+# TextCraft round 3, deviation D-G2 (notes/textcraft_r3_deviation_attention_float32.md): the attention-agreement
+# criterion (eager against SDPA on the smoke run's first five main failures, aligned two-candidate and yes/no arms;
+# wave B's limits unchanged) evaluated on a float32 copy of gemma4-31b-it. Runs on A100 80 GB (two on one node for 31B).
+manifest: wf/textcraft/data/r2_manifest.json
+model: gemma4-31b-it
+n_shards: 1
