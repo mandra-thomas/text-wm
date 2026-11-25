@@ -1463,6 +1463,12 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
        for suffix in ("", "_smoke")},
     **{f"decisionsim_agent_score{suffix}_{tag}": (lambda cfg: _lazy("decisionsim_agent", "run_decisionsim_agent_score")(cfg))
        for tag in ("llama3.1-8b", "mistral-7b-v0.3", "qwen3-8b") for suffix in ("", "_smoke")},
+    # Minimal interpretability pilot (branch interp; notes/interp_design.md, amendment 1, section M). Qwen3-8B,
+    # yes/no format; the three GPU runs need torch, the analysis only numpy and scikit-learn.
+    "interp_pilot_stage0": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_stage0")(cfg),
+    "interp_pilot_patch": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_patch")(cfg),
+    "interp_pilot_ablate": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_ablate")(cfg),
+    "interp_pilot_analysis": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_analysis")(cfg),
 }
 
 

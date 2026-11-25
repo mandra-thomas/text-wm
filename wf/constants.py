@@ -68,6 +68,9 @@ REVISIONS = {
     "mistralai/Mistral-7B-Instruct-v0.3": "c170c708c41dac9275d15a8fff4eca08d52bab71",
     "meta-llama/Llama-3.2-1B-Instruct": "9213176726f574b556790deb65791e0c5aa438b6",
     "meta-llama/Llama-3.2-3B-Instruct": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+    # Interpretability pilot, base-versus-instruct stage 0 (notes/interp_design.md, amendment 1, A9): the `main`
+    # revision reported by the Hugging Face API on 2026-11-20, before any download.
+    "Qwen/Qwen3-8B-Base": "49e3418fbbbca6ecbdf9608b4d22e5a407081db4",
 }
 
 

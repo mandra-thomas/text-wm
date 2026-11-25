@@ -1,0 +1,829 @@
+"""Interpretability tooling (wf/interp) on tiny random models and a word-level tokenizer built here.
+
+Nothing is downloaded. The identities checked: patching nothing reproduces the target run; patching every
+position (or the answer position at the last layer) from the source reproduces the source's readout; patching
+positions the two prompts share changes nothing; every head patched separately equals patching the attention
+output; the logit lens at the last layer is the model's readout. Also hook removal, determinism, token groups,
+resumable stages, item selection, probes and directions.
+"""
+import re
+
+import pytest
+
+torch = pytest.importorskip("torch")
+pytest.importorskip("transformers")
+pytest.importorskip("sklearn")
+
+import numpy as np  # noqa: E402
+
+from wf.interp import directions as D  # noqa: E402
+from wf.interp import hooks as H  # noqa: E402
+from wf.interp import probes as P  # noqa: E402
+from wf.interp import prompts as PR  # noqa: E402
+from wf.interp import run as R  # noqa: E402
+from wf.interp.lens import logit_lens  # noqa: E402
+from wf.interp.model import parts  # noqa: E402
+from wf.interp.patching import Cell, arrival_layer, fraction_restored, head_cells, ratio_of_sums, sweep  # noqa: E402
+
+TEMPLATE = ("{% for m in messages %}<|im_start|>{{ m['role'] }}\n{{ m['content'] }}<|im_end|>\n{% endfor %}"
+            "{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}")
+SPECIALS = ["<|im_start|>", "<|im_end|>", "<unk>"]
+SPLIT = r"\s+|\w+|[^\w\s]"
+
+
+def _item(**kw):
+    hist = ("You are in the middle of a room. Looking quickly around you, you see a cabinet 1, a cabinet 3, "
+            "a shelf 1, and a countertop 1.\nYour task is to: put some mug on countertop.\n"
+            "> go to shelf 1\nYou arrive at shelf 1. On the shelf 1, you see a mug 2, and a plate 1.\n"
+            "> go to cabinet 1\nYou arrive at cabinet 1. The cabinet 1 is closed.")
+    t = {"id": "t_000001", "game_id": "valid_unseen/1", "action": "take mug 1 from cabinet 3",
+         "task_line": "Your task is to: put some mug on countertop.",
+         "swapped_task_line": "Your task is to: put some plate on countertop.",
+         "goal_object": "mug", "swapped_goal_object": "plate", "history_text": hist,
+         "history_pairs": [], "history_len": 2, "determination_reason": "away_from_receptacle",
+         "candidates": {"o_plus": "You pick up the mug 1 from the cabinet 3.", "o_minus": "Nothing happens."},
+         "scene_locations": {"mug 1": ["cabinet 3"], "bowl 1": ["cabinet 3"], "plate 1": ["shelf 1"]}}
+    return {**t, **kw}
+
+
+def _unequal_item():
+    """Swapped object of two words, so the two prompts' spans differ in length."""
+    return _item(id="t_000002", swapped_goal_object="spray bottle",
+                 swapped_task_line="Your task is to: put some spray bottle on countertop.")
+
+
+def _corpus(items):
+    texts = []
+    for t in items:
+        for fmt in PR.FORMATS:
+            for goal in ("aligned", "swapped", "absent"):
+                texts += [m["content"] for m in PR.messages(t, fmt, goal)] + ["system user assistant"]
+            texts += [m["content"] for m in PR.messages(t, fmt, "placebo", "bowl")]
+    return "\n".join(texts) + " Yes No You Nothing"
+
+
+@pytest.fixture(scope="module")
+def tok():
+    from tokenizers import Regex, Tokenizer, models, pre_tokenizers
+    from transformers import PreTrainedTokenizerFast
+
+    words = sorted(set(re.findall(SPLIT, _corpus([_item(), _unequal_item()]))))
+    vocab = {w: i for i, w in enumerate(SPECIALS + words)}
+    core = Tokenizer(models.WordLevel(vocab, unk_token="<unk>"))
+    core.pre_tokenizer = pre_tokenizers.Split(Regex(SPLIT), behavior="isolated")
+    tk = PreTrainedTokenizerFast(tokenizer_object=core, unk_token="<unk>", additional_special_tokens=SPECIALS[:2])
+    tk.chat_template = TEMPLATE
+    return tk
+
+
+def _qwen(vocab, layers=4, seed=0):
+    from transformers import Qwen3Config, Qwen3ForCausalLM
+
+    torch.manual_seed(seed)
+    cfg = Qwen3Config(vocab_size=vocab, hidden_size=64, intermediate_size=128, num_hidden_layers=layers,
+                      num_attention_heads=4, num_key_value_heads=2, head_dim=16, max_position_embeddings=4096,
+                      use_sliding_window=False, tie_word_embeddings=False, attn_implementation="sdpa",
+                      initializer_range=0.3)  # large weights, so prompts that differ in one word read out differently
+    return Qwen3ForCausalLM(cfg).eval()
+
+
+@pytest.fixture(scope="module")
+def model(tok):
+    return _qwen(len(tok))
+
+
+@pytest.fixture(scope="module")
+def p(model):
+    return parts(model)
+
+
+def _ids(e):
+    return torch.tensor([e.ids])
+
+
+def _d(logits, plus, minus, row=0):
+    return float(logits[row, plus] - logits[row, minus])
+
+
+# ---------------- prompts and token groups ----------------
+
+
+def test_encode_matches_the_chat_template_and_prompts_are_the_scored_ones(tok):
+    from wf import rq1, rq1v
+
+    t = _item()
+    assert PR.messages(t, "yn", "aligned") == rq1v.arm_messages(t, "yn_aligned")
+    assert PR.messages(t, "obs", "swapped") == rq1.arm_messages(t, "swapped")
+    e = PR.encode(tok, PR.messages(t, "yn", "aligned"))
+    assert e.ids == list(tok.apply_chat_template(PR.messages(t, "yn", "aligned"), add_generation_prompt=True))
+    assert e.text[e.user_start:e.user_end].endswith("Answer:")
+    assert PR.readout_ids(tok, "yn") != PR.readout_ids(tok, "obs")
+
+
+def test_pair_and_groups_partition_the_suffix(tok):
+    t = _item()
+    pr = PR.build_pair(tok, t, "yn")
+    assert pr.equal_span and pr.span_a[1] - pr.span_a[0] == 1
+    assert tok.decode([pr.a.ids[pr.prefix]]) == "mug" and tok.decode([pr.b.ids[pr.prefix]]) == "plate"
+    g = pr.groups
+    fine = ["span", "task_rest", "hist_obj", "hist_swap", "hist_rec", "hist_other", "action", "query", "final"]
+    covered = sorted(i for k in fine for i in g[k])
+    assert covered == list(range(pr.prefix, len(pr.a)))  # every differing or later position, exactly once
+    assert g["last"] == [len(pr.a) - 1] and g["last"][0] in g["final"]
+    assert sorted(g["hist_all"]) == sorted(g["hist_obj"] + g["hist_swap"] + g["hist_rec"] + g["hist_other"])
+    text = lambda ps: "".join(tok.decode([pr.a.ids[i]]) for i in ps)  # noqa: E731
+    assert text(g["action"]).strip().startswith("Action: take mug 1 from cabinet 3")
+    assert "mug" in text(g["hist_obj"]) and "plate" in text(g["hist_swap"]) and "cabinet" not in text(g["hist_obj"])
+    assert text(g["query"]).strip().startswith("Question:")
+    assert text(g["final"]).startswith("<|im_end|>")
+    assert text(g["task_rest"]).startswith(" on countertop")
+
+
+def test_unequal_spans_map_the_suffix_from_the_end(tok):
+    pr = PR.build_pair(tok, _unequal_item(), "yn")
+    assert not pr.equal_span and pr.groups["span"] == []
+    assert len(pr.b) == len(pr.a) + 2  # "spray bottle" is three tokens, "mug" one
+    for g in ("action", "final", "hist_other"):
+        a_pos = pr.groups[g]
+        assert [pr.a.ids[i] for i in a_pos] == [pr.b.ids[j] for j in pr.to_b(a_pos)]
+    fl = pr.flipped()
+    assert [fl.a.ids[i] for i in fl.groups["action"]] == [pr.a.ids[i] for i in pr.groups["action"]]
+    with pytest.raises(ValueError):
+        pr.to_b(list(range(*pr.span_a)))
+
+
+def test_action_positions_and_final_positions(tok):
+    t = _item()
+    e = PR.encode(tok, PR.messages(t, "yn", "aligned"))
+    pos = PR.action_positions(e, t)
+    assert tok.decode([e.ids[pos["action_rec"]]]) == "cabinet" and tok.decode([e.ids[pos["action_end"]]]) == "3"
+    assert pos["answer"] == len(e) - 1
+    fp = R.final_positions(e)
+    assert fp[-1] == len(e) - 1 and tok.decode([e.ids[fp[0]]]) == "<|im_end|>"
+
+
+def test_placebo_object_follows_the_rules():
+    t = _item()
+    same_game = [_item(id="a", swapped_goal_object="plate"), _item(id="b", swapped_goal_object="bowl"),
+                 _item(id="c", swapped_goal_object="apple"), _item(id="d", swapped_goal_object="kettle",
+                                                                   task_line="Your task is to: other.")]
+    # plate is the item's own swap and bowl is at cabinet 3 at reset; kettle belongs to another task
+    assert PR.placebo_object(t, same_game) == "apple"
+    assert PR.placebo_object(t, same_game[:2]) is None
+
+
+# ---------------- hooks: removal, determinism, identities ----------------
+
+
+def test_hooks_are_removed_even_after_an_exception(p, model, tok):
+    e = PR.encode(tok, PR.messages(_item(), "yn", "aligned"))
+    before = H.n_hooks(model)
+    with pytest.raises(RuntimeError):
+        with H.HookSet() as hs:
+            hs.edit(p, "resid", 1, lambda h: (_ for _ in ()).throw(RuntimeError("boom")))
+            hs.edit(p, "head_in", 0, lambda h: h)
+            assert H.n_hooks(model) == before + 2
+            H.forward_last_logits(p, _ids(e))
+    assert H.n_hooks(model) == before
+    with H.no_hooks_left(model):
+        H.capture(p, _ids(e), [("resid", 0), ("attn", 1), ("mlp", 2), ("head_in", 3)])
+        H.run_patched(p, _ids(e), [H.Patch("resid", 1, 0, torch.tensor([3]), torch.zeros(1, 64))])
+
+
+def test_forward_is_deterministic_and_patching_nothing_is_the_clean_run(p, tok):
+    e = PR.encode(tok, PR.messages(_item(), "yn", "aligned"))
+    a1, a2 = H.forward_last_logits(p, _ids(e)), H.forward_last_logits(p, _ids(e))
+    assert torch.equal(a1, a2)
+    assert torch.equal(H.run_patched(p, _ids(e), []), a1)
+    logits, _ = H.capture(p, _ids(e), [("resid", 2)])
+    assert torch.equal(logits, a1)  # reading activations does not change the run
+
+
+@pytest.mark.parametrize("site,layer", [("resid", -1), ("resid", 0), ("resid", 2), ("attn", 0), ("mlp", 1)])
+def test_patching_every_position_reproduces_the_source(p, tok, site, layer):
+    pr = PR.build_pair(tok, _item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    b_logits, b_acts = H.capture(p, _ids(pr.b), [(site, layer)])
+    a_logits = H.forward_last_logits(p, _ids(pr.a))
+    all_pos = torch.arange(len(pr.a))
+    out = H.run_patched(p, _ids(pr.a), [H.Patch(site, layer, 0, all_pos, b_acts[(site, layer)][0])])
+    assert _d(a_logits, plus, minus) != pytest.approx(_d(b_logits, plus, minus), abs=1e-4)
+    if site == "resid":
+        assert torch.allclose(out, b_logits, atol=1e-5)
+    else:  # a block's output alone is not the whole state: the residual before it still comes from the target
+        assert not torch.allclose(out, a_logits, atol=1e-6)
+
+
+def test_answer_position_at_the_last_layer_reproduces_the_source_even_with_unequal_spans(p, tok):
+    pr = PR.build_pair(tok, _unequal_item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    last = p.n_layers - 1
+    b_logits, b_acts = H.capture(p, _ids(pr.b), [("resid", last)])
+    out = H.run_patched(p, _ids(pr.a), [H.Patch("resid", last, 0, torch.tensor([len(pr.a) - 1]),
+                                                b_acts[("resid", last)][0, [len(pr.b) - 1]])])
+    assert _d(out, plus, minus) == pytest.approx(_d(b_logits, plus, minus), abs=1e-5)
+
+
+def test_patching_shared_prefix_positions_changes_nothing(p, tok):
+    for t in (_item(), _unequal_item()):
+        pr = PR.build_pair(tok, t, "yn")
+        plus, minus = PR.readout_ids(tok, "yn")
+        # 1e-4: multithreaded float32 CPU matmuls differ by a few 1e-6 between batch shapes; a wrong patch moves
+        # the readout by far more
+        assert R.check_prefix_noop(p, pr, plus, minus, tol=1e-4) == pytest.approx(0.0, abs=1e-4)
+
+
+def test_every_head_patched_separately_equals_patching_the_attention_output(p, tok):
+    pr = PR.build_pair(tok, _item(), "yn")
+    layer, pos = 1, torch.tensor(pr.groups["final"])
+    _, src = H.capture(p, _ids(pr.b), [("head_in", layer), ("attn", layer)])
+    heads = [H.Patch("head_in", layer, 0, pos, src[("head_in", layer)][0, pos][:, h * p.head_dim:(h + 1) * p.head_dim], h)
+             for h in range(p.n_heads)]
+    by_heads = H.run_patched(p, _ids(pr.a), heads)
+    by_attn = H.run_patched(p, _ids(pr.a), [H.Patch("attn", layer, 0, pos, src[("attn", layer)][0, pos])])
+    assert torch.allclose(by_heads, by_attn, atol=1e-5)
+    with pytest.raises(ValueError):
+        H.run_patched(p, _ids(pr.a), [H.Patch("attn", layer, 0, pos, src[("attn", layer)][0, pos], head=0)])
+
+
+def test_batched_rows_get_only_their_own_patch(p, tok):
+    pr = PR.build_pair(tok, _item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    last = p.n_layers - 1
+    b_logits, b_acts = H.capture(p, _ids(pr.b), [("resid", last)])
+    ids = torch.tensor([pr.a.ids] * 3)
+    out = H.run_patched(p, ids, [H.Patch("resid", last, 2, torch.tensor([len(pr.a) - 1]), b_acts[("resid", last)][0, [-1]])])
+    clean = H.forward_last_logits(p, _ids(pr.a))
+    assert torch.allclose(out[0], clean[0], atol=1e-5) and torch.allclose(out[1], clean[0], atol=1e-5)
+    assert _d(out, plus, minus, 2) == pytest.approx(_d(b_logits, plus, minus), abs=1e-5)
+
+
+def test_direction_edit_sets_or_adds_the_component():
+    torch.manual_seed(1)
+    h = torch.randn(2, 5, 8)
+    u = torch.nn.functional.normalize(torch.randn(8), dim=0)
+    out = H.direction_edit(u, positions=[1, 3], value=0.7)(h)
+    assert torch.allclose(out[:, [1, 3]] @ u, torch.full((2, 2), 0.7), atol=1e-5)
+    assert torch.equal(out[:, [0, 2, 4]], h[:, [0, 2, 4]])
+    other = out[:, 1] - (out[:, 1] @ u).unsqueeze(-1) * u  # the orthogonal part is untouched
+    assert torch.allclose(other, h[:, 1] - (h[:, 1] @ u).unsqueeze(-1) * u, atol=1e-5)
+    assert torch.allclose(H.direction_edit(u, add=2.0)(h) - h, 2.0 * u.expand_as(h), atol=1e-5)
+
+
+def test_logit_lens_at_the_last_layer_is_the_readout(p, tok):
+    e = PR.encode(tok, PR.messages(_item(), "obs", "aligned"))
+    plus, minus = PR.readout_ids(tok, "obs")
+    logits, acts = H.capture(p, _ids(e), [("resid", i) for i in range(p.n_layers)], positions=[len(e) - 1])
+    last = torch.stack([acts[("resid", i)][0, 0] for i in range(p.n_layers)])
+    lens = logit_lens(p, last, plus, minus)
+    assert len(lens) == p.n_layers and lens[-1] == pytest.approx(_d(logits, plus, minus), abs=1e-4)
+
+
+def test_llama_layout_is_supported(tok):
+    from transformers import LlamaConfig, LlamaForCausalLM
+
+    torch.manual_seed(0)
+    m = LlamaForCausalLM(LlamaConfig(vocab_size=len(tok), hidden_size=64, intermediate_size=128, num_hidden_layers=3,
+                                     num_attention_heads=4, num_key_value_heads=2, max_position_embeddings=4096,
+                                     initializer_range=0.3)).eval()
+    q = parts(m)
+    assert q.n_layers == 3 and q.head_dim == 16
+    pr = PR.build_pair(tok, _item(), "yn")
+    b_logits, b_acts = H.capture(q, _ids(pr.b), [("resid", 1)])
+    out = H.run_patched(q, _ids(pr.a), [H.Patch("resid", 1, 0, torch.arange(len(pr.a)), b_acts[("resid", 1)][0])])
+    assert torch.allclose(out, b_logits, atol=1e-5)
+
+
+# ---------------- sweep and stages ----------------
+
+
+def test_sweep_fractions_hit_the_identities(p, tok):
+    pr = PR.build_pair(tok, _item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    last = p.n_layers - 1
+    cells = [Cell("resid", last, "last"), Cell("resid", last, "final"), Cell("resid", 0, "hist_rec"),
+             Cell("attn", 1, "action"), Cell("resid", -1, "span")] + head_cells([1], p.n_heads)
+    res = sweep(p, pr, cells, plus, minus, batch_size=4)
+    assert res["clean_spread"] == pytest.approx(0.0, abs=1e-5)
+    a = H.forward_last_logits(p, _ids(pr.a))
+    assert res["d_target"] == pytest.approx(_d(a, plus, minus), abs=1e-5)
+    # Readouts are compared in absolute terms: batch size changes fp32 rounding by about 1e-6, and the random
+    # model's effect is small, so a fraction would magnify that rounding.
+    assert abs(res["d_target"] - res["d_source"]) > 1e-3
+    for c in cells[:2]:  # the answer position at the last layer carries the whole effect
+        assert res["cells"][c.key()] == pytest.approx(res["d_source"], abs=1e-4)
+    # at an equal-length pair, the span's embedding is everything the two prompts differ in
+    assert res["cells"]["resid|-1|span"] == pytest.approx(res["d_source"], abs=1e-4)
+    assert fraction_restored(res["d_target"], res["d_source"], res["d_source"]) == 1.0
+    den = sweep(p, pr.flipped(), [Cell("resid", last, "last")], plus, minus)
+    assert den["d_target"] == pytest.approx(res["d_source"], abs=1e-5)
+    assert den["cells"]["resid|%d|last" % last] == pytest.approx(res["d_target"], abs=1e-4)
+
+
+def test_sweep_skips_empty_groups(p, tok):
+    pr = PR.build_pair(tok, _unequal_item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    res = sweep(p, pr, [Cell("resid", 0, "span"), Cell("resid", 1, "action")], plus, minus)
+    assert res["cells"]["resid|0|span"] is None and res["cells"]["resid|1|action"] is not None
+    assert res["n_source"] == res["n_target"] + 2 and not res["equal_span"]
+
+
+def test_baseline_stage_saves_and_resumes(p, tok, tmp_path):
+    items = [_item(), _unequal_item()]
+    store = R.baseline(p, tok, items, tmp_path / "acts", placebo={"t_000001": "bowl"},
+                       goals=("aligned", "swapped", "absent", "placebo"), chunk=3, min_free_gb=0)
+    rows = R.read_jsonl(store.index)
+    assert len(rows) == 2 * 2 * 3 + 2  # two items, two formats, three goals, plus the one item with a placebo
+    again = R.baseline(p, tok, items, tmp_path / "acts", placebo={"t_000001": "bowl"},
+                       goals=("aligned", "swapped", "absent", "placebo"), chunk=3, min_free_gb=0)
+    assert len(R.read_jsonl(again.index)) == len(rows)
+    rows, last = store.load("last")
+    _, probe = store.load("probe")
+    assert last.shape == (len(rows), p.n_layers, 64) and probe.shape == (len(rows), len(R.probe_layers(p.n_layers)), 2, 64)
+    for r in rows:  # the lens at the last layer equals the saved readout; mass is a probability
+        assert r["lens"][-1] == pytest.approx(r["d"], abs=1e-3) and 0 < r["mass"] <= 1
+    key = "t_000001|yn|aligned"
+    e = PR.encode(tok, PR.messages(_item(), "yn", "aligned"))
+    _, acts = H.capture(p, _ids(e), [("resid", 2)], positions=[len(e) - 1])
+    _, one = store.load("last", keys=[key])
+    assert np.allclose(one[0, 2], acts[("resid", 2)][0, 0].numpy(), rtol=2e-3, atol=1e-3)  # fp16 storage
+
+
+def test_patch_and_edit_stages_resume(p, tok, tmp_path):
+    items = [_item(), _unequal_item()]
+    cells = [Cell("resid", 0, "action"), Cell("resid", p.n_layers - 1, "last")]
+    out = R.patch_items(p, tok, items, tmp_path / "patch.jsonl", cells, batch_size=2)
+    first = R.read_jsonl(out)
+    assert len(first) == 4 and {r["direction"] for r in first} == {"noise", "denoise"}
+    R.patch_items(p, tok, items, out, cells)
+    assert len(R.read_jsonl(out)) == 4
+    R.patch_items(p, tok, items, out, cells, directions=("noise",), source_goal="placebo", placebo={"t_000001": "bowl"})
+    assert len(R.read_jsonl(out)) == 5
+    u = torch.nn.functional.normalize(torch.randn(64), dim=0)
+    edits = {"noop": [(1, lambda pos: H.direction_edit(u, pos, add=0.0))],
+             "push": [(1, lambda pos: H.direction_edit(u, pos, add=50.0))]}
+    eo = R.edit_items(p, tok, items, tmp_path / "edit.jsonl", edits, batch_size=2)
+    recs = R.read_jsonl(eo)
+    assert len(recs) == 6
+    for r in recs:
+        assert r["edits"]["noop"] == pytest.approx(r["d"], abs=1e-4) and r["edits"]["push"] != pytest.approx(r["d"], abs=1e-3)
+    R.edit_items(p, tok, items, eo, edits)
+    assert len(R.read_jsonl(eo)) == 6
+
+
+def test_disk_check_stops_before_writing(tmp_path):
+    with pytest.raises(SystemExit):
+        R.check_disk(tmp_path, min_free_gb=1e12)
+
+
+def test_item_selection_is_seeded_stratified_and_filtered():
+    items = []
+    for k in range(60):
+        items.append(_item(id=f"t{k:03d}", game_id=f"g{k % 6}", history_len=0 if k % 3 == 0 else 4,
+                           determination_reason="hands_full" if k % 2 else "away_from_receptacle"))
+    effect = {t["id"]: (2.0 if k % 5 else 0.5) for k, t in enumerate(items)}
+    games = {"g0", "g1", "g2", "g3"}
+    pick = R.select_patch_items(items, effect, 10, 1.0, games, "seed")
+    assert pick == R.select_patch_items(list(reversed(items)), effect, 10, 1.0, games, "seed")
+    assert len(pick) == 10 and all(t["game_id"] in games and effect[t["id"]] >= 1.0 for t in pick)
+    step0 = sum(t["history_len"] == 0 for t in pick)
+    eligible = [t for t in items if t["game_id"] in games and effect[t["id"]] >= 1.0]
+    assert abs(step0 - 10 * sum(t["history_len"] == 0 for t in eligible) / len(eligible)) <= 1.5
+    assert pick != R.select_patch_items(items, effect, 10, 1.0, games, "other seed")
+
+
+# ---------------- analysis helpers ----------------
+
+
+def test_fractions_and_arrival():
+    assert fraction_restored(5.0, 1.0, 3.0) == pytest.approx(0.5)
+    assert ratio_of_sums([(5, 1, 3), (2, 1, 2)]) == pytest.approx(2 / 5)
+    assert arrival_layer([0.0, 0.2, 0.6, 0.4, 0.7, 1.0]) == pytest.approx(4 / 5)
+    assert arrival_layer([0.0, 0.1]) != arrival_layer([0.0, 0.1])  # nan when never reached
+
+
+def test_fact_labels_and_deciding_fact():
+    t = _item()
+    lab = P.fact_labels(t)
+    assert lab["at_receptacle"] is False and lab["holding_any"] is False and lab["holding_object"] is False
+    assert lab["object_listed"] is None and lab["receptacle_closed"] is None  # cabinet 3 never seen
+    assert P.deciding_fact(t) == "at_receptacle" and P.success_value(t, "at_receptacle") is True
+    t2 = _item(action="take mug 1 from shelf 1", determination_reason="contents_or_open_state")
+    assert P.fact_labels(t2)["object_listed"] is False and P.deciding_fact(t2) == "object_listed"
+    t3 = _item(action="take mug 1 from cabinet 1", determination_reason="contents_or_open_state")
+    assert P.fact_labels(t3)["receptacle_closed"] is True and P.deciding_fact(t3) == "receptacle_closed"
+    assert P.success_value(t3, "receptacle_closed") is False
+
+
+def test_probe_fit_shift_and_balance():
+    rng = np.random.default_rng(0)
+    n, d = 400, 16
+    y = rng.integers(0, 2, n).astype(bool)
+    w = np.zeros(d)
+    w[3] = 1.0
+    X = rng.standard_normal((n, d)) + 3.0 * np.outer(y, w)
+    groups = [f"g{i % 20}" for i in range(n)]
+    m = P.fit_probe(X, y, groups)
+    assert P.probe_auc(m, X, y) > 0.9
+    assert abs(P.probe_direction(m)[3]) > 0.9
+    sep = P.separation(m, X, y)
+    shifted = X + 1.5 * w  # half the class gap, toward the positive class
+    s = P.belief_shifts(m, shifted, X, sep, [True] * n)
+    assert 0.3 < float(np.mean(s)) < 0.7
+    assert float(np.mean(P.belief_shifts(m, shifted, X, sep, [False] * n))) < 0
+    outcomes = list(rng.integers(0, 2, n).astype(bool))
+    keep = P.balanced_indices(list(y), outcomes, 0)
+    for o in (True, False):
+        ys = [y[i] for i in keep if outcomes[i] == o]
+        assert sum(ys) == len(ys) - sum(ys)
+    train, test = P.split_games([f"g{i}" for i in range(10)], 0)
+    assert not train & test and len(train | test) == 10 and P.split_games([f"g{i}" for i in range(10)], 0) == (train, test)
+
+
+def test_direction_helpers():
+    rng = np.random.default_rng(1)
+    u0 = np.zeros(32)
+    u0[5] = 1.0
+    S = rng.standard_normal((200, 32))
+    A = S + 2.0 * u0 + 0.1 * rng.standard_normal((200, 32))
+    est = D.diff_of_means(A, S)
+    assert D.cosine(est["u"], u0) > 0.99 and est["norm"] == pytest.approx(2.0, abs=0.1)
+    assert est["midpoint"] == pytest.approx(D.midpoint_for(est["u"], A, S))
+    r = D.random_units(32, 5, 0)
+    assert np.allclose(np.linalg.norm(r, axis=1), 1.0) and np.array_equal(r, D.random_units(32, 5, 0))
+    assert D.auc([3, 4], [1, 2]) == 1.0 and D.auc([1], [1]) == 0.5
+    assert D.removed_share(4.0, 1.0) == pytest.approx(0.75)
+
+
+# ---------------- review 1 fixes (amendment 1, 2026-11-20) ----------------
+
+SUBWORD_SPLIT = r"glass(?=\w)|\w+?(?=bottle\b)|bottle|\s+|\w+|[^\w\s]"
+
+
+def _bottle_item(**kw):
+    return _item(**{"id": "t_000003", "goal_object": "glassbottle", "swapped_goal_object": "winebottle",
+                    "task_line": "Your task is to: put some glassbottle on countertop.",
+                    "swapped_task_line": "Your task is to: put some winebottle on countertop.",
+                    "history_text": _item()["history_text"].replace("put some mug on", "put some glassbottle on"), **kw})
+
+
+@pytest.fixture(scope="module")
+def subword_tok():
+    """Splits "...bottle" into a stem and "bottle", as BPE tokenizers do for glassbottle and winebottle."""
+    from tokenizers import Regex, Tokenizer, models, pre_tokenizers
+    from transformers import PreTrainedTokenizerFast
+
+    words = sorted(set(re.findall(SUBWORD_SPLIT, _corpus([_item(), _bottle_item()]) + " glassbottle winebottle glassjar")))
+    vocab = {w: i for i, w in enumerate(SPECIALS + words)}
+    core = Tokenizer(models.WordLevel(vocab, unk_token="<unk>"))
+    core.pre_tokenizer = pre_tokenizers.Split(Regex(SUBWORD_SPLIT), behavior="isolated")
+    tk = PreTrainedTokenizerFast(tokenizer_object=core, unk_token="<unk>", additional_special_tokens=SPECIALS[:2])
+    tk.chat_template = TEMPLATE
+    return tk
+
+
+def test_a_shared_word_ending_stays_in_the_span(subword_tok):
+    tok = subword_tok
+    pr = PR.build_pair(tok, _bottle_item(), "yn")
+    span_a = "".join(tok.decode([pr.a.ids[i]]) for i in range(*pr.span_a))
+    span_b = "".join(tok.decode([pr.b.ids[i]]) for i in range(*pr.span_b))
+    assert span_a.strip() == "glassbottle" and span_b.strip() == "winebottle"  # not "glass" / "wine"
+    rest = "".join(tok.decode([pr.a.ids[i]]) for i in pr.groups["task_rest"])
+    assert rest.startswith(" on countertop") and "bottle" not in rest
+    assert [pr.a.ids[i] for i in pr.groups["action"]] == [pr.b.ids[j] for j in pr.to_b(pr.groups["action"])]
+    assert PR.char_diff("put glassbottle on", "put winebottle on") == (4, 15, 14)
+
+
+def test_a_shared_word_start_stays_in_the_span(subword_tok):
+    """glassbottle and glassjar share the token "glass"; the span is still the whole name."""
+    tok = subword_tok
+    t = _bottle_item(swapped_goal_object="glassjar", swapped_task_line="Your task is to: put some glassjar on countertop.")
+    pr = PR.build_pair(tok, t, "yn")
+    assert "".join(tok.decode([pr.a.ids[i]]) for i in range(*pr.span_a)).strip() == "glassbottle"
+    assert "".join(tok.decode([pr.b.ids[i]]) for i in range(*pr.span_b)).strip() == "glassjar"
+
+
+def test_new_goals_build_and_name_their_objects(tok):
+    t = _item()
+    from wf import rq1
+
+    plus = PR.messages(t, "yn", "swapped_plus")
+    assert plus[-1]["content"].endswith("Answer:") and rq1.mention_sentence("mug") in plus[-1]["content"]
+    assert PR.task_object(t, "swapped_plus") == "plate" and PR.task_object(t, "cf_aligned") == "mug"
+    with pytest.raises(ValueError):
+        PR.messages(t, "yn", "cf_aligned")  # this item has no other destination in the room
+
+
+def test_matched_history_positions_are_history_and_same_size(tok):
+    pr = PR.build_pair(tok, _item(), "yn")
+    g = pr.groups
+    assert len(g["hist_obj_matched"]) == min(len(g["hist_obj"]), len(g["hist_other"] + g["hist_rec"]))
+    assert set(g["hist_obj_matched"]) <= set(g["hist_other"] + g["hist_rec"])
+    assert g["hist_obj_matched"] == PR.build_pair(tok, _item(), "yn").groups["hist_obj_matched"]  # seeded
+
+
+def test_fp32_readout_is_the_logit_difference_and_not_rounded(tok):
+    e = PR.encode(tok, PR.messages(_item(), "yn", "aligned"))
+    plus, minus = PR.readout_ids(tok, "yn")
+    q = parts(_qwen(len(tok)))
+    logits, h = H.forward_last(q, _ids(e))
+    assert float(q.readout(h, plus, minus)[0]) == pytest.approx(_d(logits, plus, minus), abs=1e-4)
+    qb = parts(_qwen(len(tok)).to(torch.bfloat16))
+    logits_b, hb = H.forward_last(qb, _ids(e))
+    d32 = float(qb.readout(hb, plus, minus)[0])
+    assert abs(d32 - _d(logits_b, plus, minus)) < 0.1  # same quantity, the logits only rounded to bfloat16
+    assert H.readout_rows(qb, torch.tensor([e.ids] * 3), plus, minus) == [d32] * 3
+
+
+def test_probe_positions_are_the_action_end_and_its_receptacle(p, tok, tmp_path):
+    """The stored "probe" array holds, in order, the action line's last token and its receptacle token."""
+    t = _item()
+    store = R.baseline(p, tok, [t], tmp_path / "acts", formats=("yn",), goals=("aligned",), min_free_gb=0)
+    _, probe = store.load("probe")
+    e = PR.encode(tok, PR.messages(t, "yn", "aligned"))
+    pos = PR.action_positions(e, t)
+    pl = R.probe_layers(p.n_layers)
+    _, acts = H.capture(p, _ids(e), [("resid", layer) for layer in pl], positions=[pos["action_end"], pos["action_rec"]])
+    for k, layer in enumerate(pl):
+        assert np.allclose(probe[0, k, 0], acts[("resid", layer)][0, 0].numpy(), rtol=2e-3, atol=1e-3)
+        assert np.allclose(probe[0, k, 1], acts[("resid", layer)][0, 1].numpy(), rtol=2e-3, atol=1e-3)
+        assert not np.allclose(probe[0, k, 0], probe[0, k, 1])
+
+
+def test_store_streams_selected_layers_in_key_order(p, tok, tmp_path):
+    items = [_item(), _unequal_item()]
+    store = R.baseline(p, tok, items, tmp_path / "acts", formats=("yn",), goals=("aligned", "swapped"), chunk=1,
+                       min_free_gb=0)
+    keys = ["t_000002|yn|swapped", "t_000001|yn|aligned"]
+    rows, full = store.load("last", keys)
+    _, one = store.load("last", keys, sel=2)
+    assert [r["key"] for r in rows] == keys and np.array_equal(one, full[:, 2]) and one.dtype == np.float16
+    _, rec = store.load("probe", keys, sel=(slice(None), 1))
+    assert rec.shape == (2, len(R.probe_layers(p.n_layers)), 64)
+    with pytest.raises(KeyError):
+        store.load("last", ["nope"])
+
+
+def test_edits_apply_only_at_the_answer_position(p, tok, tmp_path):
+    """An edit asked for at "last" must not touch earlier positions (the direction was estimated there only)."""
+    t = _item()
+    e = PR.encode(tok, PR.messages(t, "yn", "aligned"))
+    plus, minus = PR.readout_ids(tok, "yn")
+    u = torch.nn.functional.normalize(torch.randn(64, generator=torch.Generator().manual_seed(3)), dim=0)
+    edits = {"push": [(0, lambda pos: H.direction_edit(u, pos, add=40.0))]}
+    out = R.edit_items(p, tok, [t], tmp_path / "e.jsonl", edits, goals=("aligned",), batch_size=4)
+    got = R.read_jsonl(out)[0]["edits"]["push"]
+    want = H.readout_rows(p, _ids(e), plus, minus, edits=[("resid", 0, H.direction_edit(u, [len(e) - 1], add=40.0))])[0]
+    every = H.readout_rows(p, _ids(e), plus, minus, edits=[("resid", 0, H.direction_edit(u, None, add=40.0))])[0]
+    assert got == pytest.approx(want, abs=1e-4) and every != pytest.approx(want, abs=1e-2)
+    with pytest.raises(ValueError):
+        R.edit_items(p, tok, [t], tmp_path / "x.jsonl", edits, positions="middle")
+
+
+class _BatchDrift:
+    """Adds a different constant to the embedding output in every forward pass (as if each batch had its own
+    rounding), and records each forward pass's batch size."""
+
+    def __init__(self, q):
+        self.n, self.sizes = 0, []
+        self.h = q.embed.register_forward_hook(self.hook)
+
+    def hook(self, _m, _a, out):
+        self.n += 1
+        self.sizes.append(out.shape[0])
+        return out + 0.05 * self.n
+
+    def remove(self):
+        self.h.remove()
+
+
+def test_each_cell_is_paired_with_the_clean_row_of_its_own_batch(tok):
+    q = parts(_qwen(len(tok)))
+    pr = PR.build_pair(tok, _item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    cells = [Cell("resid", layer, g) for layer in range(q.n_layers) for g in ("action", "final", "query")][:11]
+    drift = _BatchDrift(q)
+    try:
+        res = sweep(q, pr, cells, plus, minus, batch_size=4)
+    finally:
+        drift.remove()
+    assert drift.sizes == [4] * 5  # the source run and every batch, the last one padded, have 4 rows
+    assert len(res["clean"]) == 4 and len(set(res["clean"])) == 4  # 11 cells, 3 per batch; every batch differs
+    assert res["d_target"] == res["clean"][0]
+    for k, c in enumerate(cells):
+        assert res["cell_clean"][c.key()] == res["clean"][k // 3]
+    from wf.interp.patching import cell_values
+    assert cell_values(res, cells[-1].key())[0] == res["clean"][-1]
+
+
+def test_sweep_on_unequal_spans_reads_the_source_at_its_own_positions(p, tok):
+    """With spans of different length a source position is not the target's; the answer position at the last
+    layer must still reproduce the source readout (fails on values, not on an index error)."""
+    pr = PR.build_pair(tok, _unequal_item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    last = p.n_layers - 1
+    res = sweep(p, pr, [Cell("resid", last, "last"), Cell("resid", last, "action")], plus, minus, batch_size=3)
+    assert len(pr.b) > len(pr.a)
+    assert res["cells"][f"resid|{last}|last"] == pytest.approx(res["d_source"], abs=1e-4)
+
+
+def test_prefix_tolerance_comes_from_measured_noise(p, tok):
+    pr = PR.build_pair(tok, _item(), "yn")
+    plus, minus = PR.readout_ids(tok, "yn")
+    noise = R.batch_noise(p, pr.a.ids, plus, minus, batch_size=4)
+    assert noise < 1e-4 and R.prefix_tolerance(noise) == R.PREFIX_TOL_FLOOR and R.prefix_tolerance(1.0) == 5.0
+    assert abs(R.check_prefix_noop(p, pr, plus, minus, batch_size=4)) < 1e-4
+
+
+def test_belief_shift_leaves_a_missing_sign_out():
+    rng = np.random.default_rng(0)
+    X = rng.standard_normal((80, 6))
+    y = X[:, 0] > 0
+    m = P.fit_probe(X, y, [f"g{i % 8}" for i in range(80)])
+    s = P.belief_shifts(m, X[:3] + 1.0, X[:3], 1.0, [True, None, False])
+    assert s[1] != s[1] and s[0] != 0 and s[0] == pytest.approx(-s[2], abs=1e-9)  # a linear probe: same move
+
+
+def test_probe_direction_undoes_the_scaling():
+    """In raw coordinates the decision function changes along the probe direction only."""
+    rng = np.random.default_rng(2)
+    n, d = 400, 8
+    scales = np.array([0.1, 1, 10, 3, 0.5, 2, 7, 0.3])
+    y = rng.integers(0, 2, n).astype(bool)
+    X = (rng.standard_normal((n, d)) + 1.5 * np.outer(y, np.ones(d))) * scales
+    m = P.fit_probe(X, y, [f"g{i % 10}" for i in range(n)])
+    u = P.probe_direction(m)
+    x1, x2 = X[0], X[0] + rng.standard_normal(d)
+    ortho = x2 - x1 - ((x2 - x1) @ u) * u  # a move orthogonal to u leaves the logit unchanged
+    assert P.probe_logit(m, [x1 + ortho])[0] == pytest.approx(P.probe_logit(m, [x1])[0], abs=1e-6)
+
+
+def test_project_out_and_residual_shift():
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((50, 5))
+    a, b = rng.standard_normal(5), rng.standard_normal(5)
+    Y = P.project_out(X, [a, b])
+    assert np.allclose(Y @ a, 0, atol=1e-9) and np.allclose(Y @ b, 0, atol=1e-9)
+    z = 2.0 * np.arange(10.0) + 1
+    assert P.readout_slope(z, np.arange(10.0)) == pytest.approx(2.0)
+
+    class Lin:
+        def decision_function(self, X):
+            return np.asarray(X)[:, 0]
+
+    Xs = np.zeros((4, 2))
+    Xa = Xs.copy()
+    Xa[:, 0] = [2, 2, 2, 2]  # the probe moves by 2 ...
+    rs = P.residual_shifts(Lin(), Xa, Xs, [1.0] * 4, [0.0] * 4, 2.0, 1.0, [True, True, None, False])
+    assert rs[0] == pytest.approx(0.0) and rs[2] != rs[2]  # ... all of it predicted by a 1-nat readout change
+
+
+def test_hidden_label_object_at_receptacle():
+    assert P.hidden_labels(_item())["object_at_receptacle"] is True  # mug 1 is in cabinet 3 at reset
+    assert P.hidden_labels(_item(action="take mug 1 from shelf 1"))["object_at_receptacle"] is False
+    moved = _item(history_text=_item()["history_text"] + "\n> take mug 2 from shelf 1\nYou pick up the mug 2.")
+    assert P.hidden_labels(moved)["object_at_receptacle"] is None
+    assert P.hidden_labels(_item(scene_locations=None))["object_at_receptacle"] is None
+
+
+def test_each_edit_is_paired_with_the_clean_row_of_its_own_batch(tok, tmp_path):
+    q = parts(_qwen(len(tok)))
+    u = torch.nn.functional.normalize(torch.randn(64, generator=torch.Generator().manual_seed(5)), dim=0)
+    edits = {f"e{k:02d}": [(1, lambda pos, k=k: H.direction_edit(u, pos, add=float(k)))] for k in range(7)}
+    drift = _BatchDrift(q)
+    try:
+        out = R.edit_items(q, tok, [_item()], tmp_path / "e.jsonl", edits, goals=("aligned",), batch_size=4)
+    finally:
+        drift.remove()
+    r = R.read_jsonl(out)[0]
+    assert set(drift.sizes) == {4} and len(drift.sizes) == 3  # 7 edits, 3 per batch, the last batch padded
+    cleans = [r["edit_clean"][f"e{k:02d}"] for k in range(7)]
+    assert cleans[0] == cleans[2] != cleans[3] == cleans[5] != cleans[6] and r["d"] == cleans[0]
+
+
+def test_baseline_readout_is_float32_not_the_rounded_logits(tok, tmp_path):
+    qb = parts(_qwen(len(tok)).to(torch.bfloat16))
+    items = [_item(), _unequal_item()]
+    store = R.baseline(qb, tok, items, tmp_path / "acts", formats=("yn",), goals=("aligned", "swapped"), min_free_gb=0)
+    plus, minus = PR.readout_ids(tok, "yn")
+    for r in store.records():
+        t = items[0] if r["id"] == "t_000001" else items[1]
+        e = PR.encode(tok, PR.messages(t, "yn", r["goal"]))
+        _, h = H.forward_last(qb, _ids(e))
+        assert r["d"] == pytest.approx(float(qb.readout(h, plus, minus)[0]), abs=1e-6)
+    assert any(abs(r["d"] - r["d_logits"]) > 1e-4 for r in store.records())
+
+
+# ---------------- amendment 2 (review 2) ----------------
+
+
+def test_action_line_splits_into_its_object_and_the_rest(tok):
+    pr = PR.build_pair(tok, _item(), "yn")
+    g = pr.groups
+    text = lambda ps: "".join(tok.decode([pr.a.ids[i]]) for i in ps)  # noqa: E731
+    assert text(g["action_obj"]).replace(" ", "") == "mug1"
+    assert sorted(g["action_obj"] + g["action_rest"]) == g["action"] and not set(g["action_obj"]) & set(g["action_rest"])
+    assert "cabinet" in text(g["action_rest"]) and "mug" not in text(g["action_rest"])
+    assert {"hist_swap", "action_obj", "action_rest"} <= set(PR.PILOT_GROUPS)
+    assert set(PR.PILOT_GROUPS) <= set(PR.GROUPS)
+    fl = pr.flipped()  # the split survives the remapping to the other prompt
+    assert [fl.a.ids[i] for i in fl.groups["action_obj"]] == [pr.a.ids[i] for i in g["action_obj"]]
+
+
+def test_mention_flag_agrees_with_the_object_mention_group(tok):
+    named = _item()  # "you see a mug 2" after the task line
+    hist = named["history_text"].replace("a mug 2, and ", "")
+    plain = _item(id="t_000003", history_text=hist)
+    assert PR.mentions_action_object(named) and not PR.mentions_action_object(plain)
+    assert PR.build_pair(tok, named, "yn").groups["hist_obj"]
+    step0 = _item(id="t_000004", history_text=hist.split("\n> ")[0], history_len=0)
+    assert not PR.mentions_action_object(step0)
+
+
+def test_placebo_patching_targets_the_swapped_prompt(p, tok, tmp_path):
+    t = _item()
+    out = R.patch_items(p, tok, [t], tmp_path / "pl.jsonl", [Cell("resid", 1, "action")], directions=("noise",),
+                        source_goal="placebo", placebo={t["id"]: "bowl"}, batch_size=2)
+    r = R.read_jsonl(out)[0]
+    plus, minus = PR.readout_ids(tok, "yn")
+
+    def d(goal, po=None):
+        e = PR.encode(tok, PR.messages(t, "yn", goal, po))
+        _, h = H.forward_last(p, _ids(e))
+        return float(p.readout(h, plus, minus)[0])
+    assert r["d_target"] == pytest.approx(d("swapped"), abs=1e-4) and r["d_source"] == pytest.approx(d("placebo", "bowl"), abs=1e-4)
+    assert r["d_target"] != pytest.approx(d("aligned"), abs=1e-3)
+
+
+def test_patching_runs_the_identical_prefix_check(p, tok, tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(R, "check_prefix_noop", lambda *a, **k: calls.append(1) or 0.0)
+    R.patch_items(p, tok, [_item(), _unequal_item()], tmp_path / "x.jsonl", [Cell("resid", 0, "action")],
+                  directions=("noise",), batch_size=2)
+    assert calls == [1]  # once per job, on its first item
+
+
+def test_lens_direction_carries_the_norm_weight(tok):
+    from wf.interp.lens import lens_direction
+
+    q = parts(_qwen(len(tok)))
+    with torch.no_grad():
+        q.norm.weight.copy_(torch.linspace(0.5, 2.0, 64))
+    plus, minus = PR.readout_ids(tok, "yn")
+    want = q.norm.weight.detach().float() * q.readout_vector(plus, minus)
+    assert torch.allclose(lens_direction(q, plus, minus), want)
+    # it is the direction along which the logit lens moves: for h with rms 1, readout(h + eps v) - readout(h)
+    # is eps * lens_dir . v to first order when v is orthogonal to h
+    h = torch.zeros(1, 64)
+    h[0, 0] = 8.0  # rms 1
+    v = torch.zeros(64)
+    v[5] = 1.0
+    delta = float(q.readout(h + 1e-3 * v, plus, minus)[0] - q.readout(h, plus, minus)[0]) / 1e-3
+    assert delta == pytest.approx(float(want[5]), rel=1e-2)
+
+
+def test_readout_of_a_zero_residual_is_finite(p, tok):
+    plus, minus = PR.readout_ids(tok, "yn")
+    z = p.readout(torch.zeros(2, 64), plus, minus)
+    assert torch.isfinite(z).all() and float(z.abs().max()) == 0.0
+    small = torch.full((1, 64), 1e-4)  # the norm's epsilon matters at this scale
+    eps = getattr(p.norm, "variance_epsilon", 1e-6)
+    want = (small * torch.rsqrt(small.pow(2).mean(-1, keepdim=True) + eps) * p.norm.weight) @ p.readout_vector(plus, minus)
+    assert float(p.readout(small, plus, minus)[0]) == pytest.approx(float(want[0]), rel=1e-5)
+
+
+def test_first_token_prompts_can_be_stored_without_activations(p, tok, tmp_path):
+    store = R.baseline(p, tok, [_item()], tmp_path / "a", formats=("yn",), goals=("aligned",), min_free_gb=0)
+    store = R.baseline(p, tok, [_item()], tmp_path / "a", formats=("obs",), goals=("aligned", "swapped"),
+                       min_free_gb=0, save_acts=False)
+    recs = store.records()
+    assert [r["fmt"] for r in recs] == ["yn", "obs", "obs"]
+    assert len(list((tmp_path / "a").glob("chunk_*.npz"))) == 1  # the readout-only rows wrote no chunk
+    rows, last = store.load("last", ["t_000001|yn|aligned"])
+    assert last.shape == (1, p.n_layers, 64)
+    e = PR.encode(tok, PR.messages(_item(), "obs", "swapped"))
+    plus, minus = PR.readout_ids(tok, "obs")
+    _, h = H.forward_last(p, _ids(e))
+    assert recs[2]["d"] == pytest.approx(float(p.readout(h, plus, minus)[0]), abs=1e-5)
+
+
+def test_realized_edits_are_read_after_the_edit(p, tok, tmp_path):
+    u = torch.nn.functional.normalize(torch.randn(64, generator=torch.Generator().manual_seed(11)), dim=0)
+    edits = {"set": [(1, lambda pos: H.direction_edit(u, pos, value=2.0))],
+             "add": [(2, lambda pos: H.direction_edit(u, pos, add=3.0))],
+             "two": [(1, lambda pos: H.direction_edit(u, pos, value=-1.0)), (2, lambda pos: H.direction_edit(u, pos, value=0.5))]}
+    checks = {"set": [(1, u.numpy(), 2.0, "set")], "add": [(2, u.numpy(), 3.0, "add")],
+              "two": [(1, u.numpy(), -1.0, "set"), (2, u.numpy(), 0.5, "set")]}
+    out = R.edit_items(p, tok, [_item(), _unequal_item()], tmp_path / "e.jsonl", edits, goals=("aligned",),
+                       batch_size=3, checks=checks)
+    recs = R.read_jsonl(out)
+    assert "edit_realized" in recs[0] and "edit_realized" not in recs[1]  # the first prompt only
+    real = recs[0]["edit_realized"]
+    assert abs(real["set"][0]) < 1e-4 and abs(real["add"][0]) < 1e-4 and max(map(abs, real["two"])) < 1e-4
+    # in bfloat16 the cast back after the edit leaves a visible, logged error
+    qb = parts(_qwen(len(tok)).to(torch.bfloat16))
+    edits_b = {"set": [(1, lambda pos: H.direction_edit(u, pos, value=7.3))]}
+    ob = R.edit_items(qb, tok, [_item()], tmp_path / "b.jsonl", edits_b, goals=("aligned",), batch_size=2,
+                      checks={"set": [(1, u.numpy(), 7.3, "set")]})
+    rb = R.read_jsonl(ob)[0]["edit_realized"]["set"][0]
+    assert 0 < abs(rb) < 0.5

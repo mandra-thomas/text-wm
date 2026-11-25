@@ -1,0 +1,19 @@
+run_id: interp_pilot_ablate
+# Minimal pilot, direction ablation (amendment 1, section M; amendment 2, B1-B4): directions estimated at the
+# answer position on the other fold's games, applied at the answer position to the calibration fold's items only
+# (fold 0; fold 1's items are not edited before the full pilot). Layers: the depth profile 4, 8, ..., 28 (the
+# pre-registered summary is the earliest of them from which the removal's lower bound stays at or above 0.6),
+# layer 32 (near-linear, task direction only, reported with a caveat) and layer 35 (task_last, sanity only: the
+# ablation is tautological there). 75 failures (at least 20 at step 0, weighted back to the population) and 50
+# successes, aligned, swapped and neutral prompts. About 0.7 A100-hours; resumes per prompt.
+model: Qwen/Qwen3-8B
+model_tag: qwen3-8b-fewshot
+stage0: interp_pilot_stage0
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+split_seed: 0
+calibration_fold: 0
+edit_folds: [0]
+n_failures_per_fold: 75
+min_step0_per_fold: 20
+n_successes_per_fold: 50
+batch_size: 16

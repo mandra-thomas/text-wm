@@ -338,6 +338,118 @@ The gate was rerun on the real tokenizers after the amendment (ICE, `coc-cpu` pa
 | Y2 below-band read below zero, not below the band | `test_the_below_band_sentence_needs_both_formats_and_the_claims_only_condition` |
 | U5 placebo read below zero, not below the band (re-anchored) | `test_placebo_below_the_band_names_the_verdicts_resting_on_p8` |
 
+## Interpretability pilot, review 2 (2026-11-20, branch `interp`)
+
+Review 2 put 35 bugs into the interpretability code (N1 to N35); 21 survived the tests, mostly because the end-to-end test of the minimal pilot checked the structure of its outputs and not their values. Fix round 2 added value checks on synthetic data with known answers, and 42 mutants of its own code (J1 to J42). All 109 interpretability mutants in `scripts/mutation_check.py` (review 1's R1 to R20 and I1 to I12, and these) are run with a CPU torch environment (`MUTANTS_MATCHING=interp`). The test that kills each of the review's survivors and each new mutant (files `tests/test_interp.py`, `tests/test_interp_pilot.py`):
+
+| Mutant | Killed by |
+|---|---|
+| N1 layer chosen on the item's own fold; N2 item read at the other fold's layer | `test_ablation_summary_chooses_each_folds_layer_on_the_other_fold` (folds with different best layers; exact shares) |
+| N4 success direction from the other fold | `test_fold_directions_use_each_folds_own_successes` |
+| N5 placebo target is the aligned prompt | `test_placebo_patching_targets_the_swapped_prompt` |
+| N7 effect sign flipped | `test_effects_sign_and_strata` |
+| N8 task_from only at its own layer; N25 random directions ablated to 0 | `test_ablation_edits_layers_and_targets` |
+| N10 maximum-over-layers interval with the layer fixed | `test_maximum_over_layers_rechooses_the_layer_in_every_resample` |
+| N11 signed placebo floor; N12 above-floor read on the upper bound; N13 early-span sign | `test_placebo_floor_bonferroni_and_early_span` |
+| N14 one-step histories counted as step 0 | `test_effects_sign_and_strata` |
+| N16 gate's median check dropped | `test_gate_median_check_hashes_and_first_token` |
+| N19 history-share verdict from the point estimate | `test_verdict_rows_read_interval_bounds_onset_and_h4` |
+| N21 answer projection without the success direction | `test_answer_projection_removes_readout_and_success` |
+| N24 lens direction without the norm weight | `test_lens_direction_carries_the_norm_weight` (random norm weights; the tiny model's are all 1) |
+| N26 gap on aligned prompts; N27 steering read on aligned prompts | `test_ablation_summary_chooses_each_folds_layer_on_the_other_fold` |
+| N29 identical-prefix check skipped | `test_patching_runs_the_identical_prefix_check` |
+| N32 norm epsilon dropped from the readout | `test_readout_of_a_zero_residual_is_finite` |
+| N33 between-fold cosine of task with success | `test_minimal_pilot_end_to_end` (value of the cosine) |
+| J1 profile includes the last layer; J6, J7 H4 layers | `test_profile_caveat_and_h4_layers` |
+| J2 onset on the point estimate; J3 onset need not stay; J4 inverted, J5 unrounded comparison with arrival | `test_onset_layer_needs_the_lower_bound_to_stay_above` |
+| J8 success direction pooled over verbs; J9 verbs weighted equally | `test_success_direction_is_estimated_within_verbs` |
+| J10 H4 cosine projected on one side; J11, J12 perp steering from the raw success direction | `test_h4_cosine_is_read_after_projecting_out_the_readout` |
+| J13 quotas ignored; J14 weights inverted; J40 mention stratum ignored | `test_selection_quotas_and_weights` |
+| J15, J16 weights ignored in curves and removed shares | `test_weights_enter_pooled_estimates` |
+| J17, J18 the analysis run drops the weights; J30 ablation step-0 quota ignored; J36 cross-fold cosine within one fold; J19 both folds edited; J25 first-token prompts keep activations (also `test_first_token_prompts_can_be_stored_without_activations`); J42 stage 0 gate without hashes | `test_minimal_pilot_end_to_end` |
+| J20 GPU check accepts any GPU | `test_gpu_check_refuses_a_different_gpu` |
+| J21, J41 patching or ablation run without the GPU check | `test_gpu_runs_refuse_before_any_work` |
+| J22 item-hash check dropped; J23 first-token gate on the yes/no arms | `test_gate_median_check_hashes_and_first_token` |
+| J24 stage 0 passes on the yes/no gate alone | `test_stage0_gate_fails_on_a_shifted_log` |
+| J26 realized edit read before the edit; J27 realized steering without the clean row; J39 logged on every prompt | `test_realized_edits_are_read_after_the_edit` |
+| J28 Bonferroni at alpha 0.05 | `test_placebo_floor_bonferroni_and_early_span` |
+| J29 onset reads the caveat layer | `test_ablation_summary_reports_caveat_and_last_layers_apart` |
+| J31 sample size not squared | `test_sample_size_for_a_half_width` |
+| J32 mention flag reads the whole history | `test_mention_flag_agrees_with_the_object_mention_group` |
+| J33 action object found from the receptacle; J34 grid without `hist_swap` | `test_action_line_splits_into_its_object_and_the_rest` |
+| J35 step-0 failures in the success direction | `test_fold_directions_use_each_folds_own_successes` |
+| J37 gap defined without successes | `test_ablation_summary_chooses_each_folds_layer_on_the_other_fold` |
+| J38 steering share over the aligned readout | `test_ablation_summary_chooses_each_folds_layer_on_the_other_fold` (swapped readout not zero) |
+
+The review's other 14 mutants (N3, N6, N9, N15, N17, N18, N20, N22, N23, N28, N30, N31, N34, N35) were already killed and stay in the list. Review 2's simulation of the last-layer tautology is a test (`test_last_layer_ablation_is_tautological_and_the_depth_profile_is_not`).
+
+## Interpretability pilot, review 3 (2026-11-21, branch `interp`)
+
+Review 3 put 40 bugs into the code (K1 to K40); 19 survived, most of them in the weighted estimators, whose tests checked point estimates with equal weights. K19 (weights computed over n instead of the number chosen) is equivalent and left out: with more eligible items than n the selection always takes exactly n. Fix round 3 added value tests and 28 mutants of its own code (L1 to L28). All 176 interpretability mutants in `scripts/mutation_check.py` are run with a CPU torch environment (`MUTANTS_MATCHING=interp`). Killing tests (files `tests/test_interp_pilot.py`, `tests/test_interp.py`):
+
+| Mutant | Killed by |
+|---|---|
+| K2 H4 layers include the arrival layer; K23 discrimination at 0.8; K27 cross-fold cosine of fold 0 twice; K4, K5 arrival index or arrival kind in the table | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| K6, K7 weights on the point estimate only; K8 steering share, K9 mean shift, K10 gap without weights; K11 mean shift over the count | `test_weighted_bootstrap_rows_carry_the_weights` (every bootstrap draw recomputed by hand) |
+| K12 verbs weighted by successes only; K33 mention rows without a mention prompt; K35 first-token gate reads the neutral arm; K20 a minimum above its stratum; K15 GPU overlap accepted; K18 two GPU types on record; K38 caveat layers keep profile layers | `test_review_3_survivors_on_small_cases` |
+| K36 successes without weights; K37 random directions at the first layer | `test_minimal_pilot_end_to_end` |
+| K26 perp over task inverted (now in `analysis.perp_over_task`) | `test_steering_relative_to_the_task_direction_and_the_perp_over_task_rule` |
+| K32 sample size at a fixed n | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| L1 arrival not rounded; L2 arrival beyond the profile read anyway; L3 no single direction without the upper bound | `test_onset_layer_needs_the_lower_bound_to_stay_above` |
+| L4 arrival from the final group | `test_patch_arrival_on_the_answer_position_under_the_onset_rule` |
+| L5 direct path without the swapped prompt; L8 at the first layer's scale | `test_direct_path_report_is_the_readout_lens_at_the_final_scale` |
+| L6 direct-path rule on the lower bound; L7 rule strict at 0.3 | `test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it` |
+| L9 onset ignores the direct path | `test_ablation_summary_reads_the_onset_on_layers_free_of_the_direct_path` |
+| L10 steering relative inverted; L11 perp over task always assessable | `test_steering_relative_to_the_task_direction_and_the_perp_over_task_rule` |
+| L12 per-stratum steering from every row; L13 edits ignore the stratum; L14 steer_task along the success direction | `test_steering_amounts_per_stratum_and_the_task_reference` |
+| L15 ablation run steers with pooled amounts; L23, L24 minimums not scaled; L25 disattenuated by the raw between-fold cosine; L26 analysis without the direct path; L27 no answer direction | `test_minimal_pilot_end_to_end` |
+| L16 cosine bootstrap projects nothing; L17 answer direction not centred; L18 disattenuation without the square root | `test_answer_direction_projections_and_the_cosine_bootstrap` |
+| L19 H4 layers cut at the final-group arrival; L20 perp-over-task median over unassessable layers; L28 every layer excluded falls back to the profile | `test_table_rows_read_interval_bounds_onset_and_h4` (L28 by a case with every layer excluded) |
+| L21 sample size without the margin | `test_sample_size_for_a_half_width` |
+| L22 scaled minimum truncated | `test_minimums_scale_with_a_smaller_draw` |
+
+The other 21 of review 3's mutants were already killed by earlier tests and stay in the list. From 2026-11-21 the mutation check counts a mutant as killed only when pytest exits with code 1 (a named test failed); a collection error, an internal error or a run stopped from outside is reported as inconclusive, never as a kill. All 176 interpretability mutants were rerun under that rule. Review 3's direct-path simulation is a test (`test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it`).
+
+## Interpretability pilot, review 4 (2026-11-21, branch `interp`)
+
+Review 4 put 32 bugs into the code (N1 to N32, listed here as R4-N1 to R4-N32); 22 survived. N18 (the readout centred within cells only through X) is equivalent and left out: once X is centred within cells, centring y as well leaves a ridge without intercept unchanged. Fix round 4 added value tests and 15 mutants of its own code (M1 to M16 without M3, which is equivalent: the onset is always one of the kept layers, so counting it in the excluded-between check changes nothing). All 222 interpretability mutants are run with a CPU torch environment under the strict rule (a kill only on pytest exit code 1). Killing tests (file `tests/test_interp_pilot.py`):
+
+| Mutant | Killed by |
+|---|---|
+| R4-N2 direct path along W_U without gamma; R4-N3 weighted by the ablation sample; R4-N4 on both folds | `test_minimal_pilot_end_to_end` (non-unit final-norm weight; the direct path recomputed on every fold-0 failure) |
+| R4-N5 direct_path_share without item weights | `test_direct_path_report_is_the_readout_lens_at_the_final_scale` |
+| R4-N7 onset on every profile layer; R4-N8 deepest bound from the deepest profile layer | `test_onset_and_deepest_bound_come_from_the_kept_layers` |
+| R4-N10 arrival at the deepest kept layer; R4-N11 upper bound of exactly 0.3; M1 the excluded-between check | `test_an_excluded_layer_between_arrival_and_onset_makes_it_not_assessable` |
+| R4-N14, R4-N15 steer_relative draws | `test_steer_relative_bootstrap_draws_carry_the_weights` |
+| R4-N17 raw success steering in the ratio; M4, M5 the steering gate; M16 linearity ratio | `test_steering_ratio_is_gated_on_the_task_steering_and_uses_the_readout_free_direction` |
+| R4-N19 answer direction centred by outcome only | `test_answer_direction_is_centred_within_verbs_too` |
+| R4-N20 verb weights in the cosine bootstrap; R4-N29 success direction fixed across draws; R4-N30 projection basis not orthonormalised; M12 disattenuation at any positive reliability | `test_cosine_bootstrap_details` |
+| R4-N21 answer direction from failures only; R4-N22 second projection without the readout; M10 answer cosine with the raw success direction | `test_h4_cosine_report_projects_the_readout_and_the_answer_direction` |
+| R4-N23 unpaired gap ratio | `test_gap_ratio_interval_is_paired` |
+| R4-N24 ablation minimum scaled against 100; R4-N26 mention disattenuated by the task's reliability | `test_ablation_minimum_scaled_against_75_and_mention_disattenuated_by_its_own_reliability` |
+| R4-N27 arrival SE from the layer before; M2 table row without the whole profile (a case with layer 16 excluded); M6 steering median over every layer (two layers not assessable); M7 H4 layers cut at the later arrival; M8 cosine sample size computed; M9 second projection at every layer; M13, M14 plan | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| M11 NaN upper bound kept | `test_onset_and_deepest_bound_come_from_the_kept_layers` |
+| M15 half-width at the cap without the margin | `test_table_rows_read_interval_bounds_onset_and_h4` (the plan when a cap binds) |
+
+## Interpretability pilot, review 5 (2026-11-22, branch `interp`)
+
+Review 5 (`notes/interp_review5.md`) ran ten spot-check mutants (V1 to V10); five survived its run. Fix round 5 added tests and eight mutants of its own code (W1 to W8). All 240 interpretability mutants are run under the strict rule: pytest exit code 1, which the harness only gets when some test failed (it runs with `--tb=no`, so the failing test's name is not printed). L7, L9 and M11 were adapted to the changed `direct_path_kept` lines. Killing tests (file `tests/test_interp_pilot.py`):
+
+| Mutant | Killed by |
+|---|---|
+| R5-V1 arrival layer not counted as between | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| R5-V2 gate on the smaller fold; R5-V3 gate at 0.5 inclusive; R5-V4 value over every H4 layer; R5-V7 ablation plan without the steering ratio; R5-V8 ablation plan capped at 100; W4 gate on one fold; W5 NaN left as NaN; W6 object-mention need in stratum items; W7 plan for the pooled stratum | `test_table_rows_read_interval_bounds_onset_and_h4` |
+| R5-V5 direct path on the unedited fold | `test_minimal_pilot_end_to_end` |
+| R5-V6 a layer without an estimate excluded | `test_direct_path_share_tracks_the_removal_and_the_rule_excludes_it` |
+| R5-V9 steering gate on the perp steering | `test_steering_ratio_is_gated_on_the_task_steering_and_uses_the_readout_free_direction` |
+| R5-V10 linearity ratio against another layer | `test_linearity_ratio_uses_its_own_layers_removal` |
+| W1 a failing layer excluded again; W2 removal must pass strictly above 0.6; W8 removal's upper bound read as the lower | `test_a_failing_layer_is_never_excluded_so_the_onset_cannot_move_earlier` |
+| W3 ablation summary without the removal profile | `test_onset_and_deepest_bound_come_from_the_kept_layers`, `test_ablation_summary_keeps_a_failing_layer_with_a_large_direct_path` |
+
+## Interpretability pilot, analysis fix (2026-11-23, branch `interp-analysis-fix`)
+
+The frozen analysis crashed in the hidden-state probe's answer-position success direction (`notes/interp_deviation_analysis_fix.md`). The mock end-to-end test never reached that code, because its balanced probe training set has fewer than 20 items. A new test, `test_hidden_probe_success_direction_is_the_training_folds_not_the_balanced_rows`, uses items shaped like the real data. It fails on the frozen `pilot.py` with the crash's own error, and it pins the direction to the training fold's successes and failures after step 0. Four mutants were added: AF1 (the frozen selection), AF2 (the direction from the test fold), AF3 (step-0 failures let in) and AF4 (the extra rows not loaded). Under origin/main's strict runner (`--root` this branch, `--mutants-from` its list, `--require-unique`), all four were killed by that test by name. The 240 earlier interpretability mutants match their target text exactly as at the tag. Interp tests: 104 passed (scikit-learn 1.9.1, CPU torch 2.2.2).
+
 ## TODO (after 2026-11-19)
 
 - [ ] **Randomised (property-based) tests of the parser and history reading.** Generate many plausible observations and replies from templates. Assert properties that must always hold:
