@@ -1002,8 +1002,9 @@ def test_extension_runs_and_configs_differ_from_the_frozen_ones_only_in_model_an
             assert ext[k] == frozen[k].replace("tau_auth", "tau_auth_l32")
         same = set(frozen) - {"models", "run_id", *renamed}
         assert {k: ext[k] for k in same} == {k: frozen[k] for k in same}
-        assert set(ext) - set(frozen) == ({"holm_family"} if name == "tau_auth_analysis" else set())
-    assert load_config("tau_auth_l32_analysis")["holm_family"] == [L32]
+        assert set(ext) - set(frozen) == ({"holm_family", "reference_run"} if name == "tau_auth_analysis" else set())
+    ana = load_config("tau_auth_l32_analysis")
+    assert ana["holm_family"] == [L32] and ana["reference_run"].endswith("text-wm-fix44/runs/tau_family_score_llama3.2-3b")
 
 
 def test_extension_margin_is_a_third_of_its_request_component_and_frozen_values_stay():
@@ -1017,9 +1018,50 @@ def test_extension_scorer_uses_the_wave_a_spec(monkeypatch):
     assert s.model_name == "meta-llama/Llama-3.2-3B-Instruct" and s.model_tag == L32
     assert s.revision == "0cb88a4f764b7a12671c53f0838cd831a0843b95"
     assert s.template_settings() == {"enable_thinking": False, "date_string": "26 Jul 2024"}
+    assert s.attn_implementation is None  # the τ families runs' default (SDPA)
     assert A.make_scorer(LLAMA).template_settings() == {"enable_thinking": False}  # frozen models unchanged
     with pytest.raises(KeyError):
         A.make_scorer("mistral-7b-v0.3")
+    from dataclasses import replace
+
+    from wf import families as F
+
+    monkeypatch.setitem(F.MODELS, L32, replace(F.MODELS[L32], system="fold"))
+    with pytest.raises(ValueError):
+        A.make_scorer(L32)
+
+
+def test_token_check_passes_the_fixed_date_to_every_render(built, monkeypatch):
+    import sys
+    import types
+
+    from wf.tau import auth_token_check as T
+
+    seen = []
+
+    class Tok:
+        model_max_length = 10**6
+
+        def __call__(self, s, add_special_tokens=False):
+            return types.SimpleNamespace(input_ids=[ord(c) for c in s])
+
+        def apply_chat_template(self, ms, tokenize=False, add_generation_prompt=True, **kw):
+            seen.append(kw)
+            return "".join(m["content"] for m in ms) + "\n"
+
+        def convert_ids_to_tokens(self, ids):
+            return [chr(i) for i in ids]
+
+    stub = types.SimpleNamespace(AutoTokenizer=types.SimpleNamespace(from_pretrained=lambda *a, **k: Tok()))
+    monkeypatch.setitem(sys.modules, "transformers", stub)
+    gen, few = built
+    items = A.auth_items(gen, 1)[:1]
+    rep = T.check_model("meta-llama/Llama-3.2-3B-Instruct", items, set(), few)
+    assert seen and all(kw == {"enable_thinking": False, "date_string": "26 Jul 2024"} for kw in seen)
+    assert rep["template_kwargs"] == {"date_string": "26 Jul 2024"}
+    seen.clear()
+    T.check_model("meta-llama/Llama-3.1-8B-Instruct", items, set(), few)
+    assert seen and all(kw == {"enable_thinking": False} for kw in seen)
 
 
 def test_token_check_renders_the_extension_model_with_its_fixed_date():
@@ -1058,8 +1100,14 @@ def test_extension_score_then_analysis(runs, monkeypatch):
     assert {r["model"] for r in recs} == {L32}
     real = A.load_config
     monkeypatch.setattr(A, "load_config", lambda name: ext if name == "tau_auth_l32_score" else real(name))
-    assert A.run_tau_auth_analysis({**load_config("tau_auth_l32_analysis"), "n_perm_primary": 200}) == 0
+    tok = json.loads((runs / "tau_auth_l32_score" / "shard_00_of_02" / f"tokens_{L32}.json").read_text())
+    assert tok["template_settings"] == {"enable_thinking": False, "date_string": "26 Jul 2024"}
+    # §7.9 against a reference run of the same model (here the run itself: every arm (i) score equal)
+    assert A.run_tau_auth_analysis({**load_config("tau_auth_l32_analysis"), "n_perm_primary": 200,
+                                    "reference_run": str(runs / "tau_auth_l32_score")}) == 0
     m = json.loads((runs / "tau_auth_l32_analysis" / "metrics.json").read_text())
+    rep = m["models"][L32]["reproducibility_main_arm"]
+    assert rep["n"] > 0 and rep["share_within_0.13"] == 1.0 and rep["max_abs_diff"] == 0.0
     assert m["missing_scores"] == 0 and m["stale_scores"] == 0 and set(m["models"]) == {L32}
     assert set(m["decision"]["per_model"]) == {L32} and len(m["decision"]["holm_adjusted_p"]) == 4
     assert m["decision"]["per_model"][L32]["margin"] == 0.16
@@ -1067,3 +1115,17 @@ def test_extension_score_then_analysis(runs, monkeypatch):
     with pytest.raises(SystemExit):
         A.run_tau_auth_analysis({**load_config("tau_auth_l32_analysis"), "run_id": "tau_auth_l32_nofamily",
                                  "holm_family": list(P.CO_PRIMARY), "n_perm_primary": 200})
+
+
+def test_extension_smoke_analysis_runs_without_a_holm_family(runs, monkeypatch):
+    smoke = {**load_config("tau_auth_l32_score_smoke"), "expected_outputs_sha256": _pins(), "items_per_class": 2,
+             "comprehension_per_class": 2}
+    assert A.run_tau_auth_score(smoke) == 0
+    real = A.load_config
+    full = {**_cfg(run_id="tau_auth_l32_score"), "models": [L32]}
+    monkeypatch.setattr(A, "load_config", lambda name: smoke if name == "tau_auth_l32_score_smoke" else
+                        (full if name == "tau_auth_l32_score" else real(name)))
+    assert A.run_tau_auth_analysis(load_config("tau_auth_l32_smoke_analysis")) == 0
+    m = json.loads((runs / "tau_auth_l32_smoke_analysis" / "metrics.json").read_text())
+    assert set(m["models"]) == {L32} and set(m["projection"]["models"]) == {L32}
+    assert "gates_readable" in m["models"][L32] and '"categories"' not in json.dumps(m)

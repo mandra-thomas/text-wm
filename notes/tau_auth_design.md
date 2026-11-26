@@ -796,7 +796,8 @@ analysis is the frozen code, with only the changes of E4.
 §6.2 sets the margin to one third of the model's confirmatory request component. For the reference models that was
 the write-minus-question contrast on the 856 primary items under the confirmatory prompt (`tau_dx.md`: +2.17 and
 +0.50). The same contrast for Llama-3.2-3B on the same 856 items and prompt is in the τ families metrics
-(`write_minus_mention`, +0.474), so
+(`write_minus_mention`, +0.474; the same field gives +2.17 and +0.50 for the reference models, so it is the same
+quantity), so
 
 $$\delta_{\text{Llama-3.2-3B}} = 0.474/3 \approx 0.16 \text{ nats},$$
 
@@ -810,7 +811,8 @@ part of the request and of the naming component on the failing call's first toke
 non-numeric p entering as 1 (R1-S1). With 10,000 permutations the smallest raw p is about 0.0001, which survives a
 multiplication by 4. As a descriptive check that decides nothing, the results note also gives the Holm-adjusted p each of
 the four tests would have in a family of twelve (these four and the eight published raw p-values of the reference
-models in `tau_auth_metrics.json`) and names any category that would differ.
+models in `tau_auth_metrics.json`, adjusted by Holm's step-down over all twelve) and names any category that would
+differ.
 
 **Code** (branch `tau-auth`, after `f70b285`; no change to any frozen run's prompts, jobs, rules or outputs):
 
@@ -825,13 +827,36 @@ models in `tau_auth_metrics.json`) and names any category that would differ.
 - `tests/test_tau_auth.py`: 6 tests for the above (configs, margin, scorer spec, token-check rendering, the family of
   four, a mock run end to end with the refusal); 106 tests in all, passing.
 
+### E4a. Changes after the review of this section (2026-11-25, before the tag and before any score)
+
+One independent review read the section and code at `8cced24`, found no must-fix item and eight should-fix items.
+Accepted and made:
+
+- **The arm (i) reproducibility check of §7.9 runs** (review S5). `tau_auth_l32_analysis` sets `reference_run` to the
+  τ families scoring of this model (`text-wm-fix44/runs/tau_family_score_llama3.2-3b`, read only): same stack, GPU type,
+  scorer and template handling, and the same arm (i) prompts for the jobs it has (the failing call's five first-token
+  lines and three yes/no lines, the witness's three and three). Same-environment rescoring has been bit-identical in
+  every case measured (`numerical_sensitivity.md` §4.1), so this checks end to end that the extension renders and
+  scores the model as the τ families runs did. It is descriptive, as in §7.9.
+- **The run records its template settings** (review N3): `tokens_<model>.json` of each shard now holds
+  `template_settings` (for this model `{"enable_thinking": false, "date_string": "26 Jul 2024"}`).
+- **`make_scorer` refuses a spec that folds the system message** (review N4).
+- **Tests** (review S8, N1, N2): the extension's smoke analysis end to end (it must run without a Holm family); the
+  token check passes the fixed date to every render (a stand-in tokenizer records the arguments) and none to the frozen
+  models; the scorer's attention setting is the default; the mock run's §7.9 check against itself is exact. 108 tests,
+  passing.
+- **E5 to E9** are revised below for the stopping rule (S1), the numerical floors of the decisive statistics (S2), two
+  more fragility boundaries (S3), the rescore (S4), the "absent" row (S6), the token-check invocation (S7) and wording
+  (N7 to N9).
+
 ### E5. Environment (numerical_sensitivity.md, rule 1)
 
 - **Software stack:** the environment of the original authorization runs and of the τ families scoring runs (the
   project's `serve` Python environment, the "old stack" of `numerical_sensitivity.md` §2: torch 2.6.0, transformers
   4.51.3), with the `pace.env` of the τ families checkout copied into a new checkout with only its paths rewritten.
-- **GPU type:** NVIDIA L40S for the smoke run and all four shards, pinned with `--constraint` at submission; a resumed
-  shard is resubmitted with the same constraint. The original authorization runs used an L40S for the smoke run and
+- **GPU type:** NVIDIA L40S for the smoke run and all four shards, pinned at submission with
+  `--constraint='(gpu-l40s)'` (brackets because ICE appends `&cuda13`); a resumed shard is resubmitted with the same
+  constraint. No run record stores the GPU, so the results note cites each job's `nvidia-smi` log line. The original authorization runs used an L40S for the smoke run and
   shard 3 and A40s for shards 0 to 2; the τ families extension scored Llama-3.2-3B on L40S only. One GPU type keeps every
   test of this model's family in one environment (rule 1); every within-item contrast is within one job in any case.
 - **Checkout:** a new ICE checkout at the extension's tag, with the pinned build (`tau_build`) and its verification
@@ -839,42 +864,67 @@ models in `tau_auth_metrics.json`) and names any category that would differ.
   other build files.
 - **Token check** (CPU, before the smoke run): `wf.tau.auth_token_check --models meta-llama/Llama-3.2-3B-Instruct
   --config tau_auth_l32_score` on every prompt the full run scores, with the frozen pass conditions.
+  `pace/tau_auth_tokcheck.sbatch` passes no arguments, so it is submitted as a CPU job (`--partition=coc-cpu`, 2 CPUs,
+  16 GB) whose command sources `pace/_common.sh` (the checkout's Python and Hugging Face cache, read only) and runs
+  `python -m wf.tau.auth_token_check runs/tau_build/items.jsonl runs/tau_build/fewshot.json --models
+  meta-llama/Llama-3.2-3B-Instruct --config tau_auth_l32_score --out runs/tau_auth_l32_tokcheck/report.json` with
+  `HF_HUB_OFFLINE=1`.
 
 ### E6. Numerical sensitivity (numerical_sensitivity.md, rules 3 and 4)
 
-Llama-3.2-3B's numerical floor has not been measured (`numerical_sensitivity.md` §8). The Llama-3.1-8B values stand in
-for it: one standard deviation of a mean contrast across environments is about 0.026 nats at 100 items and 0.018 at 300
-(§4.8), about 0.02 at 192 items. The margin of 0.16 nats is six to eight times that, which meets rule 3's requirement of
-at least five.
+Llama-3.2-3B's numerical floor has not been measured (`numerical_sensitivity.md` §8 says each new model family needs
+its own), so the Llama-3.1-8B values stand in for it; this is an assumption. For a two-condition mean contrast, one
+standard deviation across environments is about 0.026 nats at 100 items and 0.018 at 300 (§4.8), about 0.02 at 192
+items. The decisive statistics combine more scores: the request component $W$ and its persisting part $R_W$ combine
+four scores per item, as do $M$ and $R_M$, and the removed parts $Z_W$ and $Z_M$ combine eight, from two arms. With
+per-score noise roughly independent (§4.3: the arms of a contrast move almost independently), their floors are about
+0.03 nats for $W$, $M$ and $R$ and about 0.04 for $Z$. The margin of 0.16 nats is about five times $R$'s floor and four
+times $Z$'s, so rule 3's requirement of at least five times is met only roughly for the removed parts; this is stated as
+a limit.
 
 **Fragility labels (rule 3), fixed now.** In the results note, a reading is labelled "numerically fragile" when the
-number that decides it lies within 0.05 nats (about twice the floor) of its boundary: a CI end within 0.05 of 0 or of
-±δ (0.16) where the category needs it on one side; an estimate within 0.05 of ±δ where the category needs at least δ
-in size; the positive control's estimate within 0.05 of 1 nat or its CI's lower end within 0.05 of 0; the arm (i)
-component's CI end within 0.05 of ±δ (absent or not). A comprehension question whose count is 19 or 20 of 24 (one item
+number that decides it lies near its boundary, within a band of about twice the floor of its statistic: 0.08 nats for a
+removed part $Z$ (and for R1-M2's aligned-half removal), 0.06 for $W$, $M$ and $R$ and for the positive control. That
+is: a CI end within the band of 0 or of ±δ (0.16) where the category needs it on one side; an estimate within the band
+of ±δ where the category needs at least δ in size; the positive control's estimate within 0.06 of 1 nat or its CI's
+lower end within 0.06 of 0; the arm (i) component's CI end within 0.06 of ±δ (absent or not); R1-M2's aligned-half
+condition when the aligned half's removed part is within 0.08 nats of half of $Z_W$ or its CI end within 0.08 of 0; and
+a Holm-adjusted p between 0.005 and 0.02 where the category needs p below 0.01 (permutation p-values moved by up to a
+factor of about 2 when only the scores changed, §4.8). A comprehension question whose count is 19 or 20 of 24 (one item
 from the 80% cutoff of 19.2 items) is labelled fragile too. The labels sit beside the category and change none.
 
-**No cross-environment rescore (rule 4).** Rule 4 asks for a rescore of a subset on another GPU type for small effects
-and equivalence-type decisions, and a "negligible" removed part is one. It is not run: rescoring even half of the items
-on another GPU type would take about another GPU-hour, beyond this extension's budget of about 2 GPU-hours. The
-fragility labels are the substitute, and the results note states the omission as a limit.
+**No cross-environment rescore (rule 4).** Rule 4 asks for a rescore on another GPU type, of at least 300 items, for
+small effects and equivalence-type decisions, and a "negligible" removed part is one. This experiment has only 192
+items, so the 300-item minimum cannot be met. Only the failing call's 15 first-token passes per item (five lines, three
+arms) decide anything; rescoring those for all 192 items would take about 0.5 GPU-hours on an L40S-class card and about
+0.8 on an A40, which together with the run exceeds this extension's budget of about 2 GPU-hours. It is therefore not run
+within this extension. If any decisive number is labelled fragile, the results note says so and names that descriptive
+A40 rescore of the failing call's first-token jobs as the check that would settle it; it is run only with a new
+approval of the GPU time. The fragility labels are the substitute, and the results note states the omission as a
+limit.
 
 ### E7. Budget and the stopping rule
 
 The τ families runs scored Llama-3.2-3B on L40S at 0.61 seconds per pass (median prompt 9,771 tokens). Arms (ii) and
 (iii) are about 15% and 19% longer than arm (i) (§9, implementation record), so the full run's 9,504 passes are expected
 to take about 1.8 GPU-hours, and the smoke run about 0.1. Four shards of about 0.45 hours each, under the frozen
-4-hour limit of `pace/tau_auth_score.sbatch`. **Stopping rule:** if the smoke run's GPU time plus the smoke analysis's
-projected GPU-hours for the full run exceeds 2.25 GPU-hours, the full run is not submitted and the projection is
-reported; no rule, item or job is changed to fit.
+4-hour limit of `pace/tau_auth_score.sbatch`. **Stopping rule:** the total is the smoke job's elapsed wall time (from
+Slurm), plus the smoke analysis's `gpu_hours_full_run` (summed mean seconds per pass by arm and readout, over every
+job), plus 0.05 hours for loading the model in four shards. If it exceeds 2.25 GPU-hours, the full run is not submitted
+and the projection is reported; no rule, item or job is changed to fit. The limit is kept at 2.25, close to the
+approved budget of about 2 GPU-hours. The projection probably errs high: in the τ families runs the smoke projection
+for this model was 2.50 GPU-hours and the scoring took 2.32 (about 8% less), and this smoke set includes the item with
+the longest prompt.
 
 ### E8. Order of work
 
 1. This section and the code (committed together, before any score). 2. One independent review; fixes committed.
 3. The annotated tag `tau-auth-ext-llama32-2026-11-25`, pushed. 4. The CPU token check (it scores nothing and may run
-before the tag; a failure stops the extension). 5. The smoke run and smoke analysis at the tag; the smoke record (format,
-timing, projection, the standard deviations of §9.2 with projected half-widths, and both gates, which R1-S3 allows to be
-read) committed to this note before the full run. 6. The full run, whatever the smoke gates show, as in the original
+before the tag). A failed check (a problem in the report) stops the extension; a job that fails before checking (for
+example a missing file) is fixed operationally and rerun, and logged. 5. The smoke run and smoke analysis at the tag;
+the smoke record (format, timing, projection, the standard deviations of §9.2 with projected half-widths, and both
+gates, which R1-S3 allows to be read) committed to this note before the full run. That commit touches only this note,
+so the full run's code is the tag's. 6. The full run, whatever the smoke gates show, as in the original
 run: a gate failure is a reported outcome, not a reason to change the design (the only stop is E7's). 7. The analysis
 at the tag. 8. A dated extension section in `notes/tau_auth_results.md` with the metrics copied unchanged as
 `notes/tau_auth_l32_metrics.json`. Any change after the tag is logged as a deviation.
@@ -889,10 +939,13 @@ were No for about 98% of calls, working or failing, under the neutral line.
 
 **Expected gate outcomes (stated before any data of this experiment).** The comprehension check is read on yes/no. A
 model that answers No to almost everything fails K1 and K4 in arm (iii), whose correct answer is Yes, so gate 1 is more
-likely to fail than to pass (subjective probability of passing about 0.25). The positive control needs the witness's
+likely to fail than to pass (subjective probability of passing about 0.25). A lean alone does not decide it:
+Llama-3.1-8B also leaned No on τ-bench calls (it predicted JSON for 7% of failures and 23% of successes) and still
+answered K1, K3 and K4 correctly on 24 of 24 items in arm (iii). The positive control needs the witness's
 aligned − swapped gap to grow by 1 nat under the authorization description. Llama-3.1-8B, whose witness goal effect was
 +0.38, reached +0.30; Llama-3.2-3B's is +1.07, so passing is possible but not likely (about 0.4). Both gates passing:
-about 0.15. The most likely outcome is therefore "inconclusive (gate)" for both components, which is a result: this
+about 0.1 if the two were independent, perhaps 0.15 since a model that reads the stated backend well is likely to do
+both. The most likely outcome is therefore "inconclusive (gate)" for both components, which is a result: this
 design cannot certify, for this model, that it read the task-blind description or follows a stated backend.
 
 **If both gates pass**, the frozen categories read as follows.
@@ -905,7 +958,7 @@ design cannot certify, for this model, that it read the task-blind description o
 | any removal of the request component not carried by the aligned half | any | Copying of the demonstrated minimal pairs (R1-M2), not an authorization belief |
 | any removal of the request component | removed too, or absent | A general suppression of task effects by the arm is not excluded (R1-M1) |
 | grows or overshoot | any | Reported, not interpreted (as Llama-3.1-8B's ungated request component) |
-| absent (arm (i) CI inside ±0.16) | any | Nothing to decompose on these 192 items; possible, since the request component (+0.47) is three margins wide and the 192-item interval may reach inside |
+| absent (arm (i) CI inside ±0.16) | any | Nothing to decompose on these 192 items. Very unlikely: with an expected half-width of about 0.12 to 0.16 nats, it would need the 192-item estimate within about 0.05 of 0, against +0.47 on the 856 items |
 
 **What no outcome shows.** Any category concerns the failing call's first token on 192 items of two classes, in one
 domain and one prompt format. One more Meta model does not separate size, distillation and post-training, and does not

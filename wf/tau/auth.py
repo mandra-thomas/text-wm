@@ -341,6 +341,8 @@ def make_scorer(tag: str) -> LogoddsScorer:
         from wf import families as F
 
         spec = F.MODELS[tag]
+        if spec.system != "native":  # every arm's system message is a system turn; nothing is folded
+            raise ValueError(f"{tag}: the authorization experiment scores native system turns only")
         return LogoddsScorer(spec.hf_id, model_tag=tag, attn_implementation=spec.attn_implementation,
                              template_kwargs=spec.template_kwargs)
     raise KeyError(f"{tag!r} is neither a frozen model nor an extension model of the authorization experiment")
@@ -379,7 +381,7 @@ def run_tau_auth_score(cfg: dict) -> int:
         if not todo:
             continue
         scorer = make_scorer(tag)
-        report = token_report(scorer, items[0])
+        report = {**token_report(scorer, items[0]), "template_settings": scorer.template_settings()}  # extension
         write_json(d / f"tokens_{tag}.json", report)
         if not report.get("first_token_ok"):
             scorer.close()

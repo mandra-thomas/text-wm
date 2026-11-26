@@ -7,3 +7,6 @@ build_run: tau_build
 models: [llama3.2-3b]
 holm_family: [llama3.2-3b]
 n_perm_primary: 10000
+# §7.9 (review of the extension, S5): the τ families scoring of this model (same stack, GPU type, scorer, template
+# handling and arm (i) prompts), read only, for the reproducibility check of arm (i)
+reference_run: /storage/ice1/2/1/gmat3/text-wm-fix44/runs/tau_family_score_llama3.2-3b
