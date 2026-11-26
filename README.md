@@ -178,6 +178,8 @@ Two cautions for reading the numbers. The two-candidate score s = σ(L), sometim
 
 ## Documents in this repository
 
+- **Start here for a walk through the benchmarks and real sample decisions:** [notes/walkthroughs/00_overview.md](notes/walkthroughs/00_overview.md) (one decision worked end to end, a map of every study, the shared measurement methods, cross-benchmark figures), then [01_alfworld.md](notes/walkthroughs/01_alfworld.md), [02_textcraft.md](notes/walkthroughs/02_textcraft.md) and [03_taubench.md](notes/walkthroughs/03_taubench.md): each benchmark explained from first principles, with rendered prompts and every model's stored scores for 8 to 14 sample decisions, and a section per study.
+
 - [PILOT_PROTOCOL.md](PILOT_PROTOCOL.md): the implementation spec for the pilots.
 - [notes/deviations.md](notes/deviations.md): the dated decision log. It records every change since the study was filed, and each exploratory design, logged before its data. It also holds the parser audits and what the write-up must mention. Where it and the protocol disagree, it is current.
 - [notes/rq2_results.md](notes/rq2_results.md) and [notes/rq1_results.md](notes/rq1_results.md): confirmatory results, with metrics in [notes/rq2_confirmatory_metrics.json](notes/rq2_confirmatory_metrics.json), [notes/rq2_shared_metrics.json](notes/rq2_shared_metrics.json) (shared-spot sensitivity) and [notes/rq1_v2_metrics.json](notes/rq1_v2_metrics.json) (RQ1 at the final parser; it supersedes `notes/rq1_metrics.json`).
