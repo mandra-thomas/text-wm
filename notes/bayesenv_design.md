@@ -357,3 +357,49 @@ The other readouts' components are in the readout's `metrics.json`.
 
 **Configurations written with this readout.** `wf/config/bayesenv_score_qwen3-8b.yaml` and `bayesenv_xgpu_qwen3-8b.yaml` keep the base design. `bayesenv_analysis.yaml` records Qwen3-8B's sizing outcome: goal minus tag not allowed for a negative conclusion; no pattern contrast withheld.
 
+### 17.2 Llama-3.1-8B (recorded 2026-11-26, before its full run was submitted)
+
+**What ran.**
+
+- Smoke scores: job 7347335, 9,300 sequences, L40S, serve2 stack, chat template, at commit 9c71355, whose code is identical to the code used for Qwen3-8B. It ran at 0.052 s per sequence.
+- Checks: job 7347336.
+- Readout: job 7350407. It counts the 1.75 GPU-hours that Qwen3-8B's runs used. No difference between conditions was computed.
+
+**Readout gates.**
+
+| Readout | Evidence slope (SE) | Median candidate mass | Continuations starting with the first / second word / neither | Success form after the first word; failure form after the second | Gate |
+|---|---|---|---|---|---|
+| World model, reply first token | 0.41 (0.01) | 0.94 | 90 / 266 / 44 of 400 | 0.40; 1.00 | fails: only 40% of "You" continuations are the success reply |
+| World model, yes/no | 0.17 (0.005) | 0.73 | (not sampled) | — | passes |
+| State inference, narrator | 0.32 (0.02) | 0.002 | 2 / 1 / 397 of 400 | — | fails: mass, form and "other" rate |
+| State inference, yes/no | 0.10 (0.009) | 0.78 | (not sampled) | — | fails: slope's lower bound 0.078 |
+| ALFWorld surface, reply | 0.74 (0.30) | 0.80 | 200 / 91 / 109 of 400 | 0.91; 0.95 | passes |
+| ALFWorld surface, yes/no | 0.05 (0.11) | 0.89 | (not sampled) | — | fails: slope |
+
+Every readout is in the "small" floor class: median larger candidate logit 16.8 to 25.1.
+
+The description check failed. Two phrasings favoured Yes (5.9 and 3.9 nats) but the third, "a house tag reads … Does the tag refer to a key?", favoured No by 0.125 nats. Name minus description is therefore not assessable for this model and leaves the Holm family before adjustment.
+
+**Consequences under the frozen rules.**
+
+- The world model's yes/no readout is primary.
+- The detection target is $T = 0.5 \times 0.173 = 0.086$ nats, and the pattern target is $T_p = 0.123$ nats.
+- The state-inference yes/no and narrator readouts both fail. Neither arm of the specificity rule can therefore be computed, and it will read "not assessable" for this model unless the full run's gates differ.
+- The reply and narrator readouts decide nothing. The ALFWorld-surface reply readout passes and is reported, as the design states, as a secondary transfer check.
+
+**Noise and wording variance on the primary readout.**
+
+- Item SD of within-item contrasts: 0.13 for goal against explore, 0.10 for key tag against other tag, and 0.12 for the 95% note against explore.
+- Goal wordings: $\sigma^2_\alpha = 0.021$ and $\sigma^2_\gamma = 0.006$. Tag wordings: $\sigma^2_\alpha = 0.004$ and $\sigma^2_\gamma = 0.011$.
+
+**Sizing rule.**
+
+- The base design's predicted MDE for goal minus tag is 0.35 nats, 4.1 times the target. That is band 3: the base design runs, and goal minus tag is not used for a negative conclusion. The menu's best design, 8 goal and 8 tag wordings, would give 0.18.
+- The pattern contrasts' predicted MDEs are 0.03 for the redundancy pattern and 0.04 for the announced slope, both below $T_p$ at 30 items, so neither is withheld from a negative conclusion.
+- Projected GPU time: 1.28 GPU-hours for Llama-3.1-8B's full and cross-GPU runs. The total for the study is 3.46 GPU-hours, within the 6.3 budget.
+
+**Configurations written with this readout.**
+
+- `wf/config/bayesenv_score_llama3.1-8b.yaml` and `bayesenv_xgpu_llama3.1-8b.yaml` keep the base design.
+- `bayesenv_analysis.yaml` records Llama-3.1-8B's sizing outcome: goal minus tag not allowed for a negative conclusion; no pattern contrast withheld.
+

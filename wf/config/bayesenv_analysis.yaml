@@ -7,4 +7,5 @@ models:
              gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: false,
              sizing: {goal_minus_tag_negative_allowed: false, patterns_not_for_negative: []}}
   llama3.1-8b: {main: bayesenv_score_llama3.1-8b, xgpu: bayesenv_xgpu_llama3.1-8b, checks: bayesenv_checks_llama3.1-8b,
-                gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: true, sizing: null}
+                gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: true,
+                sizing: {goal_minus_tag_negative_allowed: false, patterns_not_for_negative: []}}
