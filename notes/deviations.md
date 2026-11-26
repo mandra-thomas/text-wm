@@ -536,7 +536,7 @@ The RQ2 smoke items were scored twice: on an A100 with the bfloat16-rounding sco
 
 **What failed.** Both Gemma 4 models stopped in their gates in `text-wm-fix52`, before scoring, and nothing was scored. The frozen bf16 check found eager and SDPA attention too far apart on yes/no, against a limit of 0.10:
 
-- Gemma 4 E4B (job 7306814): 0.275 nats on average. E4B's placement check (7306815) produced no scores either.
+- Gemma 4 E4B (job 7306814): 0.275 nats on average. (Corrected after the tag: E4B's placement check, 7306815, passed the frozen bf16 check, 0.050, and completed; its scores are not read or used, and it is rerun under D-B1 with the others.)
 - Gemma 4 31B (job 7306818): 0.159 nats on average.
 
 **Why the bf16 limit cannot decide.** The limit is below one bf16 step at these logits (0.125 nats between 16 and 32), and in float32 the two implementations agree to about 0.00001 nats. TextCraft round 3's D-G1 diagnostic on E4B gave 0.000011 nats mean and 0.000027 at most. See also `numerical_sensitivity.md` §4.7 and rule 2.

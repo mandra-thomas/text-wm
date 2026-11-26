@@ -445,7 +445,7 @@ Review 1 ([families_waveb_review1.md](families_waveb_review1.md)) read the desig
 - **Gemma 4 E4B** (job 7306814, one L40S): 0.275 nats on average.
 - **Gemma 4 31B** (job 7306818, one A100 80GB): 0.159 nats on average.
 
-Nothing was scored for either, and E4B's placement check (job 7306815) produced no scores.
+Nothing was scored for either. *(Corrected 2026-11-25, after the tag: this sentence first said that E4B's placement check "produced no scores". Its gate record shows that it passed the frozen bf16 check (0.050 nats on yes/no, on its own five items) and completed. Its scores were not read, and are not used: under D-B1 the placement check is rerun with the float32 check, so that all three Gemma 4 runs meet the same rule.)*
 
 **Why the frozen limit cannot decide this.** The frozen check compares the two implementations in bf16. At E4B's yes/no readout logits (between 16 and 32), one bf16 step is 0.125 nats, so the 0.10 limit sits below a single step of rounding.
 
