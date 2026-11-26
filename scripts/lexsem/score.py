@@ -301,7 +301,7 @@ def smoke(args, tok, model, recs, by_id, pairs, fail_conds, successes=()) -> dic
         rep["failure_text_after_first_token_nats"] = {"min": round(min(tails), 4), "max": round(max(tails), 4),
                                                        "n": len(tails)}
     probe = []
-    for t in success_probe(list(successes)):
+    for t in success_probe(list(successes)) if "obs" in fmts else ():  # yes/no-only arms have no first token
         js = success_jobs(t, tok, args.mode, fmts)
         t0 = time.time()
         sc = readouts(js, run_item(model, js), pairs, tok, own_first=True)[NEUTRAL_COND]["obs"]
