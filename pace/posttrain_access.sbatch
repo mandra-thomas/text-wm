@@ -16,6 +16,8 @@ set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 # shellcheck disable=SC1091
 source "${SLURM_SUBMIT_DIR:-$(pwd)}/pace/_common.sh"
+# the serve2 stack (torch 2.14.1+cu126, transformers 5.23.0), named here rather than in pace.env
+export SERVE_ENV=/storage/ice1/2/1/gmat3/envs/serve2
 activate_serve
 echo "=== posttrain access START $(date) host=$(hostname) commit=$(git rev-parse HEAD) ==="
 python scripts/posttrain/access_check.py --cache "${PROJECT_ROOT}/tokcache" --out "logs/posttrain_access_${SLURM_JOB_ID:-local}.json"
