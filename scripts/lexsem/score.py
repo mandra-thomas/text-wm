@@ -80,11 +80,30 @@ def load(model_id: str):
     return tok, model, rev
 
 
+def adds_bos(tok) -> bool:
+    """Whether the tokenizer itself puts a BOS token in front of a text (Llama: yes; Qwen: no)."""
+    bos = getattr(tok, "bos_token_id", None)
+    return bos is not None and tok("x", add_special_tokens=True)["input_ids"][:1] == [bos]
+
+
+def check_bos(tok, ids: list[int]) -> None:
+    """Plain-text convention (wave B's plain format, `LogoddsScorer._encode`): the tokenizer's own BOS exactly once at
+    the start where it adds one, and none otherwise."""
+    bos = getattr(tok, "bos_token_id", None)
+    n = ids.count(bos) if bos is not None else 0
+    if adds_bos(tok) and not (n == 1 and ids[0] == bos):
+        raise SystemExit(f"plain prompt should start with BOS exactly once, found {n}")
+    if not adds_bos(tok) and n:
+        raise SystemExit("plain prompt carries a BOS token its tokenizer does not add")
+
+
 def prompt_ids(tok, msgs, mode: str) -> list[int]:
     if mode == "plain":
         from scripts.qwen_audit.followup_score import plain_text
 
-        return tok(plain_text(msgs), add_special_tokens=False)["input_ids"]
+        ids = tok(plain_text(msgs), add_special_tokens=True)["input_ids"]
+        check_bos(tok, ids)
+        return ids
     out = tok.apply_chat_template(msgs, tokenize=True, add_generation_prompt=True, enable_thinking=False)
     if hasattr(out, "keys"):  # transformers 5 returns a mapping
         out = out["input_ids"]
@@ -100,7 +119,7 @@ def sequence(tok, msgs, mode: str, continuation: str | None) -> tuple[list[int],
     if mode == "plain":
         from scripts.qwen_audit.followup_score import plain_text
 
-        full = tok(plain_text(msgs) + " " + continuation, add_special_tokens=False)["input_ids"]
+        full = tok(plain_text(msgs) + " " + continuation, add_special_tokens=True)["input_ids"]
         if full[: len(p)] != p:
             full = p + tok(" " + continuation, add_special_tokens=False)["input_ids"]
         return full, len(p)

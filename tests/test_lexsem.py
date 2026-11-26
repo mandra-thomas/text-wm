@@ -30,6 +30,8 @@ def _added(spec: dict, t: dict) -> str:
     if spec.get("pre") or spec.get("post"):
         assert spec["task_line"] == t["swapped_task_line"]
         return spec.get("pre") or spec.get("post")
+    if spec["task_line"] == lexsem.rq1.ABSENT_LINE:  # the competence condition: the neutral task, no sentence
+        return "Neutral."
     if spec["task_line"].startswith(t["task_line"] + " "):  # the competition line is built on the real task
         return spec["task_line"][len(t["task_line"]) + 1:]
     assert spec["task_line"].startswith(t["swapped_task_line"] + " ")
@@ -128,7 +130,7 @@ def test_frozen_tables():
         assert s.count(f" {obj} ") == 1 and ctrl not in VOCAB and " " not in ctrl
         assert not re.search(r"\b(room|there is)\b", s, re.I)
     assert set(lexsem.CONTROL_OF) <= set(lexsem.MENTIONS)
-    assert all(set(g) <= set(lexsem.MENTIONS) | set(lexsem.ANCHORS) for g in lexsem.GROUPS.values())
+    assert all(set(g) <= set(lexsem.MENTIONS) | set(lexsem.ANCHORS) | {lexsem.NEUTRAL} for g in lexsem.GROUPS.values())
 
 
 def test_lenient_reader():
@@ -270,3 +272,30 @@ def test_stratum_specific_needs_a_step_difference():
     st_sem = R.account_statuses(_iv(R.planted({"semantic": 1})))
     assert R.stratum_specific(st_ev, st_sem, {"name_use": (-0.2, 0.2)}) == []
     assert "evidence" in R.stratum_specific(st_ev, st_sem, {k: (0.5, 1.2) for k in R.PREDICTIONS})
+
+
+class _BosTok(_Tok):
+    """As _Tok, with a BOS token added in front of a text when asked (Llama-like) or never (Qwen-like)."""
+
+    def __init__(self, bos: bool):
+        super().__init__()
+        self.adds = bos
+        self.bos_token_id = 10**6 if bos else None
+
+    def __call__(self, text, add_special_tokens=False):
+        ids = super().__call__(text)["input_ids"]
+        return {"input_ids": ([self.bos_token_id] if (self.adds and add_special_tokens) else []) + ids}
+
+
+@pytest.mark.parametrize("bos", [True, False])
+def test_plain_prompts_carry_the_tokenizers_bos_exactly_once(mock_score, bos):
+    tok = _BosTok(bos)
+    t = _pan()
+    rec = lexsem.build([t], ALL)[0]
+    for j in lscore.item_jobs(t, rec, tok, "plain", ("obs", "yn"), frozenset(lexsem.GROUPS["core"])):
+        n = j["ids"].count(tok.bos_token_id) if bos else 0
+        assert (n == 1 and j["ids"][0] == tok.bos_token_id) if bos else n == 0
+    if bos:  # a Llama-like prompt without its BOS, or with it twice, is refused
+        for ids in ([5, 6], [tok.bos_token_id, tok.bos_token_id, 5]):
+            with pytest.raises(SystemExit, match="BOS"):
+                lscore.check_bos(tok, ids)
