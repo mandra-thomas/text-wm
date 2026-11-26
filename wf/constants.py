@@ -71,6 +71,9 @@ REVISIONS = {
     # Interpretability pilot, base-versus-instruct stage 0 (notes/interp_design.md, amendment 1, A9): the `main`
     # revision reported by the Hugging Face API on 2026-11-20, before any download.
     "Qwen/Qwen3-8B-Base": "49e3418fbbbca6ecbdf9608b4d22e5a407081db4",
+    # Lexsem base arm and post-training pilot (2026-11-26): the `main` revision from the Hub API, as in the
+    # post-training pilot's checkpoint table; its access check (job 7347490) reached all four weight files there.
+    "meta-llama/Llama-3.1-8B": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
 }
 
 

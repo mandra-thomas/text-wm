@@ -34,6 +34,7 @@ from pathlib import Path
 EXPECTED_SAMPLE_DIGEST = "cc8da36181976edd"  # sha256 of the sorted sample ids, first 16 hex digits
 READOUT = {"obs": ("You", "Nothing"), "yn": ("Yes", "No")}
 FAILURE_TEXT = "Nothing happens."  # the "fail" format (optional): the failure text after the observation prompt
+NEUTRAL_COND = "neutral"  # wf.lexsem.NEUTRAL (checked by a test), the competence condition
 
 
 def sample_digest(ids: list[str]) -> str:
@@ -169,18 +170,30 @@ def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...], fail
     return jobs
 
 
-def readouts(jobs: list[dict], rows: list, pairs: dict, tok) -> dict:
+def readouts(jobs: list[dict], rows: list, pairs: dict, tok, own_first: bool = False) -> dict:
+    """Every readout of each sequence. The first-token decision of an obs sequence is log p(first token of the success
+    text) minus log p("Nothing"), the project's L_first (`ScoreResult.L_first`, `plain_pair`): for every sampled
+    failure the success text starts with "You", which is checked. With `own_first` (the competence set's successes,
+    whose texts also start with "There's", "The" or "This") the text's own first token is read and not checked, and
+    log p("You") at the same position is kept beside it as `lp_you` (design section 5)."""
     out: dict = {}
     for j, (lp, z) in zip(jobs, rows):
         a, b = pairs["obs" if j["fmt"] == "fail" else j["fmt"]]
-        r = {"lp_a": round(lp[0, a].item(), 5), "lp_b": round(lp[0, b].item(), 5), "z_a": round(z[a].item(), 4),
-             "z_b": round(z[b].item(), 4), "n_prompt": j["n_prompt"]}
-        if j["fmt"] in ("obs", "fail"):
-            cont = j["ids"][j["n_prompt"]:]
+        cont = j["ids"][j["n_prompt"]:] if j["fmt"] in ("obs", "fail") else []
+        if j["fmt"] == "obs" and own_first:
+            a_read = cont[0]
+        else:
+            a_read = a
+            if cont and cont[0] != (a if j["fmt"] == "obs" else b):
+                raise SystemExit(f"{j['fmt']} text does not start with its readout token: {tok.decode([cont[0]])!r}")
+        r = {"lp_a": round(lp[0, a_read].item(), 5), "lp_b": round(lp[0, b].item(), 5),
+             "z_a": round(z[a_read].item(), 4), "z_b": round(z[b].item(), 4), "n_prompt": j["n_prompt"]}
+        if j["fmt"] == "obs" and own_first:
+            r["first"] = tok.decode([a_read])
+            r["lp_you"] = round(lp[0, a].item(), 5)
+        if cont:
             r["tok_lp"] = [round(lp[k, cont[k]].item(), 5) for k in range(len(cont))]
             r["toks"] = [tok.decode([x]) for x in cont]
-            if cont[0] != (a if j["fmt"] == "obs" else b):
-                raise SystemExit(f"{j['fmt']} text does not start with its readout token: {r['toks'][0]!r}")
         out.setdefault(j["cond"], {})[j["fmt"]] = r
     return out
 
@@ -243,10 +256,13 @@ def needs_check(conds: tuple[str, ...]) -> bool:
     return any(lexsem.MENTIONS[c][0] in ("desc", "alias") for c in conds if c in lexsem.MENTIONS)
 
 
-def smoke(args, tok, model, recs, by_id, pairs, fail_conds) -> dict:
+def smoke(args, tok, model, recs, by_id, pairs, fail_conds, successes=()) -> dict:
     """Timing and validity only, scored exactly as the full run scores: seconds per sequence by format, the two
-    readout tokens' probability mass per condition (mean and minimum), the token checks (run by item_jobs), and the
-    failure text's tail after "Nothing". No effect (no difference between conditions) is computed or written."""
+    readout tokens' probability mass per condition (mean and minimum), the token checks (run by item_jobs) and the
+    first-token checks (run by readouts), and the failure text's tail after "Nothing". Then one competence-set success
+    of each start word (`success_probe`) through the full run's success path: its own first token as decoded, that
+    token's and "Nothing"'s mass, and log p("You") beside it. No effect (no difference between conditions, no
+    competence statistic) is computed or written."""
     import math
 
     import torch
@@ -263,9 +279,11 @@ def smoke(args, tok, model, recs, by_id, pairs, fail_conds) -> dict:
     for j in flat:
         torch.cuda.synchronize()
         t0 = time.time()
-        rows.append(score_one(model, j["ids"], j["n_prompt"], j["fmt"] in ("obs", "fail"))[0])
+        rows.append(score_one(model, j["ids"], j["n_prompt"], j["fmt"] in ("obs", "fail")))
         torch.cuda.synchronize()
         times.setdefault(j["fmt"], []).append(time.time() - t0)
+    readouts(flat, rows, pairs, tok)  # the first-token checks of the full run
+    rows = [r[0] for r in rows]
     rep["s_per_sequence"] = {f: round(sum(v) / len(v), 4) for f, v in times.items()}
     rep["n_by_format"] = {f: len(v) for f, v in times.items()}
     mass: dict = {}
@@ -282,6 +300,15 @@ def smoke(args, tok, model, recs, by_id, pairs, fail_conds) -> dict:
     if tails:
         rep["failure_text_after_first_token_nats"] = {"min": round(min(tails), 4), "max": round(max(tails), 4),
                                                        "n": len(tails)}
+    probe = []
+    for t in success_probe(list(successes)):
+        js = success_jobs(t, tok, args.mode, fmts)
+        t0 = time.time()
+        sc = readouts(js, run_item(model, js), pairs, tok, own_first=True)[NEUTRAL_COND]["obs"]
+        probe.append({"id": t["id"], "start": t["candidates"]["o_plus"].split()[0], "first": sc["first"],
+                      "mass": round(math.exp(sc["lp_a"]) + math.exp(sc["lp_b"]), 4), "lp_first": sc["lp_a"],
+                      "lp_you": sc["lp_you"], "n_sequences": len(js), "s": round(time.time() - t0, 3)})
+    rep["success_probe"] = probe
     return rep
 
 
@@ -337,7 +364,7 @@ def main() -> None:
     env = environment(args.model, rev, args.mode)
     if args.smoke:
         t0 = time.time()
-        rep = smoke(args, tok, model, recs, by_id, pairs, fail_conds)
+        rep = smoke(args, tok, model, recs, by_id, pairs, fail_conds, rq1x.rq1x_sets(collected)["successes"])
         rep.update({"environment": env, "revision": rev, "groups": args.groups, "formats": args.formats, "fail_groups": args.fail_groups,
                     "wall_s": round(time.time() - t0, 1)})
         out.write_text(json.dumps(rep, indent=1))
@@ -365,25 +392,41 @@ def main() -> None:
         score_successes(args, tok, model, rev, pairs, rq1x.rq1x_sets(collected)["successes"], out, fmts)
 
 
-def score_successes(args, tok, model, rev, pairs, successes, out, fmts) -> None:
-    """The competence set's working actions (RQ2's determined successes) under the neutral task, every readout and
-    the failure text, appended to `<out>_successes.jsonl` (design section 5)."""
+def success_jobs(t: dict, tok, mode: str, fmts: tuple[str, ...]) -> list[dict]:
+    """One success item of the competence set under the neutral task: every format and the failure text."""
     from wf import lexsem, rq1
 
+    spec = {"task_line": rq1.ABSENT_LINE}
+    jobs = []
+    for fmt in fmts + ("fail",):
+        msgs = lexsem.messages(t, spec, "obs" if fmt == "fail" else fmt)
+        cont = {"obs": t["candidates"]["o_plus"], "fail": FAILURE_TEXT}.get(fmt)
+        ids, n_p = sequence(tok, msgs, mode, cont)
+        jobs.append({"cond": lexsem.NEUTRAL, "fmt": fmt, "ids": ids, "n_prompt": n_p})
+    return jobs
+
+
+def success_probe(successes: list[dict]) -> list[dict]:
+    """For the smoke: the first success (by id) of each start word of the success text ("You", "There's", "The",
+    "This"), so every kind of first token passes through the scorer before the freeze."""
+    seen: dict = {}
+    for t in sorted(successes, key=lambda t: t["id"]):
+        seen.setdefault(t["candidates"]["o_plus"].split()[0], t)
+    return [seen[k] for k in sorted(seen)]
+
+
+def score_successes(args, tok, model, rev, pairs, successes, out, fmts) -> None:
+    """The competence set's working actions (RQ2's determined successes) under the neutral task, every readout and
+    the failure text, appended to `<out>_successes.jsonl` (design section 5). Their first-token readout is the
+    success text's own first token against "Nothing" (`readouts`, own_first)."""
     path = out.parent / f"{out.stem}_successes.jsonl"
     done = {json.loads(x)["id"] for x in path.open()} if path.exists() else set()
     for t in sorted(successes, key=lambda t: t["id"]):
         if t["id"] in done:
             continue
-        spec = {"task_line": rq1.ABSENT_LINE}
-        jobs = []
-        for fmt in fmts + ("fail",):
-            msgs = lexsem.messages(t, spec, "obs" if fmt == "fail" else fmt)
-            cont = {"obs": t["candidates"]["o_plus"], "fail": FAILURE_TEXT}.get(fmt)
-            ids, n_p = sequence(tok, msgs, args.mode, cont)
-            jobs.append({"cond": lexsem.NEUTRAL, "fmt": fmt, "ids": ids, "n_prompt": n_p})
+        jobs = success_jobs(t, tok, args.mode, fmts)
         rec = {"id": t["id"], "game_id": t["game_id"], "stratum": "success", "model": args.model, "revision": rev,
-               "mode": args.mode, "scores": readouts(jobs, run_item(model, jobs), pairs, tok)}
+               "mode": args.mode, "scores": readouts(jobs, run_item(model, jobs), pairs, tok, own_first=True)}
         with path.open("a") as f:
             f.write(json.dumps(rec) + "\n")
 

@@ -26,7 +26,7 @@ echo "=== lexsem smoke START $(date) host=$(hostname) commit=$(git rev-parse HEA
 nvidia-smi --query-gpu=name,memory.total --format=csv || true
 activate_serve
 python -c "import torch, transformers; print('torch', torch.__version__, 'transformers', transformers.__version__)"
-ARMS="${LX_ARMS:-qwen_plain qwen_block llama_chat qwen4b_plain qwen4b_block qwen14b_plain qwen14b_block llama3b_chat qwen8b_base_plain}"
+ARMS="${LX_ARMS:-qwen_plain qwen_block llama_chat qwen4b_plain qwen4b_block qwen14b_plain qwen14b_block llama3b_chat qwen8b_base_plain llama8b_base_plain}"
 for ARM in ${ARMS}; do
   python scripts/lexsem/score.py --arm "${ARM}" --smoke 5 --out "${D}/smoke_${ARM}.json"
 done

@@ -299,3 +299,68 @@ def test_plain_prompts_carry_the_tokenizers_bos_exactly_once(mock_score, bos):
         for ids in ([5, 6], [tok.bos_token_id, tok.bos_token_id, 5]):
             with pytest.raises(SystemExit, match="BOS"):
                 lscore.check_bos(tok, ids)
+
+
+# ---------------- the competence set's successes (design section 5) ----------------
+
+def _success(i: int, o_plus: str):
+    return _t(id=f"s{i}", goal_object="pan", action="take pan 1 from stoveburner 1",
+              task_line="Your task is to: put some pan on cabinet.",
+              candidates={"o_plus": o_plus, "o_minus": "Nothing happens."})
+
+
+STARTS = {"You": "You pick up the pan 1 from the stoveburner 1.", "There's": "There's nothing special about pan 1.",
+          "The": "The fridge 1 is open.", "This": "This is a normal pan 1."}
+
+
+def _fake_rows(jobs, vocab: int, seed: int = 0):
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    return [(rng.normal(size=(max(1, len(j["ids"]) - j["n_prompt"]), vocab)), rng.normal(size=vocab)) for j in jobs]
+
+
+@pytest.mark.parametrize("start", sorted(STARTS))
+def test_success_first_token_is_its_own_first_token_against_nothing(mock_score, start):
+    tok = _Tok()
+    t = _success(1, STARTS[start])
+    pairs = lscore.readout_ids(tok, "plain")
+    jobs = lscore.success_jobs(t, tok, "plain", ("obs", "yn"))
+    assert [j["fmt"] for j in jobs] == ["obs", "yn", "fail"] and {j["cond"] for j in jobs} == {lexsem.NEUTRAL}
+    rows = _fake_rows(jobs, len(tok.vocab) + 1)
+    sc = lscore.readouts(jobs, rows, pairs, tok, own_first=True)[lexsem.NEUTRAL]
+    obs, (lp, z) = jobs[0], rows[0]
+    own = obs["ids"][obs["n_prompt"]]
+    assert sc["obs"]["first"].strip() == start.split("'")[0]
+    assert sc["obs"]["lp_a"] == round(lp[0, own].item(), 5) and sc["obs"]["z_a"] == round(z[own].item(), 4)
+    assert sc["obs"]["lp_b"] == round(lp[0, pairs["obs"][1]].item(), 5)  # always "Nothing"
+    assert sc["obs"]["lp_you"] == round(lp[0, pairs["obs"][0]].item(), 5)
+    if start == "You":  # identical to the failure items' reading
+        assert sc["obs"]["lp_a"] == sc["obs"]["lp_you"]
+        assert lscore.readouts(jobs, rows, pairs, tok)[lexsem.NEUTRAL]["obs"]["lp_a"] == sc["obs"]["lp_a"]
+    else:  # the failure path keeps its check and refuses a text that does not start with "You"
+        assert sc["obs"]["lp_a"] != sc["obs"]["lp_you"]
+        with pytest.raises(SystemExit, match="readout token"):
+            lscore.readouts(jobs, rows, pairs, tok)
+    assert "first" not in sc["fail"] and sc["fail"]["toks"][0] == " Nothing"
+
+
+def test_smoke_probe_takes_one_success_of_each_start_word():
+    succ = [_success(i, STARTS[w]) for i, w in enumerate(["The", "You", "The", "This", "There's", "You"])]
+    probe = lscore.success_probe(succ)
+    assert [t["candidates"]["o_plus"].split()[0] for t in probe] == sorted(STARTS)
+    assert [t["id"] for t in probe] == ["s0", "s4", "s3", "s1"]  # the first id of each start word
+    assert lscore.NEUTRAL_COND == lexsem.NEUTRAL
+
+
+def test_base_arms_mirror_the_plain_core_arm_at_pinned_revisions():
+    from wf.constants import REVISIONS
+
+    assert lexsem.BASE_ARMS == {"qwen8b_base_plain", "llama8b_base_plain"}
+    for n in lexsem.BASE_ARMS:
+        a = lexsem.ARMS[n]
+        assert a["competence"] and a["model"] in REVISIONS
+        assert {k: v for k, v in a.items() if k not in ("model", "competence")} == \
+            {k: v for k, v in lexsem.ARMS["qwen_plain"].items() if k != "model"}
+    assert lexsem.ARMS["llama8b_base_plain"]["model"] == "meta-llama/Llama-3.1-8B"
+    assert REVISIONS["meta-llama/Llama-3.1-8B"] == "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b"
