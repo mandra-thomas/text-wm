@@ -549,3 +549,7 @@ The RQ2 smoke items were scored twice: on an A100 with the bfloat16-rounding sco
 - 31B on two A100 80GB cards of one node. Its float32 copy (about 125 GB) does not fit one card; scoring stays bf16 with SDPA, and the model is split over the two cards.
 
 **Unchanged.** Every other gate and rule, including the serve2 rescoring of the older models, the 16-test family and every threshold.
+
+## Families wave B: interim reading at the user's request (2026-11-25)
+
+Interim reading at the user's request: the frozen analysis is run now on the completed models; the two Gemma 4 models are 'waiting' and enter the 16-test family at p = 1, as the frozen design specifies; no rules change. The final analysis is rerun once after the Gemma 4 reruns (deviation D-B1, tag `families-waveb-deviation-attn-float32-2026-11-25`) finish, and it replaces this one. Any verdict that changes between the two is reported as such. This entry is committed and pushed before the interim analysis is run.
