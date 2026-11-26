@@ -1,0 +1,355 @@
+{
+ "_about": "Goal effect (aligned minus swapped task line) by history length, per model and readout,\nfrom stored scores (exploratory, post hoc; 2026-11-25). No model is scored.\n\nInputs: a copy of the run folders `rq12_transitions_s0..s2`, `rq1v_score` and\n`family_score_<model>` (families wave A), under RUNS (default ./runs).\nItems: the 4,666 RQ2 primary items, i.e. the items that carry the two-candidate\naligned and swapped scores; the yes/no rows are restricted to the same items.\nIntervals: 95% game-clustered bootstrap, 1,000 resamples, seed 1.\nOutput: notes/step0_by_history_metrics.json (or the path given as the first argument).",
+ "models": {
+  "gemma2-9b-it": {
+   "yes/no": {
+    "0": {
+     "mean_nats": 4.651,
+     "ci95": [
+      4.211,
+      5.123
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 1.246,
+     "ci95": [
+      0.98,
+      1.5
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 0.631,
+     "ci95": [
+      0.377,
+      0.853
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 0.561,
+     "ci95": [
+      0.312,
+      0.769
+     ],
+     "n_items": 1438
+    }
+   },
+   "two-candidate": {
+    "0": {
+     "mean_nats": 1.494,
+     "ci95": [
+      1.249,
+      1.735
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 0.891,
+     "ci95": [
+      0.485,
+      1.293
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 0.641,
+     "ci95": [
+      0.231,
+      1.011
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 0.629,
+     "ci95": [
+      0.272,
+      0.973
+     ],
+     "n_items": 1438
+    }
+   }
+  },
+  "mistral-7b-v0.3": {
+   "yes/no": {
+    "0": {
+     "mean_nats": 5.941,
+     "ci95": [
+      5.405,
+      6.426
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 3.029,
+     "ci95": [
+      2.661,
+      3.386
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 1.987,
+     "ci95": [
+      1.717,
+      2.228
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 1.809,
+     "ci95": [
+      1.553,
+      2.061
+     ],
+     "n_items": 1438
+    }
+   },
+   "two-candidate": {
+    "0": {
+     "mean_nats": 2.653,
+     "ci95": [
+      2.337,
+      2.956
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 0.982,
+     "ci95": [
+      0.758,
+      1.206
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 0.913,
+     "ci95": [
+      0.732,
+      1.1
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 0.719,
+     "ci95": [
+      0.487,
+      0.945
+     ],
+     "n_items": 1438
+    }
+   }
+  },
+  "llama3.2-3b": {
+   "yes/no": {
+    "0": {
+     "mean_nats": 0.797,
+     "ci95": [
+      0.707,
+      0.877
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 0.67,
+     "ci95": [
+      0.545,
+      0.782
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 0.692,
+     "ci95": [
+      0.575,
+      0.809
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 0.712,
+     "ci95": [
+      0.574,
+      0.855
+     ],
+     "n_items": 1438
+    }
+   },
+   "two-candidate": {
+    "0": {
+     "mean_nats": 1.28,
+     "ci95": [
+      1.156,
+      1.402
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 0.888,
+     "ci95": [
+      0.716,
+      1.066
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 0.886,
+     "ci95": [
+      0.706,
+      1.048
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 1.05,
+     "ci95": [
+      0.801,
+      1.302
+     ],
+     "n_items": 1438
+    }
+   }
+  },
+  "llama3.1-8b": {
+   "yes/no": {
+    "0": {
+     "mean_nats": 3.343,
+     "ci95": [
+      3.036,
+      3.632
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 2.49,
+     "ci95": [
+      2.28,
+      2.697
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 1.952,
+     "ci95": [
+      1.742,
+      2.15
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 1.789,
+     "ci95": [
+      1.6,
+      1.977
+     ],
+     "n_items": 1438
+    }
+   },
+   "two-candidate": {
+    "0": {
+     "mean_nats": 1.512,
+     "ci95": [
+      1.376,
+      1.633
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 1.53,
+     "ci95": [
+      1.379,
+      1.677
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 1.704,
+     "ci95": [
+      1.497,
+      1.904
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 1.733,
+     "ci95": [
+      1.493,
+      1.943
+     ],
+     "n_items": 1438
+    }
+   }
+  },
+  "qwen3-8b (with the empty think block)": {
+   "yes/no": {
+    "0": {
+     "mean_nats": 7.712,
+     "ci95": [
+      7.237,
+      8.22
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 2.734,
+     "ci95": [
+      2.496,
+      2.961
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 2.087,
+     "ci95": [
+      1.852,
+      2.317
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 1.803,
+     "ci95": [
+      1.559,
+      2.051
+     ],
+     "n_items": 1438
+    }
+   },
+   "two-candidate": {
+    "0": {
+     "mean_nats": 11.037,
+     "ci95": [
+      10.115,
+      11.844
+     ],
+     "n_items": 514
+    },
+    "1-3": {
+     "mean_nats": 5.241,
+     "ci95": [
+      4.707,
+      5.793
+     ],
+     "n_items": 1332
+    },
+    "4-6": {
+     "mean_nats": 5.503,
+     "ci95": [
+      4.681,
+      6.259
+     ],
+     "n_items": 1382
+    },
+    "7+": {
+     "mean_nats": 5.779,
+     "ci95": [
+      5.031,
+      6.549
+     ],
+     "n_items": 1438
+    }
+   }
+  }
+ }
+}

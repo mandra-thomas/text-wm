@@ -1,0 +1,6 @@
+# Controlled Bayesian environment, smoke run (notes/bayesenv_design.md section 9). One shard, L40S only.
+model: Qwen/Qwen3-8B
+mode: plain
+units: smoke
+gpu_type: L40S
+stack: {torch: "2.14.1", transformers: "5.23.0"}   # the serve2 stack

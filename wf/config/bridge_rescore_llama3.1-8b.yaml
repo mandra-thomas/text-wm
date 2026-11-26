@@ -1,0 +1,15 @@
+run_id: bridge_rescore_llama3.1-8b
+# Rule 4 of notes/numerical_sensitivity.md: the 300-item subset, every arm and readout, the primary format, rescored
+# in the same software stack on another GPU type (A100).
+model: meta-llama/Llama-3.1-8B-Instruct
+tag: llama3.1-8b
+formats: {chat: sample}
+items: subset
+gpu_type: A100
+n_shards: 1
+sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+accept_commits:
+  rq12_transitions_s0: ["f8d20c1"]
+  rq12_transitions_s1: ["f8d20c1"]
+  rq12_transitions_s2: ["f8d20c1"]
+freeze_tag: bridge-design-frozen-2026-11-25

@@ -1,10 +1,10 @@
-# Reproducing the results (2026-11-20)
+# Reproducing the results (2026-11-20; sections 2, 5 and 7 updated 2026-11-25)
 
-This note says what the study ran on, where its data are, which run produced each reported number, and how to run everything again. Code, configs, seeds and commits are all in this repository. The run data are not: the collected items, scores, written predictions and agent episodes live outside git (`runs/**` is ignored).
+This note says what the study ran on, where its data are, which run produced each reported number, and how to run everything again. Code, configs, seeds and commits are all in this repository. The run data are not: the collected items, scores, written predictions and agent episodes live outside git (`runs/**` is ignored). The exception is the headline result. The inputs of the preregistered RQ2 analysis are public as the GitHub release `repro-rq2-2026-11-25`, and the README's section "Reproduce the headline result" reruns it on a CPU.
 
 There are two levels of reproduction:
 
-- **Re-running the analyses** from the saved scores needs no GPU and gives the reported numbers, apart from the known parser change in RQ1 (below).
+- **Re-running the analyses** from the saved scores needs no GPU and gives the reported numbers, apart from the known parser change in RQ1 (below). For RQ2 anyone can do this from the public release; for the other analyses it needs the run data, which are not public.
 - **Re-running everything from scratch** gives a new, statistically equivalent data set, not the same one. The agent's greedy rollouts are not bit-identical across GPUs, so a new collection produces different histories and items, and scores differ slightly across GPU types. Exact reproduction of the reported numbers requires the saved items.
 
 ## 1. What you need
@@ -52,7 +52,7 @@ The full list (80 packages) is `envs/serve2_freeze.txt`; it pins exact versions 
 
 ### The environment and its data
 
-"ALFWorld" here is the AgentGym ALFWorld server shipped with Word2World, not the original ALFWorld release. Its game data come from Word2World's `scripts/download_data/download_data.py`. That data renames `put` to `move` and adds a `help` action, so the stock ALFWorld download does not work with this code. No version or checksum of the downloaded data was recorded. The fine-tuned models' prompts, and the full-state condition's starting layouts, come from Word2World's `data/init_contexts/alfworld/wm_instruct_*.json` in the same download. The Hugging Face dataset `X1AOX1A/LLMasWorldModels` is used only by the Tier 0 parser check.
+"ALFWorld" here is the AgentGym ALFWorld server shipped with Word2World, not the original ALFWorld release. Its game data come from Word2World's `scripts/download_data/download_data.py`. Those files are ALFWorld's own: on 2026-11-25 every file of the `valid_unseen` split was found byte-identical to the file at the same path in ALFWorld's GitHub release assets (`json_2.1.1_json.zip` and `json_2.1.1_pddl.zip` from release 0.2.2, and `json_2.1.2_tw-pddl.zip` from release 0.4.0 for the 134 solvable games). The code needs ALFWorld's wording from version 0.4.0 on (pull request #94), where `put` became `move` and a `help` action was added; ALFWorld data from before 0.4.0 use `put` and do not work with this code. No version or checksum of the download was recorded at collection time; a SHA-256 list of every file in the data tree on ICE, taken on 2026-11-25, is in [`repro/alfworld_data_sha256.txt`](../repro/alfworld_data_sha256.txt). The fine-tuned models' prompts, and the full-state condition's starting layouts, come from Word2World's `data/init_contexts/alfworld/wm_instruct_*.json` in the same download. The Hugging Face dataset `X1AOX1A/LLMasWorldModels` is used only by the Tier 0 parser check.
 
 The study uses the 134 solvable `valid_unseen` games. AgentGym lists 195; the other 61 crash on reset and `wf/env/server.py` leaves them out. The game list is not committed: it is the server's listing of solvable games, shuffled with seed 20260924 (`wf/runs.py`), so it is fixed given the same data.
 
@@ -89,9 +89,24 @@ Each batch of runs was made in its own checkout on ICE, under `/storage/ice1/2/1
 
 Some numbers in between (for example τ-bench's and Option C's checkouts) are not named in the notes. The RQ3 episodes are also archived as `text-wm-runs-archive/text-wm-fix11/runs/rq3` (`decisionsim_agent_design.md`).
 
-ICE course storage is not permanent. The owner keeps a full copy outside this repository, with a SHA-256 manifest; it is not public. A public archive of the items, scores, generations and episodes is planned, and this note will link it.
+ICE course storage is not permanent. *(Corrected 2026-11-25.)* An earlier version of this paragraph said the owner keeps a full copy outside this repository. That was true only on 2026-11-20. The off-cluster copy then covered the checkouts `text-wm-fix` to `fix19`, with a SHA-256 manifest. On 2026-11-25 the checkouts `fix20` to `fix51` were copied as well, with their own SHA-256 manifest. Runs that finish after that copy (the remaining round-3 TextCraft arms, model families wave B and later studies) exist only on ICE until they are copied in turn. The off-cluster copy is not public; the inputs of the headline result are public as the release above.
+
+**What is public.** The GitHub release [`repro-rq2-2026-11-25`](https://github.com/mandra-thomas/text-wm/releases/tag/repro-rq2-2026-11-25) holds the inputs of the headline analysis, `rq2_analysis`, as one 3.5 MB archive, `rq2-headline-inputs.tar.gz`, whose SHA-256 is committed in `repro/SHA256SUMS`. The archive holds:
+
+- the 12,987 collected items, from the three `rq12_transitions_s*` runs;
+- the four `rq2_score` shards, with both co-primary models' scores and written predictions;
+- a manifest.
+
+It was built from fix11 by `repro/build_rq2_archive.py`, which is deterministic: rebuilding from the same run folders gives the same bytes. Two things differ from the run folders:
+
+- **One field removed.** Each item's `hidden_state`, the text copied verbatim from Word2World's data download, is left out because that download declares no licence ([DATA_LICENSES.md](../DATA_LICENSES.md)). `rq2_analysis` does not read it.
+- **Files the analysis does not read left out.** The scoring shards' `inputs.json`, which names cluster paths, is one of them. The manifest records the original SHA-256 of every file the archive holds.
+
+No other run's data are public.
 
 ## 3. Which run produced each result
+
+This table covers the ALFWorld studies run up to 2026-11-20. For every reported result, including the later studies (families, TextCraft, τ-bench, the decision simulations, the mechanism battery, Option C and the interpretability pilot), the README's section "Reproduce the headline result" has a short table of the tag or commit to check out, and whether that code is on `main`. Each later study's results note names its runs, jobs and commits.
 
 Commits are read from each run folder's `git_sha`. Every metrics file in `notes/` is byte-identical to the `metrics.json` of the analysis run named here. "GPU" is what each run's jobs could get; the type each job actually got is printed in its job log on ICE (`logs/`), which is not copied here.
 
@@ -180,7 +195,7 @@ RQ2_RUN=rq2_score WF_SHARD=0 WF_N_SHARDS=4 bash pace/rq2_score.sbatch
 
 Set the variables that `pace/pace.env.example` lists (`SERVE_ENV`, `WORD2WORLD_ROOT`, `ALFWORLD_DATA`, `HF_HOME`, `RUNS_DIR`, `HF_TOKEN` for Llama) in `pace/pace.env` or the environment. `module load` is tried and its failure ignored. You can also call `python -m wf.runs <run>` directly. Scoring runs need only the models and the items. Collection and RQ3 also need the ALFWorld server (Word2World's `uv_alfworld/bin/alfworld`) and a vLLM server with the agent model, started with the prefix cache off. Point the code at them with `ALFWORLD_BASE_URL` and `VLLM_BASE_URL`; the job scripts start both and do this for you.
 
-Without a GPU, `pip install -e ".[dev]"`, `pytest -q` and the mock runs (README, "Run locally") check the logic on a simulator.
+Without a GPU, `pip install -e ".[dev]"`, `pytest -q` and the mock runs (README, "Run locally") check the logic on a simulator. Run `python -m wf.textcraft.freeze --fetch` first, or the TextCraft tests skip. Without a GPU you can also rerun the headline analysis on the real data: README, "Reproduce the headline result". On 2026-11-25 that took about a minute on a laptop CPU from a fresh clone, and it reproduced `rq2_confirmatory_metrics.json` exactly, apart from one float in its 17th significant digit.
 
 ## 6. From scratch, in order, with rough costs
 
@@ -202,17 +217,20 @@ The pilots ran on `train` games and fixed the design, which is now in the config
 
 ## 7. Licences
 
-This repository has no licence file yet. The third-party components, as checked on 2026-11-20:
+*(Updated 2026-11-25.)* The project's code is under the MIT licence ([LICENSE](../LICENSE)). The upstream licences, what of each is in the repository or the public RQ2 release, and the notices they require are in [DATA_LICENSES.md](../DATA_LICENSES.md), with copies of the MIT texts in `licenses/`. On 2026-11-25 each licence was read from its upstream file, not from metadata alone:
 
 | Component | Licence | How checked |
 | --- | --- | --- |
-| ALFWorld | MIT | GitHub repository `alfworld/alfworld` |
-| TextWorld | MIT (its README lists some dependencies under other licences) | `LICENSE.txt` in `microsoft/TextWorld` |
-| Qwen3 models | Apache-2.0 | Hugging Face model card (checked for Qwen3-8B) |
-| Llama-3.1-8B-Instruct | Llama 3.1 Community License; gated, access approved by Meta on request | Hugging Face model card |
-| Word2World fine-tuned checkpoints | declared "other", with no name or text given; their bases are Qwen2.5-7B and Llama-3.1-8B, whose licences presumably carry over | Hugging Face metadata; **unverified** |
-| Word2World code and AgentGym server | none declared in the Word2World repository | GitHub metadata; **unverified** |
-| `X1AOX1A/LLMasWorldModels` dataset | none declared | Hugging Face metadata; **unverified** |
+| ALFWorld | MIT | `LICENSE` in `alfworld/alfworld` |
+| ALFRED (ALFWorld's scenes) | MIT | `LICENSE` in `askforalfred/alfred` |
+| TextWorld | MIT (GitHub labels it "Other" because the file starts with a version line) | `LICENSE.txt` in `microsoft/TextWorld` |
+| AgentGym (ALFWorld server, TextCraft) | MIT | `LICENSE` in `WooooDyy/AgentGym` |
+| τ²-bench (retail data) | MIT | `wf/tau/vendor/LICENSE` |
+| Qwen3 models | Apache-2.0 | `LICENSE` on the Qwen3-8B model card |
+| Llama-3.1-8B-Instruct | Llama 3.1 Community License; gated, access approved by Meta on request. Its redistribution terms cover the weights, code and documentation, not outputs | `models/llama3_1/LICENSE` in `meta-llama/llama-models` |
+| Word2World fine-tuned checkpoints | declared "other", with no name or text given | Hugging Face metadata; nothing of them is redistributed |
+| Word2World code | none: the repository has no licence file | GitHub API (no licence file) |
+| `X1AOX1A/LLMasWorldModels` dataset (Word2World's data download) | none declared on the dataset card | Hugging Face card and metadata. Its own text, the items' `hidden_state` field, is therefore left out of the public release |
 
 ## 8. Known limits
 

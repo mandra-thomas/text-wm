@@ -10,6 +10,70 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided or found 2026-11-25: τ-bench authorization experiment, extension to Llama-3.2-3B
+
+- **An extension, not a change of the frozen design.** The τ-auth design (tag `tau-auth-design-frozen-2026-11-22`) was run on one more model, Llama-3.2-3B-Instruct, under a section added to `tau_auth_design.md` ("Extension 2026-11-25") and tagged `tau-auth-ext-llama32-2026-11-25` (`a70e652`) before any score of this model in the experiment. Every frozen gate, rule, category and readout is unchanged. Added for the new model, before its data: its template handling (the τ families spec, date fixed), its margin by the frozen rule (0.16 nats, a third of +0.474), its own Holm family of four tests (the reference models' family of eight and their categories are not reopened), fragility labels and a budget stop. One independent review (no must-fix item; its should-fix items were made before the tag).
+- **Operational, no effect on any score.** The first smoke submission (7328769) waited on "BadConstraints" and then refused to score because the copied build-verification record had been made at another commit; the items were rebuilt and verified at the tag (CPU job 7330380; all three pinned files reproduced) and the smoke run repeated (7330545). Scoring jobs were submitted with the partitions that hold L40S nodes and shorter time limits than `pace/tau_auth_score.sbatch`'s 4 hours, so they could start sooner. The smoke record was committed to the design note before the full run (`e55064e`).
+- **Outcome.** Both gates fail; both categories "inconclusive (gate)" (`tau_auth_results.md` §12).
+
+## Decided 2026-11-25: TextCraft round 3, interim reading
+
+- **Interim reading at the user's request,** under the five conditions the user approved on 2026-11-24:
+  - the inputs are complete for what is read;
+  - the protocol allows it;
+  - no rule changes;
+  - it cannot influence the unfinished arms;
+  - the final run preserves the verdicts.
+- **Models without filed scores** enter as the frozen design specifies: "not scored" with p = 1, or "waiting", whose tests are padded at p = 1 and whose readings wait. These are Qwen3.8-27B and Gemma-4-31B (scoring queued) and the Gemma slot, which under D-G2 waits for Gemma 4 12B's float32 attention check and smoke rerun.
+- **How it runs.** The analysis `textcraft_r3_analysis_dg2` runs once, from a clean checkout at D-G2's tag. That tag carries this entry and D-G2, both committed before the run.
+- **The final analysis** is rerun once when every arm is filed, and it replaces this reading. Any verdict that changes is reported as such.
+- **Effect on the unfinished arms.** None. Their gates, slot rule and analysis are fixed by the committed code and do not depend on any number read here.
+
+## Decided 2026-11-25: TextCraft round 3, deviation D-G2 (attention agreement in float32)
+
+- **Approved by the user, after the freeze and before the round-3 analysis ran.** No round-3 score, contrast or effect had been read. The full note is [textcraft_r3_deviation_attention_float32.md](textcraft_r3_deviation_attention_float32.md) on branch `textcraft-r3-dev-g2`, at tag `textcraft-r3-deviation-g2-2026-11-25`.
+- **Change.** Round 3's eager-against-SDPA attention-agreement criterion is now evaluated in float32 for every Gemma 4 model (12B, E4B and 31B). It uses the same frozen function, the same five items and arms, and wave B's limits unchanged (yes/no mean 0.10, two-candidate mean 0.50, any single score 1.0).
+  - The check is the run `textcraft_r3_attnf32_<tag>`, on A100 80 GB cards; a float32 copy of 12B does not fit an L40S.
+  - It replaces the bf16 check that each job ran at its start.
+- **Reason.** In bf16, at these models' readout logits, the 0.10 limit is below one grid step (0.125). Every observed bf16 difference is a whole number of steps, and in float32 the two implementations agree to about 0.00001 (`numerical_sensitivity.md` §4.7, Rule 2; D-G1's job 7252801).
+- **Effect in round 3.** The frozen slot procedure runs again with the float32 reading:
+  - **12B first.** Gemma 4 12B's float32 check runs, and then, if it passes, its smoke is rerun (`textcraft_r3_smoke2_gemma4-12b-it`), because the filed smoke stopped before any score and the fallback rule's format diagnostic needs the smoke's rows.
+  - **If no trigger fires,** 12B holds the Gemma slot as designed. It is scored at D-G2's commit, two shards on L40S. It enters A3, and B3 compares Gemma-2-9B's serve2 rescoring with 12B.
+  - **Otherwise** E4B holds the slot. It is scored under its core run id rather than reusing D-G1's exploratory scores, so that every core score has one provenance rule. The procedure is the same and the cost is about 1.4 GPU-hours.
+  - **31B's state** waits for its own float32 check.
+- **Not changed.** Every other gate, rule, family and test; the filed bf16 records, which stay as filed; and the queued jobs.
+- **Where runs start and the analysis.** Only D-G2's runs may start at its tag's commit. The analysis that is read is `textcraft_r3_analysis_dg2`, at that tag; it supersedes D-T2's `textcraft_r3_analysis_dt2`.
+- **Cost.** About 4.5 to 5.5 GPU-hours if 12B holds the slot, including the 31B check; about 3 if E4B does. Nothing is submitted before the coordinator confirms.
+
+- **Interim results** (2026-11-25): `textcraft_r3_interim_results.md`, from the analysis run `textcraft_r3_analysis_dg2` at tag `textcraft-r3-deviation-g2-2026-11-25` (ICE CPU job 7330172).
+
+## Documentation corrections, 2026-11-25
+
+A review of what the public documents claim against what the evidence supports. No verdict, threshold, rule, confirmatory result or metrics file changed. Each revised reading is marked "(revised 2026-11-25)" where it stands.
+
+- **Thinking mode** (README "Reasoning" and the forensic-audit row, `GUIDE.md` §8.5, `exploratory_results.md` §2, `qwen_effect_audit_pipeline.md` §7.3). Old: reasoning "does not reduce the effect" (4.01 nats after reasoning against 3.33 without the empty block). New: the result depends on the scale and is not determined. Nats show no reduction; the standardized effect falls (0.25 [0.18, 0.32] after reasoning against 1.02 with the block and 1.10 without, same 1,000 items) and so does the share of items moved (61% against 88%), partly through sampling noise from the reasoning traces. The 0.25 and 61% are post hoc, recomputed from the archived `thinking_probe` run (`text-wm-fix16`; its SHA-256 matches the archive manifest and its mean shift reproduces `thinking_v2_metrics.json`'s 4.005 nats); the 1.02, 1.10 and 88% are in `qwen_effect_audit_followup_metrics.json`. The entry of 2026-11-23 below ("reasoning shows no reduction") is kept as written.
+- **Interpretability pilot** (README status row, `GUIDE.md` §8.18, `interp_results.md` Summary and §11.1). Old: the effect "moves from the object's name … into the action line's object word … and reaches the answer position"; "the history carries little of it … except on the 3% of items whose history mentions the object"; "onset after arrival"; "cosine 0.44 before arrival". New: aligned with `interp_results.md` §13: the route is largely forced by prompt order and untested edge by edge; the history share cannot detect evidence use and is high (0.40) where the history names the object; "after arrival" depends on the interval method; the cosine is confounded with object mention; the omitted mention control is reported with its existence caveat; the audit's classification is given. The mention items are 7.0% of later failures and 6.2% of all failures; the "3%" was their weight in the patching sample (items with an effect of at least 1 nat).
+- **Planning nulls** (README RQ3 section and the Stage 1b and Option C rows, `GUIDE.md` §8.4, §8.15 and §8.16, `rq3_results.md`, `decisionsim_agent_results.md`, `optionc_results.md` §10.1, `cross_model_summary.md` §4). Added: the agent's prompt included ALFWorld's admissible-action list, so the RQ3, Stage 1b and Option C nulls mean "not detected in this setup"; Option C's primary rests on 3 discordant games, and the design could detect only success losses of roughly 6 to 11 points.
+- **Failure-specificity** (`exploratory_results.md` §1). The statement that the goal effect on the 292 working actions "is much smaller than on failures" now carries the qualifier that this is not a test of failure-specificity: matched successes move as much, and τ-bench witness calls move as much or more. The 2026-11-20 audit entry below ("much smaller than on failures") is kept as written; this entry qualifies it.
+- **Families primary metric** (README families section, `GUIDE.md` §4.6 and §8.6, `families_results.md`). Added: Option C's step-0 check found Qwen3-8B partly reading the anchored yes/no question as task success, so the item share may include a task-progress judgement; the two-candidate effect is positive for every model.
+- **Families wave B status** (this file, 2026-11-23; README status row; `GUIDE.md` §8.7; `cross_model_summary.md` §4). Old: "the amendment is being written" (README: "amendment in progress"; summary: "environment check running"). New: the amendment is written and re-reviewed, and a re-freeze is in progress.
+
+## Decided or found 2026-11-24
+
+- **Mutation runners wrote bytecode (TextCraft and τ-bench); all their mutants rerun; no tally changed.**
+  - **Defect.** `wf/textcraft/mutation_check.py` and `scripts/tau_mutation_check.py` let pytest write `.pyc` files while testing mutants. Python trusts a `.pyc` when the source's mtime in whole seconds and its size match. A file restored within the second its same-length mutant was compiled could therefore keep running the mutant's code, and every later mutant would be "killed" by code that was still broken. This can only over-credit kills. It was seen on another branch, where one shard credited 38 mutants to an unrelated constants test.
+  - **Fix.** Both runners now run pytest with `PYTHONDONTWRITEBYTECODE=1` on a copy made without `__pycache__`, as `scripts/mutation_check.py` has done since cc1db87. They also now use that runner's strict kill rule by default.
+  - **Earlier tallies made with the unfixed runners.**
+    - TextCraft round 1: the runs of 75, 146 and 193 mutants (`textcraft_design.md` §11 to §13; 193 of 193 at the freeze), plus the 2 tie-couple mutants of 7495cb8.
+    - τ-bench: the runs of 86, 133 and 155 mutants (`tau_design.md`; 155 of 155 at the freeze).
+    - The authorization experiment's 87 at its freeze tag: both runners there lack the setting. Its 2026-11-23 strict recheck ran on the main runner, which already had it.
+    - `scripts/mutation_check.py` wrote bytecode before cc1db87 too. Its earlier tallies are outside this entry, apart from the three rechecked on 2026-11-23.
+  - **New tallies, under the strict rule with the fix.**
+    - TextCraft: 195 of 195 killed by a named test.
+    - Authorization experiment: 87 of 87, with the same outcome and killing test for every mutant as the 2026-11-23 recheck.
+    - τ-bench: 153 of 155. "failed return writes first" and "every task achievable" were error-only: the item build failed in a fixture's setup, which the old any-exit rule had counted as a kill. Two new tests, which change no study code, kill both by name.
+  - No mutant survived or timed out. Records: `mutation_textcraft_nobytecode_2026-11-24.jsonl`, `mutation_tau_nobytecode_2026-11-24.jsonl` and `mutation_tau_auth_nobytecode_2026-11-24.jsonl` (`testing.md`, 2026-11-24).
+
 ## Documentation corrections, 2026-11-23
 
 A documentation consistency pass, prompted by the reader's guide (`GUIDE.md`). No verdict, threshold, rule or confirmatory result changed, and no metrics file was edited. Each corrected note keeps the old text, struck through or quoted, beside a dated correction line. Numbers and statements corrected:
@@ -30,7 +94,7 @@ A documentation consistency pass, prompted by the reader's guide (`GUIDE.md`). N
 
 ## Decided or found 2026-11-23
 
-- **Families wave B: environment check not passed; older models to be rescored in the new stack (decided before any wave B score).** The check (job 7247973) passed Mistral-7B on every criterion and failed Qwen3-8B on the yes/no per-score criterion only (0.248 nats against 0.07; goal effect 0.026, share and two-candidate criteria passed, tokens identical on 39,082 prompts). A float64 diagnostic (branch `families-waveb-envfix`, job 7248092, 50 items) refuted bf16 rounding as the cause: each environment reproduces its archived scores exactly, but before rounding the yes/no score still moves 0.217 nats on average, because the newer stack changes the float64 readout logits by a median of 0.44% (about the bf16 unit roundoff, 2⁻⁸; a hidden-state change is inferred, not measured), which Qwen's large readout logits (median 52) amplify. That is about seven times the change measured across GPU types in the old stack (0.035 nats per score, 91% identical, against 0.248 and 30% across the stack change). On the 50 diagnostic items the per-condition shifts imply a goal-effect change of −0.11 nats (SE 0.053), against +0.026 on the check's full 300 items. Mistral's logit magnitudes were not measured. *(Corrected 2026-11-24 after wave B review 2, which found the earlier wording, "about one bf16 epsilon", too favourable.)* No threshold was changed. The user decided that every older model used in a wave B comparison is rescored in the new stack so that all comparisons sit in one environment; the amendment is being written, and one independent review comes before re-freezing.
+- **Families wave B: environment check not passed; older models to be rescored in the new stack (decided before any wave B score).** The check (job 7247973) passed Mistral-7B on every criterion (narrowly on the yes/no per-score criterion: 0.0688 nats against 0.07) and failed Qwen3-8B on the yes/no per-score criterion only (0.248 nats against 0.07; goal effect 0.026, share and two-candidate criteria passed, tokens identical on 39,082 prompt, candidate and answer token lists). A float64 diagnostic (branch `families-waveb-envfix`, job 7248092, 50 items) refuted bf16 rounding as the cause: each environment reproduces its archived scores exactly, but before rounding the yes/no score still moves 0.217 nats on average, because the newer stack changes the float64 readout logits by a median of 0.44% (about the bf16 unit roundoff, 2⁻⁸; a hidden-state change is inferred, not measured), which Qwen's large readout logits (median 52) amplify. That is about seven times the change measured across GPU types in the old stack (0.035 nats per score, 91% identical, against 0.248 and 30% across the stack change); *(qualified 2026-11-25: the 0.035 reference mostly measures reruns on the same GPU type; split by GPU, L40S-against-L40S scores agree 99.2% (0.003 nats) while the one shard that ran on an A40 agrees 28.6% (0.273 nats), and Option C's agreement check found an A100-PCIE-40GB against L40S change of 0.289 nats for Qwen (notes/optionc_results.md section 3.1). So the stack change moves Qwen's yes/no scores about as much as a real change of GPU type, not seven times as much. The decision to rescore every older model in one environment is unaffected.)* in the two-candidate format the stack change is about twice the GPU-type change (0.341 against 0.18). On the 50 diagnostic items the per-condition shifts imply a goal-effect change of −0.11 nats (SE 0.053), against +0.026 on the check's full 300 items. Mistral's logit magnitudes were not measured. *(Corrected 2026-11-24 after wave B review 2, which found the earlier wording, "about one bf16 epsilon", too favourable.)* No threshold was changed. The user decided that every older model used in a wave B comparison is rescored in the new stack so that all comparisons sit in one environment. *(revised 2026-11-25: this entry said "the amendment is being written, and one independent review comes before re-freezing". The amendment is written and re-reviewed (review 2 and its fixes, branch `families-waveb-serve2-rescore`), and a re-freeze is in progress. No wave B model has been scored.)* *(Update 2026-11-25: re-frozen at the annotated tag `families-waveb-design-refrozen-2026-11-25` (commit `de8312f`) after a short re-review whose four small points were applied; the token job, the five serve2 rescorings and the wave B models are being submitted from one clean checkout at that tag.)*
 - **TextCraft round 3 frozen and smoked.** Tag `textcraft-r3-design-frozen-2026-11-23` (commit `0d6f460`) after reviews 1 and 2 and their fixes; the only commit after the design content (`bcd233d`) adds the environment-check plan, built from round 2's recorded GPU names (all L40S: one job, 300 of 300 records comparable). Smokes at the tag (checkout `text-wm-fix47`, jobs 7252010–7252013): Qwen3.5-9B and Ministral-3-8B passed every gate; Gemma-4-12B failed attention agreement (yes/no 0.216 against 0.1), so the coded fallback rule gives the Gemma slot to Gemma-4-E4B and Gemma-4-12B is "not scored"; the thinking arm's start check failed (padded against alone 0.111 against 0.10) and stopped it before generating. The environment checks were submitted together with the core scoring rather than before it as `r3.RUN_ORDER` lists; the check only decides which older-model scores the B3 comparisons read, so the order cannot affect a score.
 - **Option C: pre-declared reallocation exercised; two shards resumed.** After the step-0 check classified Qwen3-8B as question-specific with a competent observation readout, and before any census episode, the observation readout became the primary run and yes/no the one-seed secondary (commit `2a86683` on `optionc`; configuration and the test that pins it only; the no-verifier arm moved to the primary run because the analysis takes its reference episodes from there). Two yes/no shards stopped on a dropped connection to a local server and resumed from their saved episodes and cache.
 - **Option C: run and analysed (exploratory; `optionc_results.md`).** The smoke run (job 7245677), the step-0 check (jobs 7245678 and 7245679) and their analyses (job 7246046) ran at the frozen commit `54cb71e`; the census runs `optionc_qwen3-8b_obs` (jobs 7247952–7247955, L40S) and `optionc_qwen3-8b_yn` (jobs 7247956–7247959, L40S, with shards 0 and 2 resumed on A40 as 7251605 and 7251606) and the analysis `optionc_analysis` (job 7252705) ran at `2a86683`, in the clean checkout `text-wm-fix40`; every gate passed with no override. The metrics files are copied unchanged to `optionc_step0_metrics.json` and `optionc_metrics.json`, and the design note and review are brought to `main` from the branch. Primary (observation readout, accepted-only): success "no reliable difference", aware minus blind −1.2 points [−3.0, 0.0], p 0.23 (3 games differ); key secondaries and invalid actions "no reliable difference"; obstruction check clear. Secondary (yes/no, one seed): success "no reliable difference" (−4.5 [−11.2, +2.2]); invalid actions, invalid actions in the first 10 steps and override harm minus help "harm, attribution not identifiable in the loop (the swapped verifier obstructs the real task)" (+1.12 per episode [+0.33, +1.96]). Used 12.3 GPU-hours of a committed 70–80. Not part of this result: the argmax-rule run (`optionc_qwen3-8b_yn_argmax`, Tier 2 of the committed plan, which follows Tier 1) was submitted after this analysis, on 2026-11-23 at `2a86683` (jobs 7253142–7253145); the optional Llama-3.1-8B loop run (Tier 3) has not been submitted; the step-0 comparison with Stage 1a's saved scores, promised by the design, was skipped by the analysis because Stage 1a's scoring runs are not in that checkout; the count of executed actions naming the swap object is not in the metrics. No verdict, threshold or rule changed.
@@ -651,3 +715,57 @@ Three of four verification jobs on one node failed to bind their own ALFWorld se
 ## Scores across GPU types (2026-11-18)
 
 The RQ2 smoke items were scored twice: on an A100 with the bfloat16-rounding scorer, and on an A40 with the float32 scorer. Most per-item differences are larger than rounding can explain, so they come from the GPU type: bfloat16 forward passes differ across hardware. The change in an item's aligned-minus-swapped L had SD 0.55 nats for Qwen3 and 0.17 for Llama. The item-to-item SD of L is 10.1 and 1.9, so the GPU adds under 1% to the variance. The mean change was −0.09 and −0.03 nats, 1.3 and 1.4 standard errors from zero over 65 items, so there is no sign of bias. The aligned and swapped versions of an item are scored in the same job on the same GPU, unless a job was cut off between them and a resume finished the item (2026-11-20 above). The confirmatory scoring jobs may land on different GPU types; each job's log records its GPU. Individual scores reproduce only on the same GPU type.
+
+## Families wave B, deviation D-B1: the attention-agreement check decided in float32 (2026-11-25)
+
+**What was decided.** On 2026-11-25 the user approved this deviation. It comes after the re-freeze tag `families-waveb-design-refrozen-2026-11-25` (de8312f) and before any wave B score was read; it is tagged `families-waveb-deviation-attn-float32-2026-11-25`. Details are in `families_waveb_design.md`, section 20.
+
+**What failed.** Both Gemma 4 models stopped in their gates in `text-wm-fix52`, before scoring, and nothing was scored. The frozen bf16 check found eager and SDPA attention too far apart on yes/no, against a limit of 0.10:
+
+- Gemma 4 E4B (job 7306814): 0.275 nats on average. (Corrected after the tag: E4B's placement check, 7306815, passed the frozen bf16 check, 0.050, and completed; its scores are not read or used, and it is rerun under D-B1 with the others.)
+- Gemma 4 31B (job 7306818): 0.159 nats on average.
+
+**Why the bf16 limit cannot decide.** The limit is below one bf16 step at these logits (0.125 nats between 16 and 32), and in float32 the two implementations agree to about 0.00001 nats. TextCraft round 3's D-G1 diagnostic on E4B gave 0.000011 nats mean and 0.000027 at most. See also `numerical_sensitivity.md` §4.7 and rule 2.
+
+**The new rule.** The check is decided with the model's floating-point tensors cast to float32 in the job. It passes when the mean absolute eager-minus-SDPA difference is at most 0.01 nats and no score differs by more than 0.05 nats. These are D-G1's limits, applied to both the yes/no and two-candidate formats, because the frozen rule covers both. The tensors are cast back exactly afterwards, so scoring is unchanged (bf16, SDPA). The bf16 comparison is still recorded, but no longer decides.
+
+**Scope.** The rule applies to every wave B model with the check: Gemma 4 E4B, its placement check, and Gemma 4 31B. All three runs are rerun at the deviation tag from one clean checkout:
+
+- E4B's scoring and placement on an L40S, as the other small models;
+- 31B on two A100 80GB cards of one node. Its float32 copy (about 125 GB) does not fit one card; scoring stays bf16 with SDPA, and the model is split over the two cards.
+
+**Unchanged.** Every other gate and rule, including the serve2 rescoring of the older models, the 16-test family and every threshold.
+
+## Families wave B: interim reading at the user's request (2026-11-25)
+
+Interim reading at the user's request: the frozen analysis is run now on the completed models; the two Gemma 4 models are 'waiting' and enter the 16-test family at p = 1, as the frozen design specifies; no rules change. The final analysis is rerun once after the Gemma 4 reruns (deviation D-B1, tag `families-waveb-deviation-attn-float32-2026-11-25`) finish, and it replaces this one. Any verdict that changes between the two is reported as such. This entry is committed and pushed before the interim analysis is run.
+
+## Controlled Bayesian environment (`notes/bayesenv_design.md`), 2026-11-26
+
+- **D-BE1. The prompt-hash check rebuilt units in the wrong order (logged before any score was read).** The design (section 12) has the smoke readout and the analysis recompute every stored prompt hash from the current code. The frozen check (`analysis.verify_hashes`, tag `bayesenv-design-frozen-2026-11-25`) rebuilt each unit's prompt types from the stored record's keys. Records are written with sorted keys (`wf/util.append_jsonl`), so every unit with more than one prompt type was rebuilt in alphabetical order and hashed differently from the scorer's hash. The first smoke readout (job 7347247) therefore stopped with "150 smoke units scored for prompts the current code does not render" before computing anything. The scorer's own resume check was correct, because it hashes the design's unit. **Fix:** the check now takes each unit from the run's design (the run configuration's units) and compares the stored hash and the set of scored sequences with that unit's. A test with sorted-key records was added. No estimate, rule, threshold or score changed. The smoke scores (job 7330239) were made at the tag and are used unchanged.
+
+## Post-training pilot, deviation D-PT1: lexsem's one-line smoke fix and the provenance check's file list (2026-11-26)
+
+Recorded before any pilot score was read. The full text is in `notes/posttraining_design.md`, section 16.
+
+- **The change.** Lexsem commit 5aabb99 changed one line in `scripts/lexsem/score.py`'s `smoke()`, which the pilot never calls.
+- **The pilot's jobs ran the earlier bytes.** Every pilot job ran from its own clone at tag `posttraining-design-frozen-2026-11-26` (e0e9c04). There the file is blob fd6dabab…, the 503ba47 version.
+- **The exception.** The analysis's provenance check now accepts exactly that one blob pair of that file (fd6dabab… and fcbf7c58…), and nothing else.
+- **A latent bug, fixed.** The check now compares lexsem's runs only on the files that decide a lexsem score. Before, it compared the pilot's own files too, which a lexsem commit does not contain, so every reuse would have been refused.
+
+Nothing was rescored.
+
+## Post-training pilot, deviation D-PT2: the five reuse arms are scored by the pilot itself (2026-11-26)
+
+Recorded and tagged (`posttraining-deviation-dpt2-2026-11-26`) before the jobs were submitted and before any pilot score was read. The full text is in `notes/posttraining_design.md`, section 17.
+
+- **What changes.** The pilot rescores five arms itself with `--no-reuse`, instead of reusing lexsem's cells:
+  - Llama-3.1-8B base, plain text;
+  - Qwen3-8B-Base, plain text;
+  - Qwen3-8B, plain text;
+  - Qwen3-8B with the think block;
+  - Llama-3.1-8B-Instruct in its chat template.
+- **Why.** Lexsem had not frozen when the pilot finished, and the user chose to decouple the two studies.
+- **Cost.** About 1.1 to 1.3 GPU-hours.
+- **Decision rules.** None change.
+- **Comparison with lexsem.** Once lexsem's scores exist, the shared cells are compared with them. This is a provenance check only and does not gate the analysis; every shared cell is expected to match bit for bit.

@@ -74,6 +74,12 @@ REVISIONS = {
     # Lexsem base arm and post-training pilot (2026-11-26): the `main` revision from the Hub API, as in the
     # post-training pilot's checkpoint table; its access check (job 7347490) reached all four weight files there.
     "meta-llama/Llama-3.1-8B": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
+    # Post-training pilot (notes/posttraining_design.md, wf/posttrain.py): the Hub's `main` sha read 2026-11-26 from
+    # https://huggingface.co/api/models/<id>, before any download.
+    "allenai/Llama-3.1-Tulu-3-8B-SFT": "f2a0b46b0cfda21003c6141b1ff837b7e165524d",
+    "allenai/Llama-3.1-Tulu-3-8B-DPO": "a7beb67e33ffd01cc87ac3b46cadc1000985b8db",
+    "allenai/Llama-3.1-Tulu-3-8B": "666943798adbde0b1aff34626007e26986a3c107",
+    "allenai/Llama-3.1-Tulu-3.1-8B": "46239c2d07db76b412e1f1b0b4542f65b81fe01f",
 }
 
 

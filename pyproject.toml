@@ -28,6 +28,12 @@ serve = [
 dev = [
   "pytest>=8.0",
 ]
+# The interpretability pilot (wf/interp/) and its tests; scikit-learn is used only there.
+interp = [
+  "torch>=2.2",
+  "transformers>=4.51",
+  "scikit-learn>=1.3",
+]
 
 [project.scripts]
 wf-run = "wf.runs:main"

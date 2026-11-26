@@ -1,0 +1,5 @@
+# Smoke validation checks: sampled continuations ('other' rate) and the description check (section 5).
+model: Qwen/Qwen3-8B
+mode: plain
+gpu_type: L40S
+stack: {torch: "2.14.1", transformers: "5.23.0"}   # the serve2 stack

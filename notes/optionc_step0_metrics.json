@@ -364,6 +364,11 @@
             "n_states": 723
           }
         }
+      },
+      "stage1a_agreement": {
+        "max_abs_diff": 1.125,
+        "n_compared": 3867,
+        "n_differing": 2414
       }
     },
     "qwen3-8b": {
@@ -730,6 +735,11 @@
             "n_states": 723
           }
         }
+      },
+      "stage1a_agreement": {
+        "max_abs_diff": 2.0,
+        "n_compared": 3867,
+        "n_differing": 2807
       }
     }
   },
