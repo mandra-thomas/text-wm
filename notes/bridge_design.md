@@ -205,7 +205,15 @@ Rule 4 of `numerical_sensitivity.md`: the 300-item subset, every arm and readout
 
 **Stop rule.** If the smoke projection exceeds 2.5 GPU-hours, nothing more is submitted; the projection and the reductions that would bring it within budget are reported for a decision.
 
-*(Smoke readout: added here before the full run.)*
+**Smoke readout (2026-11-26, before any full run; format and cost only, no effect or gate was computed or read).** Runs `bridge_smoke_qwen3-8b` (job 7329828) and `bridge_smoke_llama3.1-8b` (job 7329829), both at the freeze tag's commit `298f282` on one NVIDIA L40S each, stack recorded as torch 2.14.1+cu126 and transformers 5.23.0; 20 subset items each, so every item also carried the 12 comprehension questions (84 scored sequences per item and format).
+
+- **Token checks:** no problem in 1,640 sequences per format; no plain-text continuation needed the fallback tokenization.
+- **Cached routine against plain forward passes** (one item, 120 log-probabilities per format; stop rule: mean above 0.5 nats or more than 5% above 1 nat): Qwen plain text mean 0.018, largest 0.37; Qwen chat format mean 0.048, largest 0.75; Llama mean 0.015, largest 0.22; none above 1 nat. All pass, at the size of bf16 rounding.
+- **Two-way masses (medians over the 20 items and both task lines):** yes/no 0.999–1.000 in every arm and format. First token: Qwen plain text 0.84–0.96 across arms (no statement 0.956; the tester wordings lowest, 0.842 and 0.863); Qwen chat format 0.999–1.000; Llama 0.80–0.85 (no statement 0.830). No arm's median is below the 0.5 flag; single items go as low as 0.17 (Llama) and 0.32 (Qwen plain).
+- **Speed:** 3.38 s per item for Qwen plain text, 3.44 for Qwen's chat format and 3.16 for Llama, with 84 sequences per item; about 40 ms per scored sequence, against the 25 ms assumed when the design was written. Each job adds about a minute for loading.
+- **Projected cost** (items outside the subset carry 72 sequences, about 0.86 of a subset item's time; rescores at the L40S speed): Qwen main run about 75 GPU-minutes, Qwen chat-format link 17, Llama main run 70, the two rescores 33, loading 6, smoke 7 (spent): **about 3.5 GPU-hours, above the 2.5-hour allowance.**
+
+**Decision under the stop rule:** nothing further is submitted. The projection and the reductions that would bring it within the allowance are reported for a decision; any reduction is a deviation from this frozen design, to be logged in `deviations.md` before any affected score is read.
 
 ## 14. Limitations stated in advance
 
