@@ -439,7 +439,12 @@ def test_score_units_resumes_and_refuses_changed_prompts(tmp_path):
     out.write_text("\n".join([json.dumps(rec)] + lines[1:]) + "\n")
     with pytest.raises(SystemExit):
         score.score_units(units, out, fake, resume=True)
-    assert A.verify_hashes([rec]) == [rec["unit"]]
+    assert A.verify_hashes([rec], units) == [rec["unit"]]
+    # records are stored with sorted keys; a unit with several prompt types still verifies against its design unit
+    fresh = [json.loads(x) for x in lines[1:]]
+    multi = [u for u in units if len(u.types) > 1]
+    assert multi and A.verify_hashes(fresh, units) == []
+    assert all(list(r["scores"]) == sorted(r["scores"]) for r in fresh)
 
 
 class _WordTok:

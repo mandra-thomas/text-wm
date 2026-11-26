@@ -88,12 +88,17 @@ def read_folders(folders) -> list[dict]:
     return out
 
 
-def verify_hashes(records: list[dict]) -> list[str]:
-    """Units whose stored prompt hash differs from the prompts the current code renders."""
+def verify_hashes(records: list[dict], units: list[D.Unit]) -> list[str]:
+    """Records whose unit is not in the run's design, whose stored prompt hash differs from the hash of that design
+    unit's prompts as the current code renders them, or whose scored sequences differ from the unit's. The unit is
+    taken from the design, not rebuilt from the record: records are written with sorted keys, so their order of
+    prompt types is not the design's (deviation 2026-11-26)."""
+    by = {u.uid: u for u in units}
     bad = []
     for r in records:
-        u = D.Unit(r["space"], r["gen"], r["hist"], r["k"], tuple(dict.fromkeys(k.split("|")[0] for k in r["scores"])))
-        if D.unit_hash(u) != r["unit_hash"]:
+        u = by.get(r["unit"])
+        want = {f"{t}|{fr}|{ro}" for t, fr, ro in u.sequences()} if u else None
+        if u is None or D.unit_hash(u) != r["unit_hash"] or set(r["scores"]) != want:
             bad.append(r["unit"])
     return bad
 

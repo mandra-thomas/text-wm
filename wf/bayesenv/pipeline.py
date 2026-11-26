@@ -72,6 +72,13 @@ def load_checks(name: str, gpu_type: str | None) -> tuple[dict | None, list[str]
     return json.loads(f.read_text()), problems
 
 
+def units_of(folders: list[Path]) -> list[D.Unit]:
+    """Every unit the run's configuration scores (all shards)."""
+    from wf.bayesenv.score import units_for
+
+    return units_for(json.loads((folders[0] / "config.json").read_text()))
+
+
 def design_of(folders: list[Path]) -> D.Design:
     cfg = json.loads((folders[0] / "config.json").read_text())
     return D.Design(**cfg.get("design", {}))
@@ -89,7 +96,7 @@ def run_bayesenv_smoke_readout(cfg: dict) -> int:
     problems += cp
     d = _init_run(run_id, {**cfg, "resume": False})
     records = A.read_folders(folders) if folders else []
-    bad = A.verify_hashes(records)
+    bad = A.verify_hashes(records, units_of(folders)) if folders else []
     if bad:
         problems.append(f"{len(bad)} smoke units scored for prompts the current code does not render: {bad[:3]}")
     if problems:
@@ -147,7 +154,8 @@ def run_bayesenv_analysis(cfg: dict) -> int:
                 problems.append(f"{tag}: the cross-GPU subset was scored with a different design")
         main_records = A.read_folders(folders) if folders else []
         x_records = A.read_folders(xf) if xf else []
-        bad = A.verify_hashes(main_records + x_records)
+        bad = (A.verify_hashes(main_records, units_of(folders)) if folders else []) + \
+            (A.verify_hashes(x_records, units_of(xf)) if xf else [])
         if bad:
             problems.append(f"{tag}: {len(bad)} units scored for prompts the current code does not render")
         loaded[tag] = (folders, env, xf, xenv, checks, main_records, x_records)
