@@ -207,6 +207,9 @@ def run_bayesenv_score(cfg: dict, scorer_factory: Callable | None = None) -> int
         want = cfg.get("gpu_type")
         if want and not any(x in env["gpu"] for x in want.split("|")):
             raise SystemExit(f"{shard_id}: runs on {env['gpu']}, but this run is pinned to {want}")
+        for lib, version in (cfg.get("stack") or {}).items():
+            if env.get(lib, "").split("+")[0] != version:
+                raise SystemExit(f"{shard_id}: {lib} {env.get(lib)} is not the pinned {version}")
         scorer = model_scorer(tok, model, cfg["mode"], cfg.get("template_kwargs"))
     else:
         env, scorer = scorer_factory(cfg)
@@ -336,6 +339,9 @@ def run_bayesenv_smoke_checks(cfg: dict) -> int:
     want = cfg.get("gpu_type")
     if want and not any(x in env["gpu"] for x in want.split("|")):
         raise SystemExit(f"{run_id}: runs on {env['gpu']}, but this run is pinned to {want}")
+    for lib, version in (cfg.get("stack") or {}).items():
+        if env.get(lib, "").split("+")[0] != version:
+            raise SystemExit(f"{run_id}: {lib} {env.get(lib)} is not the pinned {version}")
     write_json(d / ENV_FILE, env)
     units = D.smoke_units()
     out = {"description": description_check(tok, model, cfg["mode"], cfg.get("template_kwargs")),

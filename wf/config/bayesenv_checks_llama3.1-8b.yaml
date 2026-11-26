@@ -2,3 +2,4 @@
 model: meta-llama/Llama-3.1-8B-Instruct
 mode: chat
 gpu_type: L40S
+stack: {torch: "2.14.1", transformers: "5.23.0"}   # the serve2 stack

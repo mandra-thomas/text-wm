@@ -5,3 +5,4 @@ mode: plain
 units: full
 gpu_type: L40S
 design: {w_goal: 2, w_tag: 3, n: 30, n_h4: 30, n_ann: 30, alf: true}
+stack: {torch: "2.14.1", transformers: "5.23.0"}   # the serve2 stack

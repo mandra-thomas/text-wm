@@ -19,11 +19,23 @@ cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 # shellcheck disable=SC1091
 source "${SLURM_SUBMIT_DIR:-$(pwd)}/pace/_common.sh"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+export SERVE_ENV="${BE_SERVE_ENV:-/storage/ice1/2/1/gmat3/envs/serve2}"
 WHAT="${BE_CPU:?set BE_CPU}"
 echo "=== bayesenv cpu ${WHAT} START $(date) host=$(hostname) commit=$(git rev-parse HEAD) ==="
 activate_serve
 python -c 'import transformers; print("transformers", transformers.__version__)'
-if [[ "${WHAT}" == "tokcheck" ]]; then
+if [[ "${WHAT}" == "prefetch" ]]; then
+  # The pinned Llama-3.1-8B-Instruct snapshot into the cache transformers reads (HF_TOKEN from pace.env, never printed)
+  unset HF_HUB_OFFLINE TRANSFORMERS_OFFLINE
+  python - <<'PY'
+from huggingface_hub import snapshot_download
+from wf.constants import revision_for
+from wf.tools.prefetch_models import ALLOW, IGNORE, transformers_cache
+m = "meta-llama/Llama-3.1-8B-Instruct"
+p = snapshot_download(m, revision=revision_for(m), allow_patterns=ALLOW, ignore_patterns=IGNORE, cache_dir=transformers_cache())
+print("OK", m, p)
+PY
+elif [[ "${WHAT}" == "tokcheck" ]]; then
   python scripts/bayesenv_tokcheck.py --out "${RUNS_DIR}/bayesenv_tokcheck.json"
 else
   run_wf "${WHAT}"

@@ -22,6 +22,8 @@ cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 # shellcheck disable=SC1091
 source "${SLURM_SUBMIT_DIR:-$(pwd)}/pace/_common.sh"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+# One stack for every score of this study: serve2 (torch 2.14.1, transformers 5.23.0); the run refuses another.
+export SERVE_ENV="${BE_SERVE_ENV:-/storage/ice1/2/1/gmat3/envs/serve2}"
 RUN="${BE_RUN:?set BE_RUN}"
 echo "=== bayesenv ${RUN} shard=${WF_SHARD:-0}/${WF_N_SHARDS:-1} START $(date) host=$(hostname) commit=$(git rev-parse HEAD) ==="
 nvidia-smi --query-gpu=name,memory.total --format=csv || true
