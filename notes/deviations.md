@@ -739,3 +739,14 @@ The RQ2 smoke items were scored twice: on an A100 with the bfloat16-rounding sco
 ## Families wave B: interim reading at the user's request (2026-11-25)
 
 Interim reading at the user's request: the frozen analysis is run now on the completed models; the two Gemma 4 models are 'waiting' and enter the 16-test family at p = 1, as the frozen design specifies; no rules change. The final analysis is rerun once after the Gemma 4 reruns (deviation D-B1, tag `families-waveb-deviation-attn-float32-2026-11-25`) finish, and it replaces this one. Any verdict that changes between the two is reported as such. This entry is committed and pushed before the interim analysis is run.
+
+## Post-training pilot, deviation D-PT1: lexsem's one-line smoke fix and the provenance check's file list (2026-11-26)
+
+Recorded before any pilot score was read. The full text is in `notes/posttraining_design.md`, section 16.
+
+- **The change.** Lexsem commit 5aabb99 changed one line in `scripts/lexsem/score.py`'s `smoke()`, which the pilot never calls.
+- **The pilot's jobs ran the earlier bytes.** Every pilot job ran from its own clone at tag `posttraining-design-frozen-2026-11-26` (e0e9c04). There the file is blob fd6dabab…, the 503ba47 version.
+- **The exception.** The analysis's provenance check now accepts exactly that one blob pair of that file (fd6dabab… and fcbf7c58…), and nothing else.
+- **A latent bug, fixed.** The check now compares lexsem's runs only on the files that decide a lexsem score. Before, it compared the pilot's own files too, which a lexsem commit does not contain, so every reuse would have been refused.
+
+Nothing was rescored.

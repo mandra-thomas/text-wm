@@ -73,16 +73,43 @@ def _cell_equal(a: dict, b: dict) -> bool:
 SCORER_FILES = ("wf/posttrain.py", "wf/posttrain_score.py", "wf/lexsem.py", "scripts/lexsem/score.py",
                 "scripts/qwen_audit/followup_score.py", "wf/scoring/logodds.py", "wf/scoring/prompts.py", "wf/rq1.py",
                 "wf/rq1x.py", "wf/rq1v.py", "wf/rq2.py", "wf/data", "wf/constants.py")
+# the files that decide a lexsem score (lexsem's commit has no pilot files and its own pin table; the pinned revision
+# of the reused checkpoint is compared through the environment records instead) (deviation D-PT1)
+LEXSEM_FILES = ("wf/lexsem.py", "scripts/lexsem/score.py", "scripts/qwen_audit/followup_score.py", "wf/scoring",
+                "wf/rq1.py", "wf/rq1x.py", "wf/rq1v.py", "wf/rq2.py", "wf/data")
 
 
-def same_code(commit: str | None, ref: str = "HEAD") -> bool:
-    """Is every scorer file at `commit` identical to `ref` (git diff --quiet)?"""
+# Deviation D-PT1 (2026-11-26, design note section 16): exactly these file versions are treated as identical.
+# Lexsem commit 5aabb99 changed one line inside scripts/lexsem/score.py's smoke(), which no full-run scoring path calls;
+# the pair is (path, git blob at one commit, git blob at the other), in either order. Any other difference still fails.
+ACCEPTED_BLOB_PAIRS = {("scripts/lexsem/score.py", "fd6dabab20a831fe846146384b461ed0db7645a1",
+                        "fcbf7c58c2233ad8102e475f060be51f495bf536")}
+
+
+def same_code(commit: str | None, ref: str = "HEAD", files: tuple[str, ...] = SCORER_FILES) -> bool:
+    """Is every scorer file at `commit` identical to `ref`, apart from the exact file versions listed in
+    ACCEPTED_BLOB_PAIRS (deviation D-PT1)?"""
     import subprocess
 
     if not commit:
         return False
-    r = subprocess.run(["git", "diff", "--quiet", commit, ref, "--", *SCORER_FILES], capture_output=True)
-    return r.returncode == 0
+    r = subprocess.run(["git", "diff", "--quiet", commit, ref, "--", *files], capture_output=True)
+    if r.returncode == 0:
+        return True
+    names = subprocess.run(["git", "diff", "--name-only", commit, ref, "--", *files], capture_output=True,
+                           text=True)
+    if names.returncode != 0:
+        return False
+
+    def blob(c: str, path: str) -> str | None:
+        out = subprocess.run(["git", "rev-parse", f"{c}:{path}"], capture_output=True, text=True)
+        return out.stdout.strip() if out.returncode == 0 else None
+
+    for path in [x for x in names.stdout.split("\n") if x]:
+        pair = (blob(commit, path), blob(ref, path))
+        if not any(p == path and set(pair) == {a, b} for p, a, b in ACCEPTED_BLOB_PAIRS):
+            return False
+    return True
 
 
 def merge_lexsem(arm: str, recs: list[dict], lexsem_dir: Path | None, env: dict, config: dict) -> tuple[list[dict], dict]:
@@ -112,7 +139,7 @@ def merge_lexsem(arm: str, recs: list[dict], lexsem_dir: Path | None, env: dict,
         return recs, {**status, "ok": False, "why": f"environment differs: {diffs}"}
     cfile = lexsem_dir / f"{lx}_commit.txt"
     lcommit = cfile.read_text().strip() if cfile.exists() else None
-    if not same_code(lcommit):
+    if not same_code(lcommit, files=LEXSEM_FILES):
         return recs, {**status, "ok": False, "why": f"lexsem commit {lcommit} missing or its scorer files differ"}
     by = {r["id"]: r for r in lrecs}
     checked, mismatched, strata = 0, [], set()

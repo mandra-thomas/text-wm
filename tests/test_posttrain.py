@@ -142,3 +142,17 @@ def test_no_reuse_arm_is_not_merged():
 def test_successes_never_reused():
     assert P.lexsem_cells("qwen8b_base_plain")["success"] == set()
     assert len(P.cells_to_score("qwen-base_plain")["success"]) == 6
+
+
+def test_accepted_blob_pair_only():
+    import subprocess
+
+    have = all(subprocess.run(["git", "cat-file", "-e", c], capture_output=True).returncode == 0
+               for c in ("5aabb99", "e0e9c04", "da2e312"))
+    if not have:
+        pytest.skip("lexsem commits not in this clone")
+    L = A.LEXSEM_FILES
+    assert A.same_code("5aabb99", "e0e9c04", L) and A.same_code("e0e9c04", "5aabb99", L)  # D-PT1's one-line change
+    assert A.same_code("503ba47", "e0e9c04", L)
+    assert not A.same_code("da2e312", "e0e9c04", L)  # any other difference still fails
+    assert not A.same_code("5aabb99", "e0e9c04")  # the pilot's own files are compared in full

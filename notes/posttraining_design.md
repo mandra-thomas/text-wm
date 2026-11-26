@@ -297,3 +297,30 @@ No code was changed. The check script is outside the repository; it uses only th
 ## 15. Review
 
 One independent adversarial review (2026-11-26) of the draft note and code found 7 must-fix, 12 should-fix and 6 minor points; every one was addressed before the freeze. The points and the changes are listed in `notes/posttraining_review1.md`. The main changes: the recognition check became a ranking among all 55 names by association; the Holm family is fixed at 35 readings, with every other reading labelled descriptive; a missing numerical floor makes a reading unreadable, and equivalence readings need their margin to be at least five floors; success cells are never reused from lexsem, and reuse needs recorded provenance, code identity, a bit-identity check in both strata and complete cells; the reference rule is two-sided; the competence gate compares later-step failures with the successes; the robustness rule's rank gain uses only the three task lines; token-id identity across a lineage is checked on every scored sequence.
+
+## 16. Deviation D-PT1: lexsem's one-line smoke fix, and the provenance check's file list (2026-11-26)
+
+Recorded after the freeze and before any pilot score was read. The scoring jobs had run, but only their job-log headers had been opened.
+
+**What changed outside this pilot.** Lexsem commit 5aabb99 edited one line of `scripts/lexsem/score.py`, inside lexsem's `smoke()`. The success probe now runs only in arms that score the first-token format, because it had crashed lexsem's yes/no-only Llama chat arms. The diff:
+
+```
+-    for t in success_probe(list(successes)):
++    for t in success_probe(list(successes)) if "obs" in fmts else ():  # yes/no-only arms have no first token
+```
+
+The file's git blob went from fd6dabab20a831fe846146384b461ed0db7645a1 (lexsem 503ba47, also this pilot's freeze tag e0e9c04) to fcbf7c58c2233ad8102e475f060be51f495bf536. No other file that decides a score changed between 503ba47 and 5aabb99.
+
+**Why it cannot affect this pilot's scores.**
+
+- Every scoring and floor job (7349816–7349832) and the smoke (7348558–7348567) ran in `/storage/ice1/2/1/gmat3/text-wm-posttrain-run`, a clone made from this branch's own bundle at the tag. 5aabb99 is not in that clone's history. Its HEAD is e0e9c0481e3f027a8b24f215b61f5437eed2efac, with no modified tracked files. Its `scripts/lexsem/score.py` hashes to blob fd6dabab… (sha256 874cf8820cc044ee1d6eee459fac536718c7b45ae465ddf49a86aff3d34fac60), and the file was last written when the clone was made (08:25, before the first job). Every job log records commit e0e9c04.
+- The pilot never calls lexsem's `smoke()`; its own smoke is `wf/posttrain_score.py`'s `smoke()`. From `scripts/lexsem/score.py` it uses only `load`, `prompt_ids`, `sequence`, `score_one`, `run_item`, `readout_ids`, `token_checks`, `sample_digest` and `environment`, none of which 5aabb99 touched.
+
+**Effect on lexsem reuse.**
+
+Lexsem's full-run scores used for reuse will come from a commit that contains 5aabb99. Their scoring path is unchanged too, since `readouts`, `score_successes`, `item_jobs`, `sequence` and `score_one` are identical. The analysis's provenance check, which requires identical files, is changed in two ways (`wf/posttrain_analysis.py`):
+
+- *An exact exception for this one file version.* `ACCEPTED_BLOB_PAIRS` holds exactly (`scripts/lexsem/score.py`, fd6dabab…, fcbf7c58…), and a difference consisting only of these two blobs of that file is treated as identical. Any other difference in any file still fails the check, so the check is not loosened beyond this diff. A test confirms that 503ba47 and 5aabb99 pass against the tag while da2e312 still fails.
+- *A latent bug, fixed.* For lexsem's runs, the check compared every pilot scorer file, including `wf/posttrain*.py` and the pin table, which a lexsem commit does not contain. So every reuse would have been refused. It now compares only the files that decide a lexsem score: `wf/lexsem.py`, `scripts/lexsem/score.py`, `scripts/qwen_audit/followup_score.py`, `wf/scoring`, `wf/rq1.py`, `wf/rq1x.py`, `wf/rq1v.py`, `wf/rq2.py` and `wf/data`. The reused checkpoint's pinned revision is compared through the environment records, as before. The pilot's own arms are still compared on the full scorer file list.
+
+Nothing was rescored. Every other rule is unchanged.
