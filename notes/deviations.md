@@ -10,6 +10,43 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided or found 2026-11-25: τ-bench authorization experiment, extension to Llama-3.2-3B
+
+- **An extension, not a change of the frozen design.** The τ-auth design (tag `tau-auth-design-frozen-2026-11-22`) was run on one more model, Llama-3.2-3B-Instruct, under a section added to `tau_auth_design.md` ("Extension 2026-11-25") and tagged `tau-auth-ext-llama32-2026-11-25` (`a70e652`) before any score of this model in the experiment. Every frozen gate, rule, category and readout is unchanged. Added for the new model, before its data: its template handling (the τ families spec, date fixed), its margin by the frozen rule (0.16 nats, a third of +0.474), its own Holm family of four tests (the reference models' family of eight and their categories are not reopened), fragility labels and a budget stop. One independent review (no must-fix item; its should-fix items were made before the tag).
+- **Operational, no effect on any score.** The first smoke submission (7328769) waited on "BadConstraints" and then refused to score because the copied build-verification record had been made at another commit; the items were rebuilt and verified at the tag (CPU job 7330380; all three pinned files reproduced) and the smoke run repeated (7330545). Scoring jobs were submitted with the partitions that hold L40S nodes and shorter time limits than `pace/tau_auth_score.sbatch`'s 4 hours, so they could start sooner. The smoke record was committed to the design note before the full run (`e55064e`).
+- **Outcome.** Both gates fail; both categories "inconclusive (gate)" (`tau_auth_results.md` §12).
+
+## Decided 2026-11-25: TextCraft round 3, interim reading
+
+- **Interim reading at the user's request,** under the five conditions the user approved on 2026-11-24:
+  - the inputs are complete for what is read;
+  - the protocol allows it;
+  - no rule changes;
+  - it cannot influence the unfinished arms;
+  - the final run preserves the verdicts.
+- **Models without filed scores** enter as the frozen design specifies: "not scored" with p = 1, or "waiting", whose tests are padded at p = 1 and whose readings wait. These are Qwen3.8-27B and Gemma-4-31B (scoring queued) and the Gemma slot, which under D-G2 waits for Gemma 4 12B's float32 attention check and smoke rerun.
+- **How it runs.** The analysis `textcraft_r3_analysis_dg2` runs once, from a clean checkout at D-G2's tag. That tag carries this entry and D-G2, both committed before the run.
+- **The final analysis** is rerun once when every arm is filed, and it replaces this reading. Any verdict that changes is reported as such.
+- **Effect on the unfinished arms.** None. Their gates, slot rule and analysis are fixed by the committed code and do not depend on any number read here.
+
+## Decided 2026-11-25: TextCraft round 3, deviation D-G2 (attention agreement in float32)
+
+- **Approved by the user, after the freeze and before the round-3 analysis ran.** No round-3 score, contrast or effect had been read. The full note is [textcraft_r3_deviation_attention_float32.md](textcraft_r3_deviation_attention_float32.md) on branch `textcraft-r3-dev-g2`, at tag `textcraft-r3-deviation-g2-2026-11-25`.
+- **Change.** Round 3's eager-against-SDPA attention-agreement criterion is now evaluated in float32 for every Gemma 4 model (12B, E4B and 31B). It uses the same frozen function, the same five items and arms, and wave B's limits unchanged (yes/no mean 0.10, two-candidate mean 0.50, any single score 1.0).
+  - The check is the run `textcraft_r3_attnf32_<tag>`, on A100 80 GB cards; a float32 copy of 12B does not fit an L40S.
+  - It replaces the bf16 check that each job ran at its start.
+- **Reason.** In bf16, at these models' readout logits, the 0.10 limit is below one grid step (0.125). Every observed bf16 difference is a whole number of steps, and in float32 the two implementations agree to about 0.00001 (`numerical_sensitivity.md` §4.7, Rule 2; D-G1's job 7252801).
+- **Effect in round 3.** The frozen slot procedure runs again with the float32 reading:
+  - **12B first.** Gemma 4 12B's float32 check runs, and then, if it passes, its smoke is rerun (`textcraft_r3_smoke2_gemma4-12b-it`), because the filed smoke stopped before any score and the fallback rule's format diagnostic needs the smoke's rows.
+  - **If no trigger fires,** 12B holds the Gemma slot as designed. It is scored at D-G2's commit, two shards on L40S. It enters A3, and B3 compares Gemma-2-9B's serve2 rescoring with 12B.
+  - **Otherwise** E4B holds the slot. It is scored under its core run id rather than reusing D-G1's exploratory scores, so that every core score has one provenance rule. The procedure is the same and the cost is about 1.4 GPU-hours.
+  - **31B's state** waits for its own float32 check.
+- **Not changed.** Every other gate, rule, family and test; the filed bf16 records, which stay as filed; and the queued jobs.
+- **Where runs start and the analysis.** Only D-G2's runs may start at its tag's commit. The analysis that is read is `textcraft_r3_analysis_dg2`, at that tag; it supersedes D-T2's `textcraft_r3_analysis_dt2`.
+- **Cost.** About 4.5 to 5.5 GPU-hours if 12B holds the slot, including the 31B check; about 3 if E4B does. Nothing is submitted before the coordinator confirms.
+
+- **Interim results** (2026-11-25): `textcraft_r3_interim_results.md`, from the analysis run `textcraft_r3_analysis_dg2` at tag `textcraft-r3-deviation-g2-2026-11-25` (ICE CPU job 7330172).
+
 ## Documentation corrections, 2026-11-25
 
 A review of what the public documents claim against what the evidence supports. No verdict, threshold, rule, confirmatory result or metrics file changed. Each revised reading is marked "(revised 2026-11-25)" where it stands.
@@ -678,3 +715,27 @@ Three of four verification jobs on one node failed to bind their own ALFWorld se
 ## Scores across GPU types (2026-11-18)
 
 The RQ2 smoke items were scored twice: on an A100 with the bfloat16-rounding scorer, and on an A40 with the float32 scorer. Most per-item differences are larger than rounding can explain, so they come from the GPU type: bfloat16 forward passes differ across hardware. The change in an item's aligned-minus-swapped L had SD 0.55 nats for Qwen3 and 0.17 for Llama. The item-to-item SD of L is 10.1 and 1.9, so the GPU adds under 1% to the variance. The mean change was −0.09 and −0.03 nats, 1.3 and 1.4 standard errors from zero over 65 items, so there is no sign of bias. The aligned and swapped versions of an item are scored in the same job on the same GPU, unless a job was cut off between them and a resume finished the item (2026-11-20 above). The confirmatory scoring jobs may land on different GPU types; each job's log records its GPU. Individual scores reproduce only on the same GPU type.
+
+## Families wave B, deviation D-B1: the attention-agreement check decided in float32 (2026-11-25)
+
+**What was decided.** On 2026-11-25 the user approved this deviation. It comes after the re-freeze tag `families-waveb-design-refrozen-2026-11-25` (de8312f) and before any wave B score was read; it is tagged `families-waveb-deviation-attn-float32-2026-11-25`. Details are in `families_waveb_design.md`, section 20.
+
+**What failed.** Both Gemma 4 models stopped in their gates in `text-wm-fix52`, before scoring, and nothing was scored. The frozen bf16 check found eager and SDPA attention too far apart on yes/no, against a limit of 0.10:
+
+- Gemma 4 E4B (job 7306814): 0.275 nats on average. (Corrected after the tag: E4B's placement check, 7306815, passed the frozen bf16 check, 0.050, and completed; its scores are not read or used, and it is rerun under D-B1 with the others.)
+- Gemma 4 31B (job 7306818): 0.159 nats on average.
+
+**Why the bf16 limit cannot decide.** The limit is below one bf16 step at these logits (0.125 nats between 16 and 32), and in float32 the two implementations agree to about 0.00001 nats. TextCraft round 3's D-G1 diagnostic on E4B gave 0.000011 nats mean and 0.000027 at most. See also `numerical_sensitivity.md` §4.7 and rule 2.
+
+**The new rule.** The check is decided with the model's floating-point tensors cast to float32 in the job. It passes when the mean absolute eager-minus-SDPA difference is at most 0.01 nats and no score differs by more than 0.05 nats. These are D-G1's limits, applied to both the yes/no and two-candidate formats, because the frozen rule covers both. The tensors are cast back exactly afterwards, so scoring is unchanged (bf16, SDPA). The bf16 comparison is still recorded, but no longer decides.
+
+**Scope.** The rule applies to every wave B model with the check: Gemma 4 E4B, its placement check, and Gemma 4 31B. All three runs are rerun at the deviation tag from one clean checkout:
+
+- E4B's scoring and placement on an L40S, as the other small models;
+- 31B on two A100 80GB cards of one node. Its float32 copy (about 125 GB) does not fit one card; scoring stays bf16 with SDPA, and the model is split over the two cards.
+
+**Unchanged.** Every other gate and rule, including the serve2 rescoring of the older models, the 16-test family and every threshold.
+
+## Families wave B: interim reading at the user's request (2026-11-25)
+
+Interim reading at the user's request: the frozen analysis is run now on the completed models; the two Gemma 4 models are 'waiting' and enter the 16-test family at p = 1, as the frozen design specifies; no rules change. The final analysis is rerun once after the Gemma 4 reruns (deviation D-B1, tag `families-waveb-deviation-attn-float32-2026-11-25`) finish, and it replaces this one. Any verdict that changes between the two is reported as such. This entry is committed and pushed before the interim analysis is run.

@@ -1,0 +1,1308 @@
+{
+ "rq3": {
+  "episode": {
+   "arm": "favorable",
+   "cap": 3,
+   "chances": 2,
+   "condition": "corrupted",
+   "delivered_errors": 1,
+   "fallbacks": 0,
+   "game_id": "valid_unseen/157",
+   "injections": [
+    {
+     "chance": 0,
+     "i": 0,
+     "proposal": "go to stoveburner 1",
+     "step": 3,
+     "verb": "go to"
+    }
+   ],
+   "n_corrupted": 1,
+   "p_arm": 0.75,
+   "planned_errors": 3,
+   "restarts": [],
+   "retention": "retained",
+   "run_id": "rq3",
+   "schedule_seed": 20260926,
+   "shard": 0,
+   "shortfall": 2,
+   "split": "valid_unseen",
+   "steps": 8,
+   "success": true,
+   "yoked_to": null
+  },
+  "trace": [
+   {
+    "t": 0,
+    "proposal": "go to sinkbasin 1",
+    "prediction_shown": "You arrive at sinkbasin 1. On the sinkbasin 1, you see a cup 3, a fork 1, a lettuce 3, a potato 2, a spatula 2, and a spatula 1.",
+    "prediction_type": "oracle",
+    "executed": "go to sinkbasin 1",
+    "real_obs": "You arrive at sinkbasin 1. On the sinkbasin 1, you see a cup 3, a fork 1, a lettuce 3, a potato 2, a spatula 2, and a spatula 1.",
+    "proposal_valid": true,
+    "executed_raw": "Thought: I need to find a cup to heat and then place it in a cabinet. The sinkbasin has a cup, so I should go there first.  \nAction: go to sinkbasin 1"
+   },
+   {
+    "t": 1,
+    "proposal": "take cup 3 from sinkbasin 1",
+    "prediction_shown": "You pick up the cup 3 from the sinkbasin 1.",
+    "prediction_type": "oracle",
+    "executed": "take cup 3 from sinkbasin 1",
+    "real_obs": "You pick up the cup 3 from the sinkbasin 1.",
+    "proposal_valid": true,
+    "executed_raw": "Thought: I need to take the cup to heat it before placing it in the cabinet.  \nAction: take cup 3 from sinkbasin 1"
+   },
+   {
+    "t": 2,
+    "proposal": "go to stoveburner 1",
+    "prediction_shown": "You arrive at stoveburner 1. On the stoveburner 1, you see a pot 1.",
+    "prediction_type": "oracle",
+    "executed": "go to stoveburner 1",
+    "real_obs": "You arrive at stoveburner 1. On the stoveburner 1, you see a pot 1.",
+    "proposal_valid": true,
+    "executed_raw": "Thought: I need to heat the cup before putting it in the cabinet. I should go to the stoveburner to heat it.  \nAction: go to stoveburner 1"
+   },
+   {
+    "t": 3,
+    "proposal": "go to stoveburner 1",
+    "prediction_shown": "You arrive at stoveburner 1. On the stoveburner 1, you see a pot 1.",
+    "prediction_type": "corrupted_favorable",
+    "executed": "go to stoveburner 1",
+    "real_obs": "Nothing happens.",
+    "proposal_valid": false,
+    "executed_raw": "Thought: I need to heat the cup before putting it in the cabinet. I should go to the stoveburner to heat it.  \nAction: go to stoveburner 1"
+   },
+   {
+    "t": 4,
+    "proposal": "go to stoveburner 1",
+    "prediction_shown": "Nothing happens.",
+    "prediction_type": "oracle",
+    "executed": "go to microwave 1",
+    "real_obs": "You arrive at microwave 1. The microwave 1 is closed.",
+    "proposal_valid": false,
+    "executed_raw": "Thought: I need to heat the cup before putting it in the cabinet. I should check if there is a way to heat it, such as using the stoveburner or microwave.  \nAction: go to microwave 1"
+   },
+   {
+    "t": 5,
+    "proposal": "open microwave 1",
+    "prediction_shown": "You open the microwave 1. The microwave 1 is open. In it, you see a mug 1.",
+    "prediction_type": "oracle",
+    "executed": "heat cup 3 with microwave 1",
+    "real_obs": "You heat the cup 3 using the microwave 1.",
+    "proposal_valid": true,
+    "executed_raw": "Thought: I need to heat the cup in the microwave to make it hot before placing it in the cabinet.  \nAction: heat cup 3 with microwave 1"
+   },
+   {
+    "t": 6,
+    "proposal": "go to cabinet 1",
+    "prediction_shown": "You arrive at cabinet 1. On the cabinet 1, you see a pan 1.",
+    "prediction_type": "oracle",
+    "executed": "go to cabinet 1",
+    "real_obs": "You arrive at cabinet 1. On the cabinet 1, you see a pan 1.",
+    "proposal_valid": true,
+    "executed_raw": "Thought: I need to put the hot cup in a cabinet, so I should go to a cabinet now.  \nAction: go to cabinet 1"
+   },
+   {
+    "t": 7,
+    "proposal": "move cup 3 to cabinet 1",
+    "prediction_shown": "You move the cup 3 to the cabinet 1.",
+    "prediction_type": "oracle",
+    "executed": "move cup 3 to cabinet 1",
+    "real_obs": "You move the cup 3 to the cabinet 1.",
+    "proposal_valid": true,
+    "executed_raw": "Thought: I need to place the hot cup in a cabinet. Cabinet 1 is already in view, and I can move the cup there directly.  \nAction: move cup 3 to cabinet 1"
+   }
+  ],
+  "messages_at_step": 4,
+  "messages": [
+   {
+    "role": "system",
+    "content": "You are a household robot agent playing ALFWorld. At each step, reason briefly then output a single admissible action. Format:\nThought: <brief>\nAction: <one action>\nUse only actions that appear in the admissible list when provided. Do not invent observations. An 'Expected outcome:' line predicts what would happen if the action on the 'Proposed action:' line above it were taken."
+   },
+   {
+    "role": "user",
+    "content": "Example:\nObservation: You arrive at drawer 1. Your task is to: put a mug in coffeemachine.\nThought: I should open the drawer to look for the mug.\nAction: open drawer 1\n"
+   },
+   {
+    "role": "user",
+    "content": "Observation: You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: put a hot cup in cabinet.\nProposed action: go to sinkbasin 1\nExpected outcome: You arrive at sinkbasin 1. On the sinkbasin 1, you see a cup 3, a fork 1, a lettuce 3, a potato 2, a spatula 2, and a spatula 1.\nAction: go to sinkbasin 1\nObservation: You arrive at sinkbasin 1. On the sinkbasin 1, you see a cup 3, a fork 1, a lettuce 3, a potato 2, a spatula 2, and a spatula 1.\nProposed action: take cup 3 from sinkbasin 1\nExpected outcome: You pick up the cup 3 from the sinkbasin 1.\nAction: take cup 3 from sinkbasin 1\nObservation: You pick up the cup 3 from the sinkbasin 1.\nProposed action: go to stoveburner 1\nExpected outcome: You arrive at stoveburner 1. On the stoveburner 1, you see a pot 1.\nAction: go to stoveburner 1\nObservation: You arrive at stoveburner 1. On the stoveburner 1, you see a pot 1.\nProposed action: go to stoveburner 1\nExpected outcome: You arrive at stoveburner 1. On the stoveburner 1, you see a pot 1.\nAction: go to stoveburner 1\nObservation: Nothing happens.\nProposed action: go to stoveburner 1\nExpected outcome: Nothing happens.\nRespond with Thought and Action."
+   }
+  ],
+  "note": "rebuilt without the admissible-action list, which the trace does not store"
+ },
+ "stage1a": {
+  "game_id": "valid_unseen/140",
+  "state_idx": 0,
+  "proposal": "go to fridge 1",
+  "swap": "apple",
+  "task_line": "Your task is to: cool some pan and put it in countertop.",
+  "models": {
+   "qwen3-8b": {
+    "scores": {
+     "yn_aligned": {
+      "t_1001303": -22.25,
+      "t_1001302": -4.0,
+      "t_1001304": -21.0,
+      "t_1001296": -18.75,
+      "t_1001306": -22.25,
+      "t_1001305": -23.0,
+      "t_1001301": -17.0,
+      "t_1001300": -20.25,
+      "t_1001299": -18.25,
+      "t_1001298": -11.5,
+      "t_1001297": -10.5
+     },
+     "yn_absent": {
+      "t_1001303": -28.75,
+      "t_1001302": -29.75,
+      "t_1001304": 19.5,
+      "t_1001296": 15.25,
+      "t_1001306": 19.75,
+      "t_1001305": 18.0,
+      "t_1001301": -29.5,
+      "t_1001300": -29.75,
+      "t_1001299": -25.75,
+      "t_1001298": -24.75,
+      "t_1001297": -27.5
+     },
+     "yn_swapped": {
+      "t_1001303": -29.625,
+      "t_1001302": -25.375,
+      "t_1001304": -21.5,
+      "t_1001296": -11.0,
+      "t_1001306": -17.5,
+      "t_1001305": -26.5,
+      "t_1001301": -26.875,
+      "t_1001300": -27.75,
+      "t_1001299": -27.375,
+      "t_1001298": -26.75,
+      "t_1001297": -29.125
+     },
+     "yn_blind": {
+      "t_1001303": -27.75,
+      "t_1001302": -27.0,
+      "t_1001304": 17.5,
+      "t_1001296": 8.75,
+      "t_1001306": 20.5,
+      "t_1001305": 18.0,
+      "t_1001301": -29.25,
+      "t_1001300": -27.75,
+      "t_1001299": -25.0,
+      "t_1001298": -24.5,
+      "t_1001297": -26.75
+     },
+     "yn_blind_all": {
+      "t_1001303": -27.25,
+      "t_1001302": -28.0,
+      "t_1001304": 19.0,
+      "t_1001296": 11.25,
+      "t_1001306": 19.5,
+      "t_1001305": 18.5,
+      "t_1001301": -27.5,
+      "t_1001300": -26.25,
+      "t_1001299": -24.75,
+      "t_1001298": -23.0,
+      "t_1001297": -28.0
+     }
+    },
+    "rule2_choice": {
+     "yn_aligned": "cool pan 1 with fridge 1",
+     "yn_absent": "go to fridge 1",
+     "yn_swapped": "go to shelf 1",
+     "yn_blind": "go to fridge 1",
+     "yn_blind_all": "go to fridge 1"
+    }
+   },
+   "llama3.1-8b": {
+    "scores": {
+     "yn_aligned": {
+      "t_1001303": 1.5,
+      "t_1001302": 0.75,
+      "t_1001304": 1.625,
+      "t_1001296": 2.125,
+      "t_1001306": 2.25,
+      "t_1001305": 3.375,
+      "t_1001301": -1.75,
+      "t_1001300": 0.125,
+      "t_1001299": 3.625,
+      "t_1001298": 3.375,
+      "t_1001297": 3.375
+     },
+     "yn_absent": {
+      "t_1001303": -2.875,
+      "t_1001302": -1.75,
+      "t_1001304": 4.875,
+      "t_1001296": 2.75,
+      "t_1001306": 2.375,
+      "t_1001305": 3.875,
+      "t_1001301": -3.625,
+      "t_1001300": -4.125,
+      "t_1001299": -6.125,
+      "t_1001298": -6.375,
+      "t_1001297": -5.875
+     },
+     "yn_swapped": {
+      "t_1001303": -1.125,
+      "t_1001302": -2.125,
+      "t_1001304": 1.125,
+      "t_1001296": 3.25,
+      "t_1001306": 2.75,
+      "t_1001305": 1.25,
+      "t_1001301": -3.25,
+      "t_1001300": -1.0,
+      "t_1001299": -2.0,
+      "t_1001298": -2.25,
+      "t_1001297": -1.875
+     },
+     "yn_blind": {
+      "t_1001303": -1.75,
+      "t_1001302": -2.125,
+      "t_1001304": 4.625,
+      "t_1001296": 1.125,
+      "t_1001306": 2.625,
+      "t_1001305": 2.75,
+      "t_1001301": -3.375,
+      "t_1001300": -3.5,
+      "t_1001299": -5.25,
+      "t_1001298": -5.75,
+      "t_1001297": -5.375
+     },
+     "yn_blind_all": {
+      "t_1001303": -1.75,
+      "t_1001302": -1.25,
+      "t_1001304": 5.25,
+      "t_1001296": 2.5,
+      "t_1001306": 3.375,
+      "t_1001305": 4.125,
+      "t_1001301": -2.75,
+      "t_1001300": -2.375,
+      "t_1001299": -3.75,
+      "t_1001298": -4.25,
+      "t_1001297": -3.5
+     }
+    },
+    "rule2_choice": {
+     "yn_aligned": "go to fridge 1",
+     "yn_absent": "go to fridge 1",
+     "yn_swapped": "go to fridge 1",
+     "yn_blind": "go to fridge 1",
+     "yn_blind_all": "go to fridge 1"
+    }
+   }
+  },
+  "candidates": [
+   {
+    "id": "t_1001303",
+    "action": "clean pan 1 with sinkbasin 1",
+    "succeeds": false,
+    "goal_object": true,
+    "determined": true,
+    "true_obs": "Nothing happens."
+   },
+   {
+    "id": "t_1001302",
+    "action": "cool pan 1 with fridge 1",
+    "succeeds": false,
+    "goal_object": true,
+    "determined": true,
+    "true_obs": "Nothing happens."
+   },
+   {
+    "id": "t_1001304",
+    "action": "go to countertop 3",
+    "succeeds": true,
+    "goal_object": false,
+    "determined": false,
+    "true_obs": "You arrive at countertop 3. On the countertop 3, you see a bread 1, a butterknife 1, a cellphone 2, a creditcard 3, a dishsponge 3, a dishsponge 2, a egg 3, a fork 1, a houseplant 1, a lettuce 1, a spatula 2, a spoon 2, a spoon 1, a statue 2, and a tomato 1."
+   },
+   {
+    "id": "t_1001296",
+    "action": "go to fridge 1",
+    "succeeds": true,
+    "goal_object": false,
+    "determined": false,
+    "true_obs": "You arrive at fridge 1. The fridge 1 is closed."
+   },
+   {
+    "id": "t_1001306",
+    "action": "go to shelf 1",
+    "succeeds": true,
+    "goal_object": false,
+    "determined": false,
+    "true_obs": "You arrive at shelf 1. On the shelf 1, you see a creditcard 2, and a statue 1."
+   },
+   {
+    "id": "t_1001305",
+    "action": "go to stoveburner 2",
+    "succeeds": true,
+    "goal_object": false,
+    "determined": false,
+    "true_obs": "You arrive at stoveburner 2. On the stoveburner 2, you see a pan 1."
+   },
+   {
+    "id": "t_1001301",
+    "action": "heat pan 1 with microwave 1",
+    "succeeds": false,
+    "goal_object": true,
+    "determined": true,
+    "true_obs": "Nothing happens."
+   },
+   {
+    "id": "t_1001300",
+    "action": "move pan 1 to countertop 1",
+    "succeeds": false,
+    "goal_object": true,
+    "determined": true,
+    "true_obs": "Nothing happens."
+   },
+   {
+    "id": "t_1001299",
+    "action": "take pan 1 from drawer 2",
+    "succeeds": false,
+    "goal_object": true,
+    "determined": true,
+    "true_obs": "Nothing happens."
+   },
+   {
+    "id": "t_1001298",
+    "action": "take pan 1 from shelf 2",
+    "succeeds": false,
+    "goal_object": true,
+    "determined": true,
+    "true_obs": "Nothing happens."
+   },
+   {
+    "id": "t_1001297",
+    "action": "take pan 1 from stoveburner 2",
+    "succeeds": false,
+    "goal_object": true,
+    "determined": true,
+    "true_obs": "Nothing happens."
+   }
+  ]
+ },
+ "stage1b": {
+  "game_id": "valid_unseen/150",
+  "model": "llama3.1-8b",
+  "encounter_states": [
+   {
+    "state_idx": 9,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.",
+    "aware_choice": "go to microwave 1",
+    "aware_fails": false,
+    "blind_choice": "go to microwave 1",
+    "blind_fails": false,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 8,
+      "action": "go to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.",
+      "L": {
+       "yn_aligned": 0.5,
+       "yn_blind": 2.5,
+       "yn_swapped": 1.375,
+       "yn_absent": 2.375
+      }
+     },
+     {
+      "rank": 2,
+      "count": 8,
+      "action": "heat apple 2 with microwave 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.875,
+       "yn_blind": 0.5,
+       "yn_swapped": 0.375,
+       "yn_absent": 0.25
+      }
+     },
+     {
+      "rank": 3,
+      "count": 2,
+      "action": "examine apple 2",
+      "failed": false,
+      "regime": false,
+      "true_obs": "There's nothing special about apple 2.",
+      "L": {
+       "yn_aligned": 1.375,
+       "yn_blind": 2.125,
+       "yn_swapped": 0.875,
+       "yn_absent": 2.0
+      }
+     },
+     {
+      "rank": 4,
+      "count": 1,
+      "action": "go to stoveburner 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You arrive at stoveburner 1. On the stoveburner 1, you see a pot 1.",
+      "L": {
+       "yn_aligned": 3.75,
+       "yn_blind": 4.875,
+       "yn_swapped": 4.0,
+       "yn_absent": 5.25
+      }
+     },
+     {
+      "rank": 5,
+      "count": 1,
+      "action": "move apple 2 to microwave 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": -0.25,
+       "yn_blind": 0.0,
+       "yn_swapped": -0.625,
+       "yn_absent": 0.0
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 11,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "move apple 2 to garbagecan 1",
+    "blind_fails": true,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 13,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.125,
+       "yn_blind": -2.0,
+       "yn_swapped": -1.0,
+       "yn_absent": -1.75
+      }
+     },
+     {
+      "rank": 2,
+      "count": 5,
+      "action": "heat apple 2 with microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You heat the apple 2 using the microwave 1.",
+      "L": {
+       "yn_aligned": -2.75,
+       "yn_blind": -3.875,
+       "yn_swapped": -3.5,
+       "yn_absent": -3.0
+      }
+     },
+     {
+      "rank": 3,
+      "count": 1,
+      "action": "examine apple 2",
+      "failed": false,
+      "regime": false,
+      "true_obs": "This is a hot apple 2.",
+      "L": {
+       "yn_aligned": -1.875,
+       "yn_blind": -2.625,
+       "yn_swapped": -2.75,
+       "yn_absent": -1.875
+      }
+     },
+     {
+      "rank": 4,
+      "count": 1,
+      "action": "move apple 2 to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You move the apple 2 to the microwave 1.",
+      "L": {
+       "yn_aligned": -0.75,
+       "yn_blind": -1.75,
+       "yn_swapped": -1.25,
+       "yn_absent": -1.25
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 12,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "move apple 2 to garbagecan 1",
+    "blind_fails": true,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 14,
+      "action": "heat apple 2 with microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You heat the apple 2 using the microwave 1.",
+      "L": {
+       "yn_aligned": -2.125,
+       "yn_blind": -3.0,
+       "yn_swapped": -2.375,
+       "yn_absent": -2.625
+      }
+     },
+     {
+      "rank": 2,
+      "count": 4,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.75,
+       "yn_blind": 0.125,
+       "yn_swapped": 0.5,
+       "yn_absent": 0.25
+      }
+     },
+     {
+      "rank": 3,
+      "count": 1,
+      "action": "examine apple 2",
+      "failed": false,
+      "regime": false,
+      "true_obs": "This is a hot apple 2.",
+      "L": {
+       "yn_aligned": -0.25,
+       "yn_blind": -0.875,
+       "yn_swapped": -0.625,
+       "yn_absent": -0.625
+      }
+     },
+     {
+      "rank": 4,
+      "count": 1,
+      "action": "move apple 2 to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You move the apple 2 to the microwave 1.",
+      "L": {
+       "yn_aligned": 0.25,
+       "yn_blind": 0.5,
+       "yn_swapped": 0.25,
+       "yn_absent": 0.625
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 13,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "go to garbagecan 1",
+    "blind_fails": false,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 7,
+      "action": "heat apple 2 with microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You heat the apple 2 using the microwave 1.",
+      "L": {
+       "yn_aligned": -1.75,
+       "yn_blind": -3.5,
+       "yn_swapped": -2.625,
+       "yn_absent": -2.875
+      }
+     },
+     {
+      "rank": 2,
+      "count": 12,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.5,
+       "yn_blind": -1.25,
+       "yn_swapped": -0.25,
+       "yn_absent": -0.875
+      }
+     },
+     {
+      "rank": 3,
+      "count": 1,
+      "action": "go to garbagecan 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a papertowelroll 1, and a potato 2.",
+      "L": {
+       "yn_aligned": 1.625,
+       "yn_blind": 1.0,
+       "yn_swapped": 1.375,
+       "yn_absent": 1.25
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 14,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "go to garbagecan 1",
+    "blind_fails": false,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 11,
+      "action": "heat apple 2 with microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You heat the apple 2 using the microwave 1.",
+      "L": {
+       "yn_aligned": -2.625,
+       "yn_blind": -4.375,
+       "yn_swapped": -3.375,
+       "yn_absent": -3.75
+      }
+     },
+     {
+      "rank": 2,
+      "count": 4,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.375,
+       "yn_blind": -1.5,
+       "yn_swapped": -0.875,
+       "yn_absent": -1.125
+      }
+     },
+     {
+      "rank": 3,
+      "count": 3,
+      "action": "examine apple 2",
+      "failed": false,
+      "regime": false,
+      "true_obs": "This is a hot apple 2.",
+      "L": {
+       "yn_aligned": -0.625,
+       "yn_blind": -1.5,
+       "yn_swapped": -1.0,
+       "yn_absent": -1.0
+      }
+     },
+     {
+      "rank": 4,
+      "count": 1,
+      "action": "go to garbagecan 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a papertowelroll 1, and a potato 2.",
+      "L": {
+       "yn_aligned": 2.0,
+       "yn_blind": 1.625,
+       "yn_swapped": 1.625,
+       "yn_absent": 1.5
+      }
+     },
+     {
+      "rank": 5,
+      "count": 1,
+      "action": "move apple 2 to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You move the apple 2 to the microwave 1.",
+      "L": {
+       "yn_aligned": -0.5,
+       "yn_blind": -0.625,
+       "yn_swapped": -1.0,
+       "yn_absent": -0.375
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 15,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "heat apple 2 with microwave 1",
+    "blind_fails": false,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 12,
+      "action": "heat apple 2 with microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You heat the apple 2 using the microwave 1.",
+      "L": {
+       "yn_aligned": -2.875,
+       "yn_blind": -4.75,
+       "yn_swapped": -3.625,
+       "yn_absent": -4.125
+      }
+     },
+     {
+      "rank": 2,
+      "count": 4,
+      "action": "move apple 2 to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You move the apple 2 to the microwave 1.",
+      "L": {
+       "yn_aligned": -0.375,
+       "yn_blind": -0.5,
+       "yn_swapped": -0.375,
+       "yn_absent": -0.25
+      }
+     },
+     {
+      "rank": 3,
+      "count": 3,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.25,
+       "yn_blind": -1.5,
+       "yn_swapped": -0.5,
+       "yn_absent": -1.125
+      }
+     },
+     {
+      "rank": 4,
+      "count": 1,
+      "action": "examine apple 2",
+      "failed": false,
+      "regime": false,
+      "true_obs": "This is a hot apple 2.",
+      "L": {
+       "yn_aligned": -1.25,
+       "yn_blind": -2.0,
+       "yn_swapped": -1.5,
+       "yn_absent": -1.5
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 16,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "heat apple 2 with microwave 1",
+    "blind_fails": false,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 16,
+      "action": "heat apple 2 with microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You heat the apple 2 using the microwave 1.",
+      "L": {
+       "yn_aligned": -3.0,
+       "yn_blind": -4.75,
+       "yn_swapped": -3.625,
+       "yn_absent": -4.0
+      }
+     },
+     {
+      "rank": 2,
+      "count": 4,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.25,
+       "yn_blind": -1.625,
+       "yn_swapped": -0.625,
+       "yn_absent": -1.625
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 17,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "move apple 2 to garbagecan 1",
+    "blind_fails": true,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 9,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.25,
+       "yn_blind": -1.125,
+       "yn_swapped": -0.625,
+       "yn_absent": -1.125
+      }
+     },
+     {
+      "rank": 2,
+      "count": 11,
+      "action": "heat apple 2 with microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You heat the apple 2 using the microwave 1.",
+      "L": {
+       "yn_aligned": -3.25,
+       "yn_blind": -4.5,
+       "yn_swapped": -3.875,
+       "yn_absent": -3.875
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 19,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> inventory\nYou are carrying: a apple 2.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "move apple 2 to garbagecan 1",
+    "blind_fails": true,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 8,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 2.0,
+       "yn_blind": 0.5,
+       "yn_swapped": 1.125,
+       "yn_absent": 0.625
+      }
+     },
+     {
+      "rank": 2,
+      "count": 10,
+      "action": "move apple 2 to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You move the apple 2 to the microwave 1.",
+      "L": {
+       "yn_aligned": 0.0,
+       "yn_blind": -0.125,
+       "yn_swapped": 0.0,
+       "yn_absent": 0.125
+      }
+     },
+     {
+      "rank": 3,
+      "count": 2,
+      "action": "inventory",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You are carrying: a apple 2.",
+      "L": {
+       "yn_aligned": 1.0,
+       "yn_blind": 0.75,
+       "yn_swapped": 0.75,
+       "yn_absent": 1.5
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 20,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> inventory\nYou are carrying: a apple 2.\n> move apple 2 to garbagecan 1\nNothing happens.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "inventory",
+    "blind_fails": false,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 8,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.875,
+       "yn_blind": 0.0,
+       "yn_swapped": 0.0,
+       "yn_absent": -0.125
+      }
+     },
+     {
+      "rank": 2,
+      "count": 7,
+      "action": "inventory",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You are carrying: a apple 2.",
+      "L": {
+       "yn_aligned": 0.375,
+       "yn_blind": 1.0,
+       "yn_swapped": 0.25,
+       "yn_absent": 0.875
+      }
+     },
+     {
+      "rank": 3,
+      "count": 5,
+      "action": "move apple 2 to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You move the apple 2 to the microwave 1.",
+      "L": {
+       "yn_aligned": 0.25,
+       "yn_blind": 0.125,
+       "yn_swapped": 0.125,
+       "yn_absent": 0.375
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 21,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> inventory\nYou are carrying: a apple 2.\n> move apple 2 to garbagecan 1\nNothing happens.\n> move apple 2 to garbagecan 1\nNothing happens.",
+    "aware_choice": "inventory",
+    "aware_fails": false,
+    "blind_choice": "inventory",
+    "blind_fails": false,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 15,
+      "action": "inventory",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You are carrying: a apple 2.",
+      "L": {
+       "yn_aligned": 0.25,
+       "yn_blind": 0.625,
+       "yn_swapped": 0.125,
+       "yn_absent": 0.875
+      }
+     },
+     {
+      "rank": 2,
+      "count": 3,
+      "action": "move apple 2 to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You move the apple 2 to the microwave 1.",
+      "L": {
+       "yn_aligned": 0.375,
+       "yn_blind": 0.0,
+       "yn_swapped": 0.375,
+       "yn_absent": 0.125
+      }
+     },
+     {
+      "rank": 3,
+      "count": 2,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 1.375,
+       "yn_blind": 0.5,
+       "yn_swapped": 0.875,
+       "yn_absent": 0.5
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 22,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> inventory\nYou are carrying: a apple 2.\n> move apple 2 to garbagecan 1\nNothing happens.\n> move apple 2 to garbagecan 1\nNothing happens.\n> inventory\nYou are carrying: a apple 2.",
+    "aware_choice": "move apple 2 to garbagecan 1",
+    "aware_fails": true,
+    "blind_choice": "move apple 2 to garbagecan 1",
+    "blind_fails": true,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 17,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 1.0,
+       "yn_blind": 0.5,
+       "yn_swapped": 0.5,
+       "yn_absent": 0.0
+      }
+     },
+     {
+      "rank": 2,
+      "count": 2,
+      "action": "move apple 2 to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You move the apple 2 to the microwave 1.",
+      "L": {
+       "yn_aligned": -0.125,
+       "yn_blind": -0.5,
+       "yn_swapped": -0.125,
+       "yn_absent": -0.375
+      }
+     },
+     {
+      "rank": 3,
+      "count": 1,
+      "action": "inventory",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You are carrying: a apple 2.",
+      "L": {
+       "yn_aligned": 0.875,
+       "yn_blind": 1.0,
+       "yn_swapped": 1.0,
+       "yn_absent": 2.0
+      }
+     }
+    ]
+   },
+   {
+    "state_idx": 24,
+    "task_line": "Your task is to: heat some apple and put it in garbagecan.",
+    "history_text": "You are in the middle of a room. Looking quickly around you, you see a cabinet 6, a cabinet 5, a cabinet 4, a cabinet 3, a cabinet 2, a cabinet 1, a coffeemachine 1, a countertop 3, a countertop 2, a countertop 1, a drawer 3, a drawer 2, a drawer 1, a fridge 1, a garbagecan 1, a microwave 1, a shelf 3, a shelf 2, a shelf 1, a sinkbasin 1, a stoveburner 4, a stoveburner 3, a stoveburner 2, a stoveburner 1, and a toaster 1.\nYour task is to: heat some apple and put it in garbagecan.\n> go to fridge 1\nYou arrive at fridge 1. The fridge 1 is closed.\n> open fridge 1\nYou open the fridge 1. The fridge 1 is open. In it, you see a bowl 1, a bread 2, a cup 2, a egg 2, a lettuce 1, a potato 3, and a potato 2.\n> take potato 2 from fridge 1\nYou pick up the potato 2 from the fridge 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is closed.\n> open microwave 1\nYou open the microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat potato 2 with microwave 1\nYou heat the potato 2 using the microwave 1.\n> go to garbagecan 1\nYou arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a apple 2, and a papertowelroll 1.\n> move potato 2 to garbagecan 1\nYou move the potato 2 to the garbagecan 1.\n> take apple 2 from garbagecan 1\nYou pick up the apple 2 from the garbagecan 1.\n> go to microwave 1\nYou arrive at microwave 1. The microwave 1 is open. In it, you see a egg 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> heat apple 2 with microwave 1\nYou heat the apple 2 using the microwave 1.\n> move apple 2 to garbagecan 1\nNothing happens.\n> inventory\nYou are carrying: a apple 2.\n> move apple 2 to garbagecan 1\nNothing happens.\n> move apple 2 to garbagecan 1\nNothing happens.\n> inventory\nYou are carrying: a apple 2.\n> move apple 2 to garbagecan 1\nNothing happens.\n> inventory\nYou are carrying: a apple 2.",
+    "aware_choice": "go to garbagecan 1",
+    "aware_fails": false,
+    "blind_choice": "go to garbagecan 1",
+    "blind_fails": false,
+    "candidates": [
+     {
+      "rank": 1,
+      "count": 1,
+      "action": "go to garbagecan 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You arrive at garbagecan 1. On the garbagecan 1, you see a apple 3, a papertowelroll 1, and a potato 2.",
+      "L": {
+       "yn_aligned": 1.125,
+       "yn_blind": 1.125,
+       "yn_swapped": 0.875,
+       "yn_absent": 0.875
+      }
+     },
+     {
+      "rank": 2,
+      "count": 9,
+      "action": "inventory",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You are carrying: a apple 2.",
+      "L": {
+       "yn_aligned": 0.5,
+       "yn_blind": 0.75,
+       "yn_swapped": 0.375,
+       "yn_absent": 1.375
+      }
+     },
+     {
+      "rank": 3,
+      "count": 6,
+      "action": "move apple 2 to garbagecan 1",
+      "failed": true,
+      "regime": true,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.75,
+       "yn_blind": -0.5,
+       "yn_swapped": -0.25,
+       "yn_absent": -0.75
+      }
+     },
+     {
+      "rank": 4,
+      "count": 2,
+      "action": "heat apple 2 with microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You heat the apple 2 using the microwave 1.",
+      "L": {
+       "yn_aligned": -2.125,
+       "yn_blind": -3.125,
+       "yn_swapped": -2.75,
+       "yn_absent": -2.625
+      }
+     },
+     {
+      "rank": 5,
+      "count": 1,
+      "action": "move apple 2 to microwave 1",
+      "failed": false,
+      "regime": false,
+      "true_obs": "You move the apple 2 to the microwave 1.",
+      "L": {
+       "yn_aligned": 0.25,
+       "yn_blind": -0.375,
+       "yn_swapped": -0.25,
+       "yn_absent": -0.25
+      }
+     },
+     {
+      "rank": 6,
+      "count": 1,
+      "action": "examine garbagecan 1",
+      "failed": true,
+      "regime": false,
+      "true_obs": "Nothing happens.",
+      "L": {
+       "yn_aligned": 0.75,
+       "yn_blind": 0.125,
+       "yn_swapped": 0.5,
+       "yn_absent": 0.25
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "optionc_step0": {
+  "game_id": "valid_unseen/140",
+  "state_idx": 0,
+  "model": "qwen3-8b",
+  "scores": {
+   "clean pan 1 with sinkbasin 1": {
+    "yn_aware": -22.375,
+    "yn_blind": -27.75,
+    "yn_swapped": -28.875,
+    "yn_neutral": -29.0,
+    "obs_aware": 9.75,
+    "obs_blind": -1.484375,
+    "obs_swapped": -1.75,
+    "obs_neutral": -3.21875
+   },
+   "cool pan 1 with fridge 1": {
+    "yn_aware": -3.25,
+    "yn_blind": -26.5,
+    "yn_swapped": -25.625,
+    "yn_neutral": -29.125,
+    "obs_aware": 11.5,
+    "obs_blind": -2.96875,
+    "obs_swapped": 0.75,
+    "obs_neutral": -3.796875
+   },
+   "go to countertop 3": {
+    "yn_aware": -20.25,
+    "yn_blind": 17.75,
+    "yn_swapped": -21.5,
+    "yn_neutral": 19.75,
+    "obs_aware": 25.25,
+    "obs_blind": 34.125,
+    "obs_swapped": 24.0,
+    "obs_neutral": 32.125
+   },
+   "go to fridge 1": {
+    "yn_aware": -18.75,
+    "yn_blind": 7.25,
+    "yn_swapped": -10.75,
+    "yn_neutral": 15.25,
+    "obs_aware": 32.25,
+    "obs_blind": 34.375,
+    "obs_swapped": 32.625,
+    "obs_neutral": 31.625
+   },
+   "go to shelf 1": {
+    "yn_aware": -22.0,
+    "yn_blind": 21.0,
+    "yn_swapped": -17.5,
+    "yn_neutral": 20.0,
+    "obs_aware": 27.75,
+    "obs_blind": 38.375,
+    "obs_swapped": 29.625,
+    "obs_neutral": 35.75
+   },
+   "go to stoveburner 2": {
+    "yn_aware": -23.25,
+    "yn_blind": 18.25,
+    "yn_swapped": -26.25,
+    "yn_neutral": 18.25,
+    "obs_aware": 24.5,
+    "obs_blind": 29.375,
+    "obs_swapped": 16.25,
+    "obs_neutral": 21.25
+   },
+   "heat pan 1 with microwave 1": {
+    "yn_aware": -17.0,
+    "yn_blind": -29.0,
+    "yn_swapped": -26.875,
+    "yn_neutral": -29.625,
+    "obs_aware": 6.0,
+    "obs_blind": -1.921875,
+    "obs_swapped": -0.296875,
+    "obs_neutral": -0.734375
+   },
+   "move pan 1 to countertop 1": {
+    "yn_aware": -20.75,
+    "yn_blind": -27.25,
+    "yn_swapped": -28.125,
+    "yn_neutral": -29.75,
+    "obs_aware": 3.75,
+    "obs_blind": -11.703125,
+    "obs_swapped": -11.46875,
+    "obs_neutral": -3.75
+   },
+   "take pan 1 from drawer 2": {
+    "yn_aware": -17.75,
+    "yn_blind": -24.75,
+    "yn_swapped": -27.875,
+    "yn_neutral": -25.5,
+    "obs_aware": 3.75,
+    "obs_blind": -7.75,
+    "obs_swapped": -6.5,
+    "obs_neutral": -7.953125
+   },
+   "take pan 1 from shelf 2": {
+    "yn_aware": -11.25,
+    "yn_blind": -24.75,
+    "yn_swapped": -27.0,
+    "yn_neutral": -25.0,
+    "obs_aware": 12.5,
+    "obs_blind": -7.0,
+    "obs_swapped": -6.75,
+    "obs_neutral": -7.984375
+   },
+   "take pan 1 from stoveburner 2": {
+    "yn_aware": -10.75,
+    "yn_blind": -26.75,
+    "yn_swapped": -29.0,
+    "yn_neutral": -27.25,
+    "obs_aware": 14.5,
+    "obs_blind": -9.734375,
+    "obs_swapped": -7.734375,
+    "obs_neutral": -9.953125
+   }
+  }
+ }
+}
