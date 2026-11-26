@@ -769,3 +769,9 @@ Recorded and tagged (`posttraining-deviation-dpt2-2026-11-26`) before the jobs w
 - **Cost.** About 1.1 to 1.3 GPU-hours.
 - **Decision rules.** None change.
 - **Comparison with lexsem.** Once lexsem's scores exist, the shared cells are compared with them. This is a provenance check only and does not gate the analysis; every shared cell is expected to match bit for bit.
+
+## Lexical-versus-semantic diagnostic, deviation D1: no recognition check for the Llama-3.1-8B base arm (2026-11-26)
+
+- **What happened.** The frozen recognition check (descriptions and aliases) runs through the tokenizer's chat template, and the Llama-3.1-8B base tokenizer has none, so the arm's first job (7353903) stopped before scoring any item.
+- **What was done.** No scorer file changed. An empty check file was placed and the arm rescored at the tag (job 7360053); its description and alias contrasts are "not assessable" under gate 6, and its other contrasts are unaffected. Committed before any score was read (`notes/lexsem_deviations.md`, commit be422a1).
+- **Outcome.** The arm then failed its competence gate (AUC 0.50), so none of its readouts is read in any case (`notes/lexsem_results.md`, section 6).

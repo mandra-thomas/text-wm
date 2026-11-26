@@ -11,3 +11,5 @@ Frozen design: `notes/lexsem_design.md` at tag `lexsem-design-frozen-2026-11-26`
 **Alternatives not taken.** One alternative was to run the check in plain text for this arm only. That would be a new procedure added after the freeze, for a model whose instruction following the design does not rely on. The other was to let the analysis fall back to Qwen3-8B's recognition checks, which would gate this arm on another model's recognition.
 
 **Consequence for reading.** For the Llama-3.1-8B base arm, the semantic-identity contrasts that use a description or an alias are not read. Account readings for that arm rest on the name, homonym, position and relevance contrasts only, and the rules report the missing contrasts as undecided.
+
+**Outcome (added 2026-11-26, after the analysis).** The rescored arm (job 7360053) completed at the tag. It then failed its competence gate (AUC 0.50 on the first token, 0.52 on the full two-candidate score), so none of its readouts is read, and D1 changes no reading (`notes/lexsem_results.md`, section 6).
