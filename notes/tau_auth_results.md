@@ -23,6 +23,8 @@ For **Llama-3.1-8B** both gates failed, so both categories are "inconclusive (ga
 | Category, request component | relevance-like (reading (a)) | inconclusive (gate) |
 | Category, naming component | relevance-like (reading (a)) | inconclusive (gate) |
 
+*(Extension, 2026-11-25)* The same frozen design was then run on a third model, **Llama-3.2-3B-Instruct**, under an extension committed and tagged before any of its scores existed (`tau-auth-ext-llama32-2026-11-25`). It also fails both gates: in the task-blind arm it is indifferent on question K3 (correct on 10 of 24 items, mean log-odds of the correct answer +0.01), and its positive control is +0.41 nats [+0.34, +0.48], below 1 nat. Both of its categories are therefore "inconclusive (gate)". Section 12 gives the full extension result.
+
 ## 1. The question
 
 A **world model** here is a language model asked to predict what τ-bench's retail backend replies to an agent's tool call. The backend is a customer-service database of users, orders and products; the agent calls tools such as `modify_pending_order_items` or `exchange_delivered_order_items`. The prompt contains the backend's description, a few worked examples (**few-shot examples**), the history of earlier calls and their outputs, a one-line description of what the user wants (the **task line**), and the next call. Every scored item is a **failing call**: a write that the backend rejects because one of its listed rules is broken, and the broken rule is visible in the history (the order's status forbids the write, the `status` class, or the requested replacement variant shows `"available": false`, the `unavailable` class). The real backend never reads the task: its reply is a function of the call and the database only, and a task-invariance check in the confirmatory build confirmed that every scored outcome is fixed by the state whatever the task line says. Any difference between task lines in a model's prediction is therefore an error.
@@ -420,3 +422,142 @@ Four of the five rows match A. The swapped − neutral row does not: the swapped
 | Analysis | `tau_auth_analysis`, job 7247968 (CPU, 19 s), 2026-11-23 05:00; `metrics.json` sha256 `73ad25b9a14c28d0afbf15291c6caa8026eadbcee0fd09909f8783529d9e380b` (copied here as `tau_auth_metrics.json`) |
 | Completeness | 192 items (96 `status`, 96 `unavailable`), 116 users, 24 comprehension items; 19,008 records, which is 9,504 per model as designed; 0 missing, 0 stale |
 | Token check in the analysis | first-token check passes for both models; `{"` and `Error` are single tokens, and the authorization error opens with the same `Error` token as the real failures |
+
+## 12. Extension (2026-11-25): Llama-3.2-3B-Instruct
+
+### 12.1 What was run, and what was fixed beforehand
+
+The frozen design was run on one more model, **Llama-3.2-3B-Instruct** (revision `0cb88a4f764b7a12671c53f0838cd831a0843b95`). It was chosen because it is the only model besides the two reference models that the τ families extension (`notes/tau_families_results.md`) found interpretable on the first-token readout, and because, unlike Llama-3.1-8B, it has a naming component on the confirmatory prompt (+0.52 nats on the 856 primary items), so the control for a general suppression of task effects would have been available.
+
+The extension is the section "Extension 2026-11-25" of [tau_auth_design.md](tau_auth_design.md) (E1 to E10), committed, reviewed once and tagged `tau-auth-ext-llama32-2026-11-25` (commit `a70e652`, branch `tau-auth`) before any score of this model in this experiment existed. Everything in sections 2 to 4 above applies unchanged: the same 192 items and 24 comprehension items, the same three backend descriptions (the confirmatory prompt, the task-blind description and the authorization description), the same five task lines, the same 48 passes per item, the same two gates, the same categories and readings, and the same inference (2,000 user-level bootstrap resamples, user-level sign-flip permutation tests with 10,000 permutations for the primary tests). Only three things were added for the new model, each fixed before its data:
+
+1. **Its chat template**, handled as in the τ families runs: the Llama 3 header format with the date fixed at "26 Jul 2024", so that its prompts are the same text as Llama-3.1-8B's.
+2. **Its margin**, by the frozen rule (a third of the model's confirmatory request component). On the 856 primary items under the confirmatory prompt its request component is +0.474 nats (τ families metrics, the same quantity that gave +2.17 and +0.50 for the reference models), so
+
+$$\delta = 0.474 / 3 \approx 0.16 \text{ nats}.$$
+
+3. **Its own Holm family** of its four primary tests (the removed and the persisting parts of the request and the naming component), at α = 0.01. The reference models' categories are not reopened.
+
+The design note also fixed, before data, labels for readings that sit numerically close to a boundary (E6, from `numerical_sensitivity.md` rule 3), a stopping rule for the budget (E7) and the expectation that the gates would more likely fail than pass (E9).
+
+All scoring ran in one environment: NVIDIA L40S GPUs only, the same software stack as the original runs and the τ families runs, bf16, one sequence per pass. A check written into the extension (design §7.9, which the original analysis skipped for lack of a reference) compared this run's arm (i) scores with the τ families scores of the same model on the same prompts: all 2,688 matching scores are identical to the bit (largest difference 0.0). So the extension renders and scores the model exactly as the τ families runs did.
+
+### 12.2 The gates
+
+**Comprehension (gate 1).** Each cell gives the correct answer, the number of the 24 items on which it was the more probable answer, and the mean log-odds of the correct answer in nats. Only the task-blind row gates.
+
+| Llama-3.2-3B, arm | K1 | K2 | K3 | K4 | Arm passes |
+|---|---|---|---|---|---|
+| (i) main | Yes: 4/24, −0.27 | No: 24/24, +1.98 | No: 24/24, +1.02 | Yes: 24/24, +1.17 | no |
+| (iii) task-blind | Yes: 24/24, +0.85 | No: 24/24, +2.42 | No: 10/24, +0.01 | Yes: 24/24, +1.56 | no |
+| (ii) authorization | No: 24/24, +0.55 | No: 24/24, +2.96 | Yes: 24/24, +1.59 | Yes: 24/24, +1.42 | yes |
+
+The model fails gate 1 on K3 alone. K3 asks whether, if the user's task were only a question about an order, a write on that order that breaks no rule would return an error; under the task-blind description the answer is No. The model's answer is a coin toss: correct on 10 of 24 items, with a mean log-odds of the correct answer of +0.01 nats, essentially zero. Under the confirmatory prompt it answers the same question correctly on all 24 items (+1.02), and under the authorization description, where the answer is Yes, also correctly on all 24 (+1.59). Its answer to K1 (a valid write on an order the task does not ask to change) flips from mostly wrong under the confirmatory prompt (4 of 24) to right on all 24 under the task-blind description, which is the change the description was written to make. The count of 10 is far from the cutoff of 20 items, so this gate outcome is not numerically fragile by the rule fixed in E6.
+
+**Positive control (gate 2).**
+
+| | Llama-3.2-3B |
+|---|---|
+| Positive control (extra aligned − swapped gap on the witness under the authorization description, compared with the task-blind one), nats | +0.41 [+0.34, +0.48] |
+| Items with a positive value | 83.3% |
+| Item-level SD, nats | 0.51 |
+| Gate (at least 1 nat, CI above 0) | fails |
+
+The model's witness predictions moved in the direction the authorization rule implies, on five items in six, but by about two fifths of the required 1 nat. The estimate is 0.59 nats below the threshold, far outside the fragility band.
+
+**Result.** Both gates fail, so by the frozen rule both categories are **"inconclusive (gate)"**, with the frozen reading: "Inconclusive: the model is not shown to understand that the task-blind backend ignores the task (comprehension check of the task-blind arm); the model's predictions are not shown to follow the stated backend (positive control)." The smoke run on 7 items had shown the same picture (K3 3 of 7; positive control +0.38), and the full run went ahead as fixed in E8.
+
+### 12.3 The decomposition, reported and not read
+
+These numbers carry no category. They are reported because the design requires every estimate to be reported.
+
+| Quantity, failing call, first token | Llama-3.2-3B |
+|---|---|
+| Request component, main prompt | +0.46 [+0.35, +0.57] |
+| Request component, removed by the task-blind arm | +0.20 [+0.12, +0.29], raw p 0.0001, Holm p 0.0004 |
+| Request component, persisting under the task-blind arm | +0.26 [+0.14, +0.38], raw p 0.0002, Holm p 0.0004 |
+| Removed part of the aligned half | +0.24 [+0.15, +0.34] |
+| Contribution of the swapped half to the removed part | −0.04 [−0.12, +0.05] |
+| Removed part of aligned − neutral | +0.04 [−0.08, +0.16] |
+| Removed part of swapped − neutral | −0.04 [−0.13, +0.06] |
+| Naming component, main prompt | +0.54 [+0.42, +0.67] |
+| Naming component, removed by the task-blind arm | −0.12 [−0.21, −0.04], raw p 0.0077, Holm p 0.0077 |
+| Naming component, persisting under the task-blind arm | +0.67 [+0.50, +0.84], raw p 0.0001, Holm p 0.0004 |
+| Removed share of the request component | +0.44 [+0.25, +0.64] |
+| Removed share of the naming component | −0.23 [−0.38, −0.07] |
+| Difference of the two shares | +0.66 [+0.37, +0.97] |
+
+The arm (i) values on these 192 items are close to the τ families values on 856 items (request component +0.46 against +0.47, naming component +0.54 against +0.52). Neither class has arm (i) values of opposite sign: the request component is +0.63 [+0.47, +0.82] in the `status` class and +0.28 [+0.17, +0.40] in the `unavailable` class, the naming component +0.75 and +0.33.
+
+The analysis also stores what the category rules would give if the gates were ignored (`ungated_categories`). For the request component that is "both: part authorization-like, part relevance-like" (the removed part, +0.20, is at least the margin with its interval above 0 and Holm p 0.0004; the persisting part, +0.26, likewise), and the aligned-half condition of amendment R1-M2 holds. For the naming component it is "relevance-like part shown; whether any of the component is removed is not determined". These are outputs of the frozen code, not categories of the design, and they decide nothing. Two of them are also numerically fragile by the rule fixed in E6: the request component's removed part (+0.20) is 0.04 nats above the margin of 0.16, inside the 0.08-nat band, and the naming component's removed part has an interval end (−0.21) 0.05 beyond the margin and a Holm p of 0.0077, inside the band of 0.005 to 0.02. The gate outcomes, on which the categories rest, are not near their boundaries, so the cross-environment rescore that E6 names for fragile decisive numbers is not needed.
+
+**Exploratory reading of where the ungated removal comes from.** The goal effect itself (aligned − swapped) hardly changed between the confirmatory and the task-blind description: +1.00 [+0.83, +1.18] and +0.93 [+0.73, +1.13]. Since the request component is the goal effect minus the naming component, its apparent removal (+0.20) mirrors the naming component's growth (from +0.54 to +0.67). Both come mainly from one line: the question about the target order (mention-aligned) rose relative to the neutral line, from −0.28 [−0.38, −0.18] to −0.08 [−0.20, +0.05]. The aligned write line did not move relative to the neutral line (removed part of aligned − neutral +0.04 [−0.08, +0.16]). An authorization belief predicts the opposite pattern: its removal should show as a drop of aligned − neutral, the aligned write losing its advantage over lines that request nothing (design amendment R1-M2). So even ignoring the gates, this model's numbers do not look like the removal of an authorization belief. They look like a change in how the model treats a bare question about the target order. This reading is post hoc and decides nothing.
+
+### 12.4 Secondary analyses (design §7)
+
+**Per arm, failing call, first token (nats; 95% CI).**
+
+| Quantity | Arm (i), main | Arm (iii), task-blind | Arm (ii), authorization |
+|---|---|---|---|
+| Goal effect (aligned − swapped) | +1.00 [+0.83, +1.18] | +0.93 [+0.73, +1.13] | +1.30 [+1.10, +1.51] |
+| Naming component | +0.54 [+0.42, +0.67] | +0.67 [+0.50, +0.84] | +0.81 [+0.69, +0.94] |
+| Request component | +0.46 [+0.35, +0.57] | +0.26 [+0.14, +0.38] | +0.49 [+0.35, +0.63] |
+| Aligned half (aligned − mention-aligned) | +2.38 [+2.27, +2.48] | +2.14 [+2.02, +2.25] | +2.42 [+2.30, +2.56] |
+| Swapped half (swapped − mention-swapped) | +1.92 [+1.80, +2.04] | +1.88 [+1.76, +1.99] | +1.93 [+1.80, +2.08] |
+| Aligned − neutral | +2.10 [+1.97, +2.23] | +2.06 [+1.91, +2.22] | +2.64 [+2.47, +2.81] |
+| Swapped − neutral | +1.10 [+0.93, +1.26] | +1.14 [+1.00, +1.27] | +1.34 [+1.19, +1.49] |
+| Mention-aligned − neutral | −0.28 [−0.38, −0.18] | −0.08 [−0.20, +0.05] | +0.22 [+0.12, +0.32] |
+| Mention-swapped − neutral | −0.82 [−0.93, −0.71] | −0.74 [−0.87, −0.62] | −0.59 [−0.68, −0.50] |
+
+Both write requests lift predicted success well above the neutral line in every arm (aligned by about 2 nats, swapped by about 1), and the bare questions sit below it, as in Llama-3.1-8B and in the τ families run of this model. On a call that fails whatever the task, all of this is error.
+
+**Witness (a working call on the same order), first token.** Goal effect +1.04 [+0.89, +1.21] (arm (i)), +0.95 [+0.77, +1.14] (arm (iii)), +1.36 [+1.19, +1.56] (arm (ii)). Its request component is +0.27 [+0.14, +0.40] under the confirmatory prompt; the task-blind description removes +0.16 [+0.06, +0.26] of it, through the aligned half (+0.38 [+0.28, +0.47]) with a drop of aligned − neutral (+0.22 [+0.11, +0.34]), while the swapped half moves the other way (−0.22 [−0.32, −0.11]). Its naming component is +0.77 and persists (+0.84). As in §7.1, no category is computed for the witness.
+
+**Per-line level changes between arms, first token (nats).** Moving from the confirmatory to the task-blind description raised every line on both calls by about 0.7 to 1.05 nats (failing call: aligned +0.81, swapped +0.88, neutral +0.84, mention-aligned +1.04, mention-swapped +0.92), a level shift toward success that the within-arm contrasts do not see. Moving from the task-blind to the authorization description lowered every line on the witness, the aligned line least (aligned −0.70, swapped −1.11, neutral −1.52, mention-aligned −1.08, mention-swapped −1.27, all intervals below 0). The design predicted "the aligned line changes little, the four other lines fall"; the model moved in that direction but shifted the aligned line too, which is why the positive control is positive but small.
+
+**The arm (ii) signature.** Under the authorization description the witness's naming component was predicted to be about 0; it is +1.03 [+0.91, +1.15], as it was clearly non-zero for both reference models.
+
+**Yes/no (not read for this model).** Llama-3.2-3B fails the τ families competence rule on yes/no (it answers No to nearly every call), so these numbers describe only how a near-constant No answer shifts. The yes/no goal effect on the failing call is +0.30 [+0.22, +0.39], +0.46 [+0.36, +0.58] and +0.41 [+0.32, +0.51] in arms (i), (iii) and (ii).
+
+**Per class.** Under the task-blind description the request component's removed part is +0.26 [+0.11, +0.40] in the `status` class and +0.15 [+0.05, +0.24] in the `unavailable` class; the naming component grows in the `status` class (removed part −0.39 [−0.51, −0.27]) and shrinks a little in the `unavailable` class (+0.15 [+0.04, +0.25]).
+
+**Format.** Median two-way mass 0.969 to 1.000 for every arm and readout; no prompt below 0.5; no red flag. The in-run token report passes and records the fixed date.
+
+**Holm over twelve tests (descriptive, fixed in E4).** If this model's four primary tests and the reference models' eight published raw p-values were adjusted together, every p-value that is 0.0002 or smaller becomes 0.0012 and this model's naming removal becomes 0.0385 (from 0.0077). No category of any of the three models changes: the reference models' material parts stay below 0.01, and this model's categories are gated.
+
+### 12.5 Predictions checked (design E9)
+
+The extension predicted, before data, that gate 1 would more likely fail than pass (probability of passing about 0.25), reasoning that a model leaning toward No would fail the questions whose correct answer is Yes (K1 and K4). The outcome matched the prediction, but not its reason: K1 and K4 were answered correctly on all 24 items, and the failure was on K3, whose correct answer is No, where the model was indifferent. The positive control was given about 0.4 to pass and failed at +0.41 nats. The predicted most likely outcome, "inconclusive (gate)" for both components, is what occurred.
+
+### 12.6 What this shows and does not show
+
+**It shows** that the frozen design cannot certify, for Llama-3.2-3B, either of its two preconditions: that the model takes in the task-blind description (it is indifferent on one of the four rule questions) and that its predictions follow a stated backend (they move by about 0.4 nats where the design asks for 1). That is the same outcome as Llama-3.1-8B, through a different comprehension question (K3 here, K2 there) and a similar positive control (+0.41 here, +0.30 there). Of the three models now run, only Qwen3-8B passes both gates, and its result ("relevance-like" for both components) remains the experiment's only read result.
+
+**It does not show** that Llama-3.2-3B holds an authorization belief, or that it lacks one. The ungated numbers, read with every caveat above, do not resemble the removal an authorization belief predicts: the goal effect did not shrink, and the apparent removal of the request component is the naming component growing through the bare question about the target order, not the requested write losing its advantage. Like Llama-3.1-8B's ungated labels, they are reported and not interpreted.
+
+**What would change it.** As for Llama-3.1-8B (§6), only a new, separately frozen design could give these models a category, for example comprehension questions on which the Llama models are not indifferent, checked on a smoke run before freezing, and a positive-control threshold scaled to each model's spread of scores. Any such change made now would be a post hoc change of a frozen rule after seeing the result.
+
+### 12.7 Limits and operational events
+
+1. **The numerical floor of this model was not measured.** Llama-3.1-8B's floor stands in for it (E6), and for the removed parts the margin is only about four times that floor. No cross-environment rescore was run; E6 required one only if a decisive number were fragile, and none is.
+2. **192 items of two classes, one domain, one prompt format.** One more Meta model does not separate size, distillation and post-training, and does not extend the result to another developer.
+3. **The first smoke submission scored nothing.** Job 7328769 waited on "BadConstraints" (it was eligible for a partition without L40S nodes) and then refused to score because the build's verification record had been copied from the original checkout, where it was made at another commit. The items were rebuilt and verified at the tag (CPU job 7330380); the rebuild reproduced all three pinned files. The smoke run was then repeated unchanged (job 7330545). Every scoring job was submitted with the partitions that hold L40S nodes and a shorter time limit than the script's 4 hours (1 hour for the smoke, 1.5 hours per shard), so that it could start sooner; no shard came near its limit. None of this changes a prompt, item, job or rule (design E10).
+4. **GPU time.** Smoke 0.14 hours, four shards 1.87 hours (32, 26, 27 and 27 minutes), the failed submission 22 seconds: about 2.0 GPU-hours in all, as projected.
+
+### 12.8 Provenance
+
+| What | Value |
+|---|---|
+| Design | Frozen design at `tau-auth-design-frozen-2026-11-22` (`f70b285`) plus the extension section, tagged `tau-auth-ext-llama32-2026-11-25` (commit `a70e652e93762b6a331768eb56083bb5ce17f160`, branch `tau-auth`); one independent review at `8cced24` (no must-fix item); smoke record committed at `e55064e` before the full run |
+| Cluster checkout | ICE `text-wm-tauauth-l32` at `a70e652`, clean; build rebuilt and verified there (CPU job 7330380): `items.jsonl` `2c8ffeac…`, `natural_items.jsonl` `9bd6c3f7…`, `fewshot.json` `231607f7…` |
+| Model | Llama-3.2-3B-Instruct, revision `0cb88a4…`, bf16, date fixed at "26 Jul 2024", default (SDPA) attention, the confirmatory scorer |
+| Token check | CPU job 7328347: PASS on all 9,504 prompts, 0 problems; system messages `7cc04248…`, `11ede0a6…`, `2c621c0e…` unchanged |
+| Smoke scoring | `tau_auth_l32_score_smoke`, job 7330545, NVIDIA L40S, 8 min 34 s, 7 items, 420 records, `scoring.jsonl` sha256 `1915093d5b8e03cc…` |
+| Smoke analysis | `tau_auth_l32_smoke_analysis`, job 7330785 (CPU), `metrics.json` sha256 `e935c2747a7cb03a…` |
+| Scoring shard 0 | job 7330880, NVIDIA L40S, 32 min, 55 items, 29 users, 2,688 records, sha256 `3b1c2eab165708b936c8f408a016f5298b2b22c46b0f3c22cf4237447b06f0ab` |
+| Scoring shard 1 | job 7330881, NVIDIA L40S, 26 min, 42 items, 29 users, 2,112 records, sha256 `ed2610ba00f0d2843f50173388d90229fa3f5afc75569b84455511fdc932dce4` |
+| Scoring shard 2 | job 7330882, NVIDIA L40S, 27 min, 48 items, 29 users, 2,340 records, sha256 `babc75a073507e4cc2488fe9a138383c5cfa8df094fe6abe5b52e84a16387d81` |
+| Scoring shard 3 | job 7330883, NVIDIA L40S, 27 min, 47 items, 29 users, 2,364 records, sha256 `a8fd375c3dab253b87a99bb6728e28eb81eb2027ff6a980b9665f8368d4ddd8c` |
+| Analysis | `tau_auth_l32_analysis`, job 7331800 (CPU, 26 s), 2026-11-25 21:32; `metrics.json` sha256 `3713c757608f309c6b27fa5e44243e0e627b52e61374fca9097c27847be43744`, copied unchanged as [tau_auth_l32_metrics.json](tau_auth_l32_metrics.json) |
+| Completeness | 192 items (96 `status`, 96 `unavailable`), 116 users, 24 comprehension items; 9,504 records; 0 missing, 0 stale |
+| Reproducibility of arm (i) | against the τ families scoring of this model (`text-wm-fix44/runs/tau_family_score_llama3.2-3b`): 2,688 matching scores, all identical |

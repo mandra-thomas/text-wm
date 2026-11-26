@@ -10,6 +10,12 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided or found 2026-11-25: τ-bench authorization experiment, extension to Llama-3.2-3B
+
+- **An extension, not a change of the frozen design.** The τ-auth design (tag `tau-auth-design-frozen-2026-11-22`) was run on one more model, Llama-3.2-3B-Instruct, under a section added to `tau_auth_design.md` ("Extension 2026-11-25") and tagged `tau-auth-ext-llama32-2026-11-25` (`a70e652`) before any score of this model in the experiment. Every frozen gate, rule, category and readout is unchanged. Added for the new model, before its data: its template handling (the τ families spec, date fixed), its margin by the frozen rule (0.16 nats, a third of +0.474), its own Holm family of four tests (the reference models' family of eight and their categories are not reopened), fragility labels and a budget stop. One independent review (no must-fix item; its should-fix items were made before the tag).
+- **Operational, no effect on any score.** The first smoke submission (7328769) waited on "BadConstraints" and then refused to score because the copied build-verification record had been made at another commit; the items were rebuilt and verified at the tag (CPU job 7330380; all three pinned files reproduced) and the smoke run repeated (7330545). Scoring jobs were submitted with the partitions that hold L40S nodes and shorter time limits than `pace/tau_auth_score.sbatch`'s 4 hours, so they could start sooner. The smoke record was committed to the design note before the full run (`e55064e`).
+- **Outcome.** Both gates fail; both categories "inconclusive (gate)" (`tau_auth_results.md` §12).
+
 ## Decided 2026-11-25: TextCraft round 3, interim reading
 
 - **Interim reading at the user's request,** under the five conditions the user approved on 2026-11-24:
