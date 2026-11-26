@@ -161,6 +161,30 @@ def test_eager_and_sdpa_agree_on_the_real_gemma4_class(mock_score, tag):
     assert set(rec["switched"]) == {"eager"} and set(rec["restored"]) == {"sdpa"} and len(rec["scores"]) == 4
 
 
+def test_float32_attention_check_leaves_the_bf16_model_bit_for_bit(mock_score):
+    """D-B1 (2026-11-25): the attention check casts every floating tensor to float32 and back; on the real Gemma 4 E4B
+    class loaded in bf16, every parameter and buffer afterwards equals its value before, bit for bit, in its own
+    dtype, and the deciding comparison ran in float32."""
+    transformers = _serve2()
+    import torch
+
+    spec, item = B["gemma4-e4b-it"], GOLDEN["item"]
+    tok = _pinned(transformers, spec, "tokenizer")
+    config = _pinned(transformers, spec, "config")
+    torch.manual_seed(0)
+    model = transformers.AutoModelForImageTextToText.from_config(tiny_config(config), dtype=torch.bfloat16).eval()
+    before = {k: (v.dtype, v.detach().clone()) for k, v in model.state_dict().items()}
+    assert any(d == torch.bfloat16 for d, _ in before.values())
+    items = [{**item, "id": f"{item['id']}-{k}"} for k in range(2)]
+    rec = families.attention_agreement(_scorer(spec, tok, model), spec, items)
+    assert rec["ok"], rec["problems"]
+    assert rec["precision"] == "float32" and rec["n_tensors_cast"] > 0 and "bf16_frozen_rule" in rec
+    after = model.state_dict()
+    assert set(after) == set(before)
+    for k, (dtype, v) in before.items():
+        assert after[k].dtype == dtype and torch.equal(after[k], v), k
+
+
 @pytest.mark.parametrize("tag", ["gemma4-e4b-it-firstturn", "qwen3.8-27b-nopreserve"])
 def test_check_variants_pass_the_gate_with_the_pinned_template(mock_score, tag):
     """Review 1, S7 and S8: the placement check's first-turn variant and Qwen3.8's preserve_thinking=False variant pass

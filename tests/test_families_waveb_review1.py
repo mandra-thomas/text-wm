@@ -585,14 +585,55 @@ def test_one_fifth_rule(diff, ci, native, dependent):
 # ---------------- S9: eager against SDPA attention for Gemma 4 ----------------
 
 
-class _AttnModel:
-    """A model whose text sub-config's attention can be switched (or not), as transformers 5's set_attn_implementation."""
+class _FakeT:
+    """A stand-in tensor: a dtype, cast by `t.data = t.data.to(dtype)` as on a real tensor. `sticky` ignores every
+    cast after the first (a restore that fails); `frozen` ignores every cast (a model that cannot change dtype)."""
 
-    def __init__(self, can_switch=True, loaded="sdpa"):
+    def __init__(self, dtype, floating=True, sticky=False, frozen=False):
+        self._dtype, self.floating, self.sticky, self.frozen, self.casts = dtype, floating, sticky, frozen, 0
+
+    def is_floating_point(self):
+        return self.floating
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @property
+    def data(self):
+        return self
+
+    @data.setter
+    def data(self, other):
+        self.casts += 1
+        if self.frozen or (self.sticky and self.casts > 1):
+            return
+        self._dtype = other._dtype
+
+    def to(self, dtype):
+        return _FakeT(dtype, self.floating)
+
+
+class _AttnModel:
+    """A model whose text sub-config's attention can be switched (or not), as transformers 5's set_attn_implementation,
+    with stand-in parameters and buffers (bf16 weights, a float32 buffer, an integer buffer)."""
+
+    def __init__(self, can_switch=True, loaded="sdpa", **tkw):
         text = types.SimpleNamespace(_attn_implementation=loaded)
         self.config = types.SimpleNamespace(text_config=text, sub_configs={"text_config": None},
                                             get_text_config=lambda: text, _attn_implementation=loaded)
         self.can_switch, self.calls = can_switch, []
+        self.params = [("w", _FakeT("bf16", **tkw)), ("v", _FakeT("bf16"))]
+        self.buffers = [("inv_freq", _FakeT("f32")), ("ids", _FakeT("int64", floating=False))]
+
+    def named_parameters(self):
+        return iter(self.params)
+
+    def named_buffers(self):
+        return iter(self.buffers)
+
+    def in_float32(self):
+        return all(t.dtype == families._float32() for _, t in self.params + self.buffers if t.is_floating_point())
 
     def set_attn_implementation(self, impl):
         self.calls.append(impl)
@@ -600,17 +641,29 @@ class _AttnModel:
             self.config.text_config._attn_implementation = impl["text_config"] if isinstance(impl, dict) else impl
 
 
+class _AttnModelNoTensors(_AttnModel):
+    named_parameters = None
+
+
 class _AttnScorer:
-    def __init__(self, model, eager_shift=0.0, one_shift=None):
-        self._model, self._cache, self.eager_shift, self.one_shift = model, {"stale": 1}, eager_shift, one_shift
-        self.n = 0
+    """Scores 1 + 0.1 * item; with eager attention, shifted by `eager_shift` in bf16 and by `f32_shift` in float32 (and
+    item t0 by `one_shift` / `one_shift_f32`)."""
+
+    def __init__(self, model, eager_shift=0.0, one_shift=None, f32_shift=0.0, one_shift_f32=None):
+        self._model, self._cache = model, {"stale": 1}
+        self.eager_shift, self.one_shift, self.f32_shift, self.one_shift_f32 = eager_shift, one_shift, f32_shift, one_shift_f32
+        self.n, self.n_f32 = 0, 0
 
     def _L(self, tid):
         eager = self._model.config.text_config._attn_implementation == "eager"
+        f32 = hasattr(self._model, "in_float32") and getattr(self._model, "params", None) is not None and self._model.in_float32()
         self.n += 1
-        shift = self.eager_shift if eager else 0.0
-        if eager and self.one_shift and tid == "t0":
-            shift = self.one_shift
+        self.n_f32 += f32
+        shift, one = (self.f32_shift, self.one_shift_f32) if f32 else (self.eager_shift, self.one_shift)
+        if not eager:
+            shift = 0.0
+        elif one and tid == "t0":
+            shift = one
         return types.SimpleNamespace(L=1.0 + 0.1 * int(tid[1:]) + shift)
 
     def score_pair(self, tid, cond, msgs, a, b):
@@ -629,25 +682,59 @@ def _attn(model, **kw):
 
 def test_attention_agreement_passes_within_the_tolerance(mock_score):
     model = _AttnModel()
-    rec, sc = _attn(model, eager_shift=0.05)
+    rec, sc = _attn(model, eager_shift=0.05, f32_shift=0.005)
     assert rec["ok"], rec["problems"]
-    assert rec["n_items"] == 5 and len(rec["scores"]) == 10 and sc.n == 20 and not sc._cache
-    assert rec["switched"] == ["eager"] and rec["restored"] == ["sdpa"] and model.calls == [{"text_config": "eager"},
-                                                                                              {"text_config": "sdpa"}]
+    assert rec["n_items"] == 5 and len(rec["scores"]) == 10 and sc.n == 40 and sc.n_f32 == 20 and not sc._cache
+    assert rec["switched"] == ["eager"] and rec["restored"] == ["sdpa"] and model.calls == [
+        {"text_config": "eager"}, {"text_config": "sdpa"}, {"text_config": "eager"}, {"text_config": "sdpa"}]
     assert families.ATTN_AGREEMENT == {"n_items": 5, "arms": ("aligned", "yn_aligned"), "yes_no_mean_abs_max": 0.10,
                                        "two_candidate_mean_abs_max": 0.50, "any_abs_max": 1.0}
+    # D-B1: decided in float32, the bf16 comparison recorded beside it; every tensor back in its own dtype
+    assert rec["precision"] == "float32" and rec["rule"] == families.ATTN_AGREEMENT_F32 and rec["n_tensors_cast"] == 3
+    assert rec["bf16_frozen_rule"]["frozen_rule_pass"] is True and rec["bf16_frozen_rule"]["rule"] == families.ATTN_AGREEMENT
+    assert abs(rec["bf16_frozen_rule"]["yes_no_mean_abs_diff"] - 0.05) < 1e-9 and abs(rec["yes_no_mean_abs_diff"] - 0.005) < 1e-9
+    assert [t.dtype for _, t in model.params + model.buffers] == ["bf16", "bf16", "f32", "int64"]
+    assert rec["deviation"] == families.ATTN_DEVIATION
+
+
+def test_attention_agreement_f32_limits_pinned():
+    assert families.ATTN_AGREEMENT_F32 == {"n_items": 5, "arms": ("aligned", "yn_aligned"), "precision": "float32",
+                                           "yes_no_mean_abs_max": 0.01, "yes_no_any_abs_max": 0.05,
+                                           "two_candidate_mean_abs_max": 0.01, "two_candidate_any_abs_max": 0.05}
+
+
+def test_bf16_rounding_failure_cleared_in_float32(mock_score):
+    """D-B1: E4B's case (job 7306814): bf16 0.275 nats apart (the frozen rule fails), float32 about 1e-5 (passes)."""
+    rec, _ = _attn(_AttnModel(), eager_shift=0.275, f32_shift=0.00001)
+    assert rec["ok"] is True and rec["problems"] == []
+    assert rec["bf16_frozen_rule"]["frozen_rule_pass"] is False
+    assert any("(yes_no)" in p for p in rec["bf16_frozen_rule"]["problems"])
 
 
 @pytest.mark.parametrize("model_kw, scorer_kw, words", [
-    ({}, {"eager_shift": 0.2}, "(yes_no)"),
-    ({}, {"eager_shift": 0.6}, "(two_candidate)"),
-    ({}, {"one_shift": 1.5}, "on one score"),
+    ({}, {"f32_shift": 0.02}, "on average (yes_no)"),
+    ({}, {"f32_shift": 0.0101}, "on average (two_candidate)"),
+    ({}, {"one_shift_f32": 0.06}, "on one score (yes_no)"),
+    ({}, {"one_shift_f32": 0.06}, "on one score (two_candidate)"),
     ({"can_switch": False}, {}, "could not switch to eager"),
     ({"loaded": "eager"}, {}, "not sdpa"),
+    ({"sticky": True}, {}, "were not restored"),
+    ({"frozen": True}, {}, "was not in float32"),
 ])
 def test_attention_agreement_fails_on_disagreement_or_no_switch(mock_score, model_kw, scorer_kw, words):
     rec, _ = _attn(_AttnModel(**model_kw), **scorer_kw)
     assert not rec["ok"] and any(words in p for p in rec["problems"]), rec["problems"]
+
+
+def test_attention_agreement_bf16_failure_alone_does_not_decide(mock_score):
+    # one large bf16 difference that the frozen rule's any-score limit (1.0) catches: recorded, not deciding
+    rec, _ = _attn(_AttnModel(), one_shift=1.5)
+    assert rec["ok"] is True and rec["bf16_frozen_rule"]["frozen_rule_pass"] is False
+
+
+def test_attention_agreement_fails_without_tensors(mock_score):
+    rec, _ = _attn(_AttnModelNoTensors())
+    assert not rec["ok"] and any("could not be listed" in p for p in rec["problems"])
 
 
 def test_attention_agreement_fails_if_the_switch_back_fails(mock_score):
@@ -655,7 +742,7 @@ def test_attention_agreement_fails_if_the_switch_back_fails(mock_score):
     orig = model.set_attn_implementation
 
     def once(impl):
-        if model.calls:  # the switch back does nothing
+        if len(model.calls) == 3:  # the float32 pass's switch back does nothing
             model.calls.append(impl)
             return
         orig(impl)

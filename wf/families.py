@@ -779,6 +779,20 @@ def weights_check(spec: ModelSpec, environ: dict[str, str] | None = None) -> dic
 # check's thresholds per score are 0.07 nats yes/no and 0.35 two-candidate).
 ATTN_AGREEMENT = {"n_items": 5, "arms": ("aligned", "yn_aligned"), "yes_no_mean_abs_max": 0.10,
                   "two_candidate_mean_abs_max": 0.50, "any_abs_max": 1.0}
+# Deviation D-B1 (2026-11-25, after the re-freeze at families-waveb-design-refrozen-2026-11-25 and before any wave B
+# score was read; approved by the user; notes/families_waveb_design.md section 20, notes/deviations.md). The frozen bf16
+# rule above cannot separate a wrong attention implementation from rounding: at Gemma 4 E4B's yes/no readout logits
+# (16 to 32) one bf16 step is 0.125 nats, above its 0.10 limit; both Gemma 4 models failed it (E4B, job 7306814, 0.275
+# nats; 31B, job 7306818, 0.159). The check
+# is therefore decided in float32, with round 3's D-G1 limits (0.01 nats mean, 0.05 any score), applied to both formats
+# as wave B's frozen rule covers both; the bf16 comparison is still run and recorded, no longer deciding.
+ATTN_AGREEMENT_F32 = {"n_items": 5, "arms": ("aligned", "yn_aligned"), "precision": "float32",
+                      "yes_no_mean_abs_max": 0.01, "yes_no_any_abs_max": 0.05,
+                      "two_candidate_mean_abs_max": 0.01, "two_candidate_any_abs_max": 0.05}
+ATTN_DEVIATION = ("D-B1 (2026-11-25): the attention-agreement check is decided with the model cast to float32 "
+                  "(yes/no and two-candidate mean absolute eager-minus-SDPA difference at most 0.01 nats, no score more "
+                  "than 0.05 apart); the frozen bf16 comparison is recorded beside it and no longer decides. Every "
+                  "other gate and rule is unchanged.")
 
 
 def _text_config_key(model: Any) -> str | None:
@@ -804,13 +818,15 @@ def _set_text_attn(model: Any, impl: str) -> None:
     model.set_attn_implementation(impl if key is None else {key: impl})
 
 
-def attention_agreement(scorer: LogoddsScorer, spec: ModelSpec, primary: list[dict]) -> dict[str, Any]:
-    """Score the shard's first ATTN_AGREEMENT["n_items"] items (aligned task, both formats) with the loaded attention
-    (SDPA, transformers' default), again with eager attention, then switch back; the two must agree within
-    ATTN_AGREEMENT. Each switch is confirmed on the config (a model that cannot switch would compare SDPA with
-    itself). The scorer's cache is cleared around each pass, so every score is computed afresh."""
+def _attention_pass(scorer: LogoddsScorer, spec: ModelSpec, items: list[dict], rule: dict[str, Any]) -> dict[str, Any]:
+    """One eager-against-SDPA comparison at the model's current precision: score `items` (aligned task, both formats)
+    with the loaded attention (SDPA, transformers' default), again with eager attention, then switch back, and judge
+    the differences by `rule`. Each switch is confirmed on the config (a model that cannot switch would compare SDPA
+    with itself). The scorer's cache is cleared around each pass, so every score is computed afresh.
+
+    `rule`: per format, `<fmt>_mean_abs_max` (mean absolute difference) and, if given, `<fmt>_any_abs_max` (largest
+    absolute difference in that format); `any_abs_max`, if given, bounds the largest difference over both formats."""
     model = scorer._model
-    items = primary[:ATTN_AGREEMENT["n_items"]]
     loaded = _attn_loaded(model)
     problems: list[str] = []
 
@@ -818,7 +834,7 @@ def attention_agreement(scorer: LogoddsScorer, spec: ModelSpec, primary: list[di
         scorer._cache.clear()
         out = {}
         for t in items:
-            for arm in ATTN_AGREEMENT["arms"]:
+            for arm in rule["arms"]:
                 msgs = family_messages(spec, t, arm)
                 if arm in sizes.YN_ARMS:
                     r = scorer.score_one_token_pair(t["id"], arm, msgs, "Yes", "No")
@@ -830,7 +846,7 @@ def attention_agreement(scorer: LogoddsScorer, spec: ModelSpec, primary: list[di
 
     if set(loaded) != {"sdpa"}:
         problems.append(f"loaded attention is {loaded}, not sdpa")
-        return {"ok": False, "problems": problems, "loaded": loaded, "rule": ATTN_AGREEMENT}
+        return {"ok": False, "problems": problems, "loaded": loaded, "rule": rule}
     sdpa = score_all()
     _set_text_attn(model, "eager")
     switched = _attn_loaded(model)
@@ -844,22 +860,89 @@ def attention_agreement(scorer: LogoddsScorer, spec: ModelSpec, primary: list[di
     diffs = {k: eager[k] - sdpa[k] for k in sdpa if k in eager}
     by_fmt = {"yes_no": [abs(v) for (i, a), v in diffs.items() if a in sizes.YN_ARMS],
               "two_candidate": [abs(v) for (i, a), v in diffs.items() if a not in sizes.YN_ARMS]}
-    out: dict[str, Any] = {"n_items": len(items), "arms": list(ATTN_AGREEMENT["arms"]), "rule": ATTN_AGREEMENT,
+    out: dict[str, Any] = {"n_items": len(items), "arms": list(rule["arms"]), "rule": rule,
                            "loaded": loaded, "switched": switched, "restored": restored,
                            "scores": [{"transition_id": i, "condition": a, "L_sdpa": sdpa[(i, a)], "L_eager": eager.get((i, a))}
                                       for i, a in sdpa]}
     for fmt, v in by_fmt.items():
         mean = sum(v) / len(v) if v else float("nan")
         out[f"{fmt}_mean_abs_diff"] = mean
-        if not mean <= ATTN_AGREEMENT[f"{fmt}_mean_abs_max"]:  # NaN (nothing compared) fails too
+        if not mean <= rule[f"{fmt}_mean_abs_max"]:  # NaN (nothing compared) fails too
             problems.append(f"eager and sdpa differ by {mean:.3f} nats on average ({fmt})")
+        top = max(v, default=float("nan"))
+        out[f"{fmt}_max_abs_diff"] = top
+        if f"{fmt}_any_abs_max" in rule and not top <= rule[f"{fmt}_any_abs_max"]:
+            problems.append(f"eager and sdpa differ by {top:.6f} nats on one score ({fmt})")
     worst = max((abs(v) for v in diffs.values()), default=float("nan"))
     out["max_abs_diff"] = worst
-    if not worst <= ATTN_AGREEMENT["any_abs_max"]:
+    if "any_abs_max" in rule and not worst <= rule["any_abs_max"]:
         problems.append(f"eager and sdpa differ by {worst:.3f} nats on one score")
-    if len(diffs) != len(items) * len(ATTN_AGREEMENT["arms"]) or not items:
-        problems.append(f"{len(diffs)} scores compared, {len(items) * len(ATTN_AGREEMENT['arms'])} expected")
+    if len(diffs) != len(items) * len(rule["arms"]) or not items:
+        problems.append(f"{len(diffs)} scores compared, {len(items) * len(rule['arms'])} expected")
     return {**out, "ok": not problems, "problems": problems}
+
+
+def _float32() -> Any:
+    """torch.float32 (the string "float32" where torch is not installed, for the CPU tests' stand-in tensors)."""
+    try:
+        import torch
+    except ImportError:
+        return "float32"
+    return torch.float32
+
+
+def _floating_tensors(model: Any) -> list[tuple[str, Any]] | None:
+    """Every floating-point parameter and buffer of the model, by name (None if the model has neither accessor)."""
+    params, buffers = getattr(model, "named_parameters", None), getattr(model, "named_buffers", None)
+    if params is None or buffers is None:
+        return None
+    return [(f"{kind}:{n}", t) for kind, it in (("param", params()), ("buffer", buffers()))
+            for n, t in it if t.is_floating_point()]
+
+
+def _cast_tensors(tensors: list[tuple[str, Any]], dtype: Any) -> None:
+    """Cast each tensor in place: to `dtype`, or to its own entry when `dtype` is a {name: dtype} mapping."""
+    for n, t in tensors:
+        t.data = t.data.to(dtype[n] if isinstance(dtype, dict) else dtype)
+
+
+def attention_agreement(scorer: LogoddsScorer, spec: ModelSpec, primary: list[dict]) -> dict[str, Any]:
+    """The attention-agreement check (review 1, S9) as deviated by D-B1 (2026-11-25, notes/families_waveb_design.md
+    section 20): on the shard's first ATTN_AGREEMENT["n_items"] items (aligned task, both formats), eager and SDPA are
+    compared twice.
+
+    1. In bf16, as loaded, under the frozen rule (ATTN_AGREEMENT). This is recorded under "bf16_frozen_rule" and no
+       longer decides.
+    2. With every floating-point parameter and buffer cast to float32, under ATTN_AGREEMENT_F32 (yes/no and
+       two-candidate: mean absolute difference at most 0.01 nats, no score more than 0.05 apart). This decides.
+
+    Afterwards every tensor is cast back to its own dtype. That is exact: bf16 values are float32 values, and float32
+    buffers are unchanged. The restore is checked tensor by tensor, so scoring runs on exactly the model as loaded."""
+    items = primary[:ATTN_AGREEMENT["n_items"]]
+    bf16 = _attention_pass(scorer, spec, items, ATTN_AGREEMENT)
+    tensors = _floating_tensors(scorer._model)
+    problems: list[str] = []
+    if tensors is None:
+        f32: dict[str, Any] = {"ok": False, "problems": ["the model's tensors could not be listed for the float32 check"]}
+    else:
+        saved = {n: t.dtype for n, t in tensors}
+        target = _float32()
+        _cast_tensors(tensors, target)
+        in_float32 = bool(tensors) and all(t.dtype == target for _, t in tensors)
+        try:
+            f32 = _attention_pass(scorer, spec, items, ATTN_AGREEMENT_F32)
+        finally:
+            _cast_tensors(tensors, saved)
+        if not in_float32:
+            problems.append("the model was not in float32 for the check")
+        if not all(t.dtype == saved[n] for n, t in tensors):
+            problems.append("the model's dtypes were not restored after the float32 check")
+    rec = {**f32, "precision": "float32", "n_tensors_cast": len(tensors or []), "deviation": ATTN_DEVIATION,
+           "bf16_frozen_rule": {**bf16, "frozen_rule_pass": bf16.get("ok")}}
+    rec["bf16_frozen_rule"].pop("ok", None)
+    rec["problems"] = list(f32.get("problems") or []) + problems
+    rec["ok"] = not rec["problems"]
+    return rec
 
 
 # ---------------- scoring ----------------

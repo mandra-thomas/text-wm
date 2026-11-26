@@ -622,6 +622,20 @@ MUTANTS = [
     ('families wave B rereview N3 reference without original dropped', 'wf/families.py', '        if deps or missing:\n', '        if deps:\n'),
     ('families wave B rereview N4 dirty tree accepted', 'wf/families.py', '"clean_tree_both_sides": left.get("git_dirty") is False and right.get("git_dirty") is False}', '"clean_tree_both_sides": left.get("git_dirty") is False}'),
     ('families wave B rereview N4 dump without its tree state', 'wf/tools/envcheck_tokens.py', '"git_dirty": git_dirty(),', '"git_dirty": False,'),
+    # Wave B deviation D-B1 (2026-11-25): the attention-agreement check decided in float32
+    ('families wave B D-B1 yes/no float32 limit loosened', 'wf/families.py', '"yes_no_mean_abs_max": 0.01, "yes_no_any_abs_max": 0.05,', '"yes_no_mean_abs_max": 0.10, "yes_no_any_abs_max": 0.05,'),
+    ('families wave B D-B1 two-candidate float32 limit loosened', 'wf/families.py', '"two_candidate_mean_abs_max": 0.01, "two_candidate_any_abs_max": 0.05}', '"two_candidate_mean_abs_max": 0.50, "two_candidate_any_abs_max": 0.05}'),
+    ('families wave B D-B1 any-score limit loosened', 'wf/families.py', '"yes_no_mean_abs_max": 0.01, "yes_no_any_abs_max": 0.05,', '"yes_no_mean_abs_max": 0.01, "yes_no_any_abs_max": 1.0,'),
+    ('families wave B D-B1 per-format largest difference unchecked', 'wf/families.py', '        if f"{fmt}_any_abs_max" in rule and not top <= rule[f"{fmt}_any_abs_max"]:', '        if False:'),
+    ('families wave B D-B1 float32 pass judged by the bf16 limits', 'wf/families.py', '            f32 = _attention_pass(scorer, spec, items, ATTN_AGREEMENT_F32)', '            f32 = _attention_pass(scorer, spec, items, ATTN_AGREEMENT)'),
+    ('families wave B D-B1 model not cast to float32', 'wf/families.py', '        _cast_tensors(tensors, target)\n', ''),
+    ('families wave B D-B1 model not cast back', 'wf/families.py', '            _cast_tensors(tensors, saved)', '            pass'),
+    ('families wave B D-B1 restore unchecked', 'wf/families.py', '        if not all(t.dtype == saved[n] for n, t in tensors):', '        if False:'),
+    ('families wave B D-B1 float32 cast unchecked', 'wf/families.py', '        if not in_float32:', '        if False:'),
+    ('families wave B D-B1 bf16 still decides', 'wf/families.py', '    rec["problems"] = list(f32.get("problems") or []) + problems', '    rec["problems"] = list(bf16.get("problems") or []) + problems'),
+    ('families wave B D-B1 integer buffers cast', 'wf/families.py', '            for n, t in it if t.is_floating_point()]', '            for n, t in it]'),
+    ('families wave B D-B1 no tensors passes', 'wf/families.py', 'f32: dict[str, Any] = {"ok": False, "problems": ["the model\'s tensors could not be listed for the float32 check"]}', 'f32: dict[str, Any] = {"ok": True, "problems": []}'),
+    ('families wave B D-B1 bf16 comparison not recorded', 'wf/families.py', '"bf16_frozen_rule": {**bf16, "frozen_rule_pass": bf16.get("ok")}}', '"bf16_frozen_rule": {"frozen_rule_pass": None}}'),
 ]
 
 

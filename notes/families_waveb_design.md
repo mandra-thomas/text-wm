@@ -435,3 +435,65 @@ Review 1 ([families_waveb_review1.md](families_waveb_review1.md)) read the desig
 
 - `tests/test_families_waveb_serve2.py` in serve2 by the author, from a checkout at the fix commit (the command is in its docstring), as the record of that commit.
 - The CPU gate for the two check variants as a job, so its record sits with job 7240542's: `pace/families_waveb_gate.sbatch` with `GATE_TAGS="gemma4-e4b-it-firstturn qwen3.8-27b-nopreserve"` (300 items each; the same run on the login node passed, above).
+
+## 20. Deviation D-B1 after the re-freeze: the attention-agreement check decided in float32 (2026-11-25)
+
+**When and by whom.** This deviation was decided on 2026-11-25 by the user. It comes after the re-freeze tag `families-waveb-design-refrozen-2026-11-25` (de8312f) and before any wave B score was read; it is tagged `families-waveb-deviation-attn-float32-2026-11-25`.
+
+**What happened.** Both Gemma 4 models stopped in their gates, before scoring, in checkout `text-wm-fix52`. The frozen attention-agreement check (review 1, S9) found eager and SDPA attention too far apart on the yes/no scores, against a limit of 0.10:
+
+- **Gemma 4 E4B** (job 7306814, one L40S): 0.275 nats on average.
+- **Gemma 4 31B** (job 7306818, one A100 80GB): 0.159 nats on average.
+
+Nothing was scored for either, and E4B's placement check (job 7306815) produced no scores.
+
+**Why the frozen limit cannot decide this.** The frozen check compares the two implementations in bf16. At E4B's yes/no readout logits (between 16 and 32), one bf16 step is 0.125 nats, so the 0.10 limit sits below a single step of rounding.
+
+- The numerical-sensitivity study (`notes/numerical_sensitivity.md` on `main`, section 4.7 and rule 2) measured eager against SDPA in bf16 as another environment change of this size.
+- In float32 the two implementations agree to about 0.00001 nats. TextCraft round 3's deviation D-G1 diagnostic on Gemma 4 E4B gave 0.000011 nats mean and 0.000027 at most on yes/no, against 0.125 and 0.375 in bf16.
+- Scoring uses one implementation (SDPA) throughout a model, so the difference between implementations never enters a contrast. The check can only catch a wrong implementation, and a float32 comparison separates that from rounding.
+
+**The deviated rule.** The check is decided in float32:
+
+- **Procedure.** In the same job, after the tokenization gate and before the first score, the loaded model's floating-point parameters and buffers are cast to float32. The shard's first five items are then scored (aligned task, both formats) with SDPA and with eager attention.
+- **Pass rule.** The check passes when, on the yes/no scale and on the two-candidate scale, the mean absolute eager-minus-SDPA difference is at most 0.01 nats and no single score differs by more than 0.05 nats (`ATTN_AGREEMENT_F32`).
+- **Limits.** These are round 3's D-G1 limits. D-G1 stated them for yes/no only; wave B's frozen rule covers both formats, so both are checked here.
+- **After the check.** Every tensor is cast back to its own dtype. This is exact (bf16 values are float32 values, and float32 buffers are unchanged), and it is checked tensor by tensor. Scoring therefore runs on exactly the model as loaded: bf16, SDPA.
+- **The frozen bf16 comparison** is still run and recorded beside the deciding one (`bf16_frozen_rule`, with `frozen_rule_pass`). It no longer decides.
+
+**Scope.** The rule applies to every wave B model that runs the check: Gemma 4 E4B, its placement check, and Gemma 4 31B. Both Gemma 4 models failed the frozen bf16 check, and nothing was scored for either:
+
+- **E4B** (job 7306814): 0.275 nats on average on yes/no.
+- **31B** (job 7306818, one A100 80GB): 0.159 nats on average on yes/no (`runs/family_score_gemma4-31b-it/shard_00_of_01/tokenization_checks.json` in `text-wm-fix52`).
+
+All three Gemma 4 runs are rerun under this rule from one new clean checkout at the deviation tag:
+
+- **E4B's scoring and placement jobs** run on an L40S, the type the other small wave B models ran on.
+- **31B's scoring job** runs on two A100 80GB cards of one node. A float32 copy of 31B (31.27B parameters, about 125 GB) does not fit one 80 GB card, but fits two. The model is split over the two cards by `device_map="auto"`, as section 12 allows for the large models (where two L40S were the declared alternative), and the job records both cards. Scoring itself stays bf16 with SDPA; splitting layers over two cards of the same type does not change the arithmetic of any layer.
+
+No other wave B model has the check, so no other outcome can change.
+
+**Unchanged.** Every other gate and rule:
+
+- the tokenization and template gate, the loading check and the weights check;
+- the serve2 rescorings of the older models and their gate, as frozen;
+- the 16-test family, every threshold, the competence gate and the predictions;
+- scoring itself (bf16, SDPA, the same items, arms and prompts).
+
+**Code and tests.**
+
+- `wf/families.py`: `attention_agreement`, `_attention_pass`, `ATTN_AGREEMENT_F32` and `ATTN_DEVIATION`.
+- Tests in `tests/test_families_waveb_review1.py`:
+  - E4B's case (bf16 failing, float32 passing) is cleared;
+  - each float32 limit fails when exceeded;
+  - a failed cast or a failed restore fails the check;
+  - a bf16 failure alone does not decide.
+- In `tests/test_families_waveb_serve2.py`, on the real Gemma 4 E4B class loaded in bf16: after the check, every parameter and buffer equals its value before, bit for bit, in its own dtype.
+
+**Tests and mutants (2026-11-25).**
+
+- **Local wave B test files:** 252 passed, 23 skipped.
+- **Mutants:** 21 of 21 killed under the strict rule with the bytecode fix (`notes/families_waveb_db1_mutants.jsonl`). These are 13 new mutants that break D-B1, and the 8 earlier review 1 S9 mutants, rerun.
+- **The serve2 test on the real class** (`test_float32_attention_check_leaves_the_bf16_model_bit_for_bit`) was started on ICE before the tag, on a login node. Its result is added when it ends.
+
+The jobs themselves are the decisive check. The gate fails closed: a failed cast, a failed restore, or a check that is not passed stops the job before it scores.
