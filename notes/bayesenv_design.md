@@ -317,4 +317,43 @@ Tag: `bayesenv-design-frozen-2026-11-25` (annotated, pushed before any model sco
 
 ## 17. Smoke readout
 
-(To be appended before the full run is submitted.)
+### 17.1 Qwen3-8B (recorded 2026-11-26, before its full run was submitted)
+
+**What ran.** The smoke scores (job 7330239, 9,300 sequences, L40S, serve2 stack, plain text, at the freeze tag) took 492 s, 0.053 s per sequence. The checks job (7330244) sampled continuations and ran the description check. The readout (job 7347289, at the commit of deviation D-BE1; an earlier attempt, 7347247, stopped at the faulty hash check before computing anything) reports only slopes, gates, variance components and logit sizes. No difference between conditions was computed.
+
+**Readout gates.** The evidence slope is the slope of the model's log-odds on the exact log-odds for the neutral prompt over the 24 graded cells; the mass is the median probability on the two candidate words; the form shares come from the sampled continuations.
+
+| Readout | Evidence slope (SE) | Median candidate mass | Continuations starting with the first / second word / neither | Success form after the first word; failure form after the second | Gate |
+|---|---|---|---|---|---|
+| World model, reply first token | −0.17 (0.03) | 0.52 | 179 / 35 / 186 of 400 | 0.94; 1.00 | fails: negative slope |
+| World model, yes/no | 0.20 (0.01) | 0.996 | (not sampled) | — | passes |
+| State inference, narrator | 0.53 (0.01) | 0.013 | 7 / 0 / 393 of 400 | 0.14; none | fails: mass, form and "other" rate |
+| State inference, yes/no | 0.63 (0.01) | 0.56 | (not sampled) | — | passes |
+| ALFWorld surface, reply | −0.11 (0.12) | 0.997 | 368 / 31 / 1 of 400 | 0.86; 1.00 | fails: slope |
+| ALFWorld surface, yes/no | −0.34 (0.09) | 0.99 | (not sampled) | — | fails: slope |
+
+Every readout's median larger candidate logit is below 32 (21.5 to 30.8), so every readout is in the "small" floor class. The description check passed on all three phrasings (Yes minus No: 2.1, 1.2 and 1.0 nats).
+
+**Consequences under the frozen rules.**
+
+- The reply readout fails competence: its log-odds fall as the exact success probability rises. The world model's yes/no readout therefore becomes the primary readout. The reply, narrator and ALFWorld-surface readouts are reported descriptively and decide nothing.
+- With the narrator and reply readouts both failing, neither the question-free arm of the specificity rule nor its fallback (which needs the reply readout) can be applied. The specificity rule will read "not assessable" for this model unless the full run's gates differ.
+- The detection target on the primary readout is $T = 0.5 \times 0.200 = 0.100$ nats. The pattern target is $T_p = 0.5 \times 0.200 / 0.7 = 0.143$ nats.
+
+**Noise and wording variance on the primary readout (world model, yes/no).**
+
+- Item SD of within-item contrasts: 0.28 for goal against explore, 0.27 for key tag against other tag, and 0.21 for the 95% note against explore.
+- Wording components: goal wordings $\sigma^2_\alpha = 0.014$ and $\sigma^2_\gamma = 0.064$; tag wordings $\sigma^2_\alpha = 0.077$ and $\sigma^2_\gamma = 0.113$; residual 0.018 and 0.020.
+- The shared wording effects therefore dominate the item noise.
+
+The other readouts' components are in the readout's `metrics.json`.
+
+**Sizing rule.**
+
+- The base design's predicted MDE for goal minus tag is 0.60 nats, which is 6.0 times the target. That is band 3: "above 1.5 times the target". The base design runs (2 goal wordings, 3 tag wordings, 30 items per cell), and goal minus tag is not used for a negative conclusion.
+- No menu design would reach the target: 8 goal and 8 tag wordings still give 0.36.
+- The predicted MDEs of the redundancy pattern (0.06) and the announced slope (0.11) are below $T_p$ at 30 items, so their cells keep 30 items and neither is withheld from negative conclusions. Equivalence is allowed only for Llama-3.1-8B in any case.
+- Projected GPU time: 1.30 GPU-hours for Qwen3-8B's full and cross-GPU runs. The projected total for both models is 3.46 GPU-hours, within the 6.3 budget.
+
+**Configurations written with this readout.** `wf/config/bayesenv_score_qwen3-8b.yaml` and `bayesenv_xgpu_qwen3-8b.yaml` keep the base design. `bayesenv_analysis.yaml` records Qwen3-8B's sizing outcome: goal minus tag not allowed for a negative conclusion; no pattern contrast withheld.
+

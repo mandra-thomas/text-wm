@@ -4,6 +4,7 @@
 tag: bayesenv-design-frozen-2026-11-25
 models:
   qwen3-8b: {main: bayesenv_score_qwen3-8b, xgpu: bayesenv_xgpu_qwen3-8b, checks: bayesenv_checks_qwen3-8b,
-             gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: false, sizing: null}
+             gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: false,
+             sizing: {goal_minus_tag_negative_allowed: false, patterns_not_for_negative: []}}
   llama3.1-8b: {main: bayesenv_score_llama3.1-8b, xgpu: bayesenv_xgpu_llama3.1-8b, checks: bayesenv_checks_llama3.1-8b,
                 gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: true, sizing: null}
