@@ -64,25 +64,28 @@ def encode(tok: Any, prompt: R.Prompt, mode: str, template_kwargs: dict | None =
         return ids, (cands[0], cands[1])
     if mode != "chat":
         raise ValueError(mode)
-    out = tok.apply_chat_template([{"role": r, "content": c} for r, c in prompt.messages], tokenize=True,
-                                  add_generation_prompt=True, **(template_kwargs or {}))
+    msgs = [{"role": r, "content": c} for r, c in prompt.messages]
+    out = tok.apply_chat_template(msgs, tokenize=True, add_generation_prompt=True, **(template_kwargs or {}))
     if hasattr(out, "keys"):
         out = out["input_ids"]
     ids = list(out[0] if out and isinstance(out[0], list) else out)
+    text = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True, **(template_kwargs or {}))
     sp = ""
     if prompt.prefix:
-        pre = tok(prompt.prefix, add_special_tokens=False)["input_ids"]
-        ids = ids + pre
+        ids = ids + tok(prompt.prefix, add_special_tokens=False)["input_ids"]
+        text = text + prompt.prefix
         sp = " "
+    base = tok(text, add_special_tokens=False)["input_ids"]
+    if base != ids:
+        raise SystemExit("the chat template's ids differ from the tokenization of its rendered text")
     cands = []
     for w in prompt.candidates:
         c = tok(sp + w, add_special_tokens=False)["input_ids"]
         if len(c) != 1:
             raise SystemExit(f"candidate {sp + w!r} is not one token: {c}")
-        if prompt.prefix:
-            joint = tok(prompt.prefix + sp + w, add_special_tokens=False)["input_ids"]
-            if joint != pre + c:
-                raise SystemExit(f"candidate {w!r} does not extend the answer prefix by one token")
+        joint = tok(text + sp + w, add_special_tokens=False)["input_ids"]
+        if joint != ids + c:
+            raise SystemExit(f"candidate {w!r} does not extend the rendered prompt by one token")
         cands.append(c[0])
     return ids, (cands[0], cands[1])
 
@@ -227,44 +230,60 @@ def run_bayesenv_score(cfg: dict, scorer_factory: Callable | None = None) -> int
 
 
 def classify_reply(space: str, framing: str, readout: str, text: str) -> str:
-    """Class of a sampled continuation: 'a' (the success form), 'b' (the failure form), 'a_other' (starts with the
-    first candidate word but is not the success form), or 'other'."""
+    """Class of a sampled continuation: 'a' (begins with the first candidate word and is the success form),
+    'a_other' (begins with the first candidate word but is not the success form), 'b' (begins with the second
+    candidate word and is the failure form), 'b_other', or 'other' (begins with neither)."""
     s = text.strip()
-    if space == "alf":
-        if s.startswith("a keychain"):
-            return "a"
-        if s.startswith("nothing"):
-            return "b"
-        return "a_other" if s.startswith("a ") else "other"
-    if framing == "wm":
-        if s.startswith("You take the key from box 3"):
-            return "a"
-        if s.startswith("Nothing happens"):
-            return "b"
-        return "a_other" if s.startswith("You") else "other"
     low = s.lower()
-    if low.startswith("holds the key") and "not locked" in low or low.startswith("holds the key and is unlocked"):
-        return "a"
-    if low.startswith("does not"):
-        return "b"
-    return "a_other" if low.startswith("holds") else "other"
+    if space == "alf":
+        if low.startswith("a "):
+            return "a" if low.startswith("a keychain") else "a_other"
+        if low.startswith("nothing"):
+            return "b" if low.startswith("nothing.") or low == "nothing" else "b_other"
+        return "other"
+    if framing == "wm":
+        if s.startswith("You"):
+            return "a" if s.startswith("You take the key from box 3") else "a_other"
+        if s.startswith("Nothing"):
+            return "b" if s.startswith("Nothing happens") else "b_other"
+        return "other"
+    if low.startswith("holds"):
+        ok = (low.startswith("holds the key") or low.startswith("holds a key")) and \
+            ("not locked" in low or "unlocked" in low)
+        return "a" if ok else "a_other"
+    if low.startswith("does"):
+        return "b" if low.startswith("does not hold") or low.startswith("doesn't hold") else "b_other"
+    return "other"
 
 
-def sample_check(tok: Any, model: Any, mode: str, units: list[D.Unit], n_prompts: int = 120, n_samples: int = 10,
+def sample_check(tok: Any, model: Any, mode: str, units: list[D.Unit], per_readout: int = 40, n_samples: int = 10,
                  max_new: int = 16, seed: int = 20261125, template_kwargs: dict | None = None) -> dict:
-    """The 'other'-rate check (section 5): sampled continuations (temperature 1) after the question-free readouts'
-    prompts, classified by `classify_reply`. Validation only: sampled in batches, never used as a score."""
+    """The reply-form and 'other'-rate check (section 5): for each question-free readout, `per_readout` prompts,
+    half drawn from prompts whose exact success probability is at least 0.25 and half from the rest, each with
+    `n_samples` continuations sampled at temperature 1, classified by `classify_reply`. Validation only: sampled in
+    batches, never used as a score."""
     import random
 
     import torch
 
     rng = random.Random(seed)
-    seqs = [(u, t, fr, r) for u in units for (t, fr, r) in u.sequences() if r in ("first", "narr")]
-    rng.shuffle(seqs)
+    groups: dict = {}
+    for u in units:
+        for t, fr, r in u.sequences():
+            if r in ("first", "narr"):
+                p = D.exact_for(u.space, t, u.gen, u.hist)
+                hi = p is not None and p >= 0.25
+                groups.setdefault((u.space, fr, r), {True: [], False: []})[hi].append((u, t, fr, r))
+    chosen = []
+    for key, g in sorted(groups.items()):
+        for hi in (True, False):
+            lst = sorted(g[hi], key=lambda x: (x[0].uid, x[1]))
+            rng.shuffle(lst)
+            chosen += lst[: per_readout // 2]
     by: dict = {}
     dev = next(model.parameters()).device
     torch.manual_seed(seed)
-    for u, t, fr, r in seqs[:n_prompts]:
+    for u, t, fr, r in chosen:
         p = D.prompt_for(u, t, fr, r)
         ids, _ = encode(tok, p, mode, template_kwargs)
         x = torch.tensor([ids], device=dev)
@@ -275,24 +294,31 @@ def sample_check(tok: Any, model: Any, mode: str, units: list[D.Unit], n_prompts
         key = f"{u.space}|{fr}|{r}"
         for row in g[:, x.shape[1]:]:
             text = tok.decode(row, skip_special_tokens=True)
-            if mode == "plain" or p.prefix:
-                text = text  # continues after the prompt (plain) or after the prefix (chat)
             c = classify_reply(u.space, fr, r, text)
             by.setdefault(key, {}).setdefault(c, 0)
             by[key][c] += 1
-            by.setdefault(key + "|examples", [])
-            if len(by[key + "|examples"]) < 12:
-                by[key + "|examples"].append(text)
+            ex = by.setdefault(key + "|examples", {})
+            if len(ex.setdefault(c, [])) < 5:
+                ex[c].append(text)
     return by
 
 
+DESCRIPTION_QUESTIONS = (
+    f"Question: does \"{R.DESCRIPTION}\" describe a key? Answer Yes or No.\nAnswer:",
+    f"Question: is \"{R.DESCRIPTION}\" a way of referring to a key? Answer Yes or No.\nAnswer:",
+    f"Question: a house tag reads \"{R.DESCRIPTION}\". Does the tag refer to a key? Answer Yes or No.\nAnswer:",
+)
+
+
 def description_check(tok: Any, model: Any, mode: str, template_kwargs: dict | None = None) -> dict:
-    """Does the model take the tag's description to mean a key? Yes/no, must favour Yes (section 5)."""
-    q = (f"Question: does \"{R.DESCRIPTION}\" describe a key? Answer Yes or No.\nAnswer:")
-    p = R.Prompt(messages=(("user", q),), prefix="", candidates=("Yes", "No"))
-    ids, c = encode(tok, p, mode, template_kwargs)
-    v = forward_last(model, ids, c)
-    return {"yes_minus_no": v["lp_a"] - v["lp_b"], "passed": v["lp_a"] > v["lp_b"]}
+    """Does the model take the tag's description to mean a key? Three yes/no phrasings; all must favour Yes."""
+    rows = []
+    for q in DESCRIPTION_QUESTIONS:
+        p = R.Prompt(messages=(("user", q),), prefix="", candidates=("Yes", "No"))
+        ids, c = encode(tok, p, mode, template_kwargs)
+        v = forward_last(model, ids, c)
+        rows.append(v["lp_a"] - v["lp_b"])
+    return {"yes_minus_no": rows, "passed": all(x > 0 for x in rows)}
 
 
 def run_bayesenv_smoke_checks(cfg: dict) -> int:
@@ -307,6 +333,9 @@ def run_bayesenv_smoke_checks(cfg: dict) -> int:
     d = _init_run(run_id, cfg)
     tok, model, rev = load(cfg["model"])
     env = environment(cfg["model"], rev, cfg["mode"], model)
+    want = cfg.get("gpu_type")
+    if want and not any(x in env["gpu"] for x in want.split("|")):
+        raise SystemExit(f"{run_id}: runs on {env['gpu']}, but this run is pinned to {want}")
     write_json(d / ENV_FILE, env)
     units = D.smoke_units()
     out = {"description": description_check(tok, model, cfg["mode"], cfg.get("template_kwargs")),

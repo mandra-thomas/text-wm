@@ -15,7 +15,7 @@ from wf.bayesenv import world as W
 CELLS = tuple((g, h) for g in W.GENERATOR_ORDER for h in W.HISTORY_ORDER)                 # 28 cells
 PANEL_CELLS = (("A", "H0"), ("A", "H6"), ("R3", "H2"), ("R3", "H9"), ("C", "H3"), ("C", "H6"), ("D", "H0"),
                ("D", "H9"))                                                                # the wording panel
-ANN_CELLS = tuple((g, h) for g in ("A", "C", "D") for h in W.GRADED)                       # announced arm, 18
+ANN_CELLS = tuple((g, h) for g in ("A", "C", "D") for h in W.GRADED if h != "H4")           # announced arm, 15
 PROV_CELLS = tuple((g, h) for g in ("A", "C") for h in ("H0", "H2", "H6"))                 # provenance, 6
 ALF_CELLS = tuple((g, h) for g in ("A", "C", "D") for h in R.ALF_HISTORIES)               # ALFWorld surface, 6
 ALF_IMPLICIT_CELLS = tuple(("none", h) for h in R.ALF_HISTORIES)                           # no generator stated

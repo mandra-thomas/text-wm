@@ -50,7 +50,7 @@ SYSTEM = {
 YN_WM = ("Question: will this action succeed, or will the environment reply \"Nothing happens.\"? "
          "Answer Yes if it succeeds and No if nothing happens.\nAnswer:")
 YN_SI = "Question: right now, does box 3 hold the key, and is box 3 not locked? Answer Yes or No.\nAnswer:"
-NARR_INSTRUCTION = "Complete the narrator's sentence about box 3."
+NARR_INSTRUCTION = "Complete the narrator's sentence about the key and box 3."
 NARR_PREFIX = "Narrator: Right now, box 3"
 
 # (framing, readout) -> the two candidate words read at the next position (with a leading space where the model
@@ -71,7 +71,7 @@ EXISTENCE = (  # two wordings, alternated by item: (rule sentence, history lines
     ("The game master always tells the truth.",
      "> ask the game master\nThe game master says: there is a key somewhere in this house."),
 )
-TAKE_RULE = ("Taking an object from a box succeeds only if the object is in that box and the box is not locked; the "
+TAKE_RULE = ("Taking an object from a box succeeds if and only if the object is in that box and the box is not locked; the "
              "environment then replies \"You take the <object> from box <n>.\" Otherwise it replies "
              "\"Nothing happens.\"")
 P0 = {"wm": "Every action in this game, the next one included, was picked at random by a tester who cannot see "
@@ -79,19 +79,20 @@ P0 = {"wm": "Every action in this game, the next one included, was picked at ran
       "si": "Every action in this game was picked at random by a tester who cannot see inside the boxes."}
 P1 = (  # the history-only helper (key task only), two wordings alternated by item
     "The earlier actions were picked at random by a tester who cannot see inside the boxes. The next action was chosen "
-    "by a helper who knows only what is shown here: it picks, at random, a box it has not looked into, and tries to "
-    "take from it the object its task names.",
+    "by a helper who knows only what is shown here: it picks, at random, one of the boxes not yet looked into, and "
+    "tries to take from that box the object named by the task in the task line.",
     "A tester who cannot see inside the boxes picked the earlier actions at random. A helper who has seen nothing but "
     "the history below chose the next action: it chose at random among the boxes not yet looked into, and tries to "
-    "take the object named by its task from that box.",
+    "take from that box the object named by the task in the task line.",
 )
 P2 = (  # the seeing guide (key task only), two wordings alternated by item
     "The earlier actions were picked at random by a tester who cannot see inside the boxes. The next action was chosen "
-    "by a guide who can see inside every box. When the object its task names is in a box that is not locked, the "
-    "guide takes it from that box 90% of the time; otherwise it picks one of the twelve take actions (the key or the "
-    "coin, from any box) at random.",
+    "by a guide who can see inside every box. When the object named by the task in the task line is in a box that is "
+    "not locked, the guide takes it from that box 90% of the time; in every other case it picks one of the twelve "
+    "take actions (the key or the coin, from any box) at random.",
     "A tester who cannot see inside the boxes picked the earlier actions at random. A guide who sees inside every box "
-    "chose the next action: if the object named by its task lies in a box that is not locked, 90% of the time the "
+    "chose the next action: if the object named by the task in the task line lies in a box that is not locked, 90% "
+    "of the time the "
     "guide takes it from there; in every other case it picks at random among the twelve take actions (the key or the "
     "coin, from any of the six boxes).",
 )
@@ -121,7 +122,8 @@ def generator_text(gen: str) -> str:
     return ("How the house was set up: first the player's task and the house tag (which may be none) were drawn. "
             "Then every object that the task or the house tag refers to was hidden with probability "
             f"{_pct(hi)}, and every other object with probability "
-            f"{_pct(lo)}. A hidden object was put in one of the six boxes, chosen at random.")
+            f"{_pct(lo)}. A hidden object was put in one of the six boxes, chosen at random; an object that was not hidden "
+            "is not in the house at all.")
 
 
 # ----------------------------------------------------------------------------- item surfaces
@@ -339,7 +341,8 @@ def alf_render(ptype: str, gen: str, hist: str, k: int, readout: str) -> Prompt:
         lines += [f"> go to drawer {b}", f"You arrive at drawer {b}. The drawer {b} is closed.", f"> open drawer {b}",
                   f"You open the drawer {b}. The drawer {b} is open. In it, you see nothing."]
     lines += ["> go to drawer 3", "You arrive at drawer 3. The drawer 3 is closed."]
-    head = ""
+    head = ("Every action in this episode, the next one included, was picked at random by a tester who cannot see "
+            "inside the drawers.\n\n")
     if stated:
         lo, hi = W.GENERATORS[gen]
         head = ("How this episode was set up: the room has six drawers, numbered 1 to 6. Before the episode, a "

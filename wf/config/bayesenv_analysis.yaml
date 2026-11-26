@@ -1,6 +1,9 @@
-# The frozen analysis (sections 7-12, 14), run once from a clean checkout at the design tag.
+# The frozen analysis (sections 7-14), run once from a clean checkout that contains the design tag.
+# `sizing` is each model's smoke-readout outcome (decision.sizing), written here in the commit that records that
+# model's smoke readout; the analysis refuses to run while it is missing.
+tag: bayesenv-design-frozen-2026-11-25
 models:
   qwen3-8b: {main: bayesenv_score_qwen3-8b, xgpu: bayesenv_xgpu_qwen3-8b, checks: bayesenv_checks_qwen3-8b,
-             gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: false}
+             gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: false, sizing: null}
   llama3.1-8b: {main: bayesenv_score_llama3.1-8b, xgpu: bayesenv_xgpu_llama3.1-8b, checks: bayesenv_checks_llama3.1-8b,
-                gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: true}
+                gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: true, sizing: null}
