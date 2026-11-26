@@ -191,6 +191,8 @@ def generator_level(rows: list[dict], comparison: str) -> dict:
     out = {"n_strata": len(strata), "n_scenes": len(scenes),
            "n_comparison_rows": sum(len(s["cmp"]) for s in strata.values()),
            "n_other_rows": sum(len(s["other"]) for s in strata.values())}
+    if not strata:
+        return out
     rng = np.random.default_rng(SEED)
     for field in ("closed_share", "n_inst", "appliance_share", "target_share"):
         arrs = _stratum_arrays(strata, field)
@@ -381,7 +383,7 @@ def analyze(args) -> None:
                       "another object, within floor plans (generator level), and the location-given-existence index "
                       "for RQ2 take items", "seed": SEED, "n_boot": N_BOOT, "n_perm": N_PERM,
               "games": dict(Counter(g["split"] for g in games)),
-              "games_solvable_flag": dict(Counter((g["split"], g["solvable"]) for g in games))}
+              "games_solvable_flag": dict(Counter(f"{g['split']}|{g['solvable']}" for g in games))}
     for split in ("train", "valid_unseen"):
         rs = [r for r in rows if r["split"] == split]
         report[f"generator_{split}"] = {"task_object": generator_level(rs, "task"),
