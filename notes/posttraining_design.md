@@ -1,6 +1,6 @@
 # How does post-training change whether a language model keeps an agent's task out of its predicted environment dynamics? A staged-checkpoint pilot (design, 2026-11-26)
 
-**Status: design, not frozen.** No effect has been scored. The access and tokenizer check (section 2) and a CPU dry run of the scorer and analysis with the real tokenizers and a tiny random model ran on CPU. Exploratory study with a frozen procedure: the design, the scorer and the analysis are fixed at an annotated tag after one independent review (`notes/posttraining_review1.md`, section 15), before any score. Approved by the user on 2026-11-26 with the scope in section 1.
+**Status: frozen design (tag `posttraining-design-frozen-2026-11-26`).** No effect has been scored. The access and tokenizer check (section 2) and a CPU dry run of the scorer and analysis with the real tokenizers and a tiny random model ran on CPU. Exploratory study with a frozen procedure: the design, the scorer and the analysis are fixed at an annotated tag after one independent review (`notes/posttraining_review1.md`, section 15), before any score. Approved by the user on 2026-11-26 with the scope in section 1.
 
 ## 1. The question and the scope
 
@@ -238,3 +238,7 @@ The approved budget is about 7.5–9 GPU-hours. The smoke measures the real rate
 - `scripts/posttrain/access_check.py`: the CPU access and tokenizer check (section 2). `scripts/posttrain/cpu_dryrun.py`: a CPU dry run with real tokenizers and a tiny random model.
 - `pace/posttrain_score.sbatch`, `pace/posttrain_cpu.sbatch`, `pace/posttrain_access.sbatch`.
 - `tests/test_posttrain.py`: cells, reuse, readout definitions and the reading rules on planted scores.
+
+## 15. Review
+
+One independent adversarial review (2026-11-26) of the draft note and code found 7 must-fix, 12 should-fix and 6 minor points; every one was addressed before the freeze. The points and the changes are listed in `notes/posttraining_review1.md`. The main changes: the recognition check became a ranking among all 55 names by association; the Holm family is fixed at 35 readings, with every other reading labelled descriptive; a missing numerical floor makes a reading unreadable, and equivalence readings need their margin to be at least five floors; success cells are never reused from lexsem, and reuse needs recorded provenance, code identity, a bit-identity check in both strata and complete cells; the reference rule is two-sided; the competence gate compares later-step failures with the successes; the robustness rule's rank gain uses only the three task lines; token-id identity across a lineage is checked on every scored sequence.
