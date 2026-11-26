@@ -1,0 +1,8 @@
+# Smoke readout and sizing rule for Llama-3.1-8B (section 9). fixed_gpu_h is set, before this readout runs, to the
+# GPU-hours Qwen3-8B's runs used (smoke, checks, full, cross-GPU); n_models 1.
+smoke: bayesenv_smoke_llama3.1-8b
+checks: bayesenv_checks_llama3.1-8b
+gpu_type: L40S
+budget_gpu_h: 6.3
+fixed_gpu_h: 0.0
+n_models: 1

@@ -1469,6 +1469,15 @@ RUNNERS: dict[str, Callable[[dict], int]] = {
     "interp_pilot_patch": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_patch")(cfg),
     "interp_pilot_ablate": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_ablate")(cfg),
     "interp_pilot_analysis": lambda cfg: _lazy("interp.pilot", "run_interp_pilot_analysis")(cfg),
+    # Controlled Bayesian environment (wf/bayesenv/, notes/bayesenv_design.md): smoke, checks, smoke readout, full
+    # and cross-GPU scoring per model, and the one analysis.
+    **{f"bayesenv_{step}_{tag}": (lambda cfg: _lazy("bayesenv.score", "run_bayesenv_score")(cfg))
+       for step in ("smoke", "score", "xgpu") for tag in ("qwen3-8b", "llama3.1-8b")},
+    **{f"bayesenv_checks_{tag}": (lambda cfg: _lazy("bayesenv.score", "run_bayesenv_smoke_checks")(cfg))
+       for tag in ("qwen3-8b", "llama3.1-8b")},
+    **{f"bayesenv_smoke_readout_{tag}": (lambda cfg: _lazy("bayesenv.pipeline", "run_bayesenv_smoke_readout")(cfg))
+       for tag in ("qwen3-8b", "llama3.1-8b")},
+    "bayesenv_analysis": lambda cfg: _lazy("bayesenv.pipeline", "run_bayesenv_analysis")(cfg),
 }
 
 

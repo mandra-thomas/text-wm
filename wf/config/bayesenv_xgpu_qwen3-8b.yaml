@@ -1,0 +1,7 @@
+# Cross-GPU subset (rule 4; section 14): items k < 9 of every cell, every arm, same stack, a different GPU type.
+# The design must equal the full run's (set together with it).
+model: Qwen/Qwen3-8B
+mode: plain
+units: xgpu
+gpu_type: A40
+design: {w_goal: 2, w_tag: 3, n: 30, n_h4: 30, n_ann: 30, alf: true}

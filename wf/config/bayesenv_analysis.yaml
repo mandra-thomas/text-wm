@@ -1,0 +1,6 @@
+# The frozen analysis (sections 7-12, 14), run once from a clean checkout at the design tag.
+models:
+  qwen3-8b: {main: bayesenv_score_qwen3-8b, xgpu: bayesenv_xgpu_qwen3-8b, checks: bayesenv_checks_qwen3-8b,
+             gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: false}
+  llama3.1-8b: {main: bayesenv_score_llama3.1-8b, xgpu: bayesenv_xgpu_llama3.1-8b, checks: bayesenv_checks_llama3.1-8b,
+                gpu_type: L40S, xgpu_gpu_type: A40, low_floor_family: true}

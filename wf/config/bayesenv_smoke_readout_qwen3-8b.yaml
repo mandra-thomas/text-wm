@@ -1,0 +1,7 @@
+# Smoke readout and sizing rule (section 9). Qwen3-8B is sized first; both models are assumed to cost the same.
+smoke: bayesenv_smoke_qwen3-8b
+checks: bayesenv_checks_qwen3-8b
+gpu_type: L40S
+budget_gpu_h: 6.3
+fixed_gpu_h: 0.0
+n_models: 2

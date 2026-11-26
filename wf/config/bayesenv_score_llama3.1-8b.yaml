@@ -1,0 +1,7 @@
+# Full run (section 9). The design is set by the smoke readout's rule and committed with the smoke readout before
+# this run is submitted; the values below are the base design until then. Four shards, L40S only, resumed on L40S.
+model: meta-llama/Llama-3.1-8B-Instruct
+mode: chat
+units: full
+gpu_type: L40S
+design: {w_goal: 2, w_tag: 3, n: 30, n_h4: 30, n_ann: 30, alf: true}

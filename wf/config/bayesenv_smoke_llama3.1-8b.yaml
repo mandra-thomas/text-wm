@@ -1,0 +1,5 @@
+# Controlled Bayesian environment, smoke run (notes/bayesenv_design.md section 9). One shard, L40S only.
+model: meta-llama/Llama-3.1-8B-Instruct
+mode: chat
+units: smoke
+gpu_type: L40S
