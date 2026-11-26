@@ -494,6 +494,6 @@ No other wave B model has the check, so no other outcome can change.
 
 - **Local wave B test files:** 252 passed, 23 skipped.
 - **Mutants:** 21 of 21 killed under the strict rule with the bytecode fix (`notes/families_waveb_db1_mutants.jsonl`). These are 13 new mutants that break D-B1, and the 8 earlier review 1 S9 mutants, rerun.
-- **The serve2 test on the real class** (`test_float32_attention_check_leaves_the_bf16_model_bit_for_bit`) was started on ICE before the tag, on a login node. Its result is added when it ends.
+- **The serve2 tests on the real classes** passed on ICE (serve2, login node, offline; 3 passed in 1 h 44 min), with the code at the tag: `test_float32_attention_check_leaves_the_bf16_model_bit_for_bit` (every parameter and buffer of a bf16 Gemma 4 E4B is equal bit for bit after the check) and the eager-against-SDPA check on the real E4B and 31B classes.
 
 The jobs themselves are the decisive check. The gate fails closed: a failed cast, a failed restore, or a check that is not passed stops the job before it scores.
