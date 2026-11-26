@@ -324,3 +324,42 @@ Lexsem's full-run scores used for reuse will come from a commit that contains 5a
 - *A latent bug, fixed.* For lexsem's runs, the check compared every pilot scorer file, including `wf/posttrain*.py` and the pin table, which a lexsem commit does not contain. So every reuse would have been refused. It now compares only the files that decide a lexsem score: `wf/lexsem.py`, `scripts/lexsem/score.py`, `scripts/qwen_audit/followup_score.py`, `wf/scoring`, `wf/rq1.py`, `wf/rq1x.py`, `wf/rq1v.py`, `wf/rq2.py` and `wf/data`. The reused checkpoint's pinned revision is compared through the environment records, as before. The pilot's own arms are still compared on the full scorer file list.
 
 Nothing was rescored. Every other rule is unchanged.
+
+## 17. Deviation D-PT2: the five reuse arms are scored by the pilot itself (2026-11-26)
+
+Recorded and tagged (`posttraining-deviation-dpt2-2026-11-26`) before these jobs were submitted and before any pilot score was read.
+
+**What changes.** The pilot scores every cell of five arms itself, with `--no-reuse`, through the same scoring path and on L40S GPUs. Under section 7, those cells would have come from lexsem's run files. The five arms are:
+
+- Llama-3.1-8B base, plain text;
+- Qwen3-8B-Base, plain text;
+- Qwen3-8B, plain text;
+- Qwen3-8B with the think block;
+- Llama-3.1-8B-Instruct in its chat template.
+
+Jobs are submitted from a clean checkout at this tag. The earlier run folders of these arms, scored at e0e9c04 with only the cells lexsem lacked, are moved unread to `runs/posttrain_superseded_reuse/` and are not used.
+
+**Why.** When the pilot's full run finished, lexsem had not frozen and none of its full-run scores existed. The user chose to decouple the pilot from lexsem's schedule rather than wait.
+
+**Cost.** About 1.1 to 1.3 L40S GPU-hours (four jobs, 75,312 sequences at the smoke's rates, plus loading). That brings the pilot to about 8.1 to 8.3 GPU-hours, within the approved 7.5 to 9.
+
+**What does not change.** No decision rule, gate, margin, floor, Holm family or estimand changes. The floor arms already scored every cell themselves and are unchanged. The analysis code is unchanged: an arm scored with `reuse: false` is read from its own cells (the frozen `merge_lexsem` skips it).
+
+**Provenance comparison with lexsem (fixed now, before either side's scores are read; it does not gate the analysis).** Lexsem froze at `lexsem-design-frozen-2026-11-26` (46e255b, scoring code identical to 5aabb99). When its scores exist, every cell scored by both studies will be compared, matched by item, condition and format. Lexsem's arms and the pilot's arms are paired as follows:
+
+- `llama8b_base_plain` with the Llama base in plain text;
+- `qwen8b_base_plain` with the Qwen base in plain text;
+- `qwen_plain` with Qwen3-8B in plain text;
+- `qwen_block` with Qwen3-8B with the think block;
+- `llama_chat` with Llama-3.1-8B-Instruct in its chat template.
+
+Both studies use the same GPU type, stack, revision, unbatched path, prompt builder and scorer functions, so the expectation is as follows.
+
+- *Expected bit-identical* (the stored log-probabilities, rounded to five decimals as both studies write them; `notes/numerical_sensitivity.md` §4.1: same environment, same bits):
+  - on the failures, the success-text sequence: log p(" You") and log p(" Nothing") at the first position, and every success-text token's log-probability;
+  - on the failures, the failure-text sequence: every token's log-probability;
+  - on the failures, the yes/no sequence: log p("Yes") and log p("No");
+  - on the successes, under the neutral task (lexsem's base arms only): the failure-text and yes/no sequences, and the success-text token log-probabilities and log p(" Nothing"). Lexsem's own-first-token field (`lp_a` for those successes) is the same number as the pilot's first stored token log-probability.
+- *Expected only within the floor:* none. Any difference is reported as a provenance finding. A cell differing by less than the arm's measured floor would point to an unrecorded environment difference (for example a different node's software or driver), and a larger one to a different prompt or code path. Neither changes this pilot's readings, which use only its own scores.
+
+The comparison is reported in the results note, with counts of identical, within-floor and larger differences per arm and readout.

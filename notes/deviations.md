@@ -750,3 +750,18 @@ Recorded before any pilot score was read. The full text is in `notes/posttrainin
 - **A latent bug, fixed.** The check now compares lexsem's runs only on the files that decide a lexsem score. Before, it compared the pilot's own files too, which a lexsem commit does not contain, so every reuse would have been refused.
 
 Nothing was rescored.
+
+## Post-training pilot, deviation D-PT2: the five reuse arms are scored by the pilot itself (2026-11-26)
+
+Recorded and tagged (`posttraining-deviation-dpt2-2026-11-26`) before the jobs were submitted and before any pilot score was read. The full text is in `notes/posttraining_design.md`, section 17.
+
+- **What changes.** The pilot rescores five arms itself with `--no-reuse`, instead of reusing lexsem's cells:
+  - Llama-3.1-8B base, plain text;
+  - Qwen3-8B-Base, plain text;
+  - Qwen3-8B, plain text;
+  - Qwen3-8B with the think block;
+  - Llama-3.1-8B-Instruct in its chat template.
+- **Why.** Lexsem had not frozen when the pilot finished, and the user chose to decouple the two studies.
+- **Cost.** About 1.1 to 1.3 GPU-hours.
+- **Decision rules.** None change.
+- **Comparison with lexsem.** Once lexsem's scores exist, the shared cells are compared with them. This is a provenance check only and does not gate the analysis; every shared cell is expected to match bit for bit.
