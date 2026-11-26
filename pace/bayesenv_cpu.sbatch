@@ -20,6 +20,8 @@ cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 source "${SLURM_SUBMIT_DIR:-$(pwd)}/pace/_common.sh"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 export SERVE_ENV="${BE_SERVE_ENV:-/storage/ice1/2/1/gmat3/envs/serve2}"
+# The shared cache holding both pinned snapshots (transformers 5 reads HF_HUB_CACHE).
+export HF_HUB_CACHE="${BE_HF_CACHE:-/storage/ice1/2/1/gmat3/hfcache}" TRANSFORMERS_CACHE="${BE_HF_CACHE:-/storage/ice1/2/1/gmat3/hfcache}"
 WHAT="${BE_CPU:?set BE_CPU}"
 echo "=== bayesenv cpu ${WHAT} START $(date) host=$(hostname) commit=$(git rev-parse HEAD) ==="
 activate_serve
