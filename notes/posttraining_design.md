@@ -264,6 +264,15 @@ So in plain text the full two-candidate score differs substantially from the fir
 
 The total is about 6.7 GPU-hours. That is under the approved 7.5–9 and under the 9-hour stopping threshold, so the full run proceeds.
 
+**CPU check of the success path (2026-11-26, after the full run was submitted, before any of its jobs started; CPU job 7349845, at commit e0e9c04).** The smoke never reached a success whose observation does not start with "You". So the frozen scorer's own job builder and readout bookkeeping (`build_jobs`, `readouts`), together with the analysis's `readout`, were run on CPU on the first success of each start word: t_000040 ("You"), t_000657 ("There's"), t_001375 ("The") and t_1000078 ("This"). The tokenizers were the real ones, from the access check's cache, and a tiny random model stood in for the weights. Seven arms were covered, spanning all prompt modes: Tülu SFT in plain text, in its template and in the bridge; the Llama base in plain text; Qwen3-8B in plain text and with the block; and the Word2World model in its template. Under the real, swapped and neutral tasks, every case passed four checks:
+
+- the success sequence's continuation decodes to the item's own observation;
+- the flag for "starts with the readout token" is false exactly for the three non-"You" words;
+- the failure-text sequence starts with "Nothing";
+- the analysis's first-token decision equals the stored log-probability of the item's own first token minus that of "Nothing", with the full and continuation scores finite.
+
+No code was changed. The check script is outside the repository; it uses only the frozen functions.
+
 ## 13. Limits
 
 - One lineage with intermediate stages, plus a base–final pair; a case study.
