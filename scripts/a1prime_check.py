@@ -260,6 +260,7 @@ def _frac_table(games: list[dict]):
         present = {o["type"].lower() for o in g["objects"] if o["pickupable"]}
         out.append({"room": g["room"], "task_type": g["task_type"], "scene": g["scene"],
                     "task_obj": g["object_target"].lower(), "present": present, "n_r": n_r,
+                    "count": Counter(o["type"].lower() for o in g["objects"] if o["pickupable"]),
                     "frac": {t: {rt: len(ids) / n_r[rt] for rt, ids in d.items()} for t, d in holding.items()}})
     return out
 
@@ -275,6 +276,15 @@ def q_values(table: list[dict], room: str, obj: str, rt: str, task_type: str) ->
     exists = [g for g in other if obj in g["present"]]
     mean = lambda gs: sum(g["frac"].get(obj, {}).get(rt, 0.0) for g in gs) / len(gs) if gs else float("nan")
     return mean(task), mean(exists), mean(other), len(task)
+
+
+def instance_values(table: list[dict], room: str, obj: str, k: int) -> tuple[float, float]:
+    """P(at least k instances of `obj`) in this room's games whose task object is `obj`, and in games where `obj`
+    exists but is not the task's object: whether the instance number the action names exists, given the type."""
+    task = [g for g in table if g["room"] == room and g["task_obj"] == obj]
+    exists = [g for g in table if g["room"] == room and g["task_obj"] != obj and g["count"][obj] > 0]
+    share = lambda gs: sum(g["count"][obj] >= k for g in gs) / len(gs) if gs else float("nan")
+    return share(task), share(exists)
 
 
 _TEMPLATES = [
@@ -299,13 +309,22 @@ def task_type_of(line: str) -> str | None:
     return None
 
 
-def room_of_item(t: dict, unseen_games: list[dict]) -> str | None:
-    """The room type of an RQ2 item's game: the valid_unseen game whose task object and receptacle names match."""
-    recs = set(t.get("scene_receptacles") or [])
-    goal = t["goal_object"]
-    rooms = {g["room"] for g in unseen_games if g["object_target"].lower() == goal
-             and {r["num_id"] for r in g["receptacles"].values() if r["num_id"]} == recs}
-    return rooms.pop() if len(rooms) == 1 else None
+def room_from_receptacle_types(types: set[str]) -> str:
+    """AI2-THOR's room types by their signature receptacles: a fridge only in kitchens, a toilet only in bathrooms,
+    a bed only in bedrooms; the rest are living rooms. Checked against the floor-plan number of every extracted game
+    (`room_rule_agreement` in the metrics)."""
+    if "fridge" in types:
+        return "kitchen"
+    if "toilet" in types:
+        return "bathroom"
+    if "bed" in types:
+        return "bedroom"
+    return "livingroom"
+
+
+def room_of_item(t: dict) -> str:
+    """The room type of an RQ2 item's game, from the receptacle types the item's scene lists."""
+    return room_from_receptacle_types({re.sub(r"\s+\d+$", "", r) for r in t.get("scene_receptacles") or []})
 
 
 def item_level(games: list[dict], transitions_dir: str | None) -> dict:
@@ -325,11 +344,14 @@ def item_level(games: list[dict], transitions_dir: str | None) -> dict:
     table = _frac_table(train)
     rows, skipped, qcache = [], Counter(), {}
     for t in items:
-        m = re.fullmatch(r"take (\w+) \d+ from (\w+) \d+", t["action"])
+        m = re.fullmatch(r"take (\w+) (\d+) from (\w+) \d+", t["action"])
+        if m:
+            k_inst = int(m[2])
+            m = re.fullmatch(r"take (\w+) \d+ from (\w+) \d+", t["action"])
         if not m or m[1] != t["goal_object"]:
             skipped["not a take of the goal object"] += 1
             continue
-        room = room_of_item(t, unseen)
+        room = room_of_item(t)
         tt = task_type_of(t["task_line"])
         if room is None or tt is None:
             skipped["room or task type not identified"] += 1
@@ -341,10 +363,16 @@ def item_level(games: list[dict], transitions_dir: str | None) -> dict:
         if not all(math.isfinite(x) for x in (qt, qe, qn)):
             skipped["no train games for this room, object and receptacle"] += 1
             continue
+        ikey = (room, m[1], k_inst)
+        if ikey not in qcache:
+            qcache[ikey] = instance_values(table, *ikey)
+        pt, pe = qcache[ikey]
         hist = t["history_text"]
         seen = re.search(rf"\b{m[2]} \d+\b", "\n".join(hist.splitlines()[2:])) is not None
         rows.append({"id": t["id"], "game": t["game_id"], "room": room, "obj": m[1], "rt": m[2], "task_type": tt,
                      "history_len": t.get("history_len", 0), "recep_type_named_in_history": seen,
+                     "instance": k_inst,
+                     "instance_given_existence": math.log((pt + SMOOTH) / (pe + SMOOTH)),
                      "location_given_existence": math.log((qt + SMOOTH) / (qe + SMOOTH)),
                      "existence": math.log((qe + SMOOTH) / (qn + SMOOTH)),
                      "total": math.log((qt + SMOOTH) / (qn + SMOOTH))})
@@ -372,7 +400,7 @@ def item_level(games: list[dict], transitions_dir: str | None) -> dict:
     for name, sel in (("all_take_items", rows),
                       ("receptacle_type_not_named_in_history", [r for r in rows if not r["recep_type_named_in_history"]]),
                       ("step0", [r for r in rows if r["history_len"] == 0])):
-        out[name] = {k: summary(sel, k) for k in ("location_given_existence", "existence", "total")}
+        out[name] = {k: summary(sel, k) for k in ("location_given_existence", "instance_given_existence", "existence", "total")}
     return out
 
 
@@ -384,10 +412,13 @@ def analyze(args) -> None:
                       "for RQ2 take items", "seed": SEED, "n_boot": N_BOOT, "n_perm": N_PERM,
               "games": dict(Counter(g["split"] for g in games)),
               "games_solvable_flag": dict(Counter(f"{g['split']}|{g['solvable']}" for g in games))}
-    for split in ("train", "valid_unseen"):
+    for split in (("train", "valid_unseen") if not args.items_only else ()):
         rs = [r for r in rows if r["split"] == split]
         report[f"generator_{split}"] = {"task_object": generator_level(rs, "task"),
                                         "movable_receptacle": generator_level(rs, "mrecep")}
+    agree = Counter(room_from_receptacle_types({r["type"].lower() for r in g["receptacles"].values()}) == g["room"]
+                    for g in games)
+    report["room_rule_agreement"] = {"agree": agree[True], "disagree": agree[False]}
     report["rq2_take_items"] = item_level(games, args.transitions)
     with open(args.out, "w") as f:
         json.dump(report, f, indent=1, sort_keys=True)
@@ -405,6 +436,7 @@ def main() -> None:
     a.add_argument("--games", required=True)
     a.add_argument("--transitions", default=None)
     a.add_argument("--out", required=True)
+    a.add_argument("--items-only", action="store_true", help="skip the generator-level part (a quick check)")
     args = ap.parse_args()
     extract(args) if args.cmd == "extract" else analyze(args)
 

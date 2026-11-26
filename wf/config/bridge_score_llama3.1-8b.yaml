@@ -6,7 +6,7 @@ tag: llama3.1-8b
 formats: {chat: sample}
 items: sample
 gpu_type: L40S
-n_shards: 3
+n_shards: 2
 sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
 accept_commits:
   rq12_transitions_s0: ["f8d20c1"]

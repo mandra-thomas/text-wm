@@ -7,7 +7,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=2:00:00
 #SBATCH --gres=gpu:1
-# The main runs and the smoke run are pinned to L40S, the cross-GPU rescore to A40 (the run itself also refuses any
+# The main runs and the smoke run are pinned to L40S, the cross-GPU rescore to A100 (the run itself also refuses any
 # other GPU type, wf/bridge.py). Brackets because ICE appends &cuda13.
 #SBATCH --constraint=(gpu-l40s)
 #SBATCH --output=logs/bridge_%j.out
@@ -16,8 +16,8 @@
 # Natural ALFWorld bridge (wf/bridge.py, notes/bridge_design.md), in the serve2 environment (transformers 5), from a
 # clean checkout at the design-freeze tag. One job per shard:
 #   bash pace/submit.sh bridge.sbatch --export=ALL,BRIDGE_RUN=bridge_smoke_qwen3-8b
-#   bash pace/submit.sh bridge.sbatch --export=ALL,BRIDGE_RUN=bridge_score_llama3.1-8b,WF_SHARD=0,WF_N_SHARDS=3
-#   bash pace/submit.sh bridge.sbatch --export=ALL,BRIDGE_RUN=bridge_rescore_qwen3-8b --constraint='(gpu-a40)'
+#   bash pace/submit.sh bridge.sbatch --export=ALL,BRIDGE_RUN=bridge_score_llama3.1-8b,WF_SHARD=0,WF_N_SHARDS=2
+#   bash pace/submit.sh bridge.sbatch --export=ALL,BRIDGE_RUN=bridge_rescore_qwen3-8b --constraint='(gpu-a100)'
 # After a timeout: the same command with WF_RESUME=1 in --export, on the same GPU type.
 
 set -euo pipefail

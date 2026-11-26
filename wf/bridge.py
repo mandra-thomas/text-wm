@@ -314,10 +314,11 @@ def token_checks(items: list[dict], fmt: str, r: Renderer, subset_ids: set[str])
         for task, arm, readout in jobs:
             if readout != "cand" or task != "aligned":
                 continue
-            a = plain_text(messages(t, "aligned", arm)) if fmt == "plain" else json.dumps(messages(t, "aligned", arm))
-            b = plain_text(messages(t, "swapped", arm)) if fmt == "plain" else json.dumps(messages(t, "swapped", arm))
-            la, lb = task_line(t, "aligned", arm), task_line(t, "swapped", arm)
-            if a.replace(la, "\x00") != b.replace(lb, "\x00"):
+            ma, mb = messages(t, "aligned", arm), messages(t, "swapped", arm)
+            a = (plain_text(ma) if fmt == "plain" else "\n".join(m["content"] for m in ma)).split("\n")
+            b = (plain_text(mb) if fmt == "plain" else "\n".join(m["content"] for m in mb)).split("\n")
+            diff = [(x, y) for x, y in zip(a, b) if x != y]
+            if len(a) != len(b) or diff != [(task_line(t, "aligned", arm), task_line(t, "swapped", arm))]:
                 problems.append(f"{t['id']}/{arm}: aligned and swapped prompts differ outside the task line")
         if fmt == "plain":
             msgs = messages(t, "aligned", "none")

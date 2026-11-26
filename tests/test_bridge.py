@@ -287,11 +287,11 @@ def test_configs_pin_gpu_types_and_formats():
     cfg = lambda name: yaml.safe_load((ROOT / "wf" / "config" / f"{name}.yaml").read_text())
     for tag in A.MODELS:
         assert cfg(f"bridge_score_{tag}")["gpu_type"] == "L40S" and cfg(f"bridge_smoke_{tag}")["gpu_type"] == "L40S"
-        assert cfg(f"bridge_rescore_{tag}")["gpu_type"] == "A40"
+        assert cfg(f"bridge_rescore_{tag}")["gpu_type"] == "A100"
         assert cfg(f"bridge_rescore_{tag}")["formats"] == {A.PRIMARY_FORMAT[tag]: "sample"}
         assert A.PRIMARY_FORMAT[tag] in cfg(f"bridge_score_{tag}")["formats"]
     an = cfg("bridge_analysis")
-    assert an["main_gpu"] == "L40S" and an["rescore_gpu"] == "A40"
+    assert an["main_gpu"] == "L40S" and an["rescore_gpu"] == "A100"
     assert set(an["score_runs"]) == set(an["rescore_runs"]) == set(A.MODELS)
 
 
@@ -303,9 +303,9 @@ def test_end_to_end_mock(mock_root):
         for i in range(2):
             assert B.run_bridge_score({**base, "run_id": f"bridge_score_{tag}", "formats": fm, "items": "sample",
                                        "n_shards": 2, "shard": i}) == 0
-        assert B.run_bridge_score({**base, "run_id": f"bridge_rescore_{tag}", "gpu_type": "A40", "n_shards": 1,
+        assert B.run_bridge_score({**base, "run_id": f"bridge_rescore_{tag}", "gpu_type": "A100", "n_shards": 1,
                                    "formats": {A.PRIMARY_FORMAT[tag]: "sample"}, "items": "subset"}) == 0
-    acfg = {"run_id": "bridge_analysis", "sources": ["rq12_transitions_smoke"], "main_gpu": "L40S", "rescore_gpu": "A40",
+    acfg = {"run_id": "bridge_analysis", "sources": ["rq12_transitions_smoke"], "main_gpu": "L40S", "rescore_gpu": "A100",
             "score_runs": {t: f"bridge_score_{t}" for t in A.MODELS},
             "rescore_runs": {t: f"bridge_rescore_{t}" for t in A.MODELS}}
     assert A.run_bridge_analysis(acfg) == 0

@@ -1,11 +1,11 @@
 run_id: bridge_rescore_qwen3-8b
 # Rule 4 of notes/numerical_sensitivity.md: the 300-item subset, every arm and readout, the primary format, rescored
-# in the same software stack on another GPU type (A40).
+# in the same software stack on another GPU type (A100).
 model: Qwen/Qwen3-8B
 tag: qwen3-8b
 formats: {plain: sample}
 items: subset
-gpu_type: A40
+gpu_type: A100
 n_shards: 1
 sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
 accept_commits:

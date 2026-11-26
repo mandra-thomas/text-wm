@@ -26,6 +26,18 @@ class SeqScore:
     stem_len: int  # the group's stem length in tokens (an audit field)
 
 
+def _cut(cache: Any, length: int) -> None:
+    """Cut the key-value cache back to its first `length` tokens. transformers 5 accepts only a negative argument to
+    DynamicCache.crop (the number of tokens to remove); transformers 4 reads a negative argument the same way."""
+    n = cache.get_seq_length()
+    if n < length:
+        raise ValueError(f"cache holds {n} tokens, fewer than {length}")
+    if n > length:
+        cache.crop(length - n)
+    if cache.get_seq_length() != length:
+        raise RuntimeError(f"cache crop left {cache.get_seq_length()} tokens, expected {length}")
+
+
 def common_prefix_len(seqs: Sequence[Sequence[int]]) -> int:
     if not seqs:
         return 0
@@ -67,7 +79,7 @@ class PrefixScorer:
                 cache = self.model(input_ids=ids, use_cache=True).past_key_values
             for p, c, probes in seqs:
                 if cache is not None:
-                    cache.crop(stem - 1)
+                    _cut(cache, stem - 1)
                 full = list(p) + list(c)
                 ids = torch.tensor([full[stem - 1:]], device=dev)
                 res = self.model(input_ids=ids, past_key_values=cache, use_cache=cache is not None)
