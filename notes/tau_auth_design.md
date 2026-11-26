@@ -963,3 +963,44 @@ design cannot certify, for this model, that it read the task-blind description o
 **What no outcome shows.** Any category concerns the failing call's first token on 192 items of two classes, in one
 domain and one prompt format. One more Meta model does not separate size, distillation and post-training, and does not
 extend the result to another developer.
+
+### E10. Smoke record (2026-11-25, written before the full run is submitted)
+
+All at the tag `tau-auth-ext-llama32-2026-11-25` (`a70e652`), checkout `text-wm-tauauth-l32`, clean tree.
+
+**Operational events before the smoke run.** The first smoke submission, job 7328769, waited with the reason
+"BadConstraints" because the job was eligible for a partition without L40S nodes (`ice-bw-gpu`); it was restricted to
+`coc-gpu,ice-gpu` and its time limit lowered to 1 hour so it could start (both operational; the GPU type stays L40S).
+It then stopped after 22 seconds with "items not verified: tau_verify has not passed", because the build and its
+verification record had been copied from `text-wm-fix38`, where they were made at `f70b285`, and the gate requires a
+record made at the current commit. It scored nothing (folder kept as `runs/_failed_tau_auth_l32_score_smoke_7328769`).
+As in the original checkout (job 7246044) and the τ families checkout (job 7246048), the items were then rebuilt and
+verified at the tag (CPU job 7330380, 4 minutes): the rebuild reproduces all three pinned files (`2c8ffeac…`,
+`9bd6c3f7…`, `231607f7…`) and `tau_verify` passes (3,363 generated and 28 natural items, 0 failed). The smoke run was
+resubmitted unchanged (with the partition list and the 1-hour limit at submission). None of this changes a prompt,
+item, job or rule. The token check (CPU job 7328347) had passed on all 9,504 prompts with 0 problems.
+
+**Smoke run** (`tau_auth_l32_score_smoke`, job 7330545, NVIDIA L40S, 8 min 34 s; 7 items including
+`tau-g-77cc59152d73`, comprehension on all 7; 420 records, `scoring.jsonl` sha256 `1915093d5b8e03cc…`). The in-run token
+report passes and records `template_settings` `{"date_string": "26 Jul 2024", "enable_thinking": false}`. **Smoke
+analysis** (`tau_auth_l32_smoke_analysis`, CPU job 7330785; `metrics.json` sha256 `e935c2747a7cb03a…`): 0 missing, 0
+stale.
+
+- **Format.** Median two-way mass per arm and readout 0.967 to 1.000; no prompt below 0.5; no red flag.
+- **Timing.** Mean seconds per pass: arm (i) 0.72 (first token), 0.59 (yes/no and comprehension); arms (ii) and (iii)
+  0.69 to 0.72. Projected full run 1.83 GPU-hours (largest shard 0.52 hours, limit 4).
+- **Stopping rule (E7).** 0.143 (smoke wall time) + 1.826 (projection) + 0.05 (model loads) = 2.02 GPU-hours, below
+  2.25: the full run is submitted.
+- **Spread (§9.2), 7 items.** Per-item standard deviation of the arm (i) request component 0.62 nats, of its removed
+  part 0.51 and of its persisting part 0.45. Projected 95% half-widths at 192 items: 0.09, 0.07 and 0.06 nats if items
+  are independent, 0.13, 0.10 and 0.09 at the full clustering bound (effective cluster size 2.03). A negligible removed
+  part needs its interval inside ±0.16, so it is reachable only if the removed part's estimate is within about 0.06 to
+  0.09 nats of zero.
+- **Gates, readable on the smoke run (R1-S3), 7 items; they change nothing.** Comprehension of the task-blind arm fails
+  on K3 (the correct No more probable on 3 of 7 items, mean log-odds of the correct answer −0.04); K1, K2 and K4 are
+  correct on 7 of 7. Under arm (i) K1 is wrong on 7 of 7 (−0.46), as for both reference models; arm (ii) passes on all
+  four questions. Positive control +0.38 nats [+0.14, +0.61], below the 1-nat threshold. So on the smoke items both
+  gates fail, and "inconclusive (gate)" is the likely outcome of the full run. As E8 fixes, the full run goes ahead: a
+  gate failure is a reported outcome, and the smoke set is too small to decide it.
+
+Nothing was changed after reading the smoke run.
