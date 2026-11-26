@@ -79,6 +79,6 @@ On a machine with ALFWorld's data (standard library only):
 
 Then, with numpy and this repository's environment, and the RQ2 collection (`rq12_transitions_s0`–`s2`, in the RQ2 reproducibility archive):
 
-    python scripts/a1prime_check.py analyze --games a1prime_games.jsonl --transitions <folder with the three collection runs> --out notes/a1prime_metrics.json
+    python scripts/a1prime_check.py analyze --games a1prime_games.jsonl --transitions <folder with the three collection runs> --out notes/a1prime_metrics.json --items-out notes/a1prime_items.jsonl
 
-The extraction of all 5,234 files writes a 59 MB file (sha256 `cb20bdd46944cb69…`); the analysis is deterministic (seed 20260924) and takes about 15 minutes on a laptop, almost all of it the shuffle tests.
+The second file holds the per-item indices (2,449 take items), which the natural bridge's analysis reads. The extraction of all 5,234 files writes a 59 MB file (sha256 `cb20bdd46944cb69…`); the analysis is deterministic (seed 20260924) and takes about 15 minutes on a laptop, almost all of it the shuffle tests.

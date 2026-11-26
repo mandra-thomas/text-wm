@@ -327,7 +327,7 @@ def room_of_item(t: dict) -> str:
     return room_from_receptacle_types({re.sub(r"\s+\d+$", "", r) for r in t.get("scene_receptacles") or []})
 
 
-def item_level(games: list[dict], transitions_dir: str | None) -> dict:
+def item_level(games: list[dict], transitions_dir: str | None, items_out: str | None = None) -> dict:
     import numpy as np
 
     if not transitions_dir:
@@ -396,6 +396,11 @@ def item_level(games: list[dict], transitions_dir: str | None) -> dict:
                 "median": float(np.median(v)), "p05": float(np.percentile(v, 5)), "p95": float(np.percentile(v, 95)),
                 "share_negative": float((v < 0).mean()), "share_above_0.5": float((v > 0.5).mean())}
 
+    if items_out:  # the per-item indices, read by the natural bridge's analysis (wf/bridge_analysis.py)
+        with open(items_out, "w") as f:
+            for r in sorted(rows, key=lambda r: r["id"]):
+                f.write(json.dumps({k: r[k] for k in ("id", "location_given_existence", "instance_given_existence",
+                                                      "existence", "total")}, sort_keys=True) + "\n")
     out = {"n_items": len(rows), "skipped": dict(skipped)}
     for name, sel in (("all_take_items", rows),
                       ("receptacle_type_not_named_in_history", [r for r in rows if not r["recep_type_named_in_history"]]),
@@ -419,7 +424,7 @@ def analyze(args) -> None:
     agree = Counter(room_from_receptacle_types({r["type"].lower() for r in g["receptacles"].values()}) == g["room"]
                     for g in games)
     report["room_rule_agreement"] = {"agree": agree[True], "disagree": agree[False]}
-    report["rq2_take_items"] = item_level(games, args.transitions)
+    report["rq2_take_items"] = item_level(games, args.transitions, args.items_out)
     with open(args.out, "w") as f:
         json.dump(report, f, indent=1, sort_keys=True)
     print(json.dumps({k: v for k, v in report.items() if k != "rq2_take_items"}, indent=1)[:4000])
@@ -437,6 +442,7 @@ def main() -> None:
     a.add_argument("--transitions", default=None)
     a.add_argument("--out", required=True)
     a.add_argument("--items-only", action="store_true", help="skip the generator-level part (a quick check)")
+    a.add_argument("--items-out", default=None, help="write the per-item indices here (JSON lines)")
     args = ap.parse_args()
     extract(args) if args.cmd == "extract" else analyze(args)
 

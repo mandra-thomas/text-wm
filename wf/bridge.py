@@ -47,11 +47,16 @@ STATEMENTS = {
     "agent_b": "This action was chosen by an agent whose only information about the room is the history shown above.",
     "positive": "This action was chosen by an agent who only proposes actions that will work.",
     "placebo": "This command is written in lower-case letters, like every command in this game.",
+    # review 1, finding 7: a statement that should increase the task effect if provenance is read (reported)
+    "expert": ("This action was chosen by an agent who could see inside every receptacle in the room and picks "
+               "actions that advance its task."),
 }
 WORDINGS = {"tester": ("tester_a", "tester_b"), "agent": ("agent_a", "agent_b")}
 EXIST_UNNAMED = "Every object any task in this house could need is present in the room."
+# review 1, finding 5: a content-free sentence in the existence sentence's position (appended to the task line)
+EXIST_PLACEBO = "This sentence and the task before it are written in plain English, as in every game."
 PROV_ARMS = ("none",) + tuple(STATEMENTS)
-EXIST_ARMS = ("exist", "named")
+EXIST_ARMS = ("exist", "named", "exist_placebo")
 ARMS = PROV_ARMS + EXIST_ARMS
 TASKS = ("aligned", "swapped")
 
@@ -128,6 +133,8 @@ def task_line(t: dict, task: str, arm: str) -> str:
         return f"{line} {EXIST_UNNAMED}"
     if arm == "named":
         return f"{line} {rq1.mention_sentence(t['goal_object'])}"
+    if arm == "exist_placebo":
+        return f"{line} {EXIST_PLACEBO}"
     return line
 
 
@@ -173,6 +180,7 @@ def jobs_for(t: dict, in_subset: bool) -> list[tuple[str, str, str]]:
         out.append((task, "none", "exist_check"))
         out += [(task, "exist", "cand"), (task, "exist", "yn"), (task, "exist", "exist_check")]
         out += [(task, "named", "cand"), (task, "named", "yn")]
+        out += [(task, "exist_placebo", "cand"), (task, "exist_placebo", "yn")]
         if in_subset and task == "aligned":
             out += [(task, arm, q) for arm in COMP_ARMS for q in ("c1", "c2")]
     return out
@@ -342,7 +350,51 @@ def reference_agreement(t: dict, r: Renderer, model: Any) -> dict:
             ref = full_pass_score(model, p, c, pr)
             diffs += [abs(x - y) for x, y in zip(sc.cont_logprobs + sc.probe_logprobs,
                                                  ref.cont_logprobs + ref.probe_logprobs)]
-    return {"n_logprobs": len(diffs), "max_abs_diff": max(diffs), "mean_abs_diff": sum(diffs) / len(diffs)}
+    out = {"n_logprobs": len(diffs), "max_abs_diff": max(diffs), "mean_abs_diff": sum(diffs) / len(diffs),
+           "share_above_1_nat": sum(x > 1 for x in diffs) / len(diffs)}
+    # pre-stated (design §13): bf16 rounding moves log-probabilities by tenths of a nat; an offset or cache error
+    # moves most of them by nats
+    out["pass"] = out["mean_abs_diff"] <= AGREE_MEAN_MAX and out["share_above_1_nat"] <= AGREE_SHARE_MAX
+    return out
+
+
+AGREE_MEAN_MAX = 0.5
+AGREE_SHARE_MAX = 0.05
+STACK = {"transformers": "5.23.0", "torch": "2.14.1"}
+
+
+def stack_versions() -> dict:
+    import torch
+    import transformers
+
+    return {"transformers": transformers.__version__, "torch": torch.__version__}
+
+
+def _tag_commit(tag: str) -> str:
+    import subprocess
+
+    from wf.util import REPO_ROOT
+
+    return subprocess.run(["git", "rev-parse", f"{tag}^{{commit}}"], capture_output=True, text=True,
+                          cwd=REPO_ROOT).stdout.strip()
+
+
+def expected_jobs(t: dict, sub_ids: set[str]) -> int:
+    return len(jobs_for(t, t["id"] in sub_ids))
+
+
+def drop_incomplete(path: Path, items: list[dict], sub_ids: set[str]) -> int:
+    """On resume: keep only items whose every job was saved (an item's records are appended together, but a kill
+    can still leave some of its lines). Returns how many records were dropped."""
+    from wf.util import write_jsonl
+
+    saved = read_jsonl(path)
+    want = {t["id"]: expected_jobs(t, sub_ids) for t in items}
+    count = Counter((s["format"], s["transition_id"]) for s in saved)
+    keep = [s for s in saved if count[(s["format"], s["transition_id"])] == want.get(s["transition_id"], -1)]
+    if len(keep) != len(saved):
+        write_jsonl(path, keep)
+    return len(saved) - len(keep)
 
 
 def run_bridge_score(cfg: dict) -> int:
@@ -353,6 +405,16 @@ def run_bridge_score(cfg: dict) -> int:
     if not is_mock() and git_dirty():
         write_status(run_id, "refused: the checkout has uncommitted changes", ok=False)
         return 1
+    if not is_mock():
+        from wf.util import git_sha
+
+        if cfg.get("freeze_tag") and git_sha() != _tag_commit(cfg["freeze_tag"]):
+            write_status(run_id, f"refused: the checkout is not at {cfg['freeze_tag']}", ok=False)
+            return 1
+        have = stack_versions()
+        if have["transformers"] != STACK["transformers"] or not have["torch"].startswith(STACK["torch"]):
+            write_status(run_id, f"refused: software stack {have}, the study runs in {STACK}", ok=False)
+            return 1
     ok, names = _gpu_ok(cfg.get("gpu_type"))
     if not ok:
         write_status(run_id, f"refused: this job's GPU is {names}, the run is pinned to {cfg.get('gpu_type')}", ok=False)
@@ -374,6 +436,7 @@ def run_bridge_score(cfg: dict) -> int:
     base = shard_items(sets[cfg.get("items", "sample")], i, n)
     sub_ids = {t["id"] for t in sets["subset"]}
     hashes = {t["id"]: _item_hash(t) for t in base}
+    dropped = drop_incomplete(d / "scoring.jsonl", base, sub_ids) if cfg.get("resume") else 0
     saved = read_jsonl(d / "scoring.jsonl") if cfg.get("resume") else []
     if any(hashes.get(s["transition_id"]) != s.get("item_hash") for s in saved):
         raise SystemExit(f"{run_id}: saved records belong to different items; rerun without --resume.")
@@ -397,6 +460,10 @@ def run_bridge_score(cfg: dict) -> int:
                 return 1
             if cfg.get("reference_agreement") and items:
                 agreement[fmt] = reference_agreement(items[0], r, model)
+                if not agreement[fmt]["pass"]:
+                    write_json(d / "timing.json", {"reference_agreement": agreement})
+                    write_status(run_id, f"cached scoring disagrees with a full pass ({fmt}): {agreement[fmt]}", ok=False)
+                    return 1
         t0, n_done = time.time(), 0
         for t in items:
             if (fmt, t["id"]) in done:
@@ -409,7 +476,9 @@ def run_bridge_score(cfg: dict) -> int:
             n_done += 1
         timing[fmt] = {"items": n_done, "seconds": time.time() - t0}
     write_json(d / "token_checks.json", checks)
-    write_json(d / "timing.json", {"timing": timing, "reference_agreement": agreement})
+    write_json(d / "timing.json", {"timing": timing, "reference_agreement": agreement,
+                                   "dropped_incomplete_records_on_resume": dropped})
+    write_json(d / "stack.json", {"mock": True} if scorer.mock else stack_versions())
     scorer.close()
     write_status(run_id, f"shard {i} of {n}: {json.dumps(timing)}", ok=False, reported="shard complete")
     return 0

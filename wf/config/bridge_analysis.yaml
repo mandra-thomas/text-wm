@@ -10,3 +10,4 @@ main_gpu: L40S
 rescore_gpu: A100
 freeze_tag: bridge-design-frozen-2026-11-25
 sources: [rq12_transitions_s0, rq12_transitions_s1, rq12_transitions_s2]
+a1prime_items: notes/a1prime_items.jsonl

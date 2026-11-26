@@ -90,13 +90,13 @@ def test_plain_text_matches_the_audit_render(mock_score):
 def test_jobs_cover_every_arm_and_readout_and_comprehension_only_on_the_subset():
     t = _item()
     full, base = B.jobs_for(t, True), B.jobs_for(t, False)
-    assert len(set(base)) == len(base) == 2 * (len(B.PROV_ARMS) * 2 + 1 + 3 + 2)
+    assert len(set(base)) == len(base) == 2 * (len(B.PROV_ARMS) * 2 + 1 + 3 + 2 + 2)
     extra = set(full) - set(base)
     assert extra == {("aligned", a, q) for a in B.COMP_ARMS for q in ("c1", "c2")}
     for task in B.TASKS:
         for arm in B.ARMS:
             assert (task, arm, "cand") in base and (task, arm, "yn") in base
-    assert {B.group_of(task, arm) for task, arm, _ in base} == {(k, g) for k in B.TASKS for g in ("prov", "exist", "named")}
+    assert {B.group_of(task, arm) for task, arm, _ in base} == {(k, g) for k in B.TASKS for g in ("prov",) + B.EXIST_ARMS}
 
 
 def test_stated_answers_and_gate_membership():
@@ -153,7 +153,8 @@ def test_prefix_scorer_equals_a_full_forward_pass(kind):
 # ---------------- analysis on planted data ----------------
 
 def _records(n=600, games=60, model="qwen3-8b", fmt="plain", effect=3.0, under=None, pc=3.0, comp_ok=True,
-             exist_ok=True, exist_effect=None, named_effect=0.3, noise=0.3, seed=0, subset_ids=None):
+             exist_ok=True, exist_effect=None, named_effect=0.3, noise=0.3, seed=0, subset_ids=None,
+             comp_ignores_statement=False, first_mass=0.9):
     """Scoring records as the runner writes them. `under` maps an arm to its goal effect (default: the
     no-statement effect); the aligned and swapped levels are -5 + effect/2 and -5 - effect/2 plus noise."""
     rng = random.Random(seed)
@@ -173,7 +174,7 @@ def _records(n=600, games=60, model="qwen3-8b", fmt="plain", effect=3.0, under=N
                 for ro in ("cand", "yn"):
                     rec = {**common, "job": [task, arm, ro]}
                     if ro == "cand":
-                        rec.update({"L": level, "L_first": level / 2, "first_mass": 0.9})
+                        rec.update({"L": level, "L_first": level / 2, "first_mass": first_mass})
                     else:
                         rec.update({"L": level, "mass": 0.99})
                     recs.append(rec)
@@ -185,6 +186,8 @@ def _records(n=600, games=60, model="qwen3-8b", fmt="plain", effect=3.0, under=N
                     for arm in B.COMP_ARMS:
                         for q in ("c1", "c2"):
                             want = B.STATED.get(arm, {}).get(q, "No")
+                            if comp_ignores_statement:  # the default answers, whatever the statement says
+                                want = B.STATED["tester_a"][q]
                             right = comp_ok or rng.random() < 0.5
                             L = (1.5 if want == "Yes" else -1.5) * (1 if right else -1)
                             recs.append({**common, "job": [task, arm, q], "L": L})
@@ -265,12 +268,125 @@ def test_cross_gpu_comparison_flags_a_shift():
     v = A.load_values(recs)
     ids = sorted({r["transition_id"] for r in recs})
     items = [{"id": i, "game_id": f"g{int(i[2:]) % 40}", "history_len": 3} for i in ids]
-    comp = A.comprehension(A.Values(v, ids))
-    same = A.rescore_comparison("llama3.1-8b", v, v, items, comp)
+    same = A.rescore_comparison("llama3.1-8b", v, v, items)
     assert not same["any_environment_dependent"]
+    # on the subset the existence gate can pass (a fifth of the items), so its category is compared for real
+    assert same["comparison"]["cand/existence"]["category_main"] != "not assessable" and \
+        not same["comparison"]["cand/existence"]["category_main"].startswith("not assessable")
     shifted = [dict(r, L=r["L"] + (0.5 if r["job"][0] == "aligned" and r["job"][1] == "tester_a" else 0.0)) for r in recs]
-    moved = A.rescore_comparison("llama3.1-8b", v, A.load_values(shifted), items, comp)
+    moved = A.rescore_comparison("llama3.1-8b", v, A.load_values(shifted), items)
     assert moved["comparison"]["cand/tester"]["environment_dependent"]
+    lifted = [dict(r, L=r["L"] + (0.5 if r["job"][1] == "none" and r["job"][0] == "aligned" and r["job"][2] == "cand"
+                                  else 0.0)) for r in recs]
+    assert A.rescore_comparison("llama3.1-8b", v, A.load_values(lifted), items)["comparison"][
+        "cand/no_statement_effect"]["environment_dependent"]
+
+
+def test_comprehension_gate_needs_the_statement_to_change_the_answer():
+    blocks, _ = _analyse(_both(comp_ignores_statement=True))
+    assert blocks["llama3.1-8b"]["cand"]["tester"]["category"].startswith("not readable: comprehension")
+
+
+def test_a_detectable_removal_below_the_margin_is_not_called_a_part():
+    blocks, _ = _analyse(_both(under={w: 2.75 for w in B.GATED}, noise=0.05))
+    cat = blocks["qwen3-8b"]["cand"]["tester"]["category"]
+    assert not cat.startswith("removes a part") and not cat.startswith("removes most")
+    blk = blocks["qwen3-8b"]["cand"]["tester"]
+    assert blk["removal"]["ci_low"] > 0 and blk["removal"]["estimate"] < blk["margin"]
+
+
+def test_share_is_of_the_reference_arm_and_low_first_token_mass_is_flagged():
+    blocks, _ = _analyse(_both(under={"placebo": 2.0, **{w: 0.0 for w in B.GATED}}, first_mass=0.3))
+    blk = blocks["llama3.1-8b"]["cand"]["tester"]
+    assert abs(blk["share_removed"]["estimate"] - 1.0) < 0.1  # all of the effect under the content-free sentence
+    assert abs(blk["share_of_no_statement_effect"]["estimate"] - 1.0) < 0.1
+    assert blocks["llama3.1-8b"]["first"]["tester"]["low_first_token_mass"]
+
+
+def test_existence_is_read_against_the_content_free_sentence_in_the_task_line():
+    # an appended sentence of any content removes as much: the unnamed existence sentence removes nothing beyond it
+    blocks, _ = _analyse(_both(exist_effect=0.1, under={"exist_placebo": 0.1}, noise=0.05))
+    assert blocks["llama3.1-8b"]["first"]["existence"]["category"].startswith("removes nothing")
+
+
+def test_score_item_maps_every_sequence_to_its_record(mock_score):
+    """Review 1's check: a fake word-level tokenizer and an engine that tags each sequence, through the real
+    Renderer, build_sequences and score_item."""
+    import re as _re
+
+    from wf.scoring.prefix import SeqScore, common_prefix_len
+
+    vocab: dict = {}
+
+    def tid(s):
+        return vocab.setdefault(s, len(vocab) + 1)
+
+    class Tok:
+        def __call__(self, text, add_special_tokens=False):
+            return {"input_ids": [tid(p) for p in _re.findall(r"\n+| ?[^\s\n]+| +", text)]}
+
+    class Sc:
+        _tok = Tok()
+
+        def template_settings(self):
+            return {}
+
+    class Eng:
+        def score_group(self, seqs):
+            stem = common_prefix_len([p for p, _, _ in seqs])
+            out = []
+            for p, c, probes in seqs:
+                key = hash((tuple(p), tuple(c))) % 100000
+                out.append(SeqScore(cont_logprobs=[-(key + k) / 1000 for k in range(len(c))],
+                                    probe_logprobs=[-(key + 7 * (j + 1)) / 1000 for j, _ in enumerate(probes)],
+                                    stem_len=stem))
+            return out
+
+    t = _item()
+    r, eng = B.Renderer(Sc(), "plain"), Eng()
+    jobs = B.jobs_for(t, True)
+    recs = B.score_item(t, jobs, "plain", r, eng)
+    assert sorted(map(tuple, (x["job"] for x in recs))) == sorted(jobs)
+    for x in recs:
+        task, arm, ro = x["job"]
+        if ro == "cand":
+            msgs = B.messages(t, task, arm, "obs")
+            p = r.prompt(msgs)
+            plus, minus = r.cont(msgs, p, t["candidates"]["o_plus"]), r.cont(msgs, p, t["candidates"]["o_minus"])
+            a, b = eng.score_group([(p, plus, [plus[0], minus[0]]), (p, minus, [])])
+            assert abs(x["L"] - (sum(a.cont_logprobs) - sum(b.cont_logprobs))) < 1e-12
+            assert abs(x["L_first"] - (a.probe_logprobs[0] - a.probe_logprobs[1])) < 1e-12
+        else:
+            (a,) = eng.score_group([(r.prompt(B.messages(t, task, arm, ro)), [], list(r.yes_no()))])
+            assert abs(x["L"] - (a.probe_logprobs[0] - a.probe_logprobs[1])) < 1e-12
+    inv = {v: k for k, v in vocab.items()}
+    for _, entries in B.build_sequences(t, jobs, r).items():
+        flat = [s for _, seqs in entries for s in seqs]
+        s = common_prefix_len([p for p, _, _ in flat])
+        assert "".join(inv[i] for i in flat[0][0][:s]).endswith("Action: take saltshaker 1 from cabinet 1\n\n")
+    # plain-text continuations: from the joint tokenization, one space before the text
+    msgs = B.messages(t, "aligned", "none")
+    p = r.prompt(msgs)
+    assert r.cont(msgs, p, "Nothing happens.") == r._ids(" Nothing happens.")
+
+
+def test_resume_drops_partly_saved_items(tmp_path):
+    from wf.util import write_jsonl
+
+    t1, t2 = _item(id="a"), _item(id="b")
+    n = B.expected_jobs(t1, set())
+    recs = [{"format": "plain", "transition_id": "a", "k": k} for k in range(n)]
+    recs += [{"format": "plain", "transition_id": "b", "k": k} for k in range(n - 3)]
+    write_jsonl(tmp_path / "s.jsonl", recs)
+    assert B.drop_incomplete(tmp_path / "s.jsonl", [t1, t2], set()) == n - 3
+    assert {r["transition_id"] for r in B.read_jsonl(tmp_path / "s.jsonl")} == {"a"}
+
+
+def test_records_of_another_model_or_item_are_refused():
+    recs = [{"transition_id": "a", "model": "qwen3-8b", "item_hash": "h1"},
+            {"transition_id": "b", "model": "llama3.1-8b", "item_hash": "h2"}]
+    assert A.check_records(recs, "qwen3-8b", {"a": "h1", "b": "h2"}) == ["qwen3-8b: 1 records of another model"]
+    assert A.check_records(recs[:1], "qwen3-8b", {"a": "zz"})
 
 
 def test_duplicate_records_are_refused():

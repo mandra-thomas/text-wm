@@ -1,0 +1,588 @@
+{
+ "games": {
+  "train": 4652,
+  "valid_seen": 187,
+  "valid_train": 200,
+  "valid_unseen": 195
+ },
+ "games_solvable_flag": {
+  "train|False": 1099,
+  "train|None": 2,
+  "train|True": 3551,
+  "valid_seen|False": 47,
+  "valid_seen|True": 140,
+  "valid_train|None": 3,
+  "valid_train|True": 197,
+  "valid_unseen|False": 58,
+  "valid_unseen|None": 3,
+  "valid_unseen|True": 134
+ },
+ "generator_train": {
+  "movable_receptacle": {
+   "appliance_share": null,
+   "closed_share": {
+    "ci95": [
+     0.0,
+     0.0
+    ],
+    "comparison_mean": 0.0,
+    "difference_within_floor_plan": 0.0,
+    "n_strata": 1,
+    "other_mean": 0.0,
+    "perm_p": 1.0
+   },
+   "n_comparison_rows": 3,
+   "n_inst": {
+    "ci95": [
+     0.8405797101449274,
+     0.8405797101449274
+    ],
+    "comparison_mean": 2.6666666666666665,
+    "difference_within_floor_plan": 0.8405797101449274,
+    "n_strata": 1,
+    "other_mean": 1.826086956521739,
+    "perm_p": 0.1924037981009495
+   },
+   "n_other_rows": 23,
+   "n_scenes": 1,
+   "n_strata": 1,
+   "receptacle_type_shares": {
+    "countertop": {
+     "comparison": 0.375,
+     "other": 0.2857142857142857
+    },
+    "diningtable": {
+     "comparison": 0.5,
+     "other": 0.5952380952380952
+    },
+    "dresser": {
+     "comparison": 0.0,
+     "other": 0.11904761904761904
+    },
+    "sidetable": {
+     "comparison": 0.125,
+     "other": 0.0
+    }
+   },
+   "receptacle_type_tv": {
+    "excess_over_null": -0.0364230152305261,
+    "n_perm": 500,
+    "null_95th": 0.4666666666666666,
+    "null_mean": 0.2507087295162404,
+    "observed": 0.2142857142857143,
+    "perm_p": 0.5429141716566867
+   },
+   "target_share": {
+    "ci95": [
+     -0.13768115942028986,
+     -0.13768115942028986
+    ],
+    "comparison_mean": 0.0,
+    "difference_within_floor_plan": -0.13768115942028986,
+    "n_strata": 1,
+    "other_mean": 0.13768115942028986,
+    "perm_p": 0.6841579210394803
+   }
+  },
+  "task_object": {
+   "appliance_share": {
+    "ci95": [
+     -0.09453377332097125,
+     -0.07286118811615909
+    ],
+    "comparison_mean": 0.0,
+    "difference_within_floor_plan": -0.08337530796813222,
+    "n_strata": 342,
+    "other_mean": 0.07097457627118645,
+    "perm_p": 0.0004997501249375312
+   },
+   "closed_share": {
+    "ci95": [
+     -0.10501290491122256,
+     -0.0775832383829091
+    ],
+    "comparison_mean": 0.12279664660361135,
+    "difference_within_floor_plan": -0.09142901592477592,
+    "n_strata": 959,
+    "other_mean": 0.22591355521094278,
+    "perm_p": 0.0004997501249375312
+   },
+   "n_comparison_rows": 4652,
+   "n_inst": {
+    "ci95": [
+     0.3125989133507179,
+     0.3879252283751834
+    ],
+    "comparison_mean": 2.253224419604471,
+    "difference_within_floor_plan": 0.350778185779013,
+    "n_strata": 959,
+    "other_mean": 1.8774424430394847,
+    "perm_p": 0.0004997501249375312
+   },
+   "n_other_rows": 41915,
+   "n_scenes": 108,
+   "n_strata": 959,
+   "receptacle_type_shares": {
+    "(inside an object)": {
+     "comparison": 0.0,
+     "other": 0.00019061415881971712
+    },
+    "(other)": {
+     "comparison": 0.07479488647204732,
+     "other": 0.06985373540213234
+    },
+    "armchair": {
+     "comparison": 0.015359664186224004,
+     "other": 0.009174894844522384
+    },
+    "bathtubbasin": {
+     "comparison": 0.022610188895249,
+     "other": 0.008780958916294969
+    },
+    "bed": {
+     "comparison": 0.030433123449723334,
+     "other": 0.025122946132438716
+    },
+    "cabinet": {
+     "comparison": 0.06267887807670292,
+     "other": 0.08094747944543987
+    },
+    "cart": {
+     "comparison": 0.0018126311772562488,
+     "other": 0.0024779840646563227
+    },
+    "coffeemachine": {
+     "comparison": 0.00038160656363289447,
+     "other": 0.00036852070705145314
+    },
+    "coffeetable": {
+     "comparison": 0.038065254722381224,
+     "other": 0.026330169138296926
+    },
+    "countertop": {
+     "comparison": 0.18689181453921008,
+     "other": 0.1905633283773652
+    },
+    "desk": {
+     "comparison": 0.03968708261782103,
+     "other": 0.031108230719377836
+    },
+    "diningtable": {
+     "comparison": 0.11419576416714368,
+     "other": 0.12433126199280749
+    },
+    "drawer": {
+     "comparison": 0.03606182026330853,
+     "other": 0.066041452225738
+    },
+    "dresser": {
+     "comparison": 0.037874451440564776,
+     "other": 0.022975359943069904
+    },
+    "fridge": {
+     "comparison": 0.04054569738599504,
+     "other": 0.08223094811482597
+    },
+    "garbagecan": {
+     "comparison": 0.031196336576989125,
+     "other": 0.02840150966413785
+    },
+    "handtowelholder": {
+     "comparison": 0.01287922152261019,
+     "other": 0.007713519626904553
+    },
+    "microwave": {
+     "comparison": 0.012783819881701965,
+     "other": 0.022784745784250188
+    },
+    "ottoman": {
+     "comparison": 0.0010494180499904598,
+     "other": 0.0015376208811457182
+    },
+    "safe": {
+     "comparison": 0.00028620492272467084,
+     "other": 0.0006862109717509817
+    },
+    "shelf": {
+     "comparison": 0.049608853272276286,
+     "other": 0.04426060767793832
+    },
+    "sidetable": {
+     "comparison": 0.06105705018126312,
+     "other": 0.042354466089741145
+    },
+    "sinkbasin": {
+     "comparison": 0.032341156267887805,
+     "other": 0.03706810008514099
+    },
+    "sofa": {
+     "comparison": 0.0242320167906888,
+     "other": 0.01870560278550824
+    },
+    "stoveburner": {
+     "comparison": 0.017840106849837816,
+     "other": 0.022073119591323243
+    },
+    "toilet": {
+     "comparison": 0.035966418622400305,
+     "other": 0.021425031451336205
+    },
+    "toiletpaperhanger": {
+     "comparison": 0.0021942377408891434,
+     "other": 0.0024017384011284356
+    },
+    "tvstand": {
+     "comparison": 0.017172295363480253,
+     "other": 0.010089842806857027
+    }
+   },
+   "receptacle_type_tv": {
+    "excess_over_null": 0.04538907148593316,
+    "n_perm": 500,
+    "null_95th": 0.22130190417008302,
+    "null_mean": 0.21643139582730528,
+    "observed": 0.26182046731323844,
+    "perm_p": 0.001996007984031936
+   },
+   "target_share": {
+    "ci95": [
+     -0.039682630603722985,
+     0.004714298402510714
+    ],
+    "comparison_mean": 0.0981298366294067,
+    "difference_within_floor_plan": -0.017744872952020676,
+    "n_strata": 959,
+    "other_mean": 0.11604721573706424,
+    "perm_p": 0.0004997501249375312
+   }
+  }
+ },
+ "generator_valid_unseen": {
+  "movable_receptacle": {
+   "n_comparison_rows": 0,
+   "n_other_rows": 0,
+   "n_scenes": 0,
+   "n_strata": 0
+  },
+  "task_object": {
+   "appliance_share": {
+    "ci95": [
+     -0.13888888888888887,
+     -0.1116806506635996
+    ],
+    "comparison_mean": 0.0,
+    "difference_within_floor_plan": -0.11534917716588579,
+    "n_strata": 15,
+    "other_mean": 0.10576923076923077,
+    "perm_p": 0.0014992503748125937
+   },
+   "closed_share": {
+    "ci95": [
+     -0.26501542343522505,
+     -0.03413911191688972
+    ],
+    "comparison_mean": 0.1175213675213675,
+    "difference_within_floor_plan": -0.17387108738450682,
+    "n_strata": 41,
+    "other_mean": 0.29003230272265806,
+    "perm_p": 0.0004997501249375312
+   },
+   "n_comparison_rows": 195,
+   "n_inst": {
+    "ci95": [
+     0.04276953205524639,
+     0.5045972545972546
+    ],
+    "comparison_mean": 2.0974358974358975,
+    "difference_within_floor_plan": 0.23095361446950716,
+    "n_strata": 41,
+    "other_mean": 1.8689432395016152,
+    "perm_p": 0.0009995002498750624
+   },
+   "n_other_rows": 2167,
+   "n_scenes": 4,
+   "n_strata": 41,
+   "receptacle_type_shares": {
+    "(other)": {
+     "comparison": 0.10024449877750612,
+     "other": 0.06765432098765432
+    },
+    "armchair": {
+     "comparison": 0.029339853300733496,
+     "other": 0.02419753086419753
+    },
+    "bed": {
+     "comparison": 0.007334963325183374,
+     "other": 0.01037037037037037
+    },
+    "cabinet": {
+     "comparison": 0.1491442542787286,
+     "other": 0.11481481481481481
+    },
+    "countertop": {
+     "comparison": 0.25183374083129584,
+     "other": 0.23777777777777778
+    },
+    "desk": {
+     "comparison": 0.07334963325183375,
+     "other": 0.03580246913580247
+    },
+    "drawer": {
+     "comparison": 0.03178484107579462,
+     "other": 0.06444444444444444
+    },
+    "dresser": {
+     "comparison": 0.06601466992665037,
+     "other": 0.05925925925925926
+    },
+    "fridge": {
+     "comparison": 0.022004889975550123,
+     "other": 0.1325925925925926
+    },
+    "garbagecan": {
+     "comparison": 0.05134474327628362,
+     "other": 0.032839506172839504
+    },
+    "microwave": {
+     "comparison": 0.0024449877750611247,
+     "other": 0.019012345679012346
+    },
+    "safe": {
+     "comparison": 0.007334963325183374,
+     "other": 0.017037037037037038
+    },
+    "shelf": {
+     "comparison": 0.08557457212713937,
+     "other": 0.07432098765432099
+    },
+    "sidetable": {
+     "comparison": 0.019559902200488997,
+     "other": 0.022962962962962963
+    },
+    "sinkbasin": {
+     "comparison": 0.044009779951100246,
+     "other": 0.05728395061728395
+    },
+    "sofa": {
+     "comparison": 0.03178484107579462,
+     "other": 0.022469135802469137
+    },
+    "toilet": {
+     "comparison": 0.02689486552567237,
+     "other": 0.005432098765432099
+    },
+    "toiletpaperhanger": {
+     "comparison": 0.0,
+     "other": 0.0017283950617283952
+    }
+   },
+   "receptacle_type_tv": {
+    "excess_over_null": 0.10489731609108346,
+    "n_perm": 500,
+    "null_95th": 0.2387246238371636,
+    "null_mean": 0.21374529204139645,
+    "observed": 0.3186426081324799,
+    "perm_p": 0.001996007984031936
+   },
+   "target_share": {
+    "ci95": [
+     -0.07692952936855375,
+     0.12815548676328406
+    ],
+    "comparison_mean": 0.13675213675213677,
+    "difference_within_floor_plan": 0.043748657313841526,
+    "n_strata": 41,
+    "other_mean": 0.09129364713121058,
+    "perm_p": 0.02048975512243878
+   }
+  }
+ },
+ "n_boot": 2000,
+ "n_perm": 2000,
+ "room_rule_agreement": {
+  "agree": 5234,
+  "disagree": 0
+ },
+ "rq2_take_items": {
+  "all_take_items": {
+   "existence": {
+    "mean": 0.0796112761772239,
+    "mean_ci95_over_games": [
+     0.03837912789764485,
+     0.1293536012963708
+    ],
+    "median": 0.0,
+    "n": 2449,
+    "n_games": 125,
+    "p05": 0.0,
+    "p95": 0.775214101560336,
+    "share_above_0.5": 0.08819926500612495,
+    "share_negative": 0.0
+   },
+   "instance_given_existence": {
+    "mean": 0.14735151282123682,
+    "mean_ci95_over_games": [
+     0.08022297434411095,
+     0.22135129253226327
+    ],
+    "median": 0.0,
+    "n": 2449,
+    "n_games": 125,
+    "p05": 0.0,
+    "p95": 0.45102692597276056,
+    "share_above_0.5": 0.043691302572478566,
+    "share_negative": 0.02694977541853818
+   },
+   "location_given_existence": {
+    "mean": -0.2907453554136436,
+    "mean_ci95_over_games": [
+     -0.43881728912090173,
+     -0.163017141224352
+    ],
+    "median": 0.06251440861906685,
+    "n": 2449,
+    "n_games": 125,
+    "p05": -3.7669524234838563,
+    "p95": 0.5558551262962931,
+    "share_above_0.5": 0.09759085340955492,
+    "share_negative": 0.41731318905675785
+   },
+   "total": {
+    "mean": -0.21113407923641972,
+    "mean_ci95_over_games": [
+     -0.3659236983533168,
+     -0.07081617709806474
+    ],
+    "median": 0.0642217966420423,
+    "n": 2449,
+    "n_games": 125,
+    "p05": -3.7669524234838563,
+    "p95": 1.086733099299599,
+    "share_above_0.5": 0.17190690077582688,
+    "share_negative": 0.3634136382196815
+   }
+  },
+  "n_items": 2449,
+  "receptacle_type_not_named_in_history": {
+   "existence": {
+    "mean": 0.08667200495897248,
+    "mean_ci95_over_games": [
+     0.041056846469194164,
+     0.14527752243423234
+    ],
+    "median": 0.0,
+    "n": 905,
+    "n_games": 125,
+    "p05": 0.0,
+    "p95": 0.775214101560336,
+    "share_above_0.5": 0.0861878453038674,
+    "share_negative": 0.0
+   },
+   "instance_given_existence": {
+    "mean": 0.004779866694061618,
+    "mean_ci95_over_games": [
+     0.0004932458371334789,
+     0.011831864584924957
+    ],
+    "median": 0.0,
+    "n": 905,
+    "n_games": 125,
+    "p05": 0.0,
+    "p95": 0.0,
+    "share_above_0.5": 0.0,
+    "share_negative": 0.0
+   },
+   "location_given_existence": {
+    "mean": 0.0671961119102439,
+    "mean_ci95_over_games": [
+     -0.007665912906437948,
+     0.13797872193444113
+    ],
+    "median": 0.1986596620941898,
+    "n": 905,
+    "n_games": 125,
+    "p05": -0.5816026178977494,
+    "p95": 0.6663862092428253,
+    "share_above_0.5": 0.12154696132596685,
+    "share_negative": 0.281767955801105
+   },
+   "total": {
+    "mean": 0.1538681168692164,
+    "mean_ci95_over_games": [
+     0.05920788698336632,
+     0.24999551068919465
+    ],
+    "median": 0.24015769406885695,
+    "n": 905,
+    "n_games": 125,
+    "p05": -0.5816026178977494,
+    "p95": 1.1798876101730709,
+    "share_above_0.5": 0.20552486187845304,
+    "share_negative": 0.2662983425414365
+   }
+  },
+  "skipped": {
+   "not a take of the goal object": 2217
+  },
+  "step0": {
+   "existence": {
+    "mean": 0.09639908337585505,
+    "mean_ci95_over_games": [
+     0.0489303158602951,
+     0.15223623591704194
+    ],
+    "median": 0.0,
+    "n": 242,
+    "n_games": 125,
+    "p05": 0.0,
+    "p95": 0.775214101560336,
+    "share_above_0.5": 0.10330578512396695,
+    "share_negative": 0.0
+   },
+   "instance_given_existence": {
+    "mean": 0.004379419356762707,
+    "mean_ci95_over_games": [
+     0.0,
+     0.010948548391906766
+    ],
+    "median": 0.0,
+    "n": 242,
+    "n_games": 125,
+    "p05": 0.0,
+    "p95": 0.0,
+    "share_above_0.5": 0.0,
+    "share_negative": 0.0
+   },
+   "location_given_existence": {
+    "mean": -0.01758696292004073,
+    "mean_ci95_over_games": [
+     -0.13333036647901544,
+     0.08755959204624005
+    ],
+    "median": 0.11702381428743847,
+    "n": 242,
+    "n_games": 125,
+    "p05": -0.7485069935070101,
+    "p95": 0.6620293951072574,
+    "share_above_0.5": 0.09504132231404959,
+    "share_negative": 0.3181818181818182
+   },
+   "total": {
+    "mean": 0.07881212045581436,
+    "mean_ci95_over_games": [
+     -0.049218482564482476,
+     0.20782769577662888
+    ],
+    "median": 0.18043081498609662,
+    "n": 242,
+    "n_games": 125,
+    "p05": -0.7485069935070101,
+    "p95": 1.1477915254600748,
+    "share_above_0.5": 0.19008264462809918,
+    "share_negative": 0.2892561983471074
+   }
+  }
+ },
+ "seed": 20260924,
+ "what": "A1' check: placement of the task's object type against the same type in games whose task names another object, within floor plans (generator level), and the location-given-existence index for RQ2 take items"
+}
