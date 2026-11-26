@@ -291,6 +291,9 @@ def main() -> None:
             args.groups, args.fail_groups, args.limit = "floor", "", lexsem.FLOOR_ITEMS
         else:
             args.groups, args.fail_groups = ",".join(a["groups"]), ",".join(a["fail_groups"])
+            if a.get("competence"):  # the neutral task on the failures, with the failure text, for the gate
+                args.groups += ",competence"
+                args.fail_groups += ",competence"
     conds = tuple(dict.fromkeys(c for g in args.groups.split(",") for c in lexsem.GROUPS[g]))
     fail_conds = frozenset(c for g in args.fail_groups.split(",") if g for c in lexsem.GROUPS[g]) & set(conds)
     tok, model, rev = load(args.model)
@@ -339,6 +342,31 @@ def main() -> None:
         if k % 25 == 0:
             print(f"[{k}/{len(recs)}] {time.time() - t0:.0f}s", flush=True)
     print(f"done: {len(recs)} items in {time.time() - t0:.0f}s", flush=True)
+    if "competence" in args.groups.split(","):
+        score_successes(args, tok, model, rev, pairs, rq1x.rq1x_sets(collected)["successes"], out, fmts)
+
+
+def score_successes(args, tok, model, rev, pairs, successes, out, fmts) -> None:
+    """The competence set's working actions (RQ2's determined successes) under the neutral task, every readout and
+    the failure text, appended to `<out>_successes.jsonl` (design section 5)."""
+    from wf import lexsem, rq1
+
+    path = out.parent / f"{out.stem}_successes.jsonl"
+    done = {json.loads(x)["id"] for x in path.open()} if path.exists() else set()
+    for t in sorted(successes, key=lambda t: t["id"]):
+        if t["id"] in done:
+            continue
+        spec = {"task_line": rq1.ABSENT_LINE}
+        jobs = []
+        for fmt in fmts + ("fail",):
+            msgs = lexsem.messages(t, spec, "obs" if fmt == "fail" else fmt)
+            cont = {"obs": t["candidates"]["o_plus"], "fail": FAILURE_TEXT}.get(fmt)
+            ids, n_p = sequence(tok, msgs, args.mode, cont)
+            jobs.append({"cond": lexsem.NEUTRAL, "fmt": fmt, "ids": ids, "n_prompt": n_p})
+        rec = {"id": t["id"], "game_id": t["game_id"], "stratum": "success", "model": args.model, "revision": rev,
+               "mode": args.mode, "scores": readouts(jobs, run_item(model, jobs), pairs, tok)}
+        with path.open("a") as f:
+            f.write(json.dumps(rec) + "\n")
 
 
 if __name__ == "__main__":

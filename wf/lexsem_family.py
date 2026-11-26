@@ -29,6 +29,7 @@ PAIRS = (
     ("qwen14b_block", "qwen_block", "size (Qwen3-14B against 8B, block)"),
     ("llama3b_chat", "llama_chat", "size (Llama-3.2-3B against 3.1-8B)"),
     ("qwen4b_plain", "llama3b_chat", "model at small size (Qwen3-4B plain against Llama-3.2-3B)"),
+    ("qwen8b_base_plain", "qwen_plain", "post-training (Qwen3-8B base against instruct, plain)"),
 )
 QWEN_SIZES = (("qwen4b", "Qwen3-4B"), ("qwen", "Qwen3-8B"), ("qwen14b", "Qwen3-14B"))
 TAKE = "take"
@@ -122,6 +123,8 @@ def between(arms: dict[str, dict], B: int, seed: int) -> dict:
         if a not in arms or b not in arms:
             continue
         for ro in ("yn", "first"):
+            if ro == "yn" and ({a, b} & lexsem.BASE_ARMS):
+                continue  # base models' yes/no is recorded, never read
             for st in ("later", "step0"):
                 base = ("aligned", "swapped", "name_assert", "ctrl_assert")
                 entry = {}
@@ -259,8 +262,9 @@ def by_action(arms: dict[str, dict], B: int, seed: int) -> dict:
 
 def run_family(arms: dict[str, list[dict]], B: int, seed: int) -> dict:
     a = {n: _by_id(r) for n, r in arms.items()}
-    return {"between": between(a, B, seed), "interaction": interaction(a, B, seed),
-            "by_action": by_action(a, B, seed),
+    inst = {n: v for n, v in a.items() if n not in lexsem.BASE_ARMS}
+    return {"between": between(a, B, seed), "interaction": interaction(inst, B, seed),
+            "by_action": by_action(inst, B, seed),
             "scope": ("three sizes of one family do not establish a scaling relationship; behavioural contrasts "
                       "describe how predictions respond, not internal computation; rejecting the pure accounts "
                       "identifies neither a mechanism nor a mixture")}

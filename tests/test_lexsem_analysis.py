@@ -49,6 +49,9 @@ def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), 
         for c in conds + conds:  # twice, so a condition whose control is itself a mention condition is filled
             if c in y or c in lexsem.ANCHORS:
                 continue
+            if c == lexsem.NEUTRAL:
+                y[c] = b - 0.3 + rng.gauss(0, noise)
+                continue
             form = lexsem.MENTIONS[c][0]
             if (form == "variant" and obj not in lexsem.VARIANTS) or (form == "alias" and obj not in lexsem.ALIASES) \
                     or (form == "homonym" and obj not in lexsem.HOMONYMS):
@@ -273,3 +276,20 @@ def test_family_arms_floors_interaction_and_action_types(tmp_path):
     assert "three sizes of one family" in rep["across_arms"]["scope"]
     x = rep["qwen_plain"]["first"]["later"]
     assert "standardized" in x["G"] and "numerator_minus_denominator_nats" in x["relative_lift"]["name_use"]
+
+
+@pytest.mark.parametrize("success_level,competent", [(3.0, True), (-3.0, False)])
+def test_base_arm_competence_gate_and_unread_yes_no(tmp_path, success_level, competent):
+    p = plant(tmp_path, {"evidence": 1}, groups=("core", "ignore", "competition"))
+    base = plant(tmp_path, {"lexical": 1}, groups=("core", "ignore", "competition", "competence"),
+                 name="qwen8b_base_plain", model="Qwen/Qwen3-8B-Base")
+    rng = random.Random(5)
+    succ = [{"id": f"s{i}", "game_id": f"valid_unseen/{i % 30}", "stratum": "success",
+             "scores": {lexsem.NEUTRAL: {"obs": _obs(success_level + rng.gauss(0, 1)), "yn": _yn(0.0)}}}
+            for i in range(80)]
+    (tmp_path / "qwen8b_base_plain_successes.jsonl").write_text("".join(json.dumps(r) + "\n" for r in succ))
+    rep = _run(p, extra_arms={"qwen8b_base_plain": str(base)})
+    b = rep["qwen8b_base_plain"]
+    assert b["competence"]["first"]["passed"] is competent
+    assert "yn" not in b and b["yes_no"].startswith("recorded, not read")
+    assert ("first" in b) is competent

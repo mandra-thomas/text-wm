@@ -668,6 +668,35 @@ def stage0_paired(index_path: str, block: list[dict], B: int, seed: int) -> dict
     return out
 
 
+COMPETENCE_AUC, COMPETENCE_MASS, COMPETENCE_SHARE = 0.70, 0.5, (0.05, 0.95)
+
+
+def _auc(pos: list[float], neg: list[float]) -> float:
+    if not pos or not neg:
+        return math.nan
+    wins = sum((p > q) + 0.5 * (p == q) for p in pos for q in neg)
+    return wins / (len(pos) * len(neg))
+
+
+def competence(failures: list[dict], successes: list[dict]) -> dict:
+    """Competence gate for base-model arms, under the neutral task (design section 5): per readout, discrimination of
+    RQ2's determined successes from the sampled failures (AUC at least 0.70), no degenerate answering (between 5%
+    and 95% of all competence items read as success), and a first-token candidate mass of at least 0.5 on average."""
+    out = {}
+    masses = [m for r in failures + successes if (m := mass(r, lexsem.NEUTRAL, "obs")) is not None]
+    mean_mass = sum(masses) / len(masses) if masses else math.nan
+    for ro in ("first", "full2c"):
+        neg = [v for r in failures if (v := value(r, lexsem.NEUTRAL, ro)) is not None]
+        pos = [v for r in successes if (v := value(r, lexsem.NEUTRAL, ro)) is not None]
+        auc = _auc(pos, neg)
+        share = sum(v > 0 for v in pos + neg) / len(pos + neg) if pos + neg else math.nan
+        ok = (auc >= COMPETENCE_AUC and COMPETENCE_SHARE[0] <= share <= COMPETENCE_SHARE[1]
+              and mean_mass >= COMPETENCE_MASS)
+        out[ro] = {"auc": auc, "share_read_as_success": share, "mean_first_token_mass": mean_mass,
+                   "n_successes": len(pos), "n_failures": len(neg), "passed": bool(ok)}
+    return out
+
+
 def run(scores_path: str, out_path: str | None = None, items_path: str | None = None, checks_path: str | None = None,
         block_path: str | None = None, llama_path: str | None = None, B: int = B_DEFAULT, seed: int = SEED,
         expect_commit: str | None = None, stage0_index: str | None = None, require_env: bool = True,
@@ -728,13 +757,21 @@ def run(scores_path: str, out_path: str | None = None, items_path: str | None = 
         ros = ("yn",) + (("first",) if "obs" in has else ())
         if n.endswith("_plain"):
             ros = ("first", "yn", "you", "nothing", "success_text") + (("full2c",) if "fail" in has else ())
+        comp = None
+        if n in lexsem.BASE_ARMS:
+            ros = tuple(r for r in ros if r != "yn")  # recorded, never read
+            sp_ = paths[n].parent / f"{paths[n].stem}_successes.jsonl"
+            comp = competence(recs_n, load_scores(sp_) if sp_.exists() else [])
+            ros = tuple(r for r in ros if comp.get(r if r in ("first", "full2c") else "first", {}).get("passed"))
         report[n] = run_model(recs_n, ros, own if own is not None else checks, B, seed, floors[n]["floor_nats"])
+        if comp is not None:
+            report[n]["competence"] = comp
+            report[n]["yes_no"] = "recorded, not read (base model; instruction following not validated)"
     report["full_two_candidate"] = "scored" if "full2c" in report["qwen_plain"] else "not scored"
     # the earlier report keys, kept for the core arms
     report["block_yes_no"] = report.get("qwen_block", "not scored")
     report["llama_yes_no"] = report.get("llama_chat", "not scored")
-    for n in ("qwen_block", "llama_chat", "qwen4b_plain", "qwen4b_block", "qwen14b_plain", "qwen14b_block",
-              "llama3b_chat"):
+    for n in lexsem.ARMS:
         report.setdefault(n, "not scored")
     if "llama_chat" in arms:
         report["model_comparison_yes_no"] = flags(report["qwen_plain"]["yn"], report["llama_chat"]["yn"])

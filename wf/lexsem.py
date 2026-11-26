@@ -147,6 +147,7 @@ GROUPS = {
     "competition": ("aligned_ctrl_assert",),
     # the numerical-floor rescoring (design section 7): the anchors and the name-assertion pair
     "floor": ANCHORS + ("name_assert", "ctrl_assert"),
+    "competence": ("neutral",),
 }
 # The arms (decided 2026-11-25): the three core arms, then the family-generality arms (Qwen3-4B and Qwen3-14B each
 # in plain text and with the think block, Llama-3.2-3B), which mirror the core arm of their kind. Each arm also has a
@@ -165,7 +166,13 @@ ARMS = {
     "qwen14b_plain": {"model": "Qwen/Qwen3-14B", **_QWEN_PLAIN},
     "qwen14b_block": {"model": "Qwen/Qwen3-14B", **_QWEN_BLOCK},
     "llama3b_chat": {"model": "meta-llama/Llama-3.2-3B-Instruct", **_LLAMA},
+    # post-training pilot (approved 2026-11-26): the base model in plain text, mirroring the plain-text core arm,
+    # with a competence set (the neutral task on the failures and on RQ2's determined successes). The Llama-3.1-8B
+    # base arm was dropped: its gated access could not be checked (design section 5).
+    "qwen8b_base_plain": {"model": "Qwen/Qwen3-8B-Base", **_QWEN_PLAIN, "competence": True},
 }
+BASE_ARMS = frozenset({"qwen8b_base_plain"})  # yes/no recorded, never read (instruction following not validated)
+NEUTRAL = "neutral"  # the competence condition: "Your task is to: explore the room."
 FLOOR_ITEMS = 100
 CORE = GROUPS["core"]
 # Each mention condition's control: same carrier and position, the control object's reference in its place. The
@@ -263,6 +270,9 @@ def specs(t: dict, conditions: tuple[str, ...] = CORE,
     for c in conditions:
         if c in ANCHORS:
             out[c] = {"task_line": t["task_line"] if c == "aligned" else t["swapped_task_line"]}
+            continue
+        if c == NEUTRAL:
+            out[c] = {"task_line": rq1.ABSENT_LINE}
             continue
         s = condition_sentence(refs, c)
         if s is None:
