@@ -38,10 +38,20 @@ def _status(e: BaseException) -> str:
     return f"HTTP {code}" if code else f"{type(e).__name__}"
 
 
+OBJECT_NAMES = ("alarmclock", "apple", "baseballbat", "basketball", "book", "bowl", "box", "bread", "butterknife",
+                "candle", "cd", "cellphone", "cloth", "creditcard", "cup", "dishsponge", "egg", "fork",
+                "glassbottle", "handtowel", "kettle", "keychain", "knife", "ladle", "laptop", "lettuce", "mug",
+                "newspaper", "pan", "pen", "pencil", "peppershaker", "pillow", "plate", "plunger", "pot", "potato",
+                "remotecontrol", "saltshaker", "scrubbrush", "soapbar", "soapbottle", "spatula", "spoon",
+                "spraybottle", "statue", "teddybear", "tennisracket", "tissuebox", "toiletpaper", "tomato", "vase",
+                "watch", "wateringcan", "winebottle")
+CARRIERS = {"assert": "There is a {obj} somewhere in the room.", "deny": "There is no {obj} in this room.",
+            "use": "The following word appears in this note: {obj}.", "ignore": "Ignore the {obj}."}
+
+
 def texts() -> dict[str, str]:
     """The fixed texts whose ids must agree across a lineage."""
     from scripts.qwen_audit.followup_score import plain_text
-    from wf.posttrain import CARRIERS, OBJECT_NAMES
 
     golden = json.loads((Path(__file__).resolve().parents[2] / "tests" / "golden" / "default_prompt.json")
                         .read_text(encoding="utf-8"))
