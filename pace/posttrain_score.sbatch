@@ -13,12 +13,12 @@
 #SBATCH --error=logs/posttrain_%j.err
 #
 # Post-training pilot (notes/posttraining_design.md). One checkpoint per job: PT_CKPT (a key of
-# wf.posttrain.CHECKPOINTS) and PT_ARMS (a comma list of its arms). Main and bridge arms on an L40S; floor arms
+# wf.posttrain.CHECKPOINTS) and PT_ARMS (its arms separated by colons: sbatch --export splits values at commas). Main and bridge arms on an L40S; floor arms
 # ("<arm>_floor") must be submitted with --constraint=gpu-a40. PT_SMOKE=5 runs the smoke (timing and validity
 # only); PT_RESUME=1 continues a timed-out job on the same GPU type. The serve2 stack is named here. Weights are
 # downloaded at the pinned revision into node-local disk (the shared scratch quota is nearly full) and removed at
 # the end; the token is HF_TOKEN from pace/pace.env and is never printed.
-#   sbatch --export=ALL,PT_CKPT=tulu-sft,PT_ARMS=tulu-sft_plain,tulu-sft_native,tulu-sft_w2w pace/posttrain_score.sbatch
+#   sbatch --export=ALL,PT_CKPT=tulu-sft,PT_ARMS=tulu-sft_plain:tulu-sft_native:tulu-sft_w2w pace/posttrain_score.sbatch
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$(pwd)}"
 # shellcheck disable=SC1091
@@ -32,6 +32,7 @@ export HF_HUB_CACHE="${LOCAL}/hub" TRANSFORMERS_CACHE="${LOCAL}/hub"
 export WF_INIT_CONTEXTS=/storage/ice1/2/1/gmat3/hfcache/hub/datasets--X1AOX1A--LLMasWorldModels/snapshots/ff6ae2b924d1a49e4b89825913887f2ea96cb282/init_contexts/alfworld
 CKPT="${PT_CKPT:?set PT_CKPT}"
 ARMS="${PT_ARMS:?set PT_ARMS}"
+ARMS="${ARMS//:/,}"
 echo "=== posttrain ${CKPT} [${ARMS}] START $(date) host=$(hostname) commit=$(git rev-parse HEAD) ==="
 nvidia-smi --query-gpu=name,memory.total --format=csv || true
 activate_serve
