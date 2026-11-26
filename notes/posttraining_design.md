@@ -136,7 +136,7 @@ The stage-by-format interaction is the change between two post-trained stages of
 
 ## 7. Reusing lexsem's scores
 
-Lexsem scores some of the same cells in what is designed to be the identical environment (the serve2 stack on an L40S, bf16, one unpadded sequence per forward pass, the same scorer functions, the same pinned revision): Qwen3-8B-Base and Qwen3-8B in plain text, Qwen3-8B with the think block, and Llama-3.1-8B-Instruct's yes/no in its chat template. Within one environment the project's scores are deterministic (`notes/numerical_sensitivity.md` §4.1), so those failure cells are taken from lexsem's run files rather than rescored. This pilot scores only the failure cells lexsem lacks (for example the failure-text sequence of "Ignore the X", the described goal, and every failure-text sequence of the think-block arm) and every success cell itself (successes are never reused). The reuse is allowed only if all of these hold, checked by the analysis:
+Lexsem scores some of the same cells in what is designed to be the identical environment (the serve2 stack on an L40S, bf16, one unpadded sequence per forward pass, the same scorer functions, the same pinned revision): Llama-3.1-8B base, Qwen3-8B-Base and Qwen3-8B in plain text, Qwen3-8B with the think block, and Llama-3.1-8B-Instruct's yes/no in its chat template. Lexsem reads the Llama base from the shared cache, where this pilot placed it at the pinned revision with every file's hash checked against the Hub (CPU job 7348413, `scripts/posttrain/fetch_shared.py`); this pilot's own Llama-base job reads the same copy. Within one environment the project's scores are deterministic (`notes/numerical_sensitivity.md` §4.1), so those failure cells are taken from lexsem's run files rather than rescored. This pilot scores only the failure cells lexsem lacks (for example the failure-text sequence of "Ignore the X", the described goal, and every failure-text sequence of the think-block arm) and every success cell itself (successes are never reused). The reuse is allowed only if all of these hold, checked by the analysis:
 
 - lexsem's environment record for that arm equals this arm's (GPU type, torch, transformers, Python, revision, dtype, unbatched scoring, prompt mode);
 - lexsem's run commit is recorded and every file that decides a score (the scorer, the item and prompt builders, the plain-text renderer, the pin table) is identical between that commit and the analysis commit;
@@ -193,7 +193,7 @@ Each row describes a pattern on the primary quantities that passes the rules of 
 
 | Part | Arms | Sequences | GPU-hours |
 |---|---|---|---|
-| Plain format, Llama tree | 6 | 75,312 | 1.56 |
+| Plain format, Llama tree (lexsem's base failure cells reused) | 6 | 66,312 | 1.38 |
 | Plain format, Qwen pair (lexsem failure cells reused) | 2 | 8,004 | 0.16 |
 | Chat templates | 6 | 99,468 | 2.01 |
 | Word2World bridge | 7 | 20,776 | 0.43 |
@@ -201,7 +201,7 @@ Each row describes a pattern on the primary quantities that passes the rules of 
 | Recognition check, 8 plain arms | 8 | about 12,500 short sequences | about 0.05 |
 | Model downloads and loading, 17 jobs | | | about 1.4 |
 | Smoke, all arms of all 9 checkpoints, 5 items | | | about 0.6 |
-| **Total** | | | **about 8.4** |
+| **Total** | | | **about 8.2** |
 
 The approved budget is about 7.5–9 GPU-hours. The smoke measures the real rates. **If the smoke projects more than 9 GPU-hours, or the seven-example fallback is needed, the study stops and reports before going on.**
 

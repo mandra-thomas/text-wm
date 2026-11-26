@@ -94,7 +94,7 @@ LLAMA_STAGES = ("llama-base", "tulu-sft", "tulu-dpo", "tulu-rl", "tulu31-grpo", 
 
 # Arms whose cells lexsem scores in the identical environment (design section 7): pilot arm -> lexsem arm.
 LEXSEM_REUSE = {"qwen-base_plain": "qwen8b_base_plain", "qwen_plain": "qwen_plain", "qwen_native": "qwen_block",
-                "llama-instruct_native": "llama_chat"}
+                "llama-base_plain": "llama8b_base_plain", "llama-instruct_native": "llama_chat"}
 REUSE_CHECK_ITEMS = 5  # the first five failures of each stratum also score the reused cells (bit-identity check)
 
 
