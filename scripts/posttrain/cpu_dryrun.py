@@ -23,7 +23,6 @@ def main() -> None:
     a = ap.parse_args()
 
     import torch
-    from huggingface_hub import snapshot_download
     from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
     from scripts.lexsem import score as ls
@@ -31,7 +30,9 @@ def main() -> None:
     from wf import posttrain_score as S
 
     ck = P.CHECKPOINTS[a.ckpt]
-    path = snapshot_download(ck["repo"], revision=ck["revision"], cache_dir=a.tokcache, local_files_only=True)
+    from pathlib import Path
+
+    path = str(Path(a.tokcache) / f"models--{ck['repo'].replace('/', '--')}" / "snapshots" / ck["revision"])
 
     def fake_load(model_id):
         tok = AutoTokenizer.from_pretrained(path, local_files_only=True)
