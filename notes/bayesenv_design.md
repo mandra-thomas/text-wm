@@ -134,7 +134,7 @@ A readout that fails is reported descriptively and decides nothing. The primary 
 - **Qwen3-8B** (pinned revision in `wf/constants.py`) in **plain text**: no chat template, so no empty think block. The messages are rendered by the Qwen audit's `plain_text` (`scripts/qwen_audit/followup_score.py`): the system text, then the user turn, separated by a blank line; an answer prefix follows after one space; candidates are read with a leading space. The scorer refuses a plain-text prompt containing chat-template markup or special tokens.
 - **Llama-3.1-8B-Instruct** (pinned) in its own chat template with the generation prompt; candidates are the reply's first token, or follow an answer prefix after one space.
 
-Every candidate must be a single token, and its joint tokenization with the prompt must extend the prompt by exactly that token; otherwise the run stops. A tokenizer-only check of every prompt form of the smoke design and every seventh unit of the full design with all wordings (`scripts/bayesenv_tokcheck.py`, before the freeze) found no failure for either model; prompts are about 300 to 500 tokens in the toy and 500 to 830 on the ALFWorld surface.
+Every candidate must be a single token, and its joint tokenization with the prompt must extend the prompt by exactly that token; otherwise the run stops. A tokenizer-only check of every prompt form of the smoke design and every seventh unit of the full design with all wordings (`scripts/bayesenv_tokcheck.py`, before the freeze) found no failure for either model; prompts are about 300 to 530 tokens in the toy and 500 to 880 on the ALFWorld surface (jobs 7329780 and 7330116).
 
 The numerical rules of `notes/numerical_sensitivity.md` (section 7) bind the study:
 
