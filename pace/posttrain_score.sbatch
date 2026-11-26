@@ -27,7 +27,8 @@ export SERVE_ENV=/storage/ice1/2/1/gmat3/envs/serve2
 LOCAL="/tmp/wf_pt_${SLURM_JOB_ID:-local}"
 mkdir -p "${LOCAL}"
 trap 'rm -rf "${LOCAL}"' EXIT
-export HF_HUB_CACHE="${LOCAL}/hub" TRANSFORMERS_CACHE="${LOCAL}/hub"
+# PT_HF_CACHE names a cache that already holds the checkpoint (the Llama-3.1-8B base sits in the shared cache)
+export HF_HUB_CACHE="${PT_HF_CACHE:-${LOCAL}/hub}" TRANSFORMERS_CACHE="${PT_HF_CACHE:-${LOCAL}/hub}"
 # Word2World's full-state contexts (bridge arms): the LLMasWorldModels dataset snapshot in the shared cache
 export WF_INIT_CONTEXTS=/storage/ice1/2/1/gmat3/hfcache/hub/datasets--X1AOX1A--LLMasWorldModels/snapshots/ff6ae2b924d1a49e4b89825913887f2ea96cb282/init_contexts/alfworld
 CKPT="${PT_CKPT:?set PT_CKPT}"

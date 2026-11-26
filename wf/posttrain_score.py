@@ -15,6 +15,7 @@ Output per arm, in runs/posttrain/<arm>/: scoring.jsonl (one line per item and i
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import time
@@ -61,8 +62,8 @@ def build_jobs(tok, arm: str, t: dict, cells: list[tuple[str, str]], specs: dict
         msgs = messages(arm, t, cond, fmt, specs)
         cont = {"obs": t["candidates"]["o_plus"], "fail": FAILURE_TEXT}.get(fmt)
         ids, n_p = ls.sequence(tok, msgs, mode, cont)
-        if check_names and fmt == "obs" and cond in lexsem.MENTIONS:
-            want = 1 if lexsem.MENTIONS[cond][0] == "name" else 0
+        if check_names and fmt == "obs" and (cond in lexsem.MENTIONS or cond in (P.DESC, P.NEUTRAL)):
+            want = 1 if cond in lexsem.MENTIONS and lexsem.MENTIONS[cond][0] == "name" else 0
             added = count_occurrences(ids[:n_p], name_ids) - base
             if added != want:
                 raise SystemExit(f"{t['id']} {cond}: adds {added} copies of the name's tokens, expected {want}")
@@ -79,7 +80,8 @@ def readouts(jobs: list[dict], rows: list, pairs: dict, tok, item_set: str) -> d
     for j, (lp, z) in zip(jobs, rows):
         a, b = pairs["obs" if j["fmt"] == "fail" else j["fmt"]]
         r = {"lp_a": round(lp[0, a].item(), 5), "lp_b": round(lp[0, b].item(), 5), "z_a": round(z[a].item(), 4),
-             "z_b": round(z[b].item(), 4), "n_prompt": j["n_prompt"], "n_tokens": len(j["ids"])}
+             "z_b": round(z[b].item(), 4), "n_prompt": j["n_prompt"], "n_tokens": len(j["ids"]),
+             "ids_sha": hashlib.sha256(json.dumps(j["ids"]).encode()).hexdigest()[:16]}
         if j["fmt"] in ("obs", "fail"):
             cont = j["ids"][j["n_prompt"]:]
             r["tok_lp"] = [round(lp[k, cont[k]].item(), 5) for k in range(len(cont))]
@@ -108,23 +110,36 @@ def strict_load_check(model, repo: str, rev: str) -> dict:
             "n_checkpoint": len(ckpt), "n_loaded": len(loaded)}
 
 
-def recognition(tok, model, pairs_obj: list[tuple[str, str]]) -> list[dict]:
-    """The teacher-forced recognition check of the described goal (design section 4), plain text with the
-    tokenizer's own BOS: log p(" <object>") against log p(" <control>") after RECOG_PROMPT."""
+def recognition(tok, model, objects: list[str]) -> list[dict]:
+    """The recognition check of the described goal (design section 4), teacher-forced in plain text with the
+    tokenizer's own BOS. For each goal object, every ALFWorld name with a description (55) is scored after
+    RECOG_PROMPT with the object's description and after the same prompt with a neutral phrase; the name's pointwise
+    association is the difference. The object passes if its own name ranks among the top RECOG_TOP by that
+    difference."""
     from wf import rq1x
 
     ls = _ls()
-    out = []
-    for obj, ctrl in pairs_obj:
-        prompt = tok(P.RECOG_PROMPT.format(desc=rq1x.DESCRIPTIONS[obj]), add_special_tokens=True)["input_ids"]
-        res = {}
-        for name in (obj, ctrl):
+    names = sorted(rq1x.DESCRIPTIONS)
+
+    def lp_names(text: str) -> dict[str, float]:
+        prompt = tok(P.RECOG_PROMPT.format(desc=text), add_special_tokens=True)["input_ids"]
+        out = {}
+        for name in names:
             cont = tok(" " + name, add_special_tokens=False)["input_ids"]
             lp, _ = ls.score_one(model, prompt + cont, len(prompt), True)
-            res[name] = sum(lp[k, cont[k]].item() for k in range(len(cont)))
-        out.append({"object": obj, "control": ctrl, "lp_object": round(res[obj], 5), "lp_control": round(res[ctrl], 5),
-                    "passed": res[obj] > res[ctrl]})
-    return out
+            out[name] = sum(lp[k, cont[k]].item() for k in range(len(cont)))
+        return out
+
+    neutral = lp_names(P.RECOG_NEUTRAL)
+    res = []
+    for obj in objects:
+        given = lp_names(rq1x.DESCRIPTIONS[obj])
+        pmi = {n: given[n] - neutral[n] for n in names}
+        order = sorted(names, key=lambda n: -pmi[n])
+        rank = order.index(obj) + 1
+        res.append({"object": obj, "rank": rank, "top": order[:5], "pmi_object": round(pmi[obj], 5),
+                    "passed": rank <= P.RECOG_TOP})
+    return res
 
 
 def item_sets(arm: str, its: dict, reuse: bool) -> list[tuple[str, list[dict], list[tuple[str, str]]]]:
@@ -138,7 +153,7 @@ def item_sets(arm: str, its: dict, reuse: bool) -> list[tuple[str, list[dict], l
 
 
 def run_arm(arm: str, tok, model, rev: str, its: dict, recs_specs: dict, cfg: dict, pairs: dict,
-            recog_pairs: list) -> None:
+            recog_objects: list) -> None:
     from wf.runs import _init_run
     from wf.rq2 import SOURCES
     from wf.util import append_jsonl, read_jsonl, runs_root, write_json, write_status  # noqa: F401
@@ -156,16 +171,19 @@ def run_arm(arm: str, tok, model, rev: str, its: dict, recs_specs: dict, cfg: di
     done = {(r["item_set"], r["id"]) for r in read_jsonl(d / "scoring.jsonl")} if cfg.get("resume") else set()
     reuse_cells = P.lexsem_cells(P.LEXSEM_REUSE[arm]) if (cfg["reuse"] and arm in P.LEXSEM_REUSE) else None
     t0, n = time.time(), 0
+    checked: dict = {}
     for item_set, ts, cells in item_sets(arm, its, cfg["reuse"]):
-        for k, t in enumerate(ts):
+        for t in ts:
             if (item_set, t["id"]) in done or not cells:
                 continue
             specs = recs_specs.get(t["id"])
             jobs = build_jobs(tok, arm, t, cells, specs, item_set)
             rec = {"id": t["id"], "game_id": t["game_id"], "item_set": item_set, "stratum": t["lexsem_stratum"],
+                   "goal_object": t["goal_object"], "fewshot_object": t["goal_object"] in lexsem.FEWSHOT_OBJECTS,
                    "arm": arm, "revision": rev, "mode": a["mode"],
                    "scores": readouts(jobs, ls.run_item(model, jobs), pairs, tok, item_set)}
-            if reuse_cells and item_set == "failure" and k < P.REUSE_CHECK_ITEMS:
+            if reuse_cells and item_set == "failure" and checked.get(t["lexsem_stratum"], 0) < P.REUSE_CHECK_ITEMS:
+                checked[t["lexsem_stratum"]] = checked.get(t["lexsem_stratum"], 0) + 1
                 extra = sorted(reuse_cells["failure"] & set(P.arm_cells(arm)["failure"]))
                 ej = build_jobs(tok, arm, t, extra, specs, item_set)
                 rec["reuse_check"] = readouts(ej, ls.run_item(model, ej), pairs, tok, item_set)
@@ -176,7 +194,7 @@ def run_arm(arm: str, tok, model, rev: str, its: dict, recs_specs: dict, cfg: di
     if a["kind"] == "main" and a["mode"] == "plain" and not a.get("fewshot"):
         path = d / "recognition.jsonl"
         if not (cfg.get("resume") and path.exists()):
-            path.write_text("".join(json.dumps(r) + "\n" for r in recognition(tok, model, recog_pairs)))
+            path.write_text("".join(json.dumps(r) + "\n" for r in recognition(tok, model, recog_objects)))
     write_status(run_id, f"{arm} scored ({n} items this job, {time.time() - t0:.0f}s)", ok=True)
     print(f"[{arm}] done: {n} items in {time.time() - t0:.0f}s", flush=True)
 
@@ -195,6 +213,7 @@ def smoke(arms: list[str], tok, model, its: dict, recs_specs: dict, n: int, pair
         mass: dict = {}
         tails: list = []
         first_not_readout = 0
+        extra_rows: list = []
         for item_set, ts, _ in item_sets(arm, its, False):
             cells = P.arm_cells(arm)[item_set]
             for t in ts[:n]:
@@ -204,6 +223,8 @@ def smoke(arms: list[str], tok, model, its: dict, recs_specs: dict, n: int, pair
                     torch.cuda.synchronize()
                     t1 = time.time()
                     rows.append(ls.score_one(model, j["ids"], j["n_prompt"], j["fmt"] in ("obs", "fail")))
+                    if rows[-1][0].shape[-1] > 128256 and rows[-1][0].shape[-1] < 150000:  # Tulu's added rows
+                        extra_rows.append(rows[-1][0][0, 128256:].exp().sum().item())
                     torch.cuda.synchronize()
                     times.setdefault(j["fmt"], []).append(time.time() - t1)
                 r = readouts(jobs, rows, pairs, tok, item_set)
@@ -223,13 +244,15 @@ def smoke(arms: list[str], tok, model, its: dict, recs_specs: dict, n: int, pair
             "mass_min": {k: round(min(v), 4) for k, v in sorted(mass.items())},
             "failure_text_after_first_token_nats": [round(min(tails), 3), round(max(tails), 3)] if tails else None,
             "success_obs_not_starting_with_readout": first_not_readout,
+            "max_prob_on_ids_from_128256": max(extra_rows) if extra_rows else None,
             "cells_full_run": {s: len(v) for s, v in P.cells_to_score(arm, True).items()},
         }
-    t1 = time.time()
-    rec = recognition(tok, model, extra["_pairs"][:5])
-    rep["recognition_s_per_pair"] = round((time.time() - t1) / 5, 4)
-    rep["recognition_first5_passed"] = sum(r["passed"] for r in rec)
+    if extra.get("_recog"):
+        t1 = time.time()
+        rec = recognition(tok, model, extra["_pairs"][:2])
+        rep["recognition_s_for_2_objects"] = round(time.time() - t1, 2)
     rep.pop("_pairs", None)
+    rep.pop("_recog", None)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(rep, indent=1) + "\n")
     print(json.dumps({a: rep["arms"][a]["s_per_sequence"] for a in arms}), flush=True)
@@ -258,6 +281,16 @@ def main() -> None:
         raise SystemExit(f"arms not of checkpoint {args.ckpt}: {bad}")
     ls = _ls()
     ck = P.CHECKPOINTS[args.ckpt]
+    import os
+
+    import torch
+
+    if os.environ.get("WF_PT_DRYRUN") != "1":  # refuse a wrong GPU type before loading anything
+        gpu = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
+        for a in arms:
+            want = "A40" if P.ARMS[a]["kind"] == "floor" else "L40S"
+            if want not in gpu:
+                raise SystemExit(f"{a} must run on an {want}, this is {gpu}")
     tok, model, rev = ls.load(ck["repo"])
     if rev != ck["revision"]:
         raise SystemExit(f"loaded revision {rev} != pinned {ck['revision']}")
@@ -277,22 +310,22 @@ def main() -> None:
                "success": its["success"][: args.limit]}
     built = lexsem.build(its["failure"], tuple(c for c in P.LEXSEM_CONDS), count_tokens=count)
     recs_specs = {r["id"]: r["specs"] for r in built}
-    recog_pairs = P.recognition_pairs(its["failure"], count)
+    recog_objects = sorted({t["goal_object"] for t in its["failure"]})
     pairs_by_mode = {m: ls.readout_ids(tok, m) for m in {P.ARMS[a]["mode"] for a in arms}}
     cfg = {"ckpt": args.ckpt, "reuse": not args.no_reuse, "resume": args.resume, "strict_load": strict,
            "n_failures": len(its["failure"]), "n_successes": len(its["success"]), "limit": args.limit}
     if args.smoke:
         extra = {"ckpt": args.ckpt, "repo": ck["repo"], "revision": rev, "commit": git_sha(), "strict_load": strict,
-                 "environment": ls.environment(ck["repo"], rev, "+".join(sorted(pairs_by_mode))), "_pairs": recog_pairs}
+                 "environment": ls.environment(ck["repo"], rev, "+".join(sorted(pairs_by_mode))), "_pairs": recog_objects}
         t0 = time.time()
         out = runs_root() / "posttrain_smoke" / f"{args.ckpt}.json"
-        for a in arms:  # one pairs table per mode
+        for k, a in enumerate(arms):  # one pairs table per mode; the recognition timing once
             smoke([a], tok, model, its, recs_specs, args.smoke, pairs_by_mode[P.ARMS[a]["mode"]],
-                  out.with_name(f"{args.ckpt}__{a}.json"), dict(extra))
+                  out.with_name(f"{args.ckpt}__{a}.json"), {**extra, "_recog": k == 0})
         print(f"smoke wall {time.time() - t0:.0f}s", flush=True)
         return
     for a in arms:
-        run_arm(a, tok, model, rev, its, recs_specs, dict(cfg), pairs_by_mode[P.ARMS[a]["mode"]], recog_pairs)
+        run_arm(a, tok, model, rev, its, recs_specs, dict(cfg), pairs_by_mode[P.ARMS[a]["mode"]], recog_objects)
 
 
 if __name__ == "__main__":

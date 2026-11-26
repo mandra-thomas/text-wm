@@ -20,7 +20,7 @@ import numpy as np
 from wf import posttrain as P
 
 SEED = 20261126
-B_DEFAULT = 2000
+B_DEFAULT = 10000  # resamples; fine enough for Holm's smallest threshold (0.05/35)
 STRATA = ("later", "step0")
 READOUTS = ("first", "cont", "full", "yn")
 PRIMARY_STRATUM = "later"
@@ -69,54 +69,81 @@ def _cell_equal(a: dict, b: dict) -> bool:
     return all(a.get(k) == b.get(k) for k in keys if k in a or k in b)
 
 
-def merge_lexsem(arm: str, recs: list[dict], lexsem_dir: Path | None, env: dict) -> tuple[list[dict], dict]:
-    """Add the cells lexsem scored for this checkpoint and format. Allowed only if lexsem's environment record
-    matches this arm's (GPU type, stack, revision, dtype, unbatched, mode) and every reuse-check cell (the first five
-    failures) is bit-identical; otherwise the arm is marked for rescoring and not read."""
+# files whose content decides a score: an arm scored at another commit is accepted only if these are identical
+SCORER_FILES = ("wf/posttrain.py", "wf/posttrain_score.py", "wf/lexsem.py", "scripts/lexsem/score.py",
+                "scripts/qwen_audit/followup_score.py", "wf/scoring/logodds.py", "wf/scoring/prompts.py", "wf/rq1.py",
+                "wf/rq1x.py", "wf/rq1v.py", "wf/rq2.py", "wf/data", "wf/constants.py")
+
+
+def same_code(commit: str | None, ref: str = "HEAD") -> bool:
+    """Is every scorer file at `commit` identical to `ref` (git diff --quiet)?"""
+    import subprocess
+
+    if not commit:
+        return False
+    r = subprocess.run(["git", "diff", "--quiet", commit, ref, "--", *SCORER_FILES], capture_output=True)
+    return r.returncode == 0
+
+
+def merge_lexsem(arm: str, recs: list[dict], lexsem_dir: Path | None, env: dict, config: dict) -> tuple[list[dict], dict]:
+    """Add the failure cells lexsem scored for this checkpoint and format (never success cells). Allowed only if
+    (i) lexsem's environment record matches this arm's (GPU type, stack, revision, dtype, unbatched, mode); (ii)
+    lexsem's run commit is recorded and its scorer files are identical to this analysis commit's; (iii) every
+    reuse-check cell (the first five failures of each stratum) is bit-identical; (iv) every reused cell exists for
+    every failure. Otherwise the arm is marked for rescoring with --no-reuse and not read."""
     lx = P.LEXSEM_REUSE.get(arm)
-    if not lx:
-        return recs, {"reused": False}
+    if not lx or not config.get("reuse", True):
+        return recs, {"reused": False, "ok": True}
     status: dict = {"lexsem_arm": lx}
     if lexsem_dir is None:
         return recs, {**status, "ok": False, "why": "no lexsem directory given"}
     lenv_p = lexsem_dir / f"{lx}_env.json"
     lrecs = read_jsonl(lexsem_dir / f"{lx}.jsonl")
-    lsucc = read_jsonl(lexsem_dir / f"{lx}_successes.jsonl")
     if not lenv_p.exists() or not lrecs:
         return recs, {**status, "ok": False, "why": "lexsem scores missing"}
     lenv = json.loads(lenv_p.read_text())
-    gpu_file = lexsem_dir / f"{lx}_gpu.txt"
-    lgpu = gpu_file.read_text().strip() if gpu_file.exists() else lenv.get("gpu", "")
     keys = ("torch", "transformers", "python", "revision", "dtype", "unbatched", "mode")
     diffs = {k: (env.get(k), lenv.get(k)) for k in keys if env.get(k) != lenv.get(k)}
-    if "L40S" not in str(lgpu).replace("_", " ") or "L40S" not in str(env.get("gpu")):
-        diffs["gpu"] = (env.get("gpu"), lgpu)
+    gpu_file = lexsem_dir / f"{lx}_gpu.txt"
+    lgpus = {str(lenv.get("gpu", ""))} | ({gpu_file.read_text().strip().replace("_", " ")} if gpu_file.exists() else set())
+    if any("L40S" not in g for g in lgpus) or "L40S" not in str(env.get("gpu")):
+        diffs["gpu"] = (env.get("gpu"), sorted(lgpus))
     if diffs:
         return recs, {**status, "ok": False, "why": f"environment differs: {diffs}"}
+    cfile = lexsem_dir / f"{lx}_commit.txt"
+    lcommit = cfile.read_text().strip() if cfile.exists() else None
+    if not same_code(lcommit):
+        return recs, {**status, "ok": False, "why": f"lexsem commit {lcommit} missing or its scorer files differ"}
     by = {r["id"]: r for r in lrecs}
-    sby = {r["id"]: r for r in lsucc}
-    checked, mismatched = 0, []
+    checked, mismatched, strata = 0, [], set()
     for r in recs:
         for c, fm in (r.get("reuse_check") or {}).items():
+            strata.add(r["stratum"])
             for f, cell in fm.items():
                 other = by.get(r["id"], {}).get("scores", {}).get(c, {}).get(f)
                 checked += 1
                 if other is None or not _cell_equal(cell, other):
                     mismatched.append(f"{r['id']}|{c}|{f}")
-    if checked == 0 or mismatched:
-        return recs, {**status, "ok": False, "why": f"bit-identity check: {len(mismatched)} of {checked} differ",
-                      "mismatched": mismatched[:10]}
-    cells = P.lexsem_cells(lx)
-    out = []
+    if checked == 0 or mismatched or strata != {"later", "step0"}:
+        return recs, {**status, "ok": False, "why": f"bit-identity check: {len(mismatched)} of {checked} differ "
+                      f"(strata checked {sorted(strata)})", "mismatched": mismatched[:10]}
+    cells = sorted(P.lexsem_cells(lx)["failure"] & set(P.arm_cells(arm)["failure"]))
+    out, missing = [], 0
     for r in recs:
-        src = by if r["item_set"] == "failure" else sby
-        lr = src.get(r["id"])
         sc = {c: dict(v) for c, v in r["scores"].items()}
-        for c, f in cells[r["item_set"]]:
-            if lr and c in lr["scores"] and f in lr["scores"][c]:
-                sc.setdefault(c, {}).setdefault(f, lr["scores"][c][f])
+        if r["item_set"] == "failure":
+            lr = by.get(r["id"])
+            for c, f in cells:
+                cell = (lr or {}).get("scores", {}).get(c, {}).get(f)
+                if cell is None:
+                    missing += 1
+                    continue
+                sc.setdefault(c, {}).setdefault(f, cell)
         out.append({**r, "scores": sc})
-    return out, {**status, "ok": True, "reused": True, "n_checked_cells": checked}
+    n_fail = sum(r["item_set"] == "failure" for r in recs)
+    if missing or n_fail != 450:
+        return recs, {**status, "ok": False, "why": f"{missing} reused cells missing ({n_fail} failures)"}
+    return out, {**status, "ok": True, "reused": True, "n_checked_cells": checked, "lexsem_commit": lcommit}
 
 
 def load_arm(runs: Path, arm: str, lexsem_dir: Path | None) -> dict | None:
@@ -125,16 +152,16 @@ def load_arm(runs: Path, arm: str, lexsem_dir: Path | None) -> dict | None:
     if not recs:
         return None
     env = json.loads((d / "env.json").read_text())
-    recs, reuse = merge_lexsem(arm, recs, lexsem_dir, env)
+    config = json.loads((d / "config.json").read_text()) if (d / "config.json").exists() else {}
+    recs, reuse = merge_lexsem(arm, recs, lexsem_dir, env, config)
     sha = (d / "git_sha").read_text().strip() if (d / "git_sha").exists() else None
     status = (d / "STATUS.md").read_text().splitlines()[0] if (d / "STATUS.md").exists() else ""
     recog = read_jsonl(d / "recognition.jsonl")
     jobs = read_jsonl(d / "jobs.jsonl")
-    config = json.loads((d / "config.json").read_text()) if (d / "config.json").exists() else {}
     return {"arm": arm, "config": config, "env": env, "commit": sha, "status": status, "reuse": reuse, "jobs": jobs,
             "fail": {r["id"]: r for r in recs if r["item_set"] == "failure"},
             "succ": {r["id"]: r for r in recs if r["item_set"] == "success"},
-            "recognition": {(x["object"], x["control"]): x["passed"] for x in recog}}
+            "recognition": {x["object"]: x["passed"] for x in recog}}
 
 
 # ---------------- readouts ----------------
@@ -240,14 +267,16 @@ def auc(pos: list[float], neg: list[float]) -> float:
 
 def competence(arm: dict, ro: str) -> dict:
     """Under the neutral task only (no goal contrast is read): AUC of successes against failures, degenerate
-    answering, median readout mass. Failures of both strata are pooled."""
-    f = [readout(r, P.NEUTRAL, ro) for r in arm["fail"].values()]
+    answering, median readout mass. RQ2's determined successes all have a history, so they are compared with the
+    later-step failures, the stratum the primary readings use; step 0 gets a descriptive AUC (arm_gates)."""
+    f = [readout(r, P.NEUTRAL, ro) for r in arm["fail"].values() if r["stratum"] == "later"]
     s = [readout(r, P.NEUTRAL, ro) for r in arm["succ"].values()]
     f, s = [x for x in f if x is not None], [x for x in s if x is not None]
     if not f or not s:
         return {"ok": False, "why": "neutral task not scored"}
     m_ro = "yn" if ro == "yn" else "first"
-    masses = [mass(r, P.NEUTRAL, m_ro) for r in list(arm["fail"].values()) + list(arm["succ"].values())]
+    masses = [mass(r, P.NEUTRAL, m_ro) for r in list(arm["fail"].values()) + list(arm["succ"].values())
+              if r["stratum"] != "step0"]
     masses = [x for x in masses if x is not None]
     out = {"auc": auc(s, f), "share_failures_positive": float(np.mean([x > 0 for x in f])),
            "share_successes_positive": float(np.mean([x > 0 for x in s])),
@@ -264,7 +293,11 @@ def arm_gates(arm: dict) -> dict:
     first-token mass passes (design section 5). The decision token (first) and the continuation are then read; the
     first token also needs its own discrimination and degeneracy to be read as a decision readout. Yes/no is gated
     on its own (native arms only)."""
-    g = {ro: competence(arm, ro) for ro in ("first", "full", "cont", "yn")}
+    g = {ro: competence(arm, ro) for ro in ("first", "full", "yn")}
+    for ro in ("first", "full"):  # descriptive: step-0 failures against the successes
+        f0 = [readout(r, P.NEUTRAL, ro) for r in arm["fail"].values() if r["stratum"] == "step0"]
+        s0 = [readout(r, P.NEUTRAL, ro) for r in arm["succ"].values()]
+        g[ro]["auc_step0_descriptive"] = auc([x for x in s0 if x is not None], [x for x in f0 if x is not None])
     full_ok = g["full"].get("ok_auc", False) and g["full"].get("ok_degenerate", False) and g["first"].get("ok_mass", False)
     return {"by_readout": g, "arm_ok": bool(full_ok),
             "read": {"full": bool(full_ok), "cont": bool(full_ok),
@@ -283,12 +316,18 @@ def vec(arm: dict, ids: list[str], cond: str, ro: str) -> np.ndarray:
     return np.array([np.nan if x is None else x for x in out], dtype=float)
 
 
-def rank_gain(arm: dict, ids: list[str], ro: str, cond_hi: str, cond_lo: str) -> np.ndarray:
-    """Within-item rank of a condition among the item's 12 failure lines (average ranks for ties), minus the
-    swapped line's rank, over 11: invariant to any monotone rescaling of the item's scores."""
+TASK_LINES = ("aligned", "swapped", P.NEUTRAL)
+
+
+def rank_gain(arm: dict, ids: list[str], ro: str, cond_hi: str, cond_lo: str,
+              among: tuple[str, ...] = P.FAIL_CONDS) -> np.ndarray:
+    """Within-item rank of a condition among the item's lines `among` (average ranks for ties), minus the other
+    condition's rank, over (number of lines - 1): invariant to any monotone rescaling of the item's scores. The
+    robustness rule uses the three task lines (real, swapped, neutral), so mention sentences cannot move it; the
+    twelve-line version is descriptive."""
     out = []
     for i in ids:
-        vals = {c: readout(arm["fail"][i], c, ro) for c in P.FAIL_CONDS}
+        vals = {c: readout(arm["fail"][i], c, ro) for c in among}
         if any(v is None for v in vals.values()):
             out.append(np.nan)
             continue
@@ -299,24 +338,20 @@ def rank_gain(arm: dict, ids: list[str], ro: str, cond_hi: str, cond_lo: str) ->
 
 
 def recognised_ids(arms: dict, lineage_arms: list[str], ids: list[str]) -> list[str]:
-    """Items whose (object, control) pair every checkpoint of the lineage recognises (plain-arm check)."""
-    out = []
-    for i in ids:
-        ok = True
-        for a in lineage_arms:
-            rec = arms[a]
-            pair = rec.get("_pair_of", {}).get(i)
-            if pair is None or not rec["recognition"].get(pair, False):
-                ok = False
-                break
-        if ok:
-            out.append(i)
-    return out
+    """Items whose goal object every plain-format checkpoint of the lineage recognises from its description."""
+    if not lineage_arms:
+        return []
+    ref = arms[lineage_arms[0]]
+    return [i for i in ids if all(arms[a]["recognition"].get(ref["fail"][i].get("goal_object"), False)
+                                  for a in lineage_arms)]
 
 
 def ref_ok(g: dict) -> bool:
-    lo = g["ci"][0]
-    return bool(lo > 0 and lo >= REF_FRACTION * g["estimate"])
+    """lexsem's reference rule, made two-sided (no direction is assumed): the interval excludes zero and its end
+    nearest zero is at least half the estimate in absolute value."""
+    lo, hi = g["ci"]
+    near = lo if g["estimate"] > 0 else -hi
+    return bool((lo > 0 or hi < 0) and near >= REF_FRACTION * abs(g["estimate"]))
 
 
 def estimands(arm: dict, ids: list[str], games: list[str], boot: Boot, ro: str, desc_ids: list[str] | None) -> dict:
@@ -335,10 +370,23 @@ def estimands(arm: dict, ids: list[str], games: list[str], boot: Boot, ro: str, 
 
     put("G", st.mean(d))
     put("G_std", st.std(d))
+    out["G_item_sd"] = float(np.std(d, ddof=1))
     put("net_share_moved", st.mean(np.sign(d)))
+    put("rank_gain", st.mean(rank_gain(arm, ids, ro, "aligned", "swapped", TASK_LINES)))
     rg = rank_gain(arm, ids, ro, "aligned", "swapped")
-    put("rank_gain", st.mean(rg))
+    put("rank_gain_12", st.mean(rg))
     out["G_reference_ok"] = ref_ok(out["G"])
+    sv = [readout(r, P.NEUTRAL, ro) for r in arm["succ"].values()]
+    fv = vec(arm, ids, P.NEUTRAL, ro)
+    if sv and None not in sv and not np.isnan(fv).any():
+        e = float(np.mean(sv) - fv.mean())
+        out["E_discrimination"] = e
+        out["R_goal_over_discrimination"] = out["G"]["estimate"] / e if e else math.nan
+    keep = [k for k, i in enumerate(ids) if not arm["fail"][i].get("fewshot_object")]
+    if len(keep) < len(ids):  # the items whose object is in the few-shot examples, left out (descriptive)
+        st3 = Stat(boot, [games[k] for k in keep])
+        out["without_fewshot_objects"] = {"n_items": len(keep), "G": iv(*st3.mean(d[keep])),
+                                          "G_std": iv(*st3.std(d[keep]))}
     for c in MENTIONS:
         k = P.PAIRS[c]
         net = vec(arm, ids, c, ro) - vec(arm, ids, k, ro)
@@ -348,6 +396,8 @@ def estimands(arm: dict, ids: list[str], games: list[str], boot: Boot, ro: str, 
         put(f"delta_std|{c}", st.std(net))
         put(f"share|{c}", st.ratio(net, d))
         put(f"rank_share|{c}", st.ratio(rank_gain(arm, ids, ro, c, k), rg))
+        if "without_fewshot_objects" in out:
+            out["without_fewshot_objects"][f"share|{c}"] = iv(*st3.ratio(net[keep], d[keep]))
     if "share|name_assert" in draws and "share|name_deny" in draws:
         put("C", (out["share|name_assert"]["estimate"] - out["share|name_deny"]["estimate"],
                   draws["share|name_assert"] - draws["share|name_deny"]))
@@ -364,6 +414,7 @@ def estimands(arm: dict, ids: list[str], games: list[str], boot: Boot, ro: str, 
             dd = vec(arm, [ids[p] for p in pos], P.DESC, ro) - sw[pos]
             if not np.isnan(dd).any():
                 put("delta|described_goal", st2.mean(dd))
+                put("delta_std|described_goal", st2.std(dd))
                 put("share|described_goal", st2.ratio(dd, d[pos]))
                 out["described_goal_n_items"] = len(pos)
     out["_draws"] = draws
@@ -412,17 +463,24 @@ def floor_of(main: dict, floor: dict, ro: str, ids: list[str], games: list[str],
     gs = [main["fail"][i]["game_id"] for i in ids]
     st = Stat(boot, gs)
     res = {}
-    for name, (a, b) in (("G", ("aligned", "swapped")), ("delta_assert", ("name_assert", "ctrl_assert"))):
+    pairs = (("G", ("aligned", "swapped")),) + tuple((f"delta|{c}", (c, P.PAIRS[c])) for c in MENTIONS)
+    for name, (a, b) in pairs:
         m = vec(main, ids, a, ro) - vec(main, ids, b, ro)
         f = vec(floor, ids, a, ro) - vec(floor, ids, b, ro)
+        if np.isnan(f).all() and name != "G":
+            continue  # pair not in this arm's floor rescoring
         if np.isnan(m).any() or np.isnan(f).any():
             return None
         sh, shd = st.mean(f - m)
-        res[name] = {"shift": sh, "floor": float(math.sqrt(sh ** 2 + np.nanstd(shd) ** 2)),
-                     "item_sd": float(np.std(m, ddof=1))}
+        sd = float(np.std(m, ddof=1))
+        res[name] = {"shift": sh, "floor": float(math.sqrt(sh ** 2 + np.nanstd(shd) ** 2)), "item_sd": sd,
+                     "shift_std": sh / sd if sd else math.nan}
+        if name == "G":  # the standardized goal effect itself on both GPU types (Rule 4)
+            res[name]["G_std_shift"] = st.std(f)[0] - st.std(m)[0]
     fl = max(v["floor"] for v in res.values())
-    return {"floor_nats": fl, "floor_std": fl / res["G"]["item_sd"] if res["G"]["item_sd"] else math.nan,
-            "detail": res, "n_items": len(ids)}
+    sd_g = res["G"]["item_sd"]
+    return {"floor_nats": fl, "floor_std": fl / sd_g if sd_g else math.nan,
+            "G_std_shift": res["G"]["G_std_shift"], "detail": res, "n_items": len(ids)}
 
 
 # ---------------- readings ----------------
@@ -452,16 +510,20 @@ def fragile(ci: list[float], floor: float, bounds: tuple[float, ...]) -> bool:
 
 
 def std_g_reading(d_std: dict, d_nats: dict, d_net: dict, d_rank: dict, floor_std: float | None,
-                  p_holm: float | None) -> dict:
+                  p_holm: float | None, holm_applies: bool = True) -> dict:
     """A stage difference in the standardized goal effect (design section 8). "higher"/"lower": the paired 95%
     interval excludes zero, the estimate exceeds 0.15 and five floors, the Holm-adjusted p is below 0.05, and nats,
     standardized effect, net share moved and rank gain agree in sign with the rank gain's interval excluding zero and
     its estimate at least 0.05. If the standardized criteria hold but the scales disagree: "scale-dependent".
-    "the same": the 90% interval within +-0.15. Otherwise "inconclusive"."""
+    "the same": the 90% interval within +-0.15, which must be at least five floors. Otherwise "inconclusive". A
+    missing floor makes the reading "not readable (floor not measured)". Where no Holm correction applies (the
+    continuation, step 0, secondary comparisons) the same rule gives a descriptive label."""
+    if floor_std is None or not math.isfinite(floor_std):
+        return {"reading": "not readable (floor not measured)", "numerically_fragile": None, "floor_std_used": None}
     e, (lo, hi) = d_std["estimate"], d_std["ci"]
-    fl = floor_std if floor_std is not None and math.isfinite(floor_std) else 0.0
-    sig = (lo > 0 or hi < 0) and abs(e) > STD_MARGIN and abs(e) > FLOOR_MULT * fl and \
-        (p_holm is None or p_holm < HOLM_ALPHA)
+    fl = floor_std
+    p_ok = (p_holm is not None and p_holm < HOLM_ALPHA) if holm_applies else True
+    sig = (lo > 0 or hi < 0) and abs(e) > STD_MARGIN and abs(e) > FLOOR_MULT * fl and p_ok
     signs = {np.sign(x["estimate"]) for x in (d_std, d_nats, d_net, d_rank)}
     rank_ok = (d_rank["ci"][0] > 0 or d_rank["ci"][1] < 0) and abs(d_rank["estimate"]) >= RANK_MARGIN
     if sig and len(signs) == 1 and rank_ok:
@@ -469,16 +531,40 @@ def std_g_reading(d_std: dict, d_nats: dict, d_net: dict, d_rank: dict, floor_st
     elif sig:
         reading = "scale-dependent"
     elif -STD_MARGIN <= d_std["ci90"][0] and d_std["ci90"][1] <= STD_MARGIN:
-        reading = "the same"
+        reading = "the same" if STD_MARGIN >= FLOOR_MULT * fl else "inconclusive (margin under five floors)"
     else:
         reading = "inconclusive"
+    if not holm_applies:
+        reading += " (descriptive)"
     return {"reading": reading, "numerically_fragile": fragile(d_std["ci"], fl, (-STD_MARGIN, 0.0, STD_MARGIN)),
             "floor_std_used": fl}
 
 
-def suppressed_reading(g_std: dict, floor_std: float | None) -> str:
+def share_reading(ci: list[float], floor_share: float | None, p_holm: float | None, holm_applies: bool) -> str:
+    """lexsem's three-way rule with the 0.25 margin; a "higher"/"lower" in the Holm family also needs the
+    adjusted p below 0.05; "the same" needs 0.25 to be at least five floors (in share units)."""
+    if floor_share is None or not math.isfinite(floor_share):
+        return "not readable (floor not measured)"
+    r = three_way(ci, SHARE_MARGIN)
+    if r in ("higher", "lower") and holm_applies and not (p_holm is not None and p_holm < HOLM_ALPHA):
+        r = "inconclusive (Holm)"
+    if r == "the same" and SHARE_MARGIN < FLOOR_MULT * floor_share:
+        r = "inconclusive (margin under five floors)"
+    return r
+
+
+def suppressed_reading(g_std: dict, floor_std: float | None, shift_std: float | None = None) -> str:
+    """A checkpoint's own standardized goal effect: "suppressed to about zero" if its 90% interval lies within
+    +-0.10 (at least five floors; "environment-dependent" if the A40 rescoring moves it by more than a fifth of the
+    margin, Rule 4)."""
     lo, hi = g_std["ci90"]
     if -ZERO_MARGIN <= lo and hi <= ZERO_MARGIN:
+        if floor_std is None or not math.isfinite(floor_std):
+            return "within +-0.10, not readable (floor not measured)"
+        if ZERO_MARGIN < FLOOR_MULT * floor_std:
+            return "within +-0.10, inconclusive (margin under five floors)"
+        if shift_std is not None and abs(shift_std) > ZERO_MARGIN / 5:
+            return "suppressed to about zero (environment-dependent)"
         return "suppressed to about zero"
     if g_std["ci"][0] > 0:
         return "above zero"
@@ -547,8 +633,10 @@ def analyse(arms: dict[str, dict], floors: dict[str, dict], B: int = B_DEFAULT, 
             continue
         clean = {k: v for k, v in e.items() if k != "_draws"}
         if "G_std" in e:
-            fl = ((out.get("floors", {}).get(a) or {}).get(ro) or {}).get("floor_std")
-            clean["zero_reading"] = suppressed_reading(e["G_std"], fl)
+            fx = (out.get("floors", {}).get(a) or {}).get(ro) or {}
+            clean["zero_reading"] = suppressed_reading(e["G_std"], fx.get("floor_std"), fx.get("G_std_shift"))
+            if stratum == "step0":
+                clean["zero_reading"] += " (floor measured on the later items)"
         out["arms"].setdefault(a, {}).setdefault(stratum, {})[ro] = clean
 
     def compare(a: str, b: str, stratum: str) -> dict:
@@ -566,6 +654,8 @@ def analyse(arms: dict[str, dict], floors: dict[str, dict], B: int = B_DEFAULT, 
                          (eb["_draws"]["share|name_assert"] - ea["_draws"]["share|name_assert"])
                     r[f"stage_by_meaning|{c}"] = iv(r[f"share|{c}"]["estimate"] - r["share|name_assert"]["estimate"], da)
             res[ro] = {k: v for k, v in r.items() if v is not None}
+            if ea.get("G_item_sd"):
+                res[ro]["item_sd_ratio"] = eb["G_item_sd"] / ea["G_item_sd"]
         pa, pb = est.get((a, stratum, "pi")), est.get((b, stratum, "pi"))
         if pa and pb and pa["pi"] and pb["pi"]:
             fa, fA = est[(a, stratum, "first")]["_draws"]["G"], est[(a, stratum, "full")]["_draws"]["G"]
@@ -586,15 +676,21 @@ def analyse(arms: dict[str, dict], floors: dict[str, dict], B: int = B_DEFAULT, 
             continue
         prim[label] = {"from": a2, "to": b2, "strata": {s: compare(a2, b2, s) for s in STRATA}}
         prim[label]["strata"] = {s: v for s, v in prim[label]["strata"].items() if v}
+    # the Holm family is fixed at 7 comparisons x 5 quantities = 35; a missing or ungated reading counts as p = 1
+    qmap = {"G_std_first": ("first", "G_std"), "G_std_full": ("full", "G_std"), "C": ("first", "C"),
+            "B": ("first", "B"), "pi": ("pi", None)}
     pvals = {}
-    for label, c in prim.items():
-        later = c["strata"].get("later", {})
-        for q, (ro, key) in {"G_std_first": ("first", "G_std"), "G_std_full": ("full", "G_std"),
-                             "C": ("first", "C"), "B": ("first", "B")}.items():
-            if ro in later and key in later[ro]:
-                pvals[f"{label}|{q}"] = later[ro][key]["p_two_sided"]
-        if "pi" in later:
-            pvals[f"{label}|pi"] = later["pi"]["p_two_sided"]
+    for a0, b0, label in PRIMARY_PAIRS:
+        later = prim.get(label, {}).get("strata", {}).get("later", {})
+        a2, b2 = resolve(a0), resolve(b0)
+        for q, (ro, key) in qmap.items():
+            gate_ro = ("first", "full") if ro == "pi" else (ro,)
+            gated = all(gates.get(x, {}).get("read", {}).get(g_) for x in (a2, b2) for g_ in gate_ro)
+            if ro == "pi":
+                pvals[f"{label}|{q}"] = later["pi"]["p_two_sided"] if "pi" in later and gated else 1.0
+            else:
+                ok = ro in later and key in later[ro] and gated
+                pvals[f"{label}|{q}"] = later[ro][key]["p_two_sided"] if ok else 1.0
     adj = holm(pvals)
     out["holm"] = {"n_readings": len(pvals), "adjusted": adj}
     for label, c in prim.items():
@@ -608,41 +704,72 @@ def analyse(arms: dict[str, dict], floors: dict[str, dict], B: int = B_DEFAULT, 
                 if ro not in r or not (ga.get("read", {}).get(ro) and gb.get("read", {}).get(ro)):
                     rd[ro] = {"reading": "not interpretable (competence gate)"} if ro in r else {"reading": "missing"}
                     continue
-                fa = ((out.get("floors", {}).get(a) or {}).get(ro) or {}).get("floor_std") or 0.0
-                fb = ((out.get("floors", {}).get(b) or {}).get(ro) or {}).get("floor_std") or 0.0
+                fxa = (out.get("floors", {}).get(a) or {}).get(ro) or {}
+                fxb = (out.get("floors", {}).get(b) or {}).get(ro) or {}
+                fa, fb = fxa.get("floor_std"), fxb.get("floor_std")
+                pair_floor = math.sqrt(fa ** 2 + fb ** 2) if fa is not None and fb is not None else None
                 q = f"G_std_{ro}"
-                p = adj.get(f"{label}|{q}") if s == "later" else None
+                in_family = s == "later" and ro in ("first", "full")
+                p = adj.get(f"{label}|{q}") if in_family else None
                 g = std_g_reading(r[ro]["G_std"], r[ro]["G"], r[ro]["net_share_moved"], r[ro]["rank_gain"],
-                                  math.sqrt(fa ** 2 + fb ** 2), p)
+                                  pair_floor, p, holm_applies=in_family)
                 g["holm_p"] = p
+                shifts = [fx.get("G_std_shift") for fx in (fxa, fxb) if fx.get("G_std_shift") is not None]
+                if any(abs(x) > STD_MARGIN / 5 for x in shifts):
+                    g["environment_dependent"] = True
                 # shares, read only when both arms' goal effects pass the reference rule
                 ea, eb = est[(a, s, ro)], est[(b, s, ro)]
                 shares_ok = ea.get("G_reference_ok") and eb.get("G_reference_ok")
+                fna, fnb = fxa.get("floor_nats"), fxb.get("floor_nats")
+                g_min = min(abs(ea["G"]["estimate"]), abs(eb["G"]["estimate"]))
+                floor_share = (math.sqrt(fna ** 2 + fnb ** 2) / g_min
+                               if fna is not None and fnb is not None and g_min else None)
                 sh = {}
                 for k in ("C", "B") + tuple(f"share|{m}" for m in MENTIONS) + \
                         tuple(f"stage_by_meaning|{m}" for m in MENTIONS if m != "name_assert"):
                     if k in r[ro]:
-                        sh[k] = three_way(r[ro][k]["ci"], SHARE_MARGIN) if shares_ok else \
-                            "not read (a goal effect fails the reference rule)"
+                        fam = in_family and ro == "first" and k in ("C", "B")
+                        if not shares_ok:
+                            sh[k] = "not read (a goal effect fails the reference rule)"
+                            continue
+                        sh[k] = share_reading(r[ro][k]["ci"], floor_share, adj.get(f"{label}|{k}"), fam)
+                        if not fam:
+                            sh[k] += " (descriptive)"
                 g["shares"] = sh
                 rd[ro] = g
             if "pi" in r:
+                gated = all(g_.get("read", {}).get(x) for g_ in (ga, gb) for x in ("first", "full"))
                 ok = all(est[(x, s, "full")].get("G_reference_ok") for x in (a, b))
-                rd["pi"] = three_way(r["pi"]["ci"], SHARE_MARGIN) if ok else "not read (reference rule)"
+                fl_pi = [((out.get("floors", {}).get(x) or {}).get("full") or {}).get("floor_nats") for x in (a, b)]
+                g_min = min(abs(est[(x, s, "full")]["G"]["estimate"]) for x in (a, b))
+                fs = math.sqrt(sum(f_ ** 2 for f_ in fl_pi)) / g_min if None not in fl_pi and g_min else None
+                if not gated:
+                    rd["pi"] = "not interpretable (competence gate)"
+                elif not ok:
+                    rd["pi"] = "not read (reference rule)"
+                else:
+                    rd["pi"] = share_reading(r["pi"]["ci"], fs, adj.get(f"{label}|pi"), s == "later")
+                    if s != "later":
+                        rd["pi"] += " (descriptive)"
             readings[s] = rd
         c["readings"] = readings
         c["strata"] = _strip(c["strata"])
     out["comparisons"] = prim
     for a, b, label in SECONDARY_PAIRS:
+        a, b = resolve(a), resolve(b)
         if a in arms and b in arms:
             out["secondary"][label] = {"from": a, "to": b, "strata": _strip({s: compare(a, b, s) for s in STRATA})}
     for a, b in FORMAT_PAIRS:
-        if a in arms and b in arms:
+        if ("qwen" if a.startswith("qwen") else "llama") in fallback:
+            out["format"][f"{a} -> {b}"] = "not read (the lineage's three-example plain arms are replaced)"
+        elif a in arms and b in arms:
             out["format"][f"{a} -> {b}"] = _strip({s: compare(a, b, s) for s in STRATA})
     # stage-by-format interaction: the change of the format effect between successive post-trained stages
     for x, y in (("tulu-sft", "tulu-dpo"), ("tulu-dpo", "tulu-rl"), ("tulu-rl", "llama-instruct")):
         keys = [f"{x}_plain", f"{x}_native", f"{y}_plain", f"{y}_native"]
-        if all(k in arms for k in keys):
+        if "llama" in fallback:
+            out["interactions"][f"stage x format {x} -> {y}"] = "not read (three-example plain arms replaced)"
+        elif all(k in arms for k in keys):
             res = {}
             for ro in ("first", "full"):
                 es = [est.get((k, "later", ro)) for k in keys]
@@ -697,21 +824,38 @@ def check_environment(arms: dict[str, dict]) -> list[str]:
             problems.append(f"{a}: scored with a testing limit")
         if x["reuse"].get("lexsem_arm") and not x["reuse"].get("ok"):
             problems.append(f"{a}: reuse of lexsem cells refused ({x['reuse'].get('why')}); rescore with --no-reuse")
-    commits = {x["commit"] for x in arms.values()}
-    if len(commits) != 1:
-        problems.append(f"scores from more than one commit: {commits}")
+    for c in sorted({str(x["commit"]) for x in arms.values()}):
+        if not same_code(None if c == "None" else c):
+            problems.append(f"scores from commit {c}, whose scorer files differ from this analysis commit's")
+    problems += token_identity(arms)
     return problems
 
 
-def attach_pairs(arms: dict[str, dict]) -> None:
-    """Each failure item's (object, control) pair, for the recognition filter (from the items record)."""
-    from wf import lexsem
-    from wf.rq2 import load_items
-
-    its = P.items(load_items())
-    pairs = {t["id"]: (t["goal_object"], lexsem.control_object(t)) for t in its["failure"]}
-    for x in arms.values():
-        x["_pair_of"] = pairs
+def token_identity(arms: dict[str, dict]) -> list[str]:
+    """The tokenizer gate across a lineage, on every scored sequence: for each item, condition and format, the
+    token ids (their hash) are identical in every plain-format arm of the lineage with the same examples, and in
+    their floor rescorings."""
+    problems = []
+    groups: dict = {}
+    for a, x in arms.items():
+        k = P.ARMS[a]
+        if k["mode"] != "plain" or k["kind"] == "bridge":
+            continue
+        lin = "qwen" if k["ckpt"].startswith("qwen") else "llama"
+        groups.setdefault((lin, k.get("fewshot")), []).append(a)
+    for members in groups.values():
+        ref: dict = {}
+        for a in members:
+            for i, r in arms[a]["fail"].items():
+                for c, fm in r["scores"].items():
+                    for f, cell in fm.items():
+                        h = cell.get("ids_sha")
+                        if h is None:
+                            continue  # a reused lexsem cell: checked bit for bit instead
+                        prev = ref.setdefault((i, c, f), (a, h))
+                        if prev[1] != h:
+                            problems.append(f"token ids differ: {i}|{c}|{f} in {prev[0]} and {a}")
+    return problems[:20]
 
 
 def main() -> None:
@@ -741,7 +885,6 @@ def main() -> None:
     problems = check_environment({**arms, **floors})
     if problems and not args.allow_partial:
         raise SystemExit("environment check failed:\n" + "\n".join(problems))
-    attach_pairs(arms)
     res = analyse(arms, {a.removesuffix("_floor"): f for a, f in floors.items()}, B=args.B)
     res["environment_problems"] = problems
     res["analysis_commit"] = git_sha()

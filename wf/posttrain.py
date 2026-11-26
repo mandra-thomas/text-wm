@@ -56,7 +56,9 @@ LEXSEM_CONDS = ("aligned", "swapped", NEUTRAL) + tuple(c for p in PAIRS.items() 
 FAIL_CONDS = LEXSEM_CONDS + (DESC,)  # 12 conditions on the determined failures
 SUCC_CONDS = ("aligned", "swapped", NEUTRAL)  # 3 conditions on the determined successes
 BRIDGE_CONDS = ("aligned", "swapped")
-FLOOR_CONDS = ("aligned", "swapped", "name_assert", "ctrl_assert")
+FLOOR_CONDS = ("aligned", "swapped", "name_assert", "ctrl_assert")  # chat-template arms
+# plain arms (the primary comparison): also the denial and listed-word pairs, which C and B use (Rule 4)
+FLOOR_CONDS_PLAIN = FLOOR_CONDS + ("name_deny", "ctrl_deny", "name_use", "ctrl_use")
 
 # ---------------- arms ----------------
 # An arm is one checkpoint in one prompt format. Modes are lexsem's: "plain" (no template, the tokenizer's own BOS
@@ -78,12 +80,12 @@ def _arms() -> dict[str, dict]:
         out[f"{ck}_native"] = {"ckpt": ck, "mode": mode, "kind": "main", "formats": ("obs", "fail", "yn")}
     for ck, mode in BRIDGE.items():
         out[f"{ck}_w2w"] = {"ckpt": ck, "mode": mode, "kind": "bridge", "formats": ("obs", "fail")}
-    for name, a in list(out.items()):
-        if a["kind"] == "main":
-            out[f"{name}_floor"] = {**a, "kind": "floor", "formats": ("obs", "fail")}
     for ck in PLAIN:  # the fixed fallback (design section 5): seven examples, plain format, whole lineage
         out[f"{ck}_plain7"] = {"ckpt": ck, "mode": "plain", "kind": "main", "formats": ("obs", "fail"),
                                "fewshot": "1+2"}
+    for name, a in list(out.items()):
+        if a["kind"] == "main":
+            out[f"{name}_floor"] = {**a, "kind": "floor", "formats": ("obs", "fail")}
     return out
 
 
@@ -93,7 +95,7 @@ LLAMA_STAGES = ("llama-base", "tulu-sft", "tulu-dpo", "tulu-rl", "tulu31-grpo", 
 # Arms whose cells lexsem scores in the identical environment (design section 7): pilot arm -> lexsem arm.
 LEXSEM_REUSE = {"qwen-base_plain": "qwen8b_base_plain", "qwen_plain": "qwen_plain", "qwen_native": "qwen_block",
                 "llama-instruct_native": "llama_chat"}
-REUSE_CHECK_ITEMS = 5  # the first five failures also score the reused cells, for the bit-identity check
+REUSE_CHECK_ITEMS = 5  # the first five failures of each stratum also score the reused cells (bit-identity check)
 
 
 def lexsem_cells(lexsem_arm: str) -> dict[str, set[tuple[str, str]]]:
@@ -101,11 +103,10 @@ def lexsem_cells(lexsem_arm: str) -> dict[str, set[tuple[str, str]]]:
     a = lexsem.ARMS[lexsem_arm]
     conds = {c for g in a["groups"] for c in lexsem.GROUPS[g]}
     fails = {c for g in a["fail_groups"] for c in lexsem.GROUPS[g]}
-    succ: set[tuple[str, str]] = set()
+    succ: set[tuple[str, str]] = set()  # successes are never reused (design section 7)
     if a.get("competence"):
         conds.add(NEUTRAL)
         fails.add(NEUTRAL)
-        succ = {(NEUTRAL, f) for f in a["formats"] + ("fail",)}
     fail_cells = {(c, f) for c in conds for f in a["formats"]} | {(c, "fail") for c in fails}
     return {"failure": fail_cells, "success": succ}
 
@@ -116,7 +117,7 @@ def arm_cells(arm: str) -> dict[str, list[tuple[str, str]]]:
     if a["kind"] == "bridge":
         conds_f, conds_s = BRIDGE_CONDS, BRIDGE_CONDS
     elif a["kind"] == "floor":
-        conds_f, conds_s = FLOOR_CONDS, ()
+        conds_f, conds_s = (FLOOR_CONDS_PLAIN if a["mode"] == "plain" else FLOOR_CONDS), ()
     else:
         conds_f, conds_s = FAIL_CONDS, SUCC_CONDS
     return {"failure": [(c, f) for c in conds_f for f in a["formats"]],
@@ -182,11 +183,5 @@ def bridge_messages(t: dict, cond: str) -> list[dict[str, str]]:
 
 
 RECOG_PROMPT = 'The phrase "{desc}" refers to the household object called'
-
-
-def recognition_pairs(fails: list[dict], count_tokens=None) -> list[tuple[str, str]]:
-    """(object, control object) pairs for the teacher-forced recognition check of the described goal."""
-    out = set()
-    for t in fails:
-        out.add((t["goal_object"], lexsem.control_object(t, count_tokens)))
-    return sorted(out)
+RECOG_NEUTRAL = "something"  # the neutral phrase for the pointwise association
+RECOG_TOP = 3  # an object is recognised if its own name ranks in the top 3 of the 55 names

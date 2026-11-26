@@ -47,6 +47,9 @@ def main() -> None:
     ls.load = fake_load
     S.strict_load_check = lambda *x, **k: {"ok": True, "dryrun": True}
     torch.cuda.synchronize = lambda *x, **k: None
+    import os
+
+    os.environ["WF_PT_DRYRUN"] = "1"  # no GPU in a dry run
     sys.argv = ["posttrain_score", "--ckpt", a.ckpt, "--arms", a.arms, "--limit", str(a.limit)]
     if a.smoke:
         sys.argv += ["--smoke", str(a.smoke)]

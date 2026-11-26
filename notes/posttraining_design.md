@@ -1,6 +1,6 @@
 # How does post-training change whether a language model keeps an agent's task out of its predicted environment dynamics? A staged-checkpoint pilot (design, 2026-11-26)
 
-**Status: design, not frozen.** No effect has been scored. The access and tokenizer check (section 2) ran on CPU. Exploratory study with a frozen procedure: the design, the scorer and the analysis are fixed at an annotated tag after one independent review, before any score. Approved by the user on 2026-11-26 with the scope in section 1.
+**Status: design, not frozen.** No effect has been scored. The access and tokenizer check (section 2) and a CPU dry run of the scorer and analysis with the real tokenizers and a tiny random model ran on CPU. Exploratory study with a frozen procedure: the design, the scorer and the analysis are fixed at an annotated tag after one independent review (`notes/posttraining_review1.md`, section 15), before any score. Approved by the user on 2026-11-26 with the scope in section 1.
 
 ## 1. The question and the scope
 
@@ -45,9 +45,9 @@ The run-time gate (section 5) repeats the identity check on every prompt actuall
 
 **Primary: one plain-text few-shot format for every checkpoint.** The study's world-model prompt (system text, three few-shot examples, the history, the action, "Next observation:") is rendered with no chat template: the system text, each example as its user text, one space and its reply, then the query's user text, separated by blank lines (the Qwen audit's `plain_text`, which wave B's plain format and the lexical-versus-semantic diagnostic, "lexsem", also use). The prompt is tokenized with the tokenizer's own special tokens: the Llama tree's BOS token exactly once at the start, nothing for Qwen. A candidate reply is scored after one space. Because the examples show the environment's replies, predicting the next observation is ordinary next-token prediction, which a base model can do without instruction following.
 
-**Secondary: each post-trained checkpoint's own chat template, as shipped at its pinned revision** (`apply_chat_template` with the generation prompt): Tülu's role-tag template for the four Tülu checkpoints (no BOS, as the template renders it), Meta's template for Llama-3.1-8B-Instruct, and Qwen3's thinking-off template, which ends in the empty think block, for Qwen3-8B. A base model is never scored in a chat template. The difference between the two formats within one checkpoint is a *format effect*, and its change between stages is reported as a stage-by-format interaction.
+**Secondary: each post-trained checkpoint's own chat template, as shipped at its pinned revision** (`apply_chat_template` with the generation prompt): Tülu's role-tag template for the four Tülu checkpoints (no BOS, as the template renders it; AI2's Tülu 3 8B SFT script, `scripts/train/tulu3/finetune_8b.sh` in open-instruct, does not pass `--add_bos`, the option with which open-instruct prepends BOS to the template, so training sequences most likely carried none either; this was not verified on the tokenized training data), Meta's template for Llama-3.1-8B-Instruct, and Qwen3's thinking-off template, which ends in the empty think block, for Qwen3-8B. A base model is never scored in a chat template. The difference between the two formats within one checkpoint is a *format effect*, and its change between stages is reported as a stage-by-format interaction.
 
-**Bridge: the Word2World message format.** The system message carries the room's full state and the task line; earlier actions are user turns and observations assistant turns; the queried action is the last user turn (`rq1.arm_messages(..., ft=True)`, as `rq1_score` scored the Word2World models). It is rendered as plain text for the base, the four Tülu checkpoints and Meta Instruct, and in its own chat template for the Word2World Llama. The full-state contexts come from the `X1AOX1A/LLMasWorldModels` dataset snapshot ff6ae2b924d1 in the shared cache.
+**Bridge: the Word2World message format.** The system message carries the room's full state and the task line; earlier actions are user turns and observations assistant turns; the queried action is the last user turn (`rq1.arm_messages(..., ft=True)`, as `rq1_score` scored the Word2World models). It is rendered as plain text for the base, the four Tülu checkpoints and Meta Instruct, and in its own chat template for the Word2World Llama. The full-state contexts come from the `X1AOX1A/LLMasWorldModels` dataset snapshot ff6ae2b924d1 in the shared cache. Rendered as plain text this format has no few-shot examples and no "Next observation:" cue, and at step 0 nothing in it shows the reply format; the bridge is therefore descriptive only, with its own discrimination (successes against failures under the swapped task) reported beside every value.
 
 **Seven-example fallback** (section 5): the same plain format with the three examples of set 1 followed by the four of set 2 (`notes/fewshot_sets_frozen.json`).
 
@@ -72,7 +72,7 @@ The run-time gate (section 5) repeats the identity check on every prompt actuall
 
 **Bridge conditions:** the real and the swapped task, on the failures and the successes.
 
-**Recognition check for the described goal.** Rq1x's and lexsem's recognition checks ask the model to name the described object, which a base model cannot be expected to answer. Here each checkpoint scores, in plain text, `The phrase "<description>" refers to the household object called` followed by the object's name and, separately, the item's control object's name. A pair passes if the object's name has the higher log-probability. The described-goal contrast is read on the items whose pair every plain-format checkpoint of the lineage passes, so its item set is the same at every stage.
+**Recognition check for the described goal.** Rq1x's and lexsem's recognition checks ask the model to name the described object, which a base model cannot be expected to answer. Here each plain-format checkpoint scores, teacher-forced, every one of the 55 ALFWorld names that have a description after `The phrase "<description>" refers to the household object called`, and again after the same sentence with the neutral phrase "something". A name's association with the description is the difference of the two log-probabilities (so a name that is merely frequent gains nothing). An object is recognised if its own name ranks among the top three of the 55. The described-goal contrast is read on the items whose object every plain-format checkpoint of the lineage recognises, so its item set is the same at every stage.
 
 ## 5. Readouts and gates
 
@@ -88,17 +88,17 @@ $$L = \log p(\text{success text}) - \log p(\text{"Nothing happens."}),$$
 
 each from its own sequence. The **continuation** is the remainder, $L^{\text{cont}} = L - L^{\text{first}}$: mostly the verb and the object's name once "You" is written, minus the tail of the failure text. The **yes/no** score is $\log p(\text{"Yes"}) - \log p(\text{"No"})$; it is recorded only for the post-trained checkpoints in their chat templates and is a secondary reading, never part of a comparison with a base model.
 
-**Gates**, computed per arm (one checkpoint in one format) under the neutral task only, so no gate reads the goal contrast. Failures of both strata are pooled against the successes.
+**Gates**, computed per arm (one checkpoint in one format) under the neutral task only, so no gate reads the goal contrast. RQ2's determined successes all have a history, so they are compared with the 300 later-step failures, the stratum of the primary readings; the step-0 discrimination is reported descriptively.
 
 1. *Discrimination:* the area under the ROC curve separating successes from failures on the full two-candidate score is at least 0.70.
 2. *Not degenerate:* the full score is above zero on at most 95% of failures and on at least 5% of successes.
 3. *Mass:* the median probability of the two first tokens (the success text's first token plus " Nothing") is at least 0.7.
-4. *Tokenization:* in plain text, the tokenizer's BOS exactly once where it adds one and never otherwise; on every failure, a name condition adds exactly one copy of the name's tokens to the swapped prompt and no other mention condition adds one; the success text of every failure starts with the readout token; the failure text starts with " Nothing" (chat: "Nothing"); lexsem's frozen name-token counts match; the rebuilt sample's hash matches. Any failure stops the job.
-5. *Loading:* the loaded model's parameter names equal the checkpoint's safetensors index (allowing a tied output layer), at the pinned revision.
+4. *Tokenization:* in plain text, the tokenizer's BOS exactly once where it adds one and never otherwise; on every failure, a name condition adds exactly one copy of the name's tokens to the swapped prompt and no other condition (other mentions, the described goal, the neutral task) adds one; every scored sequence's token ids (stored as a hash) are identical across the plain-format arms of a lineage with the same examples and in their floor rescorings, checked by the analysis; the success text of every failure starts with the readout token; the failure text starts with " Nothing" (chat: "Nothing"); lexsem's frozen name-token counts match; the rebuilt sample's hash matches. Any failure stops the job.
+5. *Loading:* the loaded model's parameter names equal the checkpoint's safetensors index (allowing a tied output layer), at the pinned revision. The job also refuses to start on the wrong GPU type (an L40S for main and bridge arms, an A40 for floor arms).
 
 An arm passing 1–3 is *interpretable*: its full score and continuation are read. Its first-token decision is read as a decision readout if, in addition, the first-token score alone passes 1 and 2. Yes/no is gated on its own (1 and 2 on the yes/no score, and a median "Yes" plus "No" mass of at least 0.9). An arm failing a gate is "not interpretable" on that readout, which is not a null result.
 
-**Fixed fallback for a failing base.** If a lineage's base fails gates 1–3 in the three-example format, every plain-format checkpoint of that lineage is rescored with seven examples and only those arms are read for that lineage, so that a base rescued by extra examples is never compared with post-trained models that did not get them. This costs about 1.6 GPU-hours for the Llama tree and 1.0 for the Qwen pair; if it is needed, the study stops and reports before running it (section 11).
+**Fixed fallback for a failing base.** If a lineage's base fails gates 1–3 in the three-example format, every plain-format checkpoint of that lineage is rescored with seven examples and only those arms are read for that lineage, so that a base rescued by extra examples is never compared with post-trained models that did not get them. Their floor rescorings are part of the fallback. It costs about 2.6 GPU-hours for both lineages; if it is needed, the study stops and reports before running it (section 10).
 
 ## 6. Estimands
 
@@ -106,11 +106,11 @@ For arm $k$, readout $r$ and the $n$ failure items of a stratum, write $L^r_{k,i
 
 $$G^r_k = \frac{1}{n}\sum_{i=1}^{n}\big[L^r_{k,i}(\text{aligned}) - L^r_{k,i}(\text{swapped})\big].$$
 
-Because post-training can change how sharp a model's probabilities are, a shift of one nat does not mean the same thing at every stage. Every goal effect is therefore also reported on three scale-free measures: the **standardized effect** $Z^r_k$, the mean item effect over its item standard deviation; the **net share of items moved**, the share of items whose effect is positive minus the share negative; and the **rank gain**, each item's real-task rank minus its swapped-task rank among its twelve condition scores, divided by eleven, which no monotone rescaling of an item's scores can change. Beside these, the goal effect relative to the arm's own discrimination is
+Because post-training can change how sharp a model's probabilities are, a shift of one nat does not mean the same thing at every stage. Every goal effect is therefore also reported on three scale-free measures: the **standardized effect** $Z^r_k$, the mean item effect over its item standard deviation (each arm's item standard deviation and the ratio between two arms are reported beside it, since a stage can change the spread as well as the mean); the **net share of items moved**, the share of items whose effect is positive minus the share negative; and the **rank gain**, each item's real-task rank minus its swapped-task rank among its three task lines (real, swapped, neutral), divided by two, which no monotone rescaling of an item's scores can change and which the mention sentences cannot move. The rank among all twelve conditions is reported descriptively. Beside these, the goal effect relative to the arm's own discrimination is
 
 $$R^r_k = \frac{G^r_k}{E^r_k}, \qquad E^r_k = \bar{L}^r_{k,\text{successes}}(\text{neutral}) - \bar{L}^r_{k,\text{failures}}(\text{neutral}),$$
 
-reported descriptively.
+reported descriptively, as are the goal effect and shares without the 56 items whose object appears in the few-shot examples.
 
 Each mention sentence $c$ with control $\kappa(c)$ has a net effect and a share of the goal effect on the same items:
 
@@ -130,39 +130,42 @@ The same indices are computed on the continuation and the full score; "Ignore th
 
 $$I_{k \to k'}(m) = \big[s_{k'}(m) - s_k(m)\big] - \big[s_{k'}(\text{assertion}) - s_k(\text{assertion})\big].$$
 
-The stage-by-format interaction is the change between two post-trained stages of the format effect (the chat-template value minus the plain-text value of the same checkpoint). A **certainty-matched** reading reports every share by quartile of the neutral task's score, a prompt that enters neither the contrast nor the goal effect; it is descriptive and states when two stages' ranges do not overlap.
+The stage-by-format interaction is the change between two post-trained stages of the format effect (the chat-template value minus the plain-text value of the same checkpoint). A **certainty-matched** reading reports every share by quartile of the neutral task's score, a prompt that enters neither the contrast nor the goal effect, with each quartile's range of neutral scores, so that the results note can state where two stages' ranges do not overlap; it is descriptive. If a lineage's base fails its gate (section 5), every comparison, secondary comparison and format effect that would use that lineage's three-example plain arms uses the seven-example arms instead or is marked "not read".
 
-**Uncertainty.** One game-clustered bootstrap per stratum (2,000 resamples of games, seed 20261126) is shared by every arm, since every arm scores the same items. Intervals are 95% percentile intervals; two-one-sided equivalence readings use the 90% interval.
+**Uncertainty.** One game-clustered bootstrap per stratum (10,000 resamples of games, seed 20261126, enough to resolve the smallest Holm threshold of 0.05/35) is shared by every arm, since every arm scores the same items. Intervals are 95% percentile intervals; two-one-sided equivalence readings use the 90% interval; p-values are two-sided bootstrap p-values for a difference of zero.
 
 ## 7. Reusing lexsem's scores
 
-Lexsem scores some of the same cells in what is designed to be the identical environment (the serve2 stack on an L40S, bf16, one unpadded sequence per forward pass, the same scorer functions, the same pinned revision): Qwen3-8B-Base and Qwen3-8B in plain text, Qwen3-8B with the think block, and Llama-3.1-8B-Instruct's yes/no in its chat template. Within one environment the project's scores are deterministic (`notes/numerical_sensitivity.md` §4.1), so those cells are taken from lexsem's run files rather than rescored. This pilot scores only the cells lexsem lacks (for example the failure-text sequence of "Ignore the X", the described goal, the successes under the real and swapped tasks, and every failure-text sequence of the think-block arm). The reuse is allowed only if both hold, checked by the analysis:
+Lexsem scores some of the same cells in what is designed to be the identical environment (the serve2 stack on an L40S, bf16, one unpadded sequence per forward pass, the same scorer functions, the same pinned revision): Qwen3-8B-Base and Qwen3-8B in plain text, Qwen3-8B with the think block, and Llama-3.1-8B-Instruct's yes/no in its chat template. Within one environment the project's scores are deterministic (`notes/numerical_sensitivity.md` §4.1), so those failure cells are taken from lexsem's run files rather than rescored. This pilot scores only the failure cells lexsem lacks (for example the failure-text sequence of "Ignore the X", the described goal, and every failure-text sequence of the think-block arm) and every success cell itself (successes are never reused). The reuse is allowed only if all of these hold, checked by the analysis:
 
-- lexsem's environment record for that arm equals this arm's (GPU type, torch, transformers, Python, revision, dtype, unbatched scoring, prompt mode), and lexsem's scores come from its own freeze tag, whose scorer and item builder this branch imports unchanged;
-- on the first five failures this pilot also scores every reused cell, and every one of those values is bit-identical to lexsem's.
+- lexsem's environment record for that arm equals this arm's (GPU type, torch, transformers, Python, revision, dtype, unbatched scoring, prompt mode);
+- lexsem's run commit is recorded and every file that decides a score (the scorer, the item and prompt builders, the plain-text renderer, the pin table) is identical between that commit and the analysis commit;
+- on the first five failures of each stratum this pilot also scores every reused cell, and every one of those values is bit-identical to lexsem's;
+- every reused cell exists for all 450 failures.
 
-Otherwise the arm is marked for rescoring with `--no-reuse` and nothing from it is read until it is rescored. Reuse never crosses an environment.
+Otherwise the arm is rescored with `--no-reuse` (a deviation entry first) and nothing from it is read until then. Reuse never crosses an environment.
 
 ## 8. Reading rules (fixed before any score)
 
 **Strata.** The pre-specified readings use the 300 later items. Step 0 (150 items) is reported in the same form but carries no Holm-corrected reading, because lexsem's simulation shows it is much weaker.
 
-**Pre-specified stage comparisons (primary, plain format).** Base against Tülu SFT; Tülu SFT against DPO; DPO against RL (PPO); base against Tülu's final model; base against Meta Instruct; Tülu's final model against Meta Instruct (sibling recipes); Qwen3-8B-Base against Qwen3-8B. For each, five primary quantities: the standardized goal effect on the first token and on the full score, the decision-token share $\pi$, content sensitivity $C$ and the content-blind lift $B$. That is 35 readings, Holm-corrected together on two-sided bootstrap p-values for the "differs" readings; everything else is descriptive. Secondary comparisons, without Holm: DPO against GRPO, PPO against GRPO, the same stage comparisons in the chat templates, the format effects and the stage-by-format interactions, and the bridge.
+**Pre-specified stage comparisons (primary, plain format).** Base against Tülu SFT; Tülu SFT against DPO; DPO against RL (PPO); base against Tülu's final model; base against Meta Instruct; Tülu's final model against Meta Instruct (sibling recipes); Qwen3-8B-Base against Qwen3-8B. For each, five primary quantities on the later stratum: the standardized goal effect on the first token and on the full score, the decision-token share $\pi$, content sensitivity $C$ and the content-blind lift $B$ (both on the first token). That is a fixed family of 35 readings, Holm-corrected together; a reading that is missing or fails a gate enters with p = 1, so the family never shrinks. A "higher" or "lower" reading in this family needs the Holm-adjusted p below 0.05 in addition to its own rule. Every other reading (the continuation, step 0, the other shares, the secondary comparisons) is computed with the same rules and labelled "descriptive". Secondary comparisons, without Holm: DPO against GRPO, PPO against GRPO, the same stage comparisons in the chat templates, the format effects and the stage-by-format interactions, and the bridge.
 
 **A stage difference in the standardized goal effect** is read as:
 
 - *higher* or *lower* if the paired 95% interval excludes zero, the estimate exceeds 0.15 in standardized units and five times the pair's numerical floor (the square root of the sum of the two arms' squared standardized floors), the Holm-adjusted p is below 0.05, **and** the difference in nats, in standardized units, in the net share moved and in the rank gain all have the same sign, with the rank-gain difference's interval excluding zero and its estimate at least 0.05 (about half a rank position);
 - *scale-dependent* if the standardized criteria hold but the four measures disagree in sign or the rank gain does not clear its margin; this is reported as a finding about calibration, not as a null;
-- *the same* if the 90% interval of the standardized difference lies within ±0.15;
-- *inconclusive* otherwise.
+- *the same* if the 90% interval of the standardized difference lies within ±0.15 and 0.15 is at least five floors;
+- *inconclusive* otherwise;
+- *not readable* if either arm's floor was not measured.
 
-**A checkpoint's own goal effect** is *suppressed to about zero* if the 90% interval of its standardized goal effect lies within ±0.10; otherwise it is reported as above zero, below zero, or not shown to be about zero.
+**A checkpoint's own goal effect** is *suppressed to about zero* if the 90% interval of its standardized goal effect lies within ±0.10 and 0.10 is at least five floors; otherwise it is reported as above zero, below zero, or not shown to be about zero.
 
-**Shares and their differences** ($\pi$, $C$, $B$, each sentence's share, and the stage-by-meaning interactions) use lexsem's three-way rule with its 0.25 margin: *lower* if the 95% interval lies wholly below −0.25, *the same* if it lies within ±0.25, *higher* if it lies wholly above 0.25, *inconclusive* otherwise. They are read only when both checkpoints' goal effects pass lexsem's reference rule (interval above zero, lower end at least half the estimate); otherwise only the net effects in nats and standardized units are reported.
+**Shares and their differences** ($\pi$, $C$, $B$, each sentence's share, and the stage-by-meaning interactions) use lexsem's three-way rule with its 0.25 margin: *lower* if the 95% interval lies wholly below −0.25, *the same* if it lies within ±0.25 (and 0.25 is at least five floors in share units, the pair's floor in nats over the smaller goal effect), *higher* if it lies wholly above 0.25, *inconclusive* otherwise. They are read only when both checkpoints' goal effects pass lexsem's reference rule made two-sided, so that a reversed effect is not excluded: the interval excludes zero and its end nearest zero is at least half the estimate in absolute value. Otherwise only the net effects in nats and standardized units are reported. The decision-token share $\pi$ also needs both arms' first-token and full readouts to pass their gates.
 
 **Readouts are read separately.** The first token, the continuation and the full score each get their own reading line; disagreements between them are reported as findings, and none overrides another.
 
-**Numerical floors** (`notes/numerical_sensitivity.md`, rules 1–6). Every main arm is rescored on an A40 (the same stack, a different GPU type) on all 300 later items, under the real and swapped tasks and the assertion pair, success and failure sequences (rule 4: at least 300 items, every arm). The floor of a readout is the square root of the squared mean shift of the goal effect plus its bootstrap variance, or that of the assertion's net effect if larger, in nats and in standardized units. Margins must be at least five floors (rule 3), and a reading whose interval ends within two floors of a boundary is labelled *numerically fragile*. Every comparison is within one environment (rule 1): the analysis refuses scores from more than one stack, a main or bridge arm not scored on an L40S, a floor arm not on an A40, a revision other than the pin, or scores from more than one commit.
+**Numerical floors** (`notes/numerical_sensitivity.md`, rules 1–6). Every main arm is rescored on an A40 (the same stack, a different GPU type) on all 300 later items (rule 4: at least 300 items, every arm): under the real and swapped tasks and the assertion pair for the chat-template arms, and additionally the denial and listed-word pairs, which $C$ and $B$ use, for the plain-format arms; success and failure sequences. The floor of a readout is the square root of the squared mean shift plus its bootstrap variance, for the goal effect and for each rescored mention pair's net effect, the largest, in nats and in standardized units. Margins must be at least five floors (rule 3); a reading whose interval ends within two floors of a boundary is labelled *numerically fragile*; a reading for which an arm's standardized goal effect moves on the A40 by more than a fifth of the margin is labelled *environment-dependent* (rule 4). Floors are measured on the later items and applied to step 0, which is stated with every step-0 reading. Every comparison is within one environment (rule 1): the analysis refuses scores from more than one stack, a main or bridge arm not scored on an L40S, a floor arm not on an A40, a revision other than the pin, scores from a commit whose scorer files differ from the analysis commit's, and any token-id mismatch.
 
 ## 9. What each outcome pattern would mean
 
@@ -186,18 +189,19 @@ Each row describes a pattern on the primary quantities that passes the rules of 
 
 **Environment.** The serve2 stack (torch 2.14.1+cu126, transformers 5.23.0, Python 3.11.18), named in the job scripts and checked at job start; L40S GPUs for every main and bridge arm, restricted to the `coc-gpu` and `ice-gpu` partitions; A40s for the floors; bf16 weights with a float32 log-softmax of the bf16 logits; one unpadded sequence per forward pass, through lexsem's scorer functions. Weights are downloaded at the pinned revision to node-local disk inside each job. Each arm's run folder (`runs/posttrain/<arm>/`) records the commit, configuration, input hashes, environment and the jobs that wrote it; a resumed job must match all of them, and the scorer refuses mock mode and a working tree with uncommitted changes.
 
-**Cost**, from lexsem's second smoke rates (0.085 s per success sequence, 0.064 per failure-text sequence, about 0.07 per yes/no sequence on an L40S; A40 taken as twice as slow), counting only the cells this pilot scores:
+**Cost**, from lexsem's second smoke rates (0.085 s per success sequence, 0.064 per failure-text sequence, about 0.07 per yes/no sequence on an L40S; A40 taken as twice as slow, a conservative guess), counting only the cells this pilot scores:
 
 | Part | Arms | Sequences | GPU-hours |
 |---|---|---|---|
 | Plain format, Llama tree | 6 | 75,312 | 1.56 |
-| Plain format, Qwen pair (lexsem cells reused) | 2 | 7,420 | 0.15 |
-| Chat templates | 6 | 99,468 | 2.02 |
+| Plain format, Qwen pair (lexsem failure cells reused) | 2 | 8,004 | 0.16 |
+| Chat templates | 6 | 99,468 | 2.01 |
 | Word2World bridge | 7 | 20,776 | 0.43 |
-| Floors (A40) | 14 | 33,600 | 1.40 |
+| Floors (A40), 300 items | 14 | 52,800 | 2.19 |
+| Recognition check, 8 plain arms | 8 | about 12,500 short sequences | about 0.05 |
 | Model downloads and loading, 17 jobs | | | about 1.4 |
 | Smoke, all arms of all 9 checkpoints, 5 items | | | about 0.6 |
-| **Total** | | | **about 7.6** |
+| **Total** | | | **about 8.4** |
 
 The approved budget is about 7.5–9 GPU-hours. The smoke measures the real rates. **If the smoke projects more than 9 GPU-hours, or the seven-example fallback is needed, the study stops and reports before going on.**
 
