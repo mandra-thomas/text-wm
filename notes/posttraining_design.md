@@ -216,7 +216,53 @@ The approved budget is about 7.5–9 GPU-hours. The smoke measures the real rate
 
 ## 12. Smoke record
 
-(Not yet run.)
+**Smoke run, 2026-11-26** (recorded before the full run is submitted). Ten jobs, 7348558–7348567, ran from a fresh checkout at the freeze tag (commit e0e9c04) in the serve2 stack (torch 2.14.1+cu126, transformers 5.23.0): nine on L40S GPUs, one per checkpoint with all of its main and bridge arms, and one on an A40 with Tülu SFT's two floor arms. Each arm scored 5 failures and 5 successes in every cell, including the cells reused from lexsem. Only timing and validity were measured; no difference between conditions was computed.
+
+**Checks.** No job stopped. The following all passed in every job:
+
+- the strict loading check (parameter names equal the safetensors index);
+- the GPU-type check;
+- the stack assertion;
+- the pinned revision;
+- lexsem's sample hash and name-token counts;
+- the BOS rule in plain text;
+- the per-item name-copy check, including the described goal and the neutral task;
+- the check that every failure's observation starts with the readout token.
+
+The four Tülu checkpoints' 8 untrained embedding rows (ids 128,256 to 128,263) held at most $7 \times 10^{-6}$ of the probability at the reply's first position. The recognition check takes about 4.5 s per two objects, so about a minute per plain arm. The first five successes by id all begin with "You", so the smoke did not exercise a success whose first token is another word. Their first-token decision is read from the stored log-probability of their own first token, which needs no further code path.
+
+**Rates**, seconds per unpadded sequence. The first arm of each job carries one-off warm-up and reads slightly higher.
+
+| Arm kind | Success sequence | Failure-text sequence | Yes/no |
+|---|---|---|---|
+| Plain format, L40S, 8 checkpoints | 0.063–0.12 (0.063–0.075 after warm-up) | 0.059–0.063 | — |
+| Chat template, L40S, 6 checkpoints | 0.066–0.071 | 0.064–0.068 | 0.068–0.074 |
+| Word2World bridge, L40S, 7 checkpoints | 0.095–0.12 | 0.094–0.098 | — |
+| Floors, A40 (Tülu SFT, plain and chat) | 0.125–0.130 | 0.115–0.122 | — |
+
+**Readout masses under the neutral task** (mean over the 5 items; the gate uses the median over all items):
+
+- *First-token mass on the failures:* the probability of " You" plus " Nothing" at the reply's first position. In plain text it was 0.86–0.94 for every checkpoint; the Llama base was at 0.91 and the Qwen base at 0.92. In the chat templates it was 0.78 for Meta Instruct, 0.91–0.95 for the Tülu checkpoints, and 1.00 for Qwen3-8B with the block.
+- *First-token mass on the successes:* 0.95–1.00 everywhere.
+- *Yes/no mass in the chat templates:* below 0.9 on some items for Tülu DPO, RL and GRPO (10–15 condition cells with a minimum under 0.9). Their yes/no readings may therefore fail the yes/no gate. Yes/no is secondary and is not part of any stage comparison.
+- *Single items:* the plain-text Qwen3-8B, Tülu RL and the bridge arms each had a few condition cells in which one item fell below 0.7. No gate is read here.
+
+**Tail of the failure text after " Nothing"** (log-probability of " happens."):
+
+- −0.7 to −5.8 nats in plain text;
+- −0.003 to −0.18 in the chat templates;
+- exactly 0 for Qwen3-8B with the block and for the Word2World model in its own template.
+
+So in plain text the full two-candidate score differs substantially from the first-token decision, which is why the failure-text sequence is scored on every cell.
+
+**Cost.** The measured rates were applied to the cells of the full run. Projected scoring time:
+
+- L40S: 3.8 GPU-hours for the main and bridge arms;
+- A40: about 1.8 GPU-hours for the 14 floor arms, from Tülu SFT's measured A40 rates (0.12–0.13 s);
+- download and loading: about 2.5 minutes per job, observed in the smoke (downloads to node-local disk were fast), about 0.7 GPU-hours over 17 jobs;
+- the smoke itself: about 0.4 GPU-hours.
+
+The total is about 6.7 GPU-hours. That is under the approved 7.5–9 and under the 9-hour stopping threshold, so the full run proceeds.
 
 ## 13. Limits
 
