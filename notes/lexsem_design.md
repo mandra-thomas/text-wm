@@ -2,7 +2,7 @@
 
 **Status: design, not frozen.** No effect has been scored. Two 5-item smoke runs measured timing and validity only (section 11). The rules (section 9, `wf/lexsem_rules.py`) and the analysis (`wf/lexsem_analysis.py`) are written and tested on planted data; the design is to be reviewed again before the freeze tag (section 13). Exploratory, frozen procedure: the same standing as the mechanism battery and τ-auth.
 
-**Decisions by the user (2026-11-25).** (1) The full run uses the `serve2` software stack. (2) Every sequence is scored one at a time, unpadded, as every stored project score was made; no float32 output layer. (3) Included arms: the core; "Ignore the X" with its control; the three-position arm; E4's stated-reliability pair; the failure-text sequence on every core cell (the full two-candidate score); Qwen3-8B with the empty think block in yes/no, eight conditions; Llama-3.1-8B in yes/no, twelve conditions. Expected cost about one GPU-hour. Later the same day, after a CPU investigation of why a mention reproduces more of Qwen's effect than of Llama's, the coordinator added "Ignore the X" (with its control) to the with-block and Llama arms, a competition line (the real task plus the control object's assertion) to all three arms, and the first-token readout to the with-block arm, within about 1.2 GPU-hours (section 11). The user also adopted the numerical-sensitivity rules of `notes/numerical_sensitivity.md` (section 7). The user added six scientific qualifications (identifiability, statistics, controls, environment, the reliability arm, readouts); sections 2, 7, 10, 5, 12 and 4 answer them.
+**Decisions by the user (2026-11-25).** (1) The full run uses the `serve2` software stack. (2) Every sequence is scored one at a time, unpadded, as every stored project score was made; no float32 output layer. (3) Included arms: the core; "Ignore the X" with its control; the three-position arm; E4's stated-reliability pair; the failure-text sequence on every core cell (the full two-candidate score); Qwen3-8B with the empty think block in yes/no, eight conditions; Llama-3.1-8B in yes/no, twelve conditions. Expected cost about one GPU-hour. Later the same day, after a CPU investigation of why a mention reproduces more of Qwen's effect than of Llama's, the coordinator added "Ignore the X" (with its control) to the with-block and Llama arms, a competition line (the real task plus the control object's assertion) to all three arms, and the first-token readout to the with-block arm, within about 1.2 GPU-hours (section 11). The user then approved family-generality arms with six qualifications (Qwen3-4B and Qwen3-14B each in plain text and with the think block, and Llama-3.2-3B; same items, conditions and readouts as the core models; absolute effects and a scale-free measure beside every share; paired, game-clustered between-model contrasts on the same items; the action-type breakdown; a pre-specified model × think-block × sentence-meaning interaction; and interpretation limits), answered in sections 5, 6, 9 and 11. The user also adopted the numerical-sensitivity rules of `notes/numerical_sensitivity.md` (section 7). The user added six scientific qualifications (identifiability, statistics, controls, environment, the reliability arm, readouts); sections 2, 7, 10, 5, 12 and 4 answer them.
 
 **Revision history.** First version 064edb6; reviewed twice on 2026-11-25 (section 17 lists every point and what was done).
 
@@ -109,13 +109,17 @@ None of the three is the definitive measure of the model's belief about the tran
 
 **Homonyms are not a pure lexical isolate.** Nine object types have a natural sense with the identical token (mug, watch, pan, plate, book, pencil, cup, bowl, egg). An unrelated-sense homonym may still activate the original concept. Its reading is therefore "the lexical form, without the intended sense in context"; semantic activation is allowed a partial lift on it, and the homonym never decides an account's reading on its own. A full homonym lift is not taken as proof of lexical-only processing.
 
-**The three arms.** All on the same 450 items, in one run, on one GPU type and stack.
+**The arms.** All on the same 450 items, in one run, on one GPU type (L40S) and one stack (`serve2`), one unpadded sequence at a time (`wf.lexsem.ARMS`). The family arms mirror the core arm of their kind exactly (conditions, controls and readouts), so that no Qwen size is measured only with the block.
 
 | Arm | Model and format | Conditions | Readouts |
 |---|---|---|---|
-| Qwen plain text | Qwen3-8B, no chat template | core, "Ignore the X", position, reliability, competition (with controls) | first token, yes/no; failure text on core cells (full two-candidate) |
-| Qwen with the block | Qwen3-8B, thinking-off chat template (empty think block) | anchors; name assertion, denial and listed word; "Ignore the X"; competition (with controls) | first token, yes/no |
-| Llama | Llama-3.1-8B-Instruct, its chat template | anchors; name assertion, denial, listed word, elsewhere; description assertion; "Ignore the X"; competition (with controls) | yes/no |
+| Qwen3-8B plain text | no chat template | core, "Ignore the X", position, reliability, competition (with controls) | first token, yes/no; failure text on core cells (full two-candidate) |
+| Qwen3-8B with the block | thinking-off chat template (empty think block) | anchors; name assertion, denial, listed word; "Ignore the X"; competition (with controls) | first token, yes/no |
+| Llama-3.1-8B | its chat template | anchors; name assertion, denial, listed word, elsewhere; description assertion; "Ignore the X"; competition (with controls) | yes/no |
+| Qwen3-4B plain text, Qwen3-14B plain text | as Qwen3-8B plain | as Qwen3-8B plain | as Qwen3-8B plain |
+| Qwen3-4B with the block, Qwen3-14B with the block | as Qwen3-8B with the block | as Qwen3-8B with the block | as Qwen3-8B with the block |
+| Llama-3.2-3B | its chat template | as Llama-3.1-8B | yes/no |
+| Floor rescoring, one per arm | the same model and format, on an A40 | anchors and the name-assertion pair, first 100 items | the arm's readouts |
 
 **The competition line.** The real task followed by the control object's assertion ("Your task is to: put some saltshaker on cabinet. There is a toiletpaper somewhere in the room."). Its effect is read net of the same sentence after the swapped task, so the carrier's own effect is removed (section 9). In stored two-candidate scores (rq1, with the block for Qwen), naming another object after the real task lowered Qwen's reading by 1.09 nats and Llama's by 0.06.
 
@@ -183,10 +187,12 @@ Further estimands: the unnormalized versions (log p(" You"), log p(" Nothing"), 
 
 ## 7. Statistics
 
+**Absolute effects beside every share.** Every share of the goal effect and every relative lift is reported with its numerator and denominator in nats (with intervals and their correlation across draws) and with a scale-free measure, the standardized effect (mean over item SD, with an interval). When a share's denominator fails the reference rule below, only the absolute effects are reported, together with the paired difference of the numerator and the denominator in nats (for example, the listed word's net effect minus the name assertion's on the same items), which needs no division.
+
 **Numerical rules** (adopted from `notes/numerical_sensitivity.md`, 2026-11-25). Within one environment, scores are deterministic; a change of GPU type, stack, code path or input shape adds noise that is not independent rounding (the two arms of a contrast move nearly independently, means shift systematically, and tails are heavy). Three rules follow.
 
 - *One environment per comparison*, including the code path and the input shape: every readout is computed the same way for every condition of a comparison (yes/no from a pass over the prompt alone; the first token and the success text from a pass over the prompt and the success text; the failure text from its own pass), and the analysis refuses mixed environments (gate 7).
-- *Margins at least five times the floor.* The floor is the measured one-SD shift of a mean paired effect under a change of environment: 0.13 nats for Qwen with the think block, 0.05 for Llama, and for Qwen in plain text, which that note judges less extreme than the block case but did not measure, the upper end of its measured range for Qwen means over a few hundred items, 0.08 nats. A zone of a ratio is 0.25 of its reference wide, so a ratio is read only if a quarter of its reference is at least five floors: references of at least 1.6 nats (Qwen plain), 2.6 (Qwen with the block) and 1.0 (Llama). The goal-effect gate requires the same of $G$; otherwise only absolute effects are reported, marked "below numerical resolution". **This may bind for the plain-text first-token readout**: on the Qwen audit's 300 items its goal effect was 1.31 nats at later steps and 1.65 at step 0. If it binds, that readout's account readings are not made; the yes/no and full two-candidate readouts, with larger effects, are read on their own.
+- *Margins at least five times the floor.* The floor is the shift of a mean paired effect under a change of environment. Noise scales with the size of the readout logits, so each arm's floor is **measured**: every arm has a floor rescoring (its first 100 items, the anchors and the name-assertion pair, on an A40 instead of an L40S, same stack), and the floor is the square root of the squared mean shift plus its squared bootstrap SD, for the goal effect and the name-assertion net effect, whichever is larger (conservative for means over 150 to 300 items). If a floor rescoring is missing, the floor falls back to the logit band of the arm's recorded readout logits (logits of 32 or more sit on a 0.25-nat grid: 0.13 nats, the measured Qwen-with-block value; otherwise 0.05, the measured Llama value), and if no logits are recorded, to the format's default in the numerical note (0.13 with the block, 0.05 for Llama, 0.08 for Qwen in plain text, the upper end of its measured range for Qwen means). A zone of a ratio is 0.25 of its reference wide, so a ratio is read only if a quarter of its reference is at least five floors: references of at least 1.6 nats (Qwen plain), 2.6 (Qwen with the block) and 1.0 (Llama). The goal-effect gate requires the same of $G$; otherwise only absolute effects are reported, marked "below numerical resolution". **This may bind for the plain-text first-token readout**: on the Qwen audit's 300 items its goal effect was 1.31 nats at later steps and 1.65 at step 0. If it binds, that readout's account readings are not made; the yes/no and full two-candidate readouts, with larger effects, are read on their own.
 - *Fragility.* A reading whose interval ends within two floors (in units of its reference) of a zone boundary is labelled "numerically fragile".
 
 The descriptive comparison of archived stage-0 scores (original stack) with their rescoring here carries an allowance of about ±0.12 nats in the mean: inside it, the difference is read as environment alone.
@@ -241,6 +247,22 @@ Evidence is read in two forms: literal claim about this room (as above), and inc
 
 **Readout disagreements.** For each pair of readouts (first-token against yes/no, first-token against full two-candidate, yes/no against full two-candidate) and each contrast, a disagreement is recorded when the two categories share no zone. The normalization flag compares the first-token readout with log p(" You"). These lists are reported as findings; no readout overrides another.
 
+**Between-model and between-format contrasts** (pre-specified; `wf/lexsem_family.py`). For each pair below and each sentence (listed word, "Ignore the X", denial, elsewhere, description), on the items both arms share, with one game-clustered bootstrap: the difference in the sentence's share of the goal effect and in its relative lift, each read three-way (lower, the same within 0.25, higher), with both arms' net effects and goal effects in nats and standardized. Pairs: Qwen3-8B plain against Llama-3.1-8B; Qwen3-8B with the block against Llama-3.1-8B; plain against block for each Qwen size; Qwen3-4B and 14B against 8B in each format; Llama-3.2-3B against Llama-3.1-8B; Qwen3-4B plain against Llama-3.2-3B. The first token and yes/no are compared separately (Llama arms have yes/no only).
+
+**The model × think-block × meaning interaction** (pre-specified). The meanings are the assertion, reference without assertion ("Ignore the X"), denial and the listed word. With $s_{a}(m)$ the share of the goal effect of meaning $m$ in arm $a$, the format effect on a meaning relative to the assertion, for each Qwen size, is
+
+$$F(m) = \big[s_{\text{block}}(m) - s_{\text{plain}}(m)\big] - \big[s_{\text{block}}(\text{assertion}) - s_{\text{plain}}(\text{assertion})\big],$$
+
+read three-way per size; the size × format × meaning term is the difference of $F(m)$ between sizes. The model × meaning term against Llama-3.1-8B, in each Qwen arm, is
+
+$$\big[s_{\text{Qwen}}(m) - s_{\text{Qwen}}(\text{assertion})\big] - \big[s_{\text{Llama}}(m) - s_{\text{Llama}}(\text{assertion})\big].$$
+
+All are differences of differences on the same items and draws, never comparisons of separate averages.
+
+**Action types.** Every share above is also reported for take actions and for move, heat, cool and clean separately, with the Qwen3-8B minus Llama-3.1-8B differences on take actions, because the stored Qwen–Llama gap is concentrated there.
+
+**Scope of the family readings.** Three sizes of one family do not establish a scaling relationship; a size difference is reported as a difference between three models, not a trend. Behavioural evidence (for example, "Llama's continuation lifts on 'Ignore the X' while its decision token tracks content") describes how predictions respond and is kept separate from claims about internal computation, which these contrasts cannot support. Rejecting the pure accounts identifies neither a mechanism nor a mixture.
+
 **"Ignore the X" across formats and models** (pre-specified). Its relative lift (net of its control, over the name assertion's net effect, same items, one bootstrap) is computed in each arm, and the differences "plain minus block" and "plain minus Llama" are read in yes/no; in the first token, Qwen plain against Qwen with the block (Llama's first token is not scored).
 
 | Outcome (yes/no) | Reading | Meaning |
@@ -293,7 +315,7 @@ The quick, rules-only mode (`simulate_rules.py rules`, independent draws per con
 
 **The bridge to stage 0 is rescored inside this run.** Stage 0's yes/no prompts for the aligned task, the swapped task and its mention sentence are, byte for byte, the with-block arm's aligned, swapped and name-assertion yes/no prompts. The bridge is therefore read within the run, on the same items, GPU type, stack and bootstrap draws: the plain-text bridge ratio against the with-block one, with the rule "plain text higher than the block format", "the same in both formats (within 0.25)" or "plain text lower" for their difference; at step 0, "plain text higher" is read as "stage 0's low step-0 share belongs to the block format". This costs nothing beyond the with-block arm. The archived stage-0 scores (original stack) are compared with their rescoring only descriptively, as differences in the *paired* effects (goal effect and mention effect, with intervals) and the mean per-score difference; the earlier 0.2-nat per-score stack difference is not assumed to carry over to paired effects.
 
-**Cost of the full run**, at the measured rate for one unpadded sequence at a time on an L40S (0.088 s in plain text, 0.076 with the think block, 0.071 for Llama; first smoke).
+**Cost of the core arms** (Qwen3-8B and Llama-3.1-8B), at the measured rate for one unpadded sequence at a time on an L40S (0.088 s in plain text, 0.076 with the think block, 0.071 for Llama; first smoke).
 
 | Arm | Item-conditions | Sequences | GPU-minutes |
 |---|---|---|---|
@@ -303,7 +325,22 @@ The quick, rules-only mode (`simulate_rules.py rules`, independent draws per con
 | Loading three models, recognition checks | | | about 5 |
 | **Total** | | | **about 70 (1.17 GPU-hours)** |
 
-Against the first full plan (about one GPU-hour), the additions cost: the two control-object reliability sentences about 2.6 minutes; "Ignore the X" in the with-block and Llama arms about 2.2; the competition line in all three arms about 2.4; the first-token readout in the with-block arm about 6.3.
+**Cost of the family arms**, extrapolated from the measured Qwen3-8B and Llama-3.1-8B rates by parameter count (Qwen3-4B 4.0B, Qwen3-14B 14.8B and Qwen3-8B 8.2B parameters; Llama-3.2-3B 3.2B against 8.0B); these are scaled, not measured, and the smoke run of every arm before the full run measures them. Qwen3-14B in bf16 (about 30 GB) fits an L40S's 48 GB.
+
+| Arm | Sequences | Seconds per sequence (scaled) | GPU-minutes |
+|---|---|---|---|
+| Qwen3-4B plain text | 30,459 | 0.043 | about 21.8 |
+| Qwen3-4B with the block | 9,900 | 0.037 | about 6.1 |
+| Qwen3-14B plain text | 30,459 | 0.159 | about 80.7 |
+| Qwen3-14B with the block | 9,900 | 0.137 | about 22.6 |
+| Llama-3.2-3B | 6,750 | 0.028 | about 3.2 |
+| Loading five models | | | about 8 |
+| **Family subtotal (L40S)** | | | **about 142** |
+| Floor rescorings, eight arms, on an A40 (about twice the L40S time) | 5,600 | | about 16 + 10 loading, **about 26 A40-minutes** |
+
+**Total for the whole diagnostic: about 212 L40S-minutes plus 26 A40-minutes, about 4.0 GPU-hours.** A smaller family variant that drops the position arm, the reliability arm and the failure text from the Qwen3-4B and 14B plain arms (keeping the core, "Ignore the X" and the competition line, first token and yes/no) costs about 95 minutes instead of 142, about 3.2 GPU-hours in all; it is not the user's stated design ("the same conditions and readouts as the core models") and is listed only as an option.
+
+Against the first full plan (about one GPU-hour), the core additions cost: the two control-object reliability sentences about 2.6 minutes; "Ignore the X" in the with-block and Llama arms about 2.2; the competition line in all three arms about 2.4; the first-token readout in the with-block arm about 6.3.
 
 **Second smoke run** (job 7315488, commit 3f3a31a, 5 items, unbatched, every arm as of that commit; timing and validity only; queued before the competition line, the "Ignore" pair in the block and Llama arms and the block arm's first token were added). SMOKE2
 
@@ -332,15 +369,16 @@ The name's tokens are unchanged in both sentences (checked with both tokenizers)
 
 1. Review of this revision.
 2. Analysis code: written (`wf/lexsem_analysis.py`), tested on planted scores (`tests/test_lexsem_analysis.py`).
-3. Smoke records committed in section 11 before the full run (the second smoke, with every arm and the unbatched scorer, is recorded there).
+3. A smoke run of every arm (`pace/lexsem_smoke.sbatch`: 5 items, timing and validity only) at the commit to be tagged; its record is committed in section 11 before the full run. If any condition fails a gate or the measured cost exceeds the approved total by more than a quarter, stop and report.
 4. Tag `lexsem-design-frozen-<date>` on the commit with this note, the builder, the rules, the scorer and the analysis.
-5. Run the three arms from a fresh checkout at the tag, on L40S, in `serve2`; the analysis refuses scores from another commit or environment.
+5. Run every arm from a fresh checkout at the tag, on L40S, in `serve2` (`pace/lexsem.sbatch`, one job per arm), and each arm's floor rescoring on an A40; the analysis (`python -m wf.lexsem_analysis --dir runs/lexsem ...`) refuses scores from another commit or environment.
 6. Deviations after the tag in a dated note committed before the affected scores are read.
 
 ## 14. Implementation
 
 - `wf/lexsem.py`: frozen tables, carriers, conditions and controls, the control-object rule, scene prevalence, strata and sample, prompt builder.
 - `wf/lexsem_rules.py`: zones, predictions, readings.
+- `wf/lexsem_family.py`: measured and band floors, between-model and between-format contrasts, the model × think-block × meaning interaction, the action-type breakdown.
 - `wf/lexsem_analysis.py`: estimands with absolute effects beside every ratio, the shared game bootstrap, gates (including the small-reference rule and the environment check), readings per readout, readout disagreements, normalization flags, item-level agreement, the prevalence covariate, the few-shot exclusion repeat, the step comparison, the in-run bridge and the archived-score comparison; optional arms read only when present.
 - `scripts/lexsem/score.py`: loads each model with the study scorer's settings, records its environment, checks tokens and the sample digest, runs the recognition checks, checks token identity per item, scores one unpadded sequence at a time, appends one line per item.
 - `scripts/lexsem/simulate_rules.py`: section 10.

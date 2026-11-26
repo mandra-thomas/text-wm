@@ -107,17 +107,18 @@ def sequence(tok, msgs, mode: str, continuation: str | None) -> tuple[list[int],
     return p + tok(continuation, add_special_tokens=False)["input_ids"], len(p)
 
 
-def score_one(model, ids: list[int], n_prompt: int, continuation: bool) -> "torch.Tensor":
+def score_one(model, ids: list[int], n_prompt: int, continuation: bool) -> tuple:
     """One unpadded sequence through the full model, as every stored project score was made (LogoddsScorer): the
     model's bf16 logits, a float32 log-softmax at the reply's first position and, with `continuation`, at every
-    position of the continuation. Returns positions x vocabulary on the CPU."""
+    position of the continuation. Returns (positions x vocabulary log-probabilities, the raw logits at the reply's
+    first position), both on the CPU; the raw logits set the bf16 grid that governs numerical noise."""
     import torch
 
     dev = next(model.parameters()).device
     with torch.no_grad():
         logits = model(input_ids=torch.tensor([ids], device=dev)).logits[0]
     pos = list(range(n_prompt - 1, len(ids) - 1)) if continuation else [n_prompt - 1]
-    return torch.log_softmax(logits[pos].float(), dim=-1).cpu()
+    return torch.log_softmax(logits[pos].float(), dim=-1).cpu(), logits[pos[0]].float().cpu()
 
 
 def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...], fail_conds: frozenset = frozenset()) \
@@ -151,9 +152,10 @@ def item_jobs(t: dict, rec: dict, tok, mode: str, formats: tuple[str, ...], fail
 
 def readouts(jobs: list[dict], rows: list, pairs: dict, tok) -> dict:
     out: dict = {}
-    for j, lp in zip(jobs, rows):
+    for j, (lp, z) in zip(jobs, rows):
         a, b = pairs["obs" if j["fmt"] == "fail" else j["fmt"]]
-        r = {"lp_a": round(lp[0, a].item(), 5), "lp_b": round(lp[0, b].item(), 5), "n_prompt": j["n_prompt"]}
+        r = {"lp_a": round(lp[0, a].item(), 5), "lp_b": round(lp[0, b].item(), 5), "z_a": round(z[a].item(), 4),
+             "z_b": round(z[b].item(), 4), "n_prompt": j["n_prompt"]}
         if j["fmt"] in ("obs", "fail"):
             cont = j["ids"][j["n_prompt"]:]
             r["tok_lp"] = [round(lp[k, cont[k]].item(), 5) for k in range(len(cont))]
@@ -196,7 +198,7 @@ def manipulation_check(tok, model, recs: list[dict]) -> list[dict]:
         res = {}
         for target in (obj, lexsem.ALIAS_FOIL[obj]):
             q = lexsem.CHECK_ALIAS.format(alias=alias, art=lexsem._article(target), obj=target)
-            lp = score_one(model, ids(q), len(ids(q)), False)
+            lp = score_one(model, ids(q), len(ids(q)), False)[0]
             res[target] = lp[0, yes].item() - lp[0, no].item()
         out.append({"form": "alias", "object": obj, "text": alias, "yes_minus_no": res,
                     "passed": res[obj] > 0 > res[lexsem.ALIAS_FOIL[obj]]})
@@ -242,7 +244,7 @@ def smoke(args, tok, model, recs, by_id, pairs, fail_conds) -> dict:
     for j in flat:
         torch.cuda.synchronize()
         t0 = time.time()
-        rows.append(score_one(model, j["ids"], j["n_prompt"], j["fmt"] in ("obs", "fail")))
+        rows.append(score_one(model, j["ids"], j["n_prompt"], j["fmt"] in ("obs", "fail"))[0])
         torch.cuda.synchronize()
         times.setdefault(j["fmt"], []).append(time.time() - t0)
     rep["s_per_sequence"] = {f: round(sum(v) / len(v), 4) for f, v in times.items()}
@@ -266,6 +268,8 @@ def smoke(args, tok, model, recs, by_id, pairs, fail_conds) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--arm", default=None, help="an arm of wf.lexsem.ARMS (sets model, mode, groups, formats); "
+                    "<arm>_floor scores that arm's floor rescoring")
     ap.add_argument("--model", default="Qwen/Qwen3-8B")
     ap.add_argument("--mode", choices=("plain", "block", "chat"), default="plain")
     ap.add_argument("--groups", default="core", help="comma list of wf.lexsem.GROUPS names")
@@ -279,6 +283,14 @@ def main() -> None:
     from wf import lexsem, rq1x
     from wf.rq2 import load_items
 
+    if args.arm:
+        base = args.arm.removesuffix("_floor")
+        a = lexsem.ARMS[base]
+        args.model, args.mode, args.formats = a["model"], a["mode"], ",".join(a["formats"])
+        if args.arm.endswith("_floor"):
+            args.groups, args.fail_groups, args.limit = "floor", "", lexsem.FLOOR_ITEMS
+        else:
+            args.groups, args.fail_groups = ",".join(a["groups"]), ",".join(a["fail_groups"])
     conds = tuple(dict.fromkeys(c for g in args.groups.split(",") for c in lexsem.GROUPS[g]))
     fail_conds = frozenset(c for g in args.fail_groups.split(",") if g for c in lexsem.GROUPS[g]) & set(conds)
     tok, model, rev = load(args.model)

@@ -145,14 +145,28 @@ GROUPS = {
     "names_only": ANCHORS + ("name_assert", "ctrl_assert", "name_deny", "ctrl_deny", "name_use", "ctrl_use",
                              "name_elsewhere", "ctrl_elsewhere", "desc_assert", "cdesc_assert"),
     "competition": ("aligned_ctrl_assert",),
+    # the numerical-floor rescoring (design section 7): the anchors and the name-assertion pair
+    "floor": ANCHORS + ("name_assert", "ctrl_assert"),
 }
-# The three arms' condition sets (decided 2026-11-25; "Ignore the X" and the competition line added on the
-# coordinator's request after the mention investigation).
+# The arms (decided 2026-11-25): the three core arms, then the family-generality arms (Qwen3-4B and Qwen3-14B each
+# in plain text and with the think block, Llama-3.2-3B), which mirror the core arm of their kind. Each arm also has a
+# floor arm (`<arm>_floor`): its first FLOOR_ITEMS items, the floor group, rescored on an A40 (design section 7).
+_QWEN_PLAIN = {"mode": "plain", "groups": ("core", "ignore", "position", "reliability", "competition"),
+               "formats": ("obs", "yn"), "fail_groups": ("core",)}
+_QWEN_BLOCK = {"mode": "block", "groups": ("block8", "ignore", "competition"), "formats": ("obs", "yn"),
+               "fail_groups": ()}
+_LLAMA = {"mode": "chat", "groups": ("names_only", "ignore", "competition"), "formats": ("yn",), "fail_groups": ()}
 ARMS = {
-    "qwen_plain": ("core", "ignore", "position", "reliability", "competition"),
-    "qwen_block": ("block8", "ignore", "competition"),
-    "llama_chat": ("names_only", "ignore", "competition"),
+    "qwen_plain": {"model": "Qwen/Qwen3-8B", **_QWEN_PLAIN},
+    "qwen_block": {"model": "Qwen/Qwen3-8B", **_QWEN_BLOCK},
+    "llama_chat": {"model": "meta-llama/Llama-3.1-8B-Instruct", **_LLAMA},
+    "qwen4b_plain": {"model": "Qwen/Qwen3-4B", **_QWEN_PLAIN},
+    "qwen4b_block": {"model": "Qwen/Qwen3-4B", **_QWEN_BLOCK},
+    "qwen14b_plain": {"model": "Qwen/Qwen3-14B", **_QWEN_PLAIN},
+    "qwen14b_block": {"model": "Qwen/Qwen3-14B", **_QWEN_BLOCK},
+    "llama3b_chat": {"model": "meta-llama/Llama-3.2-3B-Instruct", **_LLAMA},
 }
+FLOOR_ITEMS = 100
 CORE = GROUPS["core"]
 # Each mention condition's control: same carrier and position, the control object's reference in its place. The
 # spelling and alias conditions use the name's control (their token counts differ from it by one or two tokens).

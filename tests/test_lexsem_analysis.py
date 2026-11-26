@@ -77,6 +77,7 @@ def plant(tmp_path, weights, groups=("core",), noise=0.02, seed=0, n=(120, 60), 
         gid = f"valid_unseen/{i % games}"
         items.append({"id": f"t{i:04d}", "game_id": gid, "stratum": st, "goal_object": obj,
                       "fewshot_object": obj in lexsem.FEWSHOT_OBJECTS,
+                      "action": ("take" if i % 2 else "move") + f" {obj} 1 from shelf 1",
                       "references": {"target_prevalence": rng.random(), "ctrl_prevalence": rng.random()}})
         scores.append({"id": f"t{i:04d}", "game_id": gid, "stratum": st, "scores": rec})
     p = tmp_path / f"{name}.jsonl"
@@ -241,3 +242,34 @@ def test_competition_reading(tmp_path):
     assert x["qwen_plain"]["first"]["later"]["competition"]["reading"].startswith("competition")
     y = _run(plant(tmp_path, {"evidence": 1}, groups=("core", "competition"), name="nocomp"))
     assert y["qwen_plain"]["first"]["later"]["competition"]["reading"].startswith("no competition")
+
+
+def test_family_arms_floors_interaction_and_action_types(tmp_path):
+    """Qwen3-8B and a second Qwen size in both formats, Llama: the block raises 'Ignore' in Qwen3-8B only; a floor
+    rescoring is read; take and other actions are reported apart; every share comes with its absolute effects."""
+    common = dict(groups=("core", "ignore", "competition"))
+    p = plant(tmp_path, {"lexical": 1}, overrides={"name_ignore": 0.3}, **common)
+    block = plant(tmp_path, {"lexical": 1}, groups=("block8", "ignore", "competition"), name="block",
+                  overrides={"name_ignore": 1.0})
+    llama = plant(tmp_path, {"lexical": 1}, groups=("names_only", "ignore", "competition"), name="llama",
+                  model="meta-llama/Llama-3.1-8B-Instruct", overrides={"name_ignore": 0.3})
+    q4p = plant(tmp_path, {"lexical": 1}, name="qwen4b_plain", model="Qwen/Qwen3-4B", overrides={"name_ignore": 0.3},
+                **common)
+    q4b = plant(tmp_path, {"lexical": 1}, groups=("block8", "ignore", "competition"), name="qwen4b_block",
+                model="Qwen/Qwen3-4B", overrides={"name_ignore": 0.3})
+    flo = plant(tmp_path, {"lexical": 1}, groups=("floor",), name="qwen_plain_floor", seed=0, n=(60, 30))
+    rep = _run(p, block_path=str(block), llama_path=str(llama),
+               extra_arms={"qwen4b_plain": str(q4p), "qwen4b_block": str(q4b)},
+               floor_paths={"qwen_plain": str(flo)})
+    assert rep["floors"]["qwen_plain"]["source"].startswith("measured")
+    inter = rep["across_arms"]["interaction"]["yn|later"]
+    assert inter["format_x_meaning"]["Qwen3-8B|reference without assertion"]["reading"].endswith("higher")
+    assert inter["format_x_meaning"]["Qwen3-4B|reference without assertion"]["reading"].endswith("within 0.25")
+    assert "Qwen3-8B minus Qwen3-4B|reference without assertion" in inter["size_x_format_x_meaning"]
+    pair = rep["across_arms"]["between"]["qwen_plain vs llama_chat|yn|later"]["sentences"]["name_ignore"]
+    assert "net_nats" in pair["arms"]["qwen_plain"] and "goal_standardized" in pair["arms"]["llama_chat"]
+    assert pair["share_difference"]["reading"].endswith("the same within 0.25")
+    assert {"yn|later|take", "yn|later|other"} <= set(rep["across_arms"]["by_action"])
+    assert "three sizes of one family" in rep["across_arms"]["scope"]
+    x = rep["qwen_plain"]["first"]["later"]
+    assert "standardized" in x["G"] and "numerator_minus_denominator_nats" in x["relative_lift"]["name_use"]

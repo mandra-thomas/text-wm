@@ -109,6 +109,12 @@ def fragile(ci: list[float], ref: float, bounds: tuple[float, ...]) -> bool:
     return any(abs(e - b) < tol for e in ci for b in bounds)
 
 
+def _standardized(boot: "Boot", gs: list[str], x: np.ndarray) -> dict:
+    from wf.lexsem_family import standardized
+
+    return standardized(boot, gs, x)
+
+
 def mean(boot: Boot, games: list[str], x: np.ndarray) -> tuple[dict, np.ndarray]:
     n, nd = boot.sums(games, x)
     k, kd = boot.sums(games, np.ones_like(x))
@@ -131,6 +137,7 @@ def ratio(boot: Boot, games: list[str], num: np.ndarray, den: np.ndarray) -> tup
     out["num_den_correlation"] = float(np.corrcoef(num_dr[ok], den_dr[ok])[0, 1]) if min(sd) > 0 else None
     lo, est = den_iv["ci"][0], den_iv["estimate"]
     out["reference_ok"] = bool(lo > 0 and lo >= REF_FRACTION * est)
+    out["numerator_minus_denominator_nats"] = mean(boot, games, num - den)[0]  # the paired fallback
     out["resolvable"] = bool(abs(est) * 0.25 >= MARGIN_MULT * NUMERICAL_FLOOR)
     out["numerically_fragile"] = fragile(out["ci"], est, LEVEL_BOUNDS)
     out["numerator_within_floor"] = bool(-NUMERICAL_FLOOR <= num_iv["ci"][0] and num_iv["ci"][1] <= NUMERICAL_FLOOR)
@@ -198,6 +205,7 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
     games = [r["game_id"] for r in base]
     g = np.array([value(r, "aligned", readout) - value(r, "swapped", readout) for r in base])
     G, _ = mean(boot, games, g)
+    G["standardized"] = _standardized(boot, games, g)
     out["G"] = G
     gate1 = (G["ci"][0] > 0 and G["ci"][0] >= 0.5 * G["estimate"]
              and 0.25 * G["estimate"] >= MARGIN_MULT * NUMERICAL_FLOOR)
@@ -265,7 +273,7 @@ def analyse(recs: list[dict], readout: str, boot: Boot, checks: dict | None, str
             sden = np.array([value(r, "name_assert", ro) - value(r, "ctrl_assert", ro) for r in s_all])
             iv["all_items"] = ratio(boot, [r["game_id"] for r in s_all], snum, sden)[0]
         rho[c], rho_draws[c], items_by[c] = iv, dr, s
-        deltas[c] = mean(boot, gs, num)[0]
+        deltas[c] = {**mean(boot, gs, num)[0], "standardized": _standardized(boot, gs, num)}
         if c in R.PREDICTIONS and iv["reference_ok"] and iv["resolvable"]:
             rho_iv[c] = tuple(iv["ci"])
     out["delta_nats"] = deltas
@@ -403,7 +411,7 @@ def attach(scores: list[dict], items: list[dict]) -> list[dict]:
         m = meta[s["id"]]
         refs = m.get("references", {})
         out.append({**s, "goal_object": m["goal_object"], "fewshot_object": m["fewshot_object"],
-                    "stratum": m["stratum"], "game_id": m["game_id"],
+                    "stratum": m["stratum"], "game_id": m["game_id"], "action": m.get("action", ""),
                     "prevalence_gap": (refs["target_prevalence"] - refs["ctrl_prevalence"]
                                        if "ctrl_prevalence" in refs else None)})
     return out
@@ -663,59 +671,80 @@ def stage0_paired(index_path: str, block: list[dict], B: int, seed: int) -> dict
 def run(scores_path: str, out_path: str | None = None, items_path: str | None = None, checks_path: str | None = None,
         block_path: str | None = None, llama_path: str | None = None, B: int = B_DEFAULT, seed: int = SEED,
         expect_commit: str | None = None, stage0_index: str | None = None, require_env: bool = True,
-        floor: float | None = None) -> dict:
-    sp = Path(scores_path)
+        floor: float | None = None, extra_arms: dict[str, str] | None = None,
+        floor_paths: dict[str, str] | None = None) -> dict:
+    """The whole analysis. The three core arms are given by `scores_path` (Qwen3-8B plain), `block_path` and
+    `llama_path`; the family arms by `extra_arms` (arm name -> score file); floor rescorings by `floor_paths` (arm
+    name -> file). Any arm or floor file that is absent is reported as not scored."""
+    from wf.lexsem_family import band_floor, measured_floor, run_family
 
-    def floor_for(path: Path, default_mode: str) -> float:
-        if floor is not None:
-            return floor
-        e = path.parent / f"{path.stem}_env.json"
-        mode = json.loads(e.read_text()).get("mode", default_mode) if e.exists() else default_mode
-        return FLOORS[mode]
+    sp = Path(scores_path)
+    paths = {"qwen_plain": sp}
+    for n, x in (("qwen_block", block_path), ("llama_chat", llama_path), *sorted((extra_arms or {}).items())):
+        if x and Path(x).exists():
+            paths[n] = Path(x)
     if require_env:
-        problems = check_env([sp] + [Path(x) for x in (block_path, llama_path) if x and Path(x).exists()])
+        problems = check_env(list(paths.values()))
         if problems:
             raise SystemExit("environment check failed: " + "; ".join(problems))
-    items_path = items_path or sp.parent / f"{sp.stem}_items.jsonl"
-    checks_path = checks_path or sp.parent / f"{sp.stem}_check.json"
     if expect_commit:
-        for p in [sp] + [Path(x) for x in (block_path, llama_path) if x]:
+        for p in list(paths.values()) + [Path(x) for x in (floor_paths or {}).values() if Path(x).exists()]:
             c = p.parent / f"{p.stem}_commit.txt"
             got = c.read_text().strip() if c.exists() else None
             if got != expect_commit:
                 raise SystemExit(f"{p.name}: scored at {got}, not at the frozen commit {expect_commit}")
-    items = load_scores(items_path)
-    checks = load_checks(checks_path)
-    recs = attach(load_scores(sp), items)
-    has_fail = any("fail" in v for r in recs for v in r["scores"].values())
-    readouts = ("first", "yn", "you", "nothing", "success_text") + (("full2c",) if has_fail else ())
-    report = {"numerical_rules": {"floors_nats": FLOORS, "margin_multiple": MARGIN_MULT,
-                                  "fragile_multiple": FRAGILE_MULT, "stage0_allowance_nats": STAGE0_ALLOWANCE},
-              "recognition_checks": "read" if checks is not None else "absent: every item counted as recognised",
-              "qwen_plain": run_model(recs, readouts, checks, B, seed, floor_for(sp, "plain")),
-              "full_two_candidate": "scored" if has_fail else "not scored"}
-    for name, path in (("block_yes_no", block_path), ("llama_yes_no", llama_path)):
-        if not path or not Path(path).exists():
-            report[name] = "not scored"
-            continue
-        own = load_checks(Path(path).parent / f"{Path(path).stem}_check.json")  # each model's own recognition
-        arm = attach(load_scores(path), items)
-        ros = ("yn",) + (("first",) if any("obs" in v for r in arm for v in r["scores"].values()) else ())
-        report[name] = run_model(arm, ros, own if own is not None else checks, B,
-                                 seed, floor_for(Path(path), "block" if name == "block_yes_no" else "chat"))
-    if isinstance(report["llama_yes_no"], dict):
-        report["model_comparison_yes_no"] = flags(report["qwen_plain"]["yn"], report["llama_yes_no"]["yn"])
-    arms = {"qwen_plain": recs}
-    if block_path and Path(block_path).exists():
-        arms["qwen_block"] = attach(load_scores(block_path), items)
-    if llama_path and Path(llama_path).exists():
-        arms["llama_chat"] = attach(load_scores(llama_path), items)
-    report["ignore_across_arms"] = ignore_compare(arms, B, seed) if len(arms) > 1 else "not scored"
-    if block_path and Path(block_path).exists():
-        block = attach(load_scores(block_path), items)
-        report["bridge_plain_vs_block"] = bridge_compare(recs, block, B, seed)
-        report["archived_stage0_vs_rescored"] = (stage0_paired(stage0_index, block, B, seed) if stage0_index
-                                                  else "not computed")
+    items = load_scores(items_path or sp.parent / f"{sp.stem}_items.jsonl")
+    checks = load_checks(checks_path or sp.parent / f"{sp.stem}_check.json")
+    arms = {n: attach(load_scores(p), items) for n, p in paths.items()}
+
+    floors: dict[str, dict] = {}
+    for n, recs_n in arms.items():
+        mode = lexsem.ARMS[n]["mode"] if n in lexsem.ARMS else "plain"
+        fp = (floor_paths or {}).get(n)
+        meas = {}
+        if fp and Path(fp).exists():
+            alt = attach(load_scores(fp), items)
+            for ro in ("yn", "first"):
+                m = measured_floor(recs_n, alt, ro, B, seed)
+                if m:
+                    meas[ro] = m
+        if floor is not None:
+            used, src = floor, "given"
+        elif meas:
+            used, src = max(m["floor"] for m in meas.values()), "measured (floor rescoring on an A40)"
+        elif (bf := band_floor(recs_n, FLOORS)) is not None:
+            used, src = bf, "logit band of the recorded readout logits"
+        else:
+            used, src = FLOORS[mode], "numerical_sensitivity.md default for this format"
+        floors[n] = {"floor_nats": used, "source": src, "measured": meas}
+
+    report: dict = {"numerical_rules": {"default_floors_nats": FLOORS, "margin_multiple": MARGIN_MULT,
+                                        "fragile_multiple": FRAGILE_MULT, "stage0_allowance_nats": STAGE0_ALLOWANCE},
+                    "floors": floors,
+                    "recognition_checks": "read" if checks is not None else "absent: every item counted as recognised"}
+    for n, recs_n in arms.items():
+        own = load_checks(paths[n].parent / f"{paths[n].stem}_check.json")
+        has = {f for r in recs_n for v in r["scores"].values() for f in v}
+        ros = ("yn",) + (("first",) if "obs" in has else ())
+        if n.endswith("_plain"):
+            ros = ("first", "yn", "you", "nothing", "success_text") + (("full2c",) if "fail" in has else ())
+        report[n] = run_model(recs_n, ros, own if own is not None else checks, B, seed, floors[n]["floor_nats"])
+    report["full_two_candidate"] = "scored" if "full2c" in report["qwen_plain"] else "not scored"
+    # the earlier report keys, kept for the core arms
+    report["block_yes_no"] = report.get("qwen_block", "not scored")
+    report["llama_yes_no"] = report.get("llama_chat", "not scored")
+    for n in ("qwen_block", "llama_chat", "qwen4b_plain", "qwen4b_block", "qwen14b_plain", "qwen14b_block",
+              "llama3b_chat"):
+        report.setdefault(n, "not scored")
+    if "llama_chat" in arms:
+        report["model_comparison_yes_no"] = flags(report["qwen_plain"]["yn"], report["llama_chat"]["yn"])
+    core = {n: arms[n] for n in ("qwen_plain", "qwen_block", "llama_chat") if n in arms}
+    report["ignore_across_arms"] = ignore_compare(core, B, seed) if len(core) > 1 else "not scored"
+    if "qwen_block" in arms:
+        report["bridge_plain_vs_block"] = bridge_compare(arms["qwen_plain"], arms["qwen_block"], B, seed)
+        report["archived_stage0_vs_rescored"] = (stage0_paired(stage0_index, arms["qwen_block"], B, seed)
+                                                  if stage0_index else "not computed")
+    report["across_arms"] = run_family(arms, B, seed) if len(arms) > 1 else "not scored"
     if out_path:
         Path(out_path).write_text(json.dumps(report, indent=1, default=float))
     return report
@@ -723,17 +752,18 @@ def run(scores_path: str, out_path: str | None = None, items_path: str | None = 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--scores", required=True)
+    ap.add_argument("--dir", required=True, help="the run folder: <arm>.jsonl and <arm>_floor.jsonl for every arm")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--items")
-    ap.add_argument("--checks")
-    ap.add_argument("--block")
-    ap.add_argument("--llama")
     ap.add_argument("--B", type=int, default=B_DEFAULT)
     ap.add_argument("--expect-commit")
     ap.add_argument("--stage0-index")
     a = ap.parse_args()
-    rep = run(a.scores, a.out, a.items, a.checks, a.block, a.llama, a.B, SEED, a.expect_commit, a.stage0_index)
+    d = Path(a.dir)
+    extra = {n: str(d / f"{n}.jsonl") for n in lexsem.ARMS if n not in ("qwen_plain", "qwen_block", "llama_chat")}
+    floors = {n: str(d / f"{n}_floor.jsonl") for n in lexsem.ARMS}
+    rep = run(str(d / "qwen_plain.jsonl"), a.out, block_path=str(d / "qwen_block.jsonl"),
+              llama_path=str(d / "llama_chat.jsonl"), B=a.B, expect_commit=a.expect_commit,
+              stage0_index=a.stage0_index, extra_arms=extra, floor_paths=floors)
     print(json.dumps(rep["qwen_plain"]["readings_by_readout"], indent=1))
 
 
