@@ -771,7 +771,7 @@ MUTANTS = [
     ('textcraft r3 golden tokens ignore the id hash', 'wf/textcraft/r3_analysis.py', 'diff = [k for k in keys if (old[k]["n_ids"], old[k]["ids_sha256"]) != (new.get(k, {}).get("n_ids"), new.get(k, {}).get("ids_sha256"))]', 'diff = [k for k in keys if old[k]["ids_sha256"] != new.get(k, {}).get("ids_sha256") and False]'),
     ('textcraft r3 one-fifth rule halved', 'wf/textcraft/r3_analysis.py', 'ONE_FIFTH = 0.2', 'ONE_FIFTH = 0.1'),
     ('textcraft r3 provenance GPU check off', 'wf/textcraft/r3_analysis.py', '            elif base in R3.GPU_PIN and not R3.gpu_type_ok(base, lists[0]):', '            elif False:'),
-    ('textcraft r3 provenance commit check off', 'wf/textcraft/r3_gates.py', '        bad = sorted({c for c in cs if not code_identical(c, tag_commit, run_git)\n                      and not (also is not None and code_identical(c, also, run_git))})', '        bad = []'),
+    ('textcraft r3 provenance commit check off', 'wf/textcraft/r3_gates.py', '        bad = sorted({c for c in cs if not code_identical(c, tag_commit, run_git)\n                      and not any(code_identical(c, a, run_git) for a in extra)})', '        bad = []'),
     ('textcraft r3 first-token split on the whole L', 'wf/textcraft/r3_analysis.py', 'b2[k] = {**s, "L": first if part == "first_token" else s["L"] - first}', 'b2[k] = {**s, "L": s["L"] if part == "first_token" else s["L"] - first}'),
     ('textcraft r3 strict floor 0.7', 'wf/textcraft/r3_analysis.py', 'STRICT_AUC = 0.80', 'STRICT_AUC = 0.70'),
     ('textcraft r3 lift values from the class-matched rows', 'wf/textcraft/r3_analysis.py', '"lift": (pops["ingredient"], lambda i: L(by, i, "aligned") - L(by, i, "swapped"), False),', '"lift": (pops["ingredient_matched"], lambda i: L(by, i, "aligned") - L(by, i, "swapped"), False),'),
@@ -856,7 +856,7 @@ MUTANTS = [
     ('textcraft r3 D-T1 head not checked against the deviation commit', 'wf/textcraft/r3_gates.py', '        if dev is None or dev["commit"] is None or not code_identical(head, dev["commit"], run_git):', '        if dev is None or dev["commit"] is None:'),
     ('textcraft r3 D-T1 deviation scope unchecked', 'wf/textcraft/r3_gates.py', '    if outside:\n', '    if False:\n'),
     ('textcraft r3 D-T1 two deviation tags accepted', 'wf/textcraft/r3_gates.py', '    if len(tags) > 1:\n        return {"commit": None, "problems": [f"more than one deviation tag', '    if False:\n        return {"commit": None, "problems": [f"more than one deviation tag'),
-    ('textcraft r3 D-T1 deviation commit not accepted for thinking shards', 'wf/textcraft/r3_gates.py', '\n                      and not (also is not None and code_identical(c, also, run_git))})', '})'),
+    ('textcraft r3 D-T1 deviation commit not accepted for thinking shards', 'wf/textcraft/r3_gates.py', '\n                      and not any(code_identical(c, a, run_git) for a in extra)})', '})'),
     ('textcraft r3 D-T1 analysis accepts the deviation commit for every run', 'wf/textcraft/r3_analysis.py', '    cp = G.commit_problems({k: v for k, v in cs.items() if not exempt(k) and not g2_run(k)}, tag_commit, **kw)', '    cp = G.commit_problems({k: v for k, v in cs.items() if not exempt(k) and not g2_run(k)}, tag_commit, also=dev.get("commit"), **kw)'),
     ('textcraft r3 D-T1 analysis drops the deviation problems', 'wf/textcraft/r3_analysis.py', '        if dev.get("problems"):', '        if False:'),
     ('textcraft r3 D-T1 thinking shard commits not recorded', 'wf/textcraft/r3_analysis.py', '    return {f"{p.parent.name}/{p.name}": sorted(set(commits_of(p))) for p in folders}', '    return {}'),
@@ -887,6 +887,11 @@ MUTANTS = [
     ('textcraft r3 D-G2 a filed float32 check rerun', 'wf/textcraft/r3_g2.py', '    if (runs_root() / shard / G.ATTN_F32_FILE).exists():', '    if False:'),
     ('textcraft r3 D-G2 float32 check of any model', 'wf/textcraft/r3_g2.py', '    if tag not in G.f32_tags() or run_id != f"textcraft_r3_attnf32_{tag}":', '    if False:'),
     ('textcraft r3 D-G2 the rule never fires', 'wf/textcraft/r3_gates.py', '    return {"slot": R3.GEMMA_FALLBACK if trig else R3.GEMMA_CORE, "triggers": trig,\n            "diagnostic": smoke_diagnostic(rows), "attention_f32": f', '    return {"slot": R3.GEMMA_CORE, "triggers": trig,\n            "diagnostic": smoke_diagnostic(rows), "attention_f32": f'),
+    ('textcraft r3 D-G2a 31B scoring not exempt', 'wf/textcraft/r3_gates.py', '           "textcraft_r3_score_gemma4-31b-it")', '           )'),
+    ('textcraft r3 D-G2a tag ignored', 'wf/textcraft/r3_gates.py', '    for prefix in (G2_TAG_PREFIX, G2A_TAG_PREFIX):', '    for prefix in (G2_TAG_PREFIX,):'),
+    ('textcraft r3 D-G2a analysis refuses 31B at its commit', 'wf/textcraft/r3_analysis.py', '                  "gemma4-31b-it")  # D-G2a: Gemma 4 31B, scored at D-G2a\'s commit', "                  )  # D-G2a: Gemma 4 31B, scored at D-G2a's commit"),
+    ('textcraft r3 D-G2a only the first deviation commit accepted', 'wf/textcraft/r3_gates.py', '                      and not any(code_identical(c, a, run_git) for a in extra)})', '                      and not any(code_identical(c, a, run_git) for a in extra[:1])})'),
+    ('textcraft r3 D-G2a head not matched to a commit', 'wf/textcraft/r3_gates.py', '            match = [(c, t) for c, t in zip(gs["commits"], gs["tags"]) if code_identical(head, c, run_git)]', '            match = [(c, t) for c, t in zip(gs["commits"], gs["tags"])]'),
 ]
 
 

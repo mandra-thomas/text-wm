@@ -463,3 +463,9 @@ family, test, threshold, Holm size, margin and reading rule is unchanged.
   Gemma slot then follows the frozen rule: 12B unless a trigger fires, else E4B. The analysis that is read is
   `textcraft_r3_analysis_dg2`, at D-G2's tag. D-G2 was decided before the round-3 analysis ran and before any round-3
   score was read.
+- **D-G2a** (2026-11-26), the same note, section "D-G2a":
+  - **What changes.** Gemma 4 31B's scoring is added to D-G2's runs, at the tag `textcraft-r3-deviation-g2a-2026-11-26`.
+  - **Why.** Its four scoring shards at the freeze tag stopped at the bf16 attention check that D-G2 replaces. Each shard
+    checks its own five items, and those disagreed by 0.42 to 0.81 nats on the two-candidate scores.
+  - **Numerical-fragility allowances.** D-G2a also states, before any 31B score exists, the allowances for Gemma 4
+    31B and 12B, measured from those disagreements.

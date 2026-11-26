@@ -2168,10 +2168,13 @@ def test_dg2_the_float32_check_run(mock_runs, small):
             F.run_textcraft_r3_attnf32(bad)
 
 
-def _git_g2(head="g2", g2_diff="wf/textcraft/r3_gates.py\nwf/textcraft/r3_g2.py\nwf/runs.py\nnotes/x.md", n_g2=1):
-    """Freeze tag at c1, D-T1's tag at dev, D-G2's tag(s) at g2; HEAD at `head`."""
+def _git_g2(head="g2", g2_diff="wf/textcraft/r3_gates.py\nwf/textcraft/r3_g2.py\nwf/runs.py\nnotes/x.md", n_g2=1,
+            n_g2a=0, g2a_diff="wf/textcraft/r3_gates.py\nwf/textcraft/r3_analysis.py\nnotes/y.md"):
+    """Freeze tag at c1, D-T1's tag at dev, D-G2's tag(s) at g2, D-G2a's tag(s) at g2a; HEAD at `head`."""
     def run(args):
         if args[:2] == ["tag", "-l"]:
+            if args[2].startswith(G.G2A_TAG_PREFIX):
+                return "\n".join(f"{G.G2A_TAG_PREFIX}2026-11-2{k}" for k in range(6, 6 + n_g2a))
             if args[2].startswith(G.G2_TAG_PREFIX):
                 return "\n".join(f"{G.G2_TAG_PREFIX}2026-11-2{k}" for k in range(5, 5 + n_g2))
             if args[2].startswith(G.DEVIATION_TAG_PREFIX):
@@ -2179,6 +2182,8 @@ def _git_g2(head="g2", g2_diff="wf/textcraft/r3_gates.py\nwf/textcraft/r3_g2.py\
             return "textcraft-r3-design-frozen-2026-11-23"
         if args[0] == "rev-parse":
             a = args[1]
+            if "deviation-g2a" in a:
+                return "g2a"
             return "c1" if "frozen" in a else "dev" if "deviation-t1" in a else "g2" if "deviation-g2" in a else head
         if args[0] == "diff":
             x, y = args[2], args[3]
@@ -2186,6 +2191,8 @@ def _git_g2(head="g2", g2_diff="wf/textcraft/r3_gates.py\nwf/textcraft/r3_g2.py\
                 return ""
             if {x, y} == {"c1", "g2"}:
                 return g2_diff
+            if {x, y} == {"c1", "g2a"}:
+                return g2a_diff
             if {x, y} == {"c1", "dev"}:
                 return "wf/textcraft/r3_think.py"
             return "wf/x.py"
@@ -2201,7 +2208,7 @@ def test_dg2_only_its_runs_start_at_its_commit(monkeypatch):
                 "textcraft_r3_placement_gemma4-12b-it"):
         out = G.require_freeze_commit(_git_g2(), clean, run_id=rid)
         assert (out["deviation"], out["deviation_commit"]) == ("D-G2", "g2"), rid
-    for rid in ("", "textcraft_r3_score_qwen3.5-9b", "textcraft_r3_score_gemma4-31b-it", "textcraft_r3_score_qwen3.8-27b",
+    for rid in ("", "textcraft_r3_score_qwen3.5-9b", "textcraft_r3_score_qwen3.8-27b",
                 "textcraft_r3_smoke_gemma4-12b-it", "textcraft_r3_envcheck_qwen3-8b", "textcraft_r3_rescore_gemma2-9b-it",
                 "textcraft_r3_think_qwen3.5-9b", "textcraft_r3x_gemma4-e4b-it", "textcraft_r3_analysis_dg2"):
         with pytest.raises(SystemExit, match="not the freeze tag"):
@@ -2237,4 +2244,50 @@ def test_dg2_the_analysis_accepts_its_shards_at_its_commit_only(tmp_path):
                                   "think": [t]}, "c1", {"commit": "dev", "problems": []}, run_git=g,
                                  g2={"commit": "g2", "problems": []})
     assert set(cp) == {"envcheck:qwen3-8b", "think"}
+
+
+# ---------------- deviation D-G2a (2026-11-26): Gemma 4 31B's scoring at D-G2a's commit ----------------
+
+
+def test_dg2a_31b_scoring_starts_at_its_commit_and_only_there(monkeypatch):
+    monkeypatch.setenv("WF_MOCK_SCORE", "0")
+    clean = lambda: False  # noqa: E731
+    run31 = "textcraft_r3_score_gemma4-31b-it"
+    assert run31.startswith(G.G2_RUNS) and G.G2A_TAG_PREFIX == "textcraft-r3-deviation-g2a-"
+    out = G.require_freeze_commit(_git_g2(head="g2a", n_g2a=1), clean, run_id=run31)
+    assert (out["deviation"], out["deviation_commit"]) == ("D-G2a", "g2a")
+    # D-G2's runs also start at D-G2a's commit; D-G2's commit stays accepted for the runs already made there
+    assert G.require_freeze_commit(_git_g2(head="g2a", n_g2a=1), clean,
+                                   run_id="textcraft_r3_score_gemma4-12b-it")["deviation"] == "D-G2a"
+    assert G.require_freeze_commit(_git_g2(head="g2", n_g2a=1), clean,
+                                   run_id="textcraft_r3_smoke2_gemma4-12b-it")["deviation"] == "D-G2"
+    # every other run is refused at D-G2a's commit, and a D-G2a commit changing other code is refused too
+    for rid in ("textcraft_r3_score_qwen3.8-27b", "textcraft_r3_score_qwen3.5-9b", "textcraft_r3_think_qwen3.5-9b",
+                "textcraft_r3_rescore_gemma2-9b-it", "textcraft_r3_nopreserve_qwen3.8-27b"):
+        with pytest.raises(SystemExit, match="not the freeze tag"):
+            G.require_freeze_commit(_git_g2(head="g2a", n_g2a=1), clean, run_id=rid)
+    with pytest.raises(SystemExit):
+        G.require_freeze_commit(_git_g2(head="g2a", n_g2a=1, g2a_diff="wf/textcraft/r3.py"), clean, run_id=run31)
+    with pytest.raises(SystemExit):  # two D-G2a tags
+        G.require_freeze_commit(_git_g2(head="g2a", n_g2a=2), clean, run_id=run31)
+    gs = G.g2_commits(_git_g2(n_g2a=1))
+    assert gs["commits"] == ["g2", "g2a"] and gs["problems"] == []
+    assert G.g2_commits(_git_g2())["commits"] == ["g2"]  # no D-G2a tag: no problem
+
+
+def test_dg2a_the_analysis_accepts_31b_at_the_d_g2_commits_only(tmp_path):
+    l40, a100 = ["NVIDIA L40S"], ["NVIDIA A100 80GB PCIe"]
+    g = _git_g2(n_g2a=1)
+    s31 = _shard(tmp_path, "s31/shard_00_of_04", [{"gpu": a100, "git_sha": "g2a"}])
+    s27 = _shard(tmp_path, "s27/shard_00_of_04", [{"gpu": a100, "git_sha": "g2a"}])
+    s12 = _shard(tmp_path, "s12/shard_00_of_02", [{"gpu": l40, "git_sha": "g2"}])
+    rev = lambda t: [{"model_revision": R3.spec_for(t).revision}]  # noqa: E731
+    probs = Z.provenance_problems({"gemma4-31b-it": [s31], "qwen3.8-27b": [s27], R3.GEMMA_CORE: [s12]},
+                                  {t: rev(t) for t in ("gemma4-31b-it", "qwen3.8-27b", R3.GEMMA_CORE)}, "c1", run_git=g,
+                                  dirty_of=lambda p: False, g2=G.g2_commits(g)["commits"])
+    assert set(probs) == {"qwen3.8-27b"} and any("not the freeze tag" in x for x in probs["qwen3.8-27b"])
+    a = _shard(tmp_path, "a/shard_00_of_01", [{"gpu": a100, "git_sha": "g2"}])
+    cp = Z.other_commit_problems({"attnf32:gemma4-31b-it": [a]}, "c1", {"commit": "dev", "problems": []}, run_git=g,
+                                 g2=G.g2_commits(g))
+    assert cp == {}
 

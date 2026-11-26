@@ -46,8 +46,12 @@ CODE_PATHS = ("wf/", "scripts/", "pace/")  # a commit that differs from the tag 
 # textcraft-r3-deviation-g2-*, and only if that commit changes no code outside the deviations' files.
 ATTENTION_PRECISION = "float32"  # D-G2; the frozen rule read the bf16 check filed by each job ("bf16")
 G2_TAG_PREFIX = "textcraft-r3-deviation-g2-"
+# D-G2a (2026-11-26, the same note): Gemma 4 31B's scoring is added; its shards at the freeze tag all stopped at the
+# bf16 check D-G2 replaces. Its runs start at the commit of the tag textcraft-r3-deviation-g2a-*.
+G2A_TAG_PREFIX = "textcraft-r3-deviation-g2a-"
 G2_RUNS = ("textcraft_r3_attnf32_", "textcraft_r3_smoke2_gemma4-12b-it", "textcraft_r3_score_gemma4-12b-it",
-           "textcraft_r3_score_gemma4-e4b-it", "textcraft_r3_placement_gemma4-12b-it")
+           "textcraft_r3_score_gemma4-e4b-it", "textcraft_r3_placement_gemma4-12b-it",
+           "textcraft_r3_score_gemma4-31b-it")
 G2_FILES = DEVIATION_FILES + (
     # D-T2 (the analysis config) and D-G2 (the float32 attention check, the 12B smoke rerun, the analysis config)
     "wf/config/textcraft_r3_analysis_dt2.yaml", "wf/config/textcraft_r3_analysis_dg2.yaml",
@@ -132,7 +136,7 @@ def code_identical(commit: str, tag_commit: str, run_git: Callable[[list[str]], 
 
 
 def commit_problems(commits: dict[str, list[str]], tag_commit: str | None,
-                    run_git: Callable[[list[str]], str] = _git, also: str | None = None) -> dict[str, list[str]]:
+                    run_git: Callable[[list[str]], str] = _git, also: str | list[str] | None = None) -> dict[str, list[str]]:
     """{tag: problems}: every job of every shard at the freeze tag's commit (or a code-identical one). `also`: one
     more accepted commit (D-T1's deviation commit, passed for the thinking arm's shards only)."""
     out: dict[str, list[str]] = {}
@@ -140,8 +144,9 @@ def commit_problems(commits: dict[str, list[str]], tag_commit: str | None,
         if tag_commit is None:
             out[tag] = ["no round-3 freeze tag in this checkout"]
             continue
+        extra = [also] if isinstance(also, str) else list(also or [])  # D-G2a: D-G2's and D-G2a's commits
         bad = sorted({c for c in cs if not code_identical(c, tag_commit, run_git)
-                      and not (also is not None and code_identical(c, also, run_git))})
+                      and not any(code_identical(c, a, run_git) for a in extra)})
         if bad or not cs:
             out[tag] = [f"jobs at commits {bad or 'none recorded'}, not the freeze tag's {tag_commit[:12]}"]
     return out
@@ -178,6 +183,19 @@ def g2_commit(run_git: Callable[[list[str]], str] = _git, tag_commit: str | None
     return deviation_commit(run_git, tag_commit, prefix=G2_TAG_PREFIX, files=G2_FILES)
 
 
+def g2_commits(run_git: Callable[[list[str]], str] = _git, tag_commit: str | None = None) -> dict[str, Any]:
+    """D-G2's and D-G2a's commits: {"commits": the valid ones, "tags", "problems"}. Each tag is checked as
+    deviation_commit (one tag per prefix, code changed only in G2_FILES); a missing D-G2a tag is no problem."""
+    out: dict[str, Any] = {"commits": [], "tags": [], "problems": []}
+    for prefix in (G2_TAG_PREFIX, G2A_TAG_PREFIX):
+        d = deviation_commit(run_git, tag_commit, prefix=prefix, files=G2_FILES)
+        out["problems"] += d["problems"]
+        if d["commit"]:
+            out["commits"].append(d["commit"])
+            out["tags"].append(d["tag"])
+    return out
+
+
 def _dirty() -> bool:
     from wf.util import git_dirty
 
@@ -200,8 +218,12 @@ def require_freeze_commit(run_git: Callable[[list[str]], str] = _git, dirty: Cal
     if not code_identical(head, tag, run_git):
         dev = deviation_commit(run_git, tag) if run_id.startswith(DEVIATION_RUNS) else None
         name = "D-G1" if run_id.startswith("textcraft_r3x_") else "D-T1"
-        if run_id.startswith(G2_RUNS):  # D-G2: the float32 attention check and the Gemma 4 runs that depend on it
-            dev, name = g2_commit(run_git, tag), "D-G2"
+        if run_id.startswith(G2_RUNS):  # D-G2 (and D-G2a): the float32 attention check and the Gemma 4 runs
+            gs = g2_commits(run_git, tag)
+            match = [(c, t) for c, t in zip(gs["commits"], gs["tags"]) if code_identical(head, c, run_git)]
+            dev = {"commit": match[0][0], "tag": match[0][1], "problems": []} if match else \
+                {"commit": None, "tag": None, "problems": gs["problems"]}
+            name = "D-G2a" if match and match[0][1].startswith(G2A_TAG_PREFIX) else "D-G2"
         if dev is None or dev["commit"] is None or not code_identical(head, dev["commit"], run_git):
             why = f"; {dev['problems']}" if dev and dev["problems"] else ""
             raise SystemExit(f"this checkout is at {head[:12]}, not the freeze tag's {tag[:12]} (or a code-identical "
