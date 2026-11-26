@@ -342,7 +342,7 @@ The quick, rules-only mode (`simulate_rules.py rules`, independent draws per con
 
 Against the first full plan (about one GPU-hour), the core additions cost: the two control-object reliability sentences about 2.6 minutes; "Ignore the X" in the with-block and Llama arms about 2.2; the competition line in all three arms about 2.4; the first-token readout in the with-block arm about 6.3.
 
-**Second smoke run** (job 7315488, commit 3f3a31a, 5 items, unbatched, every arm as of that commit; timing and validity only; queued before the competition line, the "Ignore" pair in the block and Llama arms and the block arm's first token were added). SMOKE2
+**Second smoke run** (job 7315488, commit 3f3a31a, 5 items, unbatched, the three core arms as of that commit; timing and validity only). Still queued on the cluster when this revision was written (pending on priority since the morning of 2026-11-25), so no figure is recorded yet. Because the arms changed after that commit (the competition line, "Ignore the X" in the block and Llama arms, the block arm's first token, the family arms, recorded logits), the smoke that counts is step 3 of the freeze plan: every arm at the commit to be tagged.
 
 ## 12. The stated-reliability arm (E4) and screening off
 
