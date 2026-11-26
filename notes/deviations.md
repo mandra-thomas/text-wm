@@ -678,3 +678,27 @@ Three of four verification jobs on one node failed to bind their own ALFWorld se
 ## Scores across GPU types (2026-11-18)
 
 The RQ2 smoke items were scored twice: on an A100 with the bfloat16-rounding scorer, and on an A40 with the float32 scorer. Most per-item differences are larger than rounding can explain, so they come from the GPU type: bfloat16 forward passes differ across hardware. The change in an item's aligned-minus-swapped L had SD 0.55 nats for Qwen3 and 0.17 for Llama. The item-to-item SD of L is 10.1 and 1.9, so the GPU adds under 1% to the variance. The mean change was −0.09 and −0.03 nats, 1.3 and 1.4 standard errors from zero over 65 items, so there is no sign of bias. The aligned and swapped versions of an item are scored in the same job on the same GPU, unless a job was cut off between them and a resume finished the item (2026-11-20 above). The confirmatory scoring jobs may land on different GPU types; each job's log records its GPU. Individual scores reproduce only on the same GPU type.
+
+## Families wave B, deviation D-B1: the attention-agreement check decided in float32 (2026-11-25)
+
+**What was decided.** On 2026-11-25 the user approved this deviation. It comes after the re-freeze tag `families-waveb-design-refrozen-2026-11-25` (de8312f) and before any wave B score was read; it is tagged `families-waveb-deviation-attn-float32-2026-11-25`. Details are in `families_waveb_design.md`, section 20.
+
+**What failed.** Both Gemma 4 models stopped in their gates in `text-wm-fix52`, before scoring, and nothing was scored. The frozen bf16 check found eager and SDPA attention too far apart on yes/no, against a limit of 0.10:
+
+- Gemma 4 E4B (job 7306814): 0.275 nats on average. (Corrected after the tag: E4B's placement check, 7306815, passed the frozen bf16 check, 0.050, and completed; its scores are not read or used, and it is rerun under D-B1 with the others.)
+- Gemma 4 31B (job 7306818): 0.159 nats on average.
+
+**Why the bf16 limit cannot decide.** The limit is below one bf16 step at these logits (0.125 nats between 16 and 32), and in float32 the two implementations agree to about 0.00001 nats. TextCraft round 3's D-G1 diagnostic on E4B gave 0.000011 nats mean and 0.000027 at most. See also `numerical_sensitivity.md` §4.7 and rule 2.
+
+**The new rule.** The check is decided with the model's floating-point tensors cast to float32 in the job. It passes when the mean absolute eager-minus-SDPA difference is at most 0.01 nats and no score differs by more than 0.05 nats. These are D-G1's limits, applied to both the yes/no and two-candidate formats, because the frozen rule covers both. The tensors are cast back exactly afterwards, so scoring is unchanged (bf16, SDPA). The bf16 comparison is still recorded, but no longer decides.
+
+**Scope.** The rule applies to every wave B model with the check: Gemma 4 E4B, its placement check, and Gemma 4 31B. All three runs are rerun at the deviation tag from one clean checkout:
+
+- E4B's scoring and placement on an L40S, as the other small models;
+- 31B on two A100 80GB cards of one node. Its float32 copy (about 125 GB) does not fit one card; scoring stays bf16 with SDPA, and the model is split over the two cards.
+
+**Unchanged.** Every other gate and rule, including the serve2 rescoring of the older models, the 16-test family and every threshold.
+
+## Families wave B: interim reading at the user's request (2026-11-25)
+
+Interim reading at the user's request: the frozen analysis is run now on the completed models; the two Gemma 4 models are 'waiting' and enter the 16-test family at p = 1, as the frozen design specifies; no rules change. The final analysis is rerun once after the Gemma 4 reruns (deviation D-B1, tag `families-waveb-deviation-attn-float32-2026-11-25`) finish, and it replaces this one. Any verdict that changes between the two is reported as such. This entry is committed and pushed before the interim analysis is run.
