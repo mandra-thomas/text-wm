@@ -743,3 +743,29 @@ Interim reading at the user's request: the frozen analysis is run now on the com
 ## Controlled Bayesian environment (`notes/bayesenv_design.md`), 2026-11-26
 
 - **D-BE1. The prompt-hash check rebuilt units in the wrong order (logged before any score was read).** The design (section 12) has the smoke readout and the analysis recompute every stored prompt hash from the current code. The frozen check (`analysis.verify_hashes`, tag `bayesenv-design-frozen-2026-11-25`) rebuilt each unit's prompt types from the stored record's keys. Records are written with sorted keys (`wf/util.append_jsonl`), so every unit with more than one prompt type was rebuilt in alphabetical order and hashed differently from the scorer's hash. The first smoke readout (job 7347247) therefore stopped with "150 smoke units scored for prompts the current code does not render" before computing anything. The scorer's own resume check was correct, because it hashes the design's unit. **Fix:** the check now takes each unit from the run's design (the run configuration's units) and compares the stored hash and the set of scored sequences with that unit's. A test with sorted-key records was added. No estimate, rule, threshold or score changed. The smoke scores (job 7330239) were made at the tag and are used unchanged.
+
+## Post-training pilot, deviation D-PT1: lexsem's one-line smoke fix and the provenance check's file list (2026-11-26)
+
+Recorded before any pilot score was read. The full text is in `notes/posttraining_design.md`, section 16.
+
+- **The change.** Lexsem commit 5aabb99 changed one line in `scripts/lexsem/score.py`'s `smoke()`, which the pilot never calls.
+- **The pilot's jobs ran the earlier bytes.** Every pilot job ran from its own clone at tag `posttraining-design-frozen-2026-11-26` (e0e9c04). There the file is blob fd6dabab…, the 503ba47 version.
+- **The exception.** The analysis's provenance check now accepts exactly that one blob pair of that file (fd6dabab… and fcbf7c58…), and nothing else.
+- **A latent bug, fixed.** The check now compares lexsem's runs only on the files that decide a lexsem score. Before, it compared the pilot's own files too, which a lexsem commit does not contain, so every reuse would have been refused.
+
+Nothing was rescored.
+
+## Post-training pilot, deviation D-PT2: the five reuse arms are scored by the pilot itself (2026-11-26)
+
+Recorded and tagged (`posttraining-deviation-dpt2-2026-11-26`) before the jobs were submitted and before any pilot score was read. The full text is in `notes/posttraining_design.md`, section 17.
+
+- **What changes.** The pilot rescores five arms itself with `--no-reuse`, instead of reusing lexsem's cells:
+  - Llama-3.1-8B base, plain text;
+  - Qwen3-8B-Base, plain text;
+  - Qwen3-8B, plain text;
+  - Qwen3-8B with the think block;
+  - Llama-3.1-8B-Instruct in its chat template.
+- **Why.** Lexsem had not frozen when the pilot finished, and the user chose to decouple the two studies.
+- **Cost.** About 1.1 to 1.3 GPU-hours.
+- **Decision rules.** None change.
+- **Comparison with lexsem.** Once lexsem's scores exist, the shared cells are compared with them. This is a provenance check only and does not gate the analysis; every shared cell is expected to match bit for bit.
