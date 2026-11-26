@@ -2124,6 +2124,10 @@ def test_dg2_the_job_reads_the_float32_record(tmp_path, monkeypatch):
     assert S.run_gate(d, scorer, R3.MODELS["qwen3.5-9b"], "qwen3.5-9b", [], [], [], {}) is True and calls == []
     monkeypatch.setattr(G, "ATTENTION_PRECISION", "bf16")
     assert S.run_gate(d, scorer, spec, spec.tag, [], [], [], {}) is True and calls == [1]
+    # the frozen rule: a failed bf16 check stops the job
+    monkeypatch.setattr(S, "attention_agreement", lambda *a: {"ok": False, "problems": ["differ"]})
+    assert S.run_gate(d, scorer, spec, spec.tag, [], [], [], {}) is False
+    assert "differ" in json.loads((d / "tokenization_checks.json").read_text())["problems"]
 
 
 def test_dg2_12b_is_not_scored_once_the_rule_gives_e4b(mock_runs, small):

@@ -10,6 +10,19 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided 2026-11-25: TextCraft round 3, interim reading
+
+- **Interim reading at the user's request,** under the five conditions the user approved on 2026-11-24:
+  - the inputs are complete for what is read;
+  - the protocol allows it;
+  - no rule changes;
+  - it cannot influence the unfinished arms;
+  - the final run preserves the verdicts.
+- **Models without filed scores** enter as the frozen design specifies: "not scored" with p = 1, or "waiting", whose tests are padded at p = 1 and whose readings wait. These are Qwen3.8-27B and Gemma-4-31B (scoring queued) and the Gemma slot, which under D-G2 waits for Gemma 4 12B's float32 attention check and smoke rerun.
+- **How it runs.** The analysis `textcraft_r3_analysis_dg2` runs once, from a clean checkout at D-G2's tag. That tag carries this entry and D-G2, both committed before the run.
+- **The final analysis** is rerun once when every arm is filed, and it replaces this reading. Any verdict that changes is reported as such.
+- **Effect on the unfinished arms.** None. Their gates, slot rule and analysis are fixed by the committed code and do not depend on any number read here.
+
 ## Decided 2026-11-25: TextCraft round 3, deviation D-G2 (attention agreement in float32)
 
 - **Approved by the user, after the freeze and before the round-3 analysis ran.** No round-3 score, contrast or effect had been read. The full note is [textcraft_r3_deviation_attention_float32.md](textcraft_r3_deviation_attention_float32.md) on branch `textcraft-r3-dev-g2`, at tag `textcraft-r3-deviation-g2-2026-11-25`.
