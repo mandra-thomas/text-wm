@@ -13,7 +13,7 @@
 #
 # Lexsem diagnostic (notes/lexsem_design.md). Submit only from the commit of the design's freeze tag, in the serve2
 # stack (decided by the user, 2026-11-25). LX_ARM is one arm of wf.lexsem.ARMS (qwen_plain, qwen_block, llama_chat,
-# qwen4b_plain, qwen4b_block, qwen14b_plain, qwen14b_block, llama3b_chat, qwen8b_base_plain), scored on an L40S, or its floor rescoring
+# qwen4b_plain, qwen4b_block, qwen14b_plain, qwen14b_block, llama3b_chat, qwen8b_base_plain, llama8b_base_plain), scored on an L40S, or its floor rescoring
 # "<arm>_floor", which must be submitted with --constraint=gpu-a40 (a second environment, design section 7).
 # Example: sbatch ... --export=ALL,LX_ARM=qwen_plain,SERVE_ENV=...,HF_HOME=...,HF_HUB_CACHE=... pace/lexsem.sbatch
 

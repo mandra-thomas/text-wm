@@ -168,10 +168,11 @@ ARMS = {
     "llama3b_chat": {"model": "meta-llama/Llama-3.2-3B-Instruct", **_LLAMA},
     # post-training pilot (approved 2026-11-26): the base model in plain text, mirroring the plain-text core arm,
     # with a competence set (the neutral task on the failures and on RQ2's determined successes). The Llama-3.1-8B
-    # base arm was dropped: its gated access could not be checked (design section 5).
+    # base arm was restored on 2026-11-26 once the gated checkpoint's access was confirmed (design section 5).
     "qwen8b_base_plain": {"model": "Qwen/Qwen3-8B-Base", **_QWEN_PLAIN, "competence": True},
+    "llama8b_base_plain": {"model": "meta-llama/Llama-3.1-8B", **_QWEN_PLAIN, "competence": True},
 }
-BASE_ARMS = frozenset({"qwen8b_base_plain"})  # yes/no recorded, never read (instruction following not validated)
+BASE_ARMS = frozenset({"qwen8b_base_plain", "llama8b_base_plain"})  # yes/no recorded, never read
 NEUTRAL = "neutral"  # the competence condition: "Your task is to: explore the room."
 FLOOR_ITEMS = 100
 CORE = GROUPS["core"]

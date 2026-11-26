@@ -30,6 +30,8 @@ PAIRS = (
     ("llama3b_chat", "llama_chat", "size (Llama-3.2-3B against 3.1-8B)"),
     ("qwen4b_plain", "llama3b_chat", "model at small size (Qwen3-4B plain against Llama-3.2-3B)"),
     ("qwen8b_base_plain", "qwen_plain", "post-training (Qwen3-8B base against instruct, plain)"),
+    # Llama-3.1-8B's instruct arm is chat yes/no only, so its base arm has no instruct cell here (design section 5)
+    ("llama8b_base_plain", "qwen8b_base_plain", "model at the base stage (Llama-3.1-8B base against Qwen3-8B base)"),
 )
 QWEN_SIZES = (("qwen4b", "Qwen3-4B"), ("qwen", "Qwen3-8B"), ("qwen14b", "Qwen3-14B"))
 TAKE = "take"
