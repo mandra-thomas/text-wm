@@ -10,6 +10,37 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Closed 2026-11-20: exclusion flow.** In `rq2_results.md`, "Exclusion flow" (`audit_metrics.json`).
 - **Public data archive.** The run data (items, scores, generations, episodes) are on ICE and in the owner's local copy; a public archive is planned (`reproducing.md`).
 
+## Decided 2026-11-25: TextCraft round 3, interim reading
+
+- **Interim reading at the user's request,** under the five conditions the user approved on 2026-11-24:
+  - the inputs are complete for what is read;
+  - the protocol allows it;
+  - no rule changes;
+  - it cannot influence the unfinished arms;
+  - the final run preserves the verdicts.
+- **Models without filed scores** enter as the frozen design specifies: "not scored" with p = 1, or "waiting", whose tests are padded at p = 1 and whose readings wait. These are Qwen3.8-27B and Gemma-4-31B (scoring queued) and the Gemma slot, which under D-G2 waits for Gemma 4 12B's float32 attention check and smoke rerun.
+- **How it runs.** The analysis `textcraft_r3_analysis_dg2` runs once, from a clean checkout at D-G2's tag. That tag carries this entry and D-G2, both committed before the run.
+- **The final analysis** is rerun once when every arm is filed, and it replaces this reading. Any verdict that changes is reported as such.
+- **Effect on the unfinished arms.** None. Their gates, slot rule and analysis are fixed by the committed code and do not depend on any number read here.
+
+## Decided 2026-11-25: TextCraft round 3, deviation D-G2 (attention agreement in float32)
+
+- **Approved by the user, after the freeze and before the round-3 analysis ran.** No round-3 score, contrast or effect had been read. The full note is [textcraft_r3_deviation_attention_float32.md](textcraft_r3_deviation_attention_float32.md) on branch `textcraft-r3-dev-g2`, at tag `textcraft-r3-deviation-g2-2026-11-25`.
+- **Change.** Round 3's eager-against-SDPA attention-agreement criterion is now evaluated in float32 for every Gemma 4 model (12B, E4B and 31B). It uses the same frozen function, the same five items and arms, and wave B's limits unchanged (yes/no mean 0.10, two-candidate mean 0.50, any single score 1.0).
+  - The check is the run `textcraft_r3_attnf32_<tag>`, on A100 80 GB cards; a float32 copy of 12B does not fit an L40S.
+  - It replaces the bf16 check that each job ran at its start.
+- **Reason.** In bf16, at these models' readout logits, the 0.10 limit is below one grid step (0.125). Every observed bf16 difference is a whole number of steps, and in float32 the two implementations agree to about 0.00001 (`numerical_sensitivity.md` §4.7, Rule 2; D-G1's job 7252801).
+- **Effect in round 3.** The frozen slot procedure runs again with the float32 reading:
+  - **12B first.** Gemma 4 12B's float32 check runs, and then, if it passes, its smoke is rerun (`textcraft_r3_smoke2_gemma4-12b-it`), because the filed smoke stopped before any score and the fallback rule's format diagnostic needs the smoke's rows.
+  - **If no trigger fires,** 12B holds the Gemma slot as designed. It is scored at D-G2's commit, two shards on L40S. It enters A3, and B3 compares Gemma-2-9B's serve2 rescoring with 12B.
+  - **Otherwise** E4B holds the slot. It is scored under its core run id rather than reusing D-G1's exploratory scores, so that every core score has one provenance rule. The procedure is the same and the cost is about 1.4 GPU-hours.
+  - **31B's state** waits for its own float32 check.
+- **Not changed.** Every other gate, rule, family and test; the filed bf16 records, which stay as filed; and the queued jobs.
+- **Where runs start and the analysis.** Only D-G2's runs may start at its tag's commit. The analysis that is read is `textcraft_r3_analysis_dg2`, at that tag; it supersedes D-T2's `textcraft_r3_analysis_dt2`.
+- **Cost.** About 4.5 to 5.5 GPU-hours if 12B holds the slot, including the 31B check; about 3 if E4B does. Nothing is submitted before the coordinator confirms.
+
+- **Interim results** (2026-11-25): `textcraft_r3_interim_results.md`, from the analysis run `textcraft_r3_analysis_dg2` at tag `textcraft-r3-deviation-g2-2026-11-25` (ICE CPU job 7330172).
+
 ## Documentation corrections, 2026-11-25
 
 A review of what the public documents claim against what the evidence supports. No verdict, threshold, rule, confirmatory result or metrics file changed. Each revised reading is marked "(revised 2026-11-25)" where it stands.
