@@ -83,18 +83,12 @@ def grouped_rows(ax, groups, xlabel, ref=None, ref_label=None):
     return ticks
 
 
-def marker_legend(fig_or_ax, final="final analysis", interim="interim analysis (models still waiting)", **kw):
-    handles = [Line2D([], [], marker="o", ls="", ms=7, mfc=INK_2, mec="white", label=final),
-               Line2D([], [], marker="o", ls="", ms=7, mfc="white", mec=INK_2, mew=2, label=interim)]
-    fig_or_ax.legend(handles=handles, **kw)
-
-
 # ---------------------------------------------------------------------------------------------------
 # Figure 1: share of failing items moved toward success
 # ---------------------------------------------------------------------------------------------------
 def fig_share():
     fa = load("families_metrics.json")            # families wave A (final)
-    fb = load("families_waveb_interim_metrics_2026-11-25.json")   # wave B (interim, Gemma 4 waiting)
+    fb = load("families_waveb_metrics_2026-11-26.json")   # families wave B (final, 2026-11-26)
     tf = load("tau_families_metrics.json")        # τ-bench families extension (final)
 
     def wa(path, model, **kw):
@@ -103,7 +97,7 @@ def fig_share():
 
     def wb(path, model, **kw):
         d = get(fb, path + "/primary_metrics/item_share_toward_yes")
-        return row(model, d["estimate"], *d["ci"], source="families_waveb_interim_metrics_2026-11-25.json:" + path, **kw)
+        return row(model, d["estimate"], *d["ci"], source="families_waveb_metrics_2026-11-26.json:" + path, **kw)
 
     def tau(path, model, **kw):
         d = get(tf, path + "/primary/item_share/first")
@@ -115,12 +109,14 @@ def fig_share():
         wa("models/mistral-7b-v0.3", "mistral-7b-v0.3"),
         wa("models/llama3.2-3b", "llama3.2-3b"),
         wa("models/gemma2-9b-it", "gemma2-9b-it"),
-        wb("reference/qwen3-32b", "qwen3-32b", label="Qwen3-32B (rescored for wave B)", hollow=True),
-        wb("models/ministral3-8b-it", "ministral3-8b-it", hollow=True),
-        wb("models/qwen3.5-9b", "qwen3.5-9b", label="Qwen3.5-9B (chat template)", hollow=True),
-        wb("models/qwen3.5-9b-plain", "qwen3.5-9b", label="Qwen3.5-9B (plain text)", hollow=True),
-        wb("models/qwen3.5-9b-base-plain", "qwen3.5-9b", label="Qwen3.5-9B-Base (plain text)", hollow=True),
-        wb("models/qwen3.8-27b", "qwen3.8-27b", hollow=True),
+        wb("reference/qwen3-32b", "qwen3-32b", label="Qwen3-32B (rescored for wave B)"),
+        wb("models/ministral3-8b-it", "ministral3-8b-it"),
+        wb("models/qwen3.5-9b", "qwen3.5-9b", label="Qwen3.5-9B (chat template)"),
+        wb("models/qwen3.5-9b-plain", "qwen3.5-9b", label="Qwen3.5-9B (plain text)"),
+        wb("models/qwen3.5-9b-base-plain", "qwen3.5-9b", label="Qwen3.5-9B-Base (plain text)"),
+        wb("models/gemma4-e4b-it", "gemma4-e4b-it"),
+        wb("models/qwen3.8-27b", "qwen3.8-27b"),
+        wb("models/gemma4-31b-it", "gemma4-31b-it"),
     ]
     taub = [
         tau("reference/qwen3-8b-fewshot", "qwen3-8b"),
@@ -129,14 +125,12 @@ def fig_share():
     ]
     for r in alf + taub:
         print(f"  share  {r['label']:34s} {r['est']:.3f} [{r['lo']:.3f}, {r['hi']:.3f}]  {r['source']}")
-    fig, ax = plt.subplots(figsize=(8.6, 6.0))
+    fig, ax = plt.subplots(figsize=(8.6, 6.6))
     grouped_rows(ax, [("ALFWorld, yes/no question", alf), ("τ-bench retail, first token", taub)],
                  "share of determined failures whose score is higher under the real task than under the swapped task",
                  ref=0.5, ref_label="0.5 = no effect")
     ax.set_xlim(0.45, 1.0)
-    ax.set_title("The real task moves most failing actions toward success, in every competent model",
-                 pad=24)
-    marker_legend(ax, loc="lower left", bbox_to_anchor=(0.0, 1.0), ncol=2, fontsize=8, borderaxespad=0.2)
+    ax.set_title("The real task moves most failing actions toward success, in every competent model")
     fig.tight_layout()
     fig.savefig(OUT / "overview_share_moved.png", dpi=200)
     plt.close(fig)

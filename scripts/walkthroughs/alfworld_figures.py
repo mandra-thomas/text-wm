@@ -143,13 +143,13 @@ def step0_by_history() -> None:
 
 def family_shares() -> None:
     a = json.loads((NOTES / "families_metrics.json").read_text())
-    b = json.loads((NOTES / "families_waveb_interim_metrics_2026-11-25.json").read_text())
+    b = json.loads((NOTES / "families_waveb_metrics_2026-11-26.json").read_text())  # wave B, final
     rows = []
     names = {"qwen3-8b": "Qwen3-8B", "llama3.1-8b": "Llama-3.1-8B", "gemma2-9b-it": "Gemma-2-9B",
              "mistral-7b-v0.3": "Mistral-7B-v0.3", "llama3.2-3b": "Llama-3.2-3B", "llama3.2-1b": "Llama-3.2-1B",
              "ministral3-8b-it": "Ministral-3-8B", "qwen3.5-9b": "Qwen3.5-9B (chat)",
              "qwen3.5-9b-plain": "Qwen3.5-9B (plain)", "qwen3.5-9b-base-plain": "Qwen3.5-9B-Base (plain)",
-             "qwen3.8-27b": "Qwen3.8-27B"}
+             "qwen3.8-27b": "Qwen3.8-27B", "gemma4-e4b-it": "Gemma-4-E4B", "gemma4-31b-it": "Gemma-4-31B"}
     for src, wave in ((a, "A"), (b, "B")):
         pool = dict(src["models"])
         if wave == "A":
@@ -161,7 +161,7 @@ def family_shares() -> None:
             rows.append((names.get(k, k) + f"  [wave {wave}]" if k not in ("qwen3-8b", "llama3.1-8b") else names[k] + "  [reference]",
                          s["estimate"], s["ci"][0], s["ci"][1], k != "llama3.2-1b"))
     rows.sort(key=lambda r: r[1])
-    fig, ax = plt.subplots(figsize=(8.5, 4.6))
+    fig, ax = plt.subplots(figsize=(8.5, 5.3))
     for y, (n, e, lo, hi, ok) in enumerate(rows):
         c = BLUE if ok else GRAY
         ax.plot([lo, hi], [y, y], color=c, lw=2, solid_capstyle="round")
@@ -174,8 +174,8 @@ def family_shares() -> None:
     ax.set_xlabel("share of the 4,666 failures whose yes/no score is higher under the aligned than the swapped task")
     ax.grid(axis="y", visible=False)
     ax.set_ylim(-1.3, len(rows) - 0.5)
-    fig.suptitle("Item share toward Yes, with 95% game-clustered intervals\n(gray: fails the competence rule; "
-                 "wave B numbers are interim)", x=0.01, ha="left", color=INK, fontsize=11)
+    fig.suptitle("Item share toward Yes, with 95% game-clustered intervals\n(gray: fails the competence rule)",
+                 x=0.01, ha="left", color=INK, fontsize=11)
     fig.tight_layout()
     save(fig, "alfworld_family_shares.png")
 

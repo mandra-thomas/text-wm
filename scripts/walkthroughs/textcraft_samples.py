@@ -208,7 +208,7 @@ def main():
              (ROUND2_PARENT, ROUND2_MAIN))
     r3 = T.load_round3(args.runs)
     round23(args, "tc3", r3, {k: v[1] for k, v in T.R3_RUNS.items()},
-            "Round 3 interim samples (prompt of commit fae00b3)", (ROUND3_PARENT, ROUND2_PARENT, ROUND2_MAIN))
+            "Round 3 samples (prompt of commit fae00b3)", (ROUND3_PARENT, ROUND2_PARENT, ROUND2_MAIN))
     think_excerpt(args)
 
 

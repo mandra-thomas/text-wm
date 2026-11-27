@@ -1,12 +1,13 @@
 """Figures for notes/walkthroughs/02_textcraft.md (static PNG, matplotlib).
 
 Headline numbers come from the committed metrics files (notes/textcraft_metrics.json, notes/textcraft_r2_metrics.json,
-notes/textcraft_r3_interim_metrics.json). The item-level scatter reads the stored round-1 scores (see
+notes/textcraft_r3_metrics.json, round 3's final analysis of 2026-11-27). The item-level scatter reads the stored round-1 scores (see
 textcraft_data.py). Palette: the validated reference categorical slots blue #2a78d6, orange #eb6834, aqua #1baf7a,
 with grey for de-emphasis; checked with the dataviz skill's palette validator (light mode, all checks pass; aqua sits
 below 3:1 contrast on the surface, so every series also has a legend entry and a distinct marker).
 
     python scripts/walkthroughs/textcraft_figures.py --runs RUNS_ROOT --out notes/walkthroughs/figures
+    python scripts/walkthroughs/textcraft_figures.py --only r2 r3     # metrics-only figures; no run archive needed
 """
 from __future__ import annotations
 
@@ -140,7 +141,7 @@ def fig_r2(out: Path):
 
 def fig_r3(out: Path):
     r2 = json.loads((NOTES / "textcraft_r2_metrics.json").read_text())["per_model"]
-    r3 = json.loads((NOTES / "textcraft_r3_interim_metrics.json").read_text())
+    r3 = json.loads((NOTES / "textcraft_r3_metrics.json").read_text())   # final analysis, 2026-11-27
     rows = []  # (label, series, lift (est, lo, hi), penalty (est, lo, hi), competent)
     for m in R2_ORDER:
         e = r2[m]["contrasts"]
@@ -149,11 +150,13 @@ def fig_r3(out: Path):
                      (e["lift"]["estimate"], *e["lift"]["ci95"]),
                      (e["parent_penalty"]["estimate"], *e["parent_penalty"]["ci95"]),
                      (comp["lift"]["competent"], comp["parent_penalty"]["competent"])))
-    for m, lab in [("qwen3.5-9b", "Qwen3.5-9B"), ("ministral3-8b-it", "Ministral-3-8B"), ("olmo3-7b-it", "OLMo 3 7B")]:
+    for m, lab in [("qwen3.5-9b", "Qwen3.5-9B (core)"), ("ministral3-8b-it", "Ministral-3-8B (core)"),
+                   ("gemma4-12b-it", "Gemma 4 12B (core)"), ("qwen3.8-27b", "Qwen3.8-27B (extension)"),
+                   ("gemma4-31b-it", "Gemma 4 31B (extension)"), ("olmo3-7b-it", "OLMo 3 7B (extension)")]:
         pm = r3["per_model"][m]
         e = pm["contrasts"]
         comp = pm["competence"]["local"]["per_contrast"]
-        rows.append((lab, "round 3 INTERIM", (e["lift"]["estimate"], *e["lift"]["ci95"]),
+        rows.append((lab, "round 3 (final, 2026-11-27)", (e["lift"]["estimate"], *e["lift"]["ci95"]),
                      (e["parent_penalty"]["estimate"], *e["parent_penalty"]["ci95"]),
                      (comp["lift"]["competent"], comp["parent_penalty"]["competent"])))
     ex = r3["exploratory"]
@@ -165,9 +168,9 @@ def fig_r3(out: Path):
                  (t["lift"]["thinking_on"]["estimate"], *t["lift"]["thinking_on"]["ci95"]),
                  (t["parent_penalty"]["thinking_on"]["estimate"], *t["parent_penalty"]["thinking_on"]["ci95"]),
                  (True, True)))
-    colors = {"round 2 (frozen, 2026-11-23)": (BLUE, "o"), "round 3 INTERIM": (ORANGE, "s"),
+    colors = {"round 2 (frozen, 2026-11-23)": (BLUE, "o"), "round 3 (final, 2026-11-27)": (ORANGE, "s"),
               "round 3 exploratory (no test)": (AQUA, "D")}
-    fig, axes = plt.subplots(1, 2, figsize=(11, 5.6), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 6.6), sharey=True)
     for ax, k, title in [(axes[0], 2, "Intermediate lift Λ\n(ingredient crafts, aligned − swapped)"),
                          (axes[1], 3, "Within-item penalty P\n(same craft: goal names it − goal is its parent)")]:
         seen = set()
@@ -189,7 +192,7 @@ def fig_r3(out: Path):
     labels = [lab for ax in axes for lab in ax.get_legend_handles_labels()[1]]
     keep = dict(zip(labels, handles))
     fig.legend(keep.values(), keep.keys(), loc="lower center", ncol=4, fontsize=8.5, bbox_to_anchor=(0.5, -0.01))
-    fig.suptitle("TextCraft rounds 2 and 3: lift and penalty by model (round 3 is INTERIM)", x=0.01, ha="left",
+    fig.suptitle("TextCraft rounds 2 and 3: lift and penalty by model (round 3 final)", x=0.01, ha="left",
                  fontsize=11.5)
     fig.tight_layout(rect=(0, 0.07, 1, 1))
     fig.savefig(out / "textcraft_r3_lift_penalty.png", dpi=150)
@@ -198,15 +201,23 @@ def fig_r3(out: Path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--runs", type=Path, required=True)
+    ap.add_argument("--runs", type=Path, help="run archive root; needed only for the item scatter")
     ap.add_argument("--out", type=Path, default=REPO / "notes/walkthroughs/figures")
+    ap.add_argument("--only", nargs="+", choices=["items", "role_class", "r2", "r3"],
+                    default=["items", "role_class", "r2", "r3"])
     args = ap.parse_args()
+    if "items" in args.only and args.runs is None:
+        ap.error("--runs is required to draw the item scatter")
     args.out.mkdir(parents=True, exist_ok=True)
     style()
-    fig_items(args.runs, args.out)
-    fig_role_class(args.out)
-    fig_r2(args.out)
-    fig_r3(args.out)
+    if "items" in args.only:
+        fig_items(args.runs, args.out)
+    if "role_class" in args.only:
+        fig_role_class(args.out)
+    if "r2" in args.only:
+        fig_r2(args.out)
+    if "r3" in args.only:
+        fig_r3(args.out)
 
 
 if __name__ == "__main__":

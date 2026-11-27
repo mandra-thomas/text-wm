@@ -7,11 +7,12 @@ Layout expected under ``runs_root`` (one folder per run, as written by the pipel
 
 - round 1: ``textcraft_score/shard_*/scoring.jsonl`` (Qwen3-8B and Llama-3.1-8B, frozen commit 5a3702a)
 - round 2: ``textcraft_r2_score_<model>/shard_*/scoring.jsonl`` (five models, frozen commit 4ccf84b)
-- round 3 (interim): ``textcraft_r3_score_<model>``, ``textcraft_r3_rescore_<model>``, ``textcraft_r3_think_qwen3.5-9b``
-  and ``textcraft_r3x_gemma4-e4b-it`` (commit fae00b3). Only the models of the interim analysis are listed.
+- round 3: ``textcraft_r3_score_<model>``, ``textcraft_r3_rescore_<model>``, ``textcraft_r3_think_qwen3.5-9b``
+  and ``textcraft_r3x_gemma4-e4b-it`` (commit fae00b3).
 
-Round 3 runs whose analysis has not been run (Gemma 4 12B, Qwen3.8-27B, Gemma 4 31B) are deliberately not listed and
-are never read.
+Round 3's final analysis (notes/textcraft_r3_results.md, 2026-11-27) also read the score runs of Gemma 4 12B,
+Qwen3.8-27B and Gemma 4 31B. Those score folders are not in the local copy of the run archive this walkthrough was
+built from, so they are not listed here and the walkthrough shows no item-level scores for those three models.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ from pathlib import Path
 R1_MODELS = {"qwen3-8b-fewshot": "Qwen3-8B", "llama3.1-8b-fewshot": "Llama-3.1-8B-Instruct"}
 R2_MODELS = {"qwen3-8b": "Qwen3-8B", "llama3.1-8b": "Llama-3.1-8B-Instruct", "gemma2-9b-it": "Gemma-2-9B-it",
              "mistral-7b-v0.3": "Mistral-7B-Instruct-v0.3", "llama3.2-3b": "Llama-3.2-3B-Instruct"}
-# Round 3: only what the interim analysis read (notes/textcraft_r3_interim_results.md).
+# Round 3: the score runs available in the local archive copy (see the module docstring).
 R3_RUNS = {
     "qwen3.5-9b": ("textcraft_r3_score_qwen3.5-9b", "Qwen3.5-9B"),
     "ministral3-8b-it": ("textcraft_r3_score_ministral3-8b-it", "Ministral-3-8B"),
@@ -34,7 +35,6 @@ R3_RUNS = {
     "qwen3.5-9b-think": ("textcraft_r3_think_qwen3.5-9b", "Qwen3.5-9B, reasoning on (exploratory)"),
     "gemma4-e4b-it": ("textcraft_r3x_gemma4-e4b-it", "Gemma 4 E4B (exploratory)"),
 }
-NOT_READ = ("gemma4-12b", "qwen3.8-27b", "gemma4-31b")
 
 
 def read_jsonl(path: str | Path) -> list[dict]:
@@ -46,9 +46,6 @@ def _shards(run_dir: str | Path) -> list[str]:
     files = sorted(glob.glob(os.path.join(str(run_dir), "shard_*", "scoring.jsonl")))
     if not files:
         raise FileNotFoundError(f"no scoring.jsonl under {run_dir}")
-    for f in files:
-        if any(tag in f for tag in NOT_READ):
-            raise RuntimeError(f"refusing to read {f}: its analysis has not run")
     return files
 
 
