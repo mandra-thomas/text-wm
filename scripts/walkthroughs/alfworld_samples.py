@@ -26,8 +26,15 @@ from wf.data.transitions import determination_reason  # noqa: E402
 from wf.rq2 import mention_lines  # noqa: E402
 from wf.runs import _item_hash, _pilotA_item_sets  # noqa: E402
 
+# Wave B (scored in the serve2 stack): the first five runs at commit de8312f, the two Gemma 4 runs at the D-B1 tag
+# families-waveb-deviation-attn-float32-2026-11-25 (commit 0ef4672), whose start check comparing eager and SDPA
+# attention is read in float32 (scores stay bf16 with SDPA). The Gemma 4 copies come from text-wm-fix53, the checkout
+# families_waveb_analysis read; their scoring.jsonl SHA-256 values equal that analysis's provenance block. The item
+# hash below (wf.runs._item_hash, over the item's action, history, task lines and candidates) is the same function
+# at de8312f, 0ef4672 and this commit.
 RUNS.update({f"family_score_{m}": f"text-wm-fix52/runs/family_score_{m}"
              for m in ("ministral3-8b-it", "qwen3.5-9b", "qwen3.5-9b-plain", "qwen3.5-9b-base-plain", "qwen3.8-27b")})
+RUNS.update({f"family_score_{m}": f"text-wm-fix53/runs/family_score_{m}" for m in ("gemma4-e4b-it", "gemma4-31b-it")})
 
 OUT = Path(os.environ.get("OUT", "notes/walkthroughs/data/alfworld_samples.json"))
 
@@ -69,6 +76,8 @@ TABLE_MODELS = [
     ("Qwen3.5-9B, plain text (wave B)", "family_score_qwen3.5-9b-plain", "qwen3.5-9b-plain"),
     ("Qwen3.5-9B-Base, plain text (wave B)", "family_score_qwen3.5-9b-base-plain", "qwen3.5-9b-base-plain"),
     ("Qwen3.8-27B (wave B)", "family_score_qwen3.8-27b", "qwen3.8-27b"),
+    ("Gemma-4-E4B (wave B, D-B1)", "family_score_gemma4-e4b-it", "gemma4-e4b-it"),
+    ("Gemma-4-31B (wave B, D-B1)", "family_score_gemma4-31b-it", "gemma4-31b-it"),
 ]
 CONDS = ("aligned", "swapped", "absent", "yn_aligned", "yn_swapped", "yn_absent")
 

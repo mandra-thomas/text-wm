@@ -2,7 +2,7 @@
 
 This document walks through the ALFWorld part of the project from the ground up, using real items and real stored scores. It is one of a set: [00_overview.md](00_overview.md) gives the project as a whole, and [02_textcraft.md](02_textcraft.md) and [03_taubench.md](03_taubench.md) do the same job for the other two environments. Section 1 explains the benchmark itself, Section 2 how the project turns it into test items, and Section 3 how a model's prediction becomes a number. Section 4 then shows twelve failing actions and two working ones in full, with every model's scores. Section 5 goes through every study run on ALFWorld, each with a sample item shown under that study's own conditions, and Section 6 is a glossary.
 
-**Where the numbers come from.** Every headline number is quoted from a committed results note or metrics file in `notes/`, which is named each time. Every number in a sample table is a stored score read from the run archive by the scripts in `scripts/walkthroughs/` (`alfworld_samples.py`, `alfworld_decisions.py`), checked against the item hash stored with it, and printed into this file by `alfworld_tables.py`. No number in a sample table is typed by hand. The extracted values are committed in `notes/walkthroughs/data/` (`alfworld_samples.json`, `alfworld_decisions.json`). The run archive itself is not public (`notes/reproducing.md`, section 2), but the inputs of the preregistered RQ2 analysis are, as the GitHub release `repro-rq2-2026-11-25`. Studies whose analysis had not run when this was written (the controlled Bayesian environment, the natural bridge, the lexical-versus-semantic diagnostic, the post-training pilot, and wave B's two Gemma 4 models) are not shown.
+**Where the numbers come from.** Every headline number is quoted from a committed results note or metrics file in `notes/`, which is named each time. Every number in a sample table is a stored score read from the run archive by the scripts in `scripts/walkthroughs/` (`alfworld_samples.py`, `alfworld_decisions.py`), checked against the item hash stored with it, and printed into this file by `alfworld_tables.py`. No number in a sample table is typed by hand. The extracted values are committed in `notes/walkthroughs/data/` (`alfworld_samples.json`, `alfworld_decisions.json`). The run archive itself is not public (`notes/reproducing.md`, section 2), but the inputs of the preregistered RQ2 analysis are, as the GitHub release `repro-rq2-2026-11-25`. Studies whose analysis had not run when this was written (the controlled Bayesian environment, the natural bridge, the lexical-versus-semantic diagnostic and the post-training pilot) are not shown.
 
 **Licensing.** ALFWorld's game text, which makes up every history, action and reply below, is ALFWorld's own (MIT licence; [DATA_LICENSES.md](../../DATA_LICENSES.md)). One field of each collected item, a starting-layout description copied from Word2World's data, has no licence; it is never quoted here, and the full-state prompts that show it are described but not printed. Model outputs quoted below are from Qwen3-8B (Apache-2.0) and Llama-3.1-8B-Instruct (Llama 3.1 Community License, which does not restrict outputs used this way).
 
@@ -373,7 +373,7 @@ Typical items were picked, within each failure reason, from a short list of item
 **How to read each sample.** Each sample gives the item's history and action (the full prompt is the one in Section 3.1 with this history in the last user turn), the true reply and the success twin, the task lines, and two tables.
 
 - The first table holds the **confirmatory scores** of the two reference models from the RQ2 run (`rq2_score`): both candidates' log-probabilities, the two-candidate log-odds, the score, the first-token log-odds, and the model's own written prediction with its parser class.
-- The second table holds **every model's scores under the three task lines in both formats**, from the runs that the families and size analyses read: the size-series run for Qwen3-8B, the RQ1, object-free and yes/no runs for Llama-3.1-8B, the wave A family runs, the Qwen3 size series, and the wave B runs (scored in the newer software stack). Wave B's two Gemma 4 models (E4B and 31B) are not in these tables: their score files are not in the local copy of the run archive these tables were built from, so their per-item scores could not be read; their headline numbers are in Section 5.13. The goal effect columns are aligned minus swapped. Models marked "not competent" failed the competence rule (they cannot tell working from failing actions), so their numbers are shown but not interpreted.
+- The second table holds **every model's scores under the three task lines in both formats**, from the runs that the families and size analyses read: the size-series run for Qwen3-8B, the RQ1, object-free and yes/no runs for Llama-3.1-8B, the wave A family runs, the Qwen3 size series, and the wave B runs (scored in the newer software stack). The two Gemma 4 rows (marked D-B1) were scored under deviation D-B1, which reads the start check comparing two attention implementations (eager against SDPA) in float32; their scores themselves are bf16 with SDPA, like every other wave B row. Wave B's results note (`notes/families_waveb_results.md`, section 6) labels two of its readings numerically fragile: Qwen3.8-27B's mean two-candidate goal effect, and the two-candidate reading of Gemma-4-E4B's placement check (a separate run of 300 items with the system text moved into the first user turn, not shown here); no Gemma-4-31B reading is fragile, and no reference model is environment-dependent. The goal effect columns are aligned minus swapped. Models marked "not competent" failed the competence rule (they cannot tell working from failing actions), so their numbers are shown but not interpreted.
 
 The Qwen3-8B and Llama-3.1-8B rows of the second table come from different scoring jobs than the first table, sometimes on a different GPU type, so their numbers can differ by a fraction of a nat (Section 5.19 explains why).
 
@@ -418,9 +418,11 @@ The confirmatory scores were worked through in Section 3.4. Every model's scores
 | Qwen3.5-9B, plain text (wave B) | −0.20 | −0.38 | −0.11 | +0.17 | −2.12 | −2.38 | −2.38 | +0.25 |
 | Qwen3.5-9B-Base, plain text (wave B) | +0.47 | +0.33 | +0.25 | +0.14 | −0.38 | −0.88 | −0.75 | +0.50 |
 | Qwen3.8-27B (wave B) | −2.82 | −2.00 | −1.30 | −0.82 | −8.94 | −8.44 | −8.94 | −0.50 |
+| Gemma-4-E4B (wave B, D-B1) | −2.79 | −3.57 | −6.35 | +0.78 | −9.81 | −10.62 | −11.50 | +0.81 |
+| Gemma-4-31B (wave B, D-B1) | −29.98 | −29.76 | −29.96 | −0.23 | −23.76 | −23.83 | −23.79 | +0.08 |
 <!-- /TABLE -->
 
-**What it shows.** The history states the deciding fact in plain words ("The cabinet 1 is closed."), and yet four of the five competent wave A models (Llama-3.1-8B, Gemma-2-9B, Mistral-7B and, weakly, Llama-3.2-3B) score the success sentence above "Nothing happens." under the aligned task. Two of them, Llama-3.1-8B and Gemma-2-9B, cross from below zero under the swapped task to well above it under the aligned one, and Llama-3.1-8B's yes/no answer also changes from No (−5.00) to Yes (+2.25). Qwen3-8B moves in the same direction but stays far below zero. The newer wave B models move little on this item, and Qwen3-32B's yes/no effect is reversed.
+**What it shows.** The history states the deciding fact in plain words ("The cabinet 1 is closed."), and yet four of the five competent wave A models (Llama-3.1-8B, Gemma-2-9B, Mistral-7B and, weakly, Llama-3.2-3B) score the success sentence above "Nothing happens." under the aligned task. Two of them, Llama-3.1-8B and Gemma-2-9B, cross from below zero under the swapped task to well above it under the aligned one, and Llama-3.1-8B's yes/no answer also changes from No (−5.00) to Yes (+2.25). Qwen3-8B moves in the same direction but stays far below zero. The newer wave B models, the two Gemma 4 models included, move little on this item, and Qwen3-32B's yes/no effect is reversed.
 
 ### S2. Step 0: the agent has not moved (game 176)
 
@@ -462,6 +464,8 @@ True reply: "Nothing happens." Success twin: "You pick up the cd 1 from the draw
 | Qwen3.5-9B, plain text (wave B) | +1.74 | +0.18 | +0.82 | +1.56 | +0.25 | −2.00 | −0.88 | +2.25 |
 | Qwen3.5-9B-Base, plain text (wave B) | +0.88 | +0.38 | +0.40 | +0.51 | +0.25 | −0.75 | −0.37 | +1.00 |
 | Qwen3.8-27B (wave B) | −0.46 | +0.65 | −0.26 | −1.11 | −6.25 | −4.00 | −5.37 | −2.25 |
+| Gemma-4-E4B (wave B, D-B1) | +3.70 | +1.59 | +1.45 | +2.10 | +1.25 | −9.37 | −7.50 | +10.62 |
+| Gemma-4-31B (wave B, D-B1) | −17.76 | −21.15 | −21.72 | +3.39 | −22.61 | −22.51 | −23.23 | −0.10 |
 <!-- /TABLE -->
 
 **What it shows.** At step 0 the only history is the room description, and the failure is decided by the agent not having moved. This is where Qwen3-8B's effect is largest in the study's format: its two-candidate log-odds rises by 10.7 nats, from far below zero to just below it, and its score rises from essentially zero to 0.43. Its written prediction under the real task is a paraphrased failure that invents a reason ("there is no cd 1 in the drawer 2"), while under the swapped task it writes "Nothing happens." Llama-3.1-8B predicts success under both tasks (it writes "You pick up the cd 1 from the drawer 2." both times) and the task only makes it more confident. Qwen3-4B and Qwen3-14B swing by about 40 nats on the yes/no question, from a confident No to a confident Yes. The two not-competent Qwen sizes answer Yes to nearly everything, which is why they are not interpreted.
@@ -514,6 +518,8 @@ True reply: "Nothing happens." Success twin: "You pick up the lettuce 1 from the
 | Qwen3.5-9B, plain text (wave B) | +0.88 | +0.37 | +0.47 | +0.50 | −1.25 | −2.25 | −2.12 | +1.00 |
 | Qwen3.5-9B-Base, plain text (wave B) | +0.48 | +0.47 | +0.65 | +0.01 | −0.75 | −1.12 | −0.75 | +0.37 |
 | Qwen3.8-27B (wave B) | −0.90 | −2.38 | −1.46 | +1.48 | −6.25 | −8.31 | −9.19 | +2.06 |
+| Gemma-4-E4B (wave B, D-B1) | −5.30 | −5.84 | −5.01 | +0.54 | −9.87 | −10.75 | −10.25 | +0.87 |
+| Gemma-4-31B (wave B, D-B1) | −21.07 | −23.58 | −23.58 | +2.51 | −22.56 | −23.59 | −23.76 | +1.03 |
 <!-- /TABLE -->
 
 **What it shows.** This is the most common kind of item (1,895 of the 4,666) and a typical one: every competent wave A model gives the failure the higher probability under both tasks, and the real task raises the success side by 1 to 5.5 nats in the reference and wave A models. Two larger Qwen models go further: Qwen3-4B moves by 13 nats and Qwen3-32B crosses zero, preferring the success sentence (+3.50) under the real task only. Llama-3.1-8B shows the wording penalty clearly. Its first-token log-odds is above zero under both tasks (it slightly prefers "You" to "Nothing"), but its two-candidate log-odds is about −6, because it would continue "You" with something other than "pick up the lettuce 1 from the countertop 2"; its written predictions start with "You can't ...". The item's scores are identical to many decimals in every run that scored it (Section 5.19).
@@ -560,6 +566,8 @@ True reply: "Nothing happens." Success twin: "You pick up the soapbar 2 from the
 | Qwen3.5-9B, plain text (wave B) | +0.87 | +0.60 | +0.58 | +0.27 | −1.37 | −1.62 | −2.00 | +0.25 |
 | Qwen3.5-9B-Base, plain text (wave B) | +0.42 | +0.40 | +0.39 | +0.01 | −0.63 | −0.75 | −0.87 | +0.12 |
 | Qwen3.8-27B (wave B) | −2.59 | −2.41 | −1.97 | −0.18 | −7.50 | −7.75 | −9.69 | +0.25 |
+| Gemma-4-E4B (wave B, D-B1) | +0.30 | +1.91 | −0.16 | −1.61 | −9.50 | −10.00 | −10.81 | +0.50 |
+| Gemma-4-31B (wave B, D-B1) | −30.42 | −31.95 | −32.29 | +1.52 | −24.43 | −24.80 | −25.30 | +0.37 |
 <!-- /TABLE -->
 
 **What it shows.** Here the deciding fact is on the line just before the action ("you see nothing"). Both reference models still move toward success under the real task (Qwen by 3.8 nats, Llama by 2.5), but neither crosses zero and both write a failure prediction. Gemma-2-9B and Mistral-7B move the other way on this item, a reminder that the population-level effect is an average with real item-to-item variation (Figure 1). Failures decided by contents are where Llama-3.1-8B's effect is largest on average (2.6 nats against 1.6 overall; `notes/exploratory_results.md`, "Effect by reason for failure").
@@ -610,6 +618,8 @@ True reply: "Nothing happens." Success twin: "You pick up the apple 1 from the f
 | Qwen3.5-9B, plain text (wave B) | −0.04 | −0.30 | −0.38 | +0.26 | −2.12 | −2.62 | −2.75 | +0.50 |
 | Qwen3.5-9B-Base, plain text (wave B) | +0.18 | 0.00 | +0.07 | +0.18 | −1.12 | −1.63 | −1.50 | +0.50 |
 | Qwen3.8-27B (wave B) | −0.09 | −0.30 | −0.43 | +0.21 | −7.25 | −8.56 | −8.69 | +1.31 |
+| Gemma-4-E4B (wave B, D-B1) | −5.26 | −4.26 | −8.15 | −1.01 | −10.50 | −8.63 | −10.19 | −1.87 |
+| Gemma-4-31B (wave B, D-B1) | −24.01 | −22.02 | −32.00 | −1.99 | −23.53 | −24.33 | −24.96 | +0.80 |
 <!-- /TABLE -->
 
 **What it shows.** The real task lifts the success side by about 5 nats for Qwen3-8B and 1 nat for Llama-3.1-8B, entirely in the success tail for Qwen (its first-token log-odds is −9.00 under both tasks). Mistral-7B, the least confident of the competent models, already answers Yes under the neutral task and moves further toward Yes under the real one. Qwen3-8B writes "Nothing happens." under both tasks; Llama-3.1-8B also predicts failure under both, but gives the contents as the reason ("You can't find an apple 1 in the fridge 1."), not the full hands.
@@ -656,6 +666,8 @@ True reply: "Nothing happens." Success twin: "You move the potato 1 to the fridg
 | Qwen3.5-9B, plain text (wave B) | −0.15 | −0.31 | −0.30 | +0.16 | −0.88 | −1.50 | −1.88 | +0.62 |
 | Qwen3.5-9B-Base, plain text (wave B) | −0.01 | −0.10 | −0.28 | +0.09 | −0.88 | −1.12 | −1.50 | +0.25 |
 | Qwen3.8-27B (wave B) | −4.81 | −3.58 | −4.11 | −1.23 | −6.37 | −6.69 | −6.50 | +0.31 |
+| Gemma-4-E4B (wave B, D-B1) | +0.34 | +0.63 | +0.29 | −0.29 | −6.37 | −7.50 | −6.00 | +1.13 |
+| Gemma-4-31B (wave B, D-B1) | −22.75 | −22.76 | −22.79 | +0.01 | −24.08 | −23.86 | −23.66 | −0.22 |
 <!-- /TABLE -->
 
 **What it shows.** The action names the task's object but does not serve the task's destination (the task wants the potato in the garbage can, the action puts it in the fridge). The goal effect is still positive for both reference models, so the effect does not require the action to advance the task. Llama-3.1-8B writes a success ("You put the potato 1 in the fridge 1.") under both tasks; its two-candidate log-odds is below zero only because the twin's exact wording ("You move ...") is not what it would write. "Not holding the object" is where Llama's effect is smallest on average (0.8 nats).
@@ -700,6 +712,8 @@ True reply: "Nothing happens." Success twin: "You cool the bread 1 using the fri
 | Qwen3.5-9B, plain text (wave B) | −1.72 | −3.37 | −3.61 | +1.66 | +0.50 | −1.62 | −1.50 | +2.12 |
 | Qwen3.5-9B-Base, plain text (wave B) | −1.76 | −2.05 | −2.83 | +0.29 | +0.63 | −0.12 | −0.88 | +0.75 |
 | Qwen3.8-27B (wave B) | −1.92 | −3.02 | −3.68 | +1.10 | −7.50 | −8.00 | −6.37 | +0.50 |
+| Gemma-4-E4B (wave B, D-B1) | −5.39 | −9.32 | −8.11 | +3.93 | −2.88 | −10.31 | −4.87 | +7.44 |
+| Gemma-4-31B (wave B, D-B1) | −30.27 | −30.76 | −34.72 | +0.50 | −22.90 | −23.45 | −23.60 | +0.54 |
 <!-- /TABLE -->
 
 **What it shows.** Under the real task Qwen3-8B prefers the success sentence (+1.75; score 0.85) and writes "You cool the bread 1 with the fridge 1." Under the swapped task its written prediction is the same success sentence, although its two-candidate log-odds is −8.9: its first-token log-odds stays positive under both tasks (+14.00 and +7.75), so its free-text answer and its two-candidate score disagree, and the task mainly moves the tail. The gap between the neutral task (−26.66 in the size run) and both concrete tasks is large here, the relevance effect of Section 2.5 in reverse: "explore the room" makes cooling bread look far less likely to work than any task about cooling. This item also belongs to the object-mention design of Section 5.2.
@@ -744,6 +758,8 @@ True reply: "Nothing happens." Success twin: "You pick up the pan 1 from the sto
 | Qwen3.5-9B, plain text (wave B) | +1.88 | +0.42 | +0.22 | +1.46 | +0.75 | −1.62 | −1.62 | +2.38 |
 | Qwen3.5-9B-Base, plain text (wave B) | +1.26 | +0.74 | +0.51 | +0.52 | +0.12 | −0.75 | −0.75 | +0.88 |
 | Qwen3.8-27B (wave B) | +0.48 | −0.44 | +0.25 | +0.93 | −3.50 | −6.13 | −5.12 | +2.63 |
+| Gemma-4-E4B (wave B, D-B1) | +4.28 | +0.79 | −2.32 | +3.49 | +1.75 | −9.50 | −9.12 | +11.25 |
+| Gemma-4-31B (wave B, D-B1) | −15.01 | −26.44 | −23.82 | +11.43 | −21.83 | −23.78 | −23.04 | +1.95 |
 <!-- /TABLE -->
 
 **What it shows.** This is one of the largest Qwen3-8B effects in the population (30.8 nats). Under the real task Qwen gives the success sentence a log-probability of −0.0002 and "Nothing happens." −14.5 (score 1.000), and writes the success sentence; under the swapped task it writes "Nothing happens." Every competent model moves in the same direction, and Qwen3-4B, Qwen3-14B and Qwen3-32B all cross from failure to success in at least one format. The same state is used for the decision-simulation examples in Sections 5.14 and 5.16, because it shows why the step-0 effect can change a decision.
@@ -808,6 +824,8 @@ True reply: "Nothing happens." Success twin: "You pick up the vase 1 from the sh
 | Qwen3.5-9B, plain text (wave B) | +0.43 | −0.17 | −0.08 | +0.60 | −2.00 | −2.75 | −2.62 | +0.75 |
 | Qwen3.5-9B-Base, plain text (wave B) | +0.44 | +0.29 | +0.53 | +0.15 | −0.12 | −0.88 | −0.50 | +0.75 |
 | Qwen3.8-27B (wave B) | −2.18 | −0.21 | −1.39 | −1.97 | −10.00 | −11.00 | −11.06 | +1.00 |
+| Gemma-4-E4B (wave B, D-B1) | −2.71 | −7.57 | −6.81 | +4.86 | −10.88 | −12.00 | −12.00 | +1.12 |
+| Gemma-4-31B (wave B, D-B1) | −24.23 | −27.16 | −22.37 | +2.93 | −24.62 | −24.82 | −24.74 | +0.20 |
 <!-- /TABLE -->
 
 **What it shows.** After ten steps spent searching shelves for a vase, Llama-3.1-8B predicts that the vase is on shelf 10 under the real task (+3.96, written "You pick up the vase 1 from the shelf 10.") and that nothing happens under the swapped task (−8.09). The history the agent produced while looking for a vase fits the vase task, which may be why the effect is so large here. For Qwen3-8B the item shows the success tail in its purest form: its first-token log-odds hardly moves (−13.25 against −13.00), yet its two-candidate log-odds moves by 25 nats, all of it in how probable the words after "You" are.
@@ -860,6 +878,8 @@ True reply: "Nothing happens." Success twin: "You clean the cup 1 using the sink
 | Qwen3.5-9B, plain text (wave B) | −3.57 | −2.95 | −2.51 | −0.62 | +0.25 | −0.38 | −0.25 | +0.62 |
 | Qwen3.5-9B-Base, plain text (wave B) | −4.39 | −3.78 | −3.24 | −0.62 | −0.12 | −0.12 | 0.00 | 0.00 |
 | Qwen3.8-27B (wave B) | −2.63 | −3.34 | −3.45 | +0.71 | −5.38 | −5.75 | −6.12 | +0.37 |
+| Gemma-4-E4B (wave B, D-B1) | −5.87 | −6.89 | −4.78 | +1.02 | −6.50 | −7.50 | −6.62 | +1.00 |
+| Gemma-4-31B (wave B, D-B1) | −24.36 | −17.44 | −18.83 | −6.92 | −20.59 | −21.30 | −21.88 | +0.70 |
 <!-- /TABLE -->
 
 **What it shows.** About one item in eight goes the other way for Qwen3-8B (12%) and one in six for Llama-3.1-8B (17%), and this one goes the other way for both. The written predictions suggest why. Under the real task, which names the cup, Qwen3-8B notices that the agent holds no cup ("you are not holding a cup"); under the swapped task it treats the held mug as the cup and writes "You clean the mug 1 with the sinkbasin 1." Naming an object can make a model check the facts about it. The effect in Figure 1 is the average of items like this and the far more common ones like S1 to S9.
@@ -904,6 +924,8 @@ True reply: "Nothing happens." Success twin: "You pick up the cup 1 from the she
 | Qwen3.5-9B, plain text (wave B) | +1.63 | +1.64 | +0.50 | −0.01 | +0.38 | +0.38 | −0.75 | 0.00 |
 | Qwen3.5-9B-Base, plain text (wave B) | +1.16 | +1.02 | +0.68 | +0.14 | +0.38 | +0.25 | −0.50 | +0.13 |
 | Qwen3.8-27B (wave B) | −0.21 | −0.02 | −0.56 | −0.19 | −6.25 | −5.75 | −6.63 | −0.50 |
+| Gemma-4-E4B (wave B, D-B1) | +4.30 | +3.82 | −2.11 | +0.49 | +1.25 | −2.37 | −9.37 | +3.62 |
+| Gemma-4-31B (wave B, D-B1) | −18.76 | −22.24 | −23.95 | +3.48 | −22.77 | −22.42 | −23.18 | −0.35 |
 <!-- /TABLE -->
 
 **What it shows.** Both reference models predict success under both tasks with near-certainty: Qwen3-8B's log-odds is exactly +13.50 in both prompts, and both models write "You pick up the cup 1 from the shelf 3." The swap object (mug) is a close relative of the cup, and both tasks ask for a hot drinking vessel; the models seem to treat a step-0 take as feasible under either. The goal effect is zero, but not because the model is right: it is wrong under both tasks. The neutral task brings both reference models back below zero (−11.62 and −1.70), so on this item it is the concrete task as such, not the object it names, that produces the false success.
@@ -948,9 +970,11 @@ True reply: "Nothing happens." Success twin: "You move the pencil 1 to the shelf
 | Qwen3.5-9B, plain text (wave B) | +0.95 | −0.39 | −0.76 | +1.34 | −0.12 | −2.00 | −2.00 | +1.88 |
 | Qwen3.5-9B-Base, plain text (wave B) | +0.55 | +0.24 | −0.36 | +0.32 | +0.12 | −0.50 | −1.12 | +0.62 |
 | Qwen3.8-27B (wave B) | −3.28 | −4.32 | −4.04 | +1.05 | −7.00 | −9.25 | −9.44 | +2.25 |
+| Gemma-4-E4B (wave B, D-B1) | +0.86 | +0.23 | −1.74 | +0.63 | −1.25 | −7.75 | −10.00 | +6.50 |
+| Gemma-4-31B (wave B, D-B1) | −21.77 | −20.68 | −25.27 | −1.09 | −23.40 | −23.12 | −23.55 | −0.29 |
 <!-- /TABLE -->
 
-**What it shows.** Here the real task changes the answer, not just the confidence, in nearly every competent model: Llama-3.1-8B's yes/no log-odds goes from −7.25 to +0.25 and its written prediction from "Nothing happens." to the success sentence; Qwen3-8B, Gemma-2-9B, Mistral-7B, Ministral-3-8B and Qwen3.5-9B (chat) cross zero on the two-candidate readout or the yes/no question. This is what the cross-model notes call a flip from No to Yes. Llama-3.1-8B makes that flip on 16.5% of all 4,666 failures and Qwen3-8B on 0.2% (`notes/families_results.md`).
+**What it shows.** Here the real task changes the answer, not just the confidence, in nearly every competent model: Llama-3.1-8B's yes/no log-odds goes from −7.25 to +0.25 and its written prediction from "Nothing happens." to the success sentence; Qwen3-8B, Gemma-2-9B, Mistral-7B, Ministral-3-8B and Qwen3.5-9B (chat) cross zero on the two-candidate readout or the yes/no question. Neither Gemma 4 model crosses zero: Gemma-4-E4B already prefers the success sentence slightly under both tasks and moves toward Yes on the yes/no question by 6.5 nats without reaching it, and Gemma-4-31B, far below zero in both formats, moves slightly the other way. This is what the cross-model notes call a flip from No to Yes. Llama-3.1-8B makes that flip on 16.5% of all 4,666 failures and Qwen3-8B on 0.2% (`notes/families_results.md`).
 
 ### W1. A working action: taking the task's own object (game 86, step 2)
 
@@ -987,6 +1011,8 @@ True reply: "You pick up the bowl 1 from the cabinet 1." This is a determined su
 | Qwen3.5-9B, plain text (wave B) | +1.41 | – | +0.73 | +0.62 | – | −0.50 |
 | Qwen3.5-9B-Base, plain text (wave B) | +1.05 | – | +0.64 | +0.38 | – | −0.12 |
 | Qwen3.8-27B (wave B) | +7.79 | – | +6.14 | +3.50 | – | +5.12 |
+| Gemma-4-E4B (wave B, D-B1) | +5.55 | – | +4.69 | +2.12 | – | +3.00 |
+| Gemma-4-31B (wave B, D-B1) | +20.53 | – | +24.61 | +15.59 | – | +16.94 |
 <!-- /TABLE -->
 
 **What it shows.** A working action gets a strongly positive two-candidate log-odds from every competent model, and the task moves it in the same direction as on failures (Qwen3-8B +23.75 aligned against +21.75 swapped). The yes/no question is a different matter for Llama-3.1-8B: it answers No under the swapped and neutral tasks for a take that plainly works. Across all 292 determined successes the aligned task raises the two-candidate log-odds by 1.94 nats for Qwen3-8B and 0.16 for Llama-3.1-8B (`notes/rq1x_v2_metrics.json`), but most of those successes do not act on the task's object; on the 37 that match the failures' criteria the effect is as large as on failures (10.3 and 1.5 nats, post hoc; `notes/exploratory_results.md`, section 1).
@@ -1034,6 +1060,8 @@ True reply: "You arrive at cabinet 2. The cabinet 2 is closed." This is a determ
 | Qwen3.5-9B, plain text (wave B) | +1.01 | – | +1.66 | −0.88 | – | −0.62 |
 | Qwen3.5-9B-Base, plain text (wave B) | +1.23 | – | +1.68 | −0.50 | – | +0.25 |
 | Qwen3.8-27B (wave B) | +7.11 | – | +6.28 | +2.88 | – | +2.50 |
+| Gemma-4-E4B (wave B, D-B1) | +9.12 | – | +9.75 | −0.12 | – | +2.38 |
+| Gemma-4-31B (wave B, D-B1) | +23.56 | – | +23.16 | +22.85 | – | +22.71 |
 <!-- /TABLE -->
 
 **What it shows.** The two-candidate readout is sure the walk works (Qwen3-8B about +35 under every task line), and the task barely moves it. Qwen3-8B's yes/no answer, however, is No under every task line, including the neutral one. The yes/no question and the two-candidate readout are different measurements, and for Qwen3-8B the question can be answered as something other than "will the environment reply 'Nothing happens.'?" (Sections 5.14 and 5.16 return to this).
@@ -1341,9 +1369,9 @@ The table is copied from `notes/cross_model_summary.md` (section 1). A sign chan
 
 **Question (exploratory, frozen at tag `families-waveb-design-frozen-2026-11-22`, re-frozen at `families-waveb-design-refrozen-2026-11-25`).** Does the effect persist in current-generation open models, and does post-training (instruct against base) change it?
 
-**Design.** Ministral-3-8B-Instruct, Qwen3.5-9B (in its chat template and in a plain-text format), Qwen3.5-9B-Base (plain text), Gemma-4-E4B-Instruct, Qwen3.8-27B and Gemma-4-31B-Instruct, scored in a newer software stack (transformers 5.23); the older comparison models (Qwen3-8B, Llama-3.1-8B, Qwen3-32B, Gemma-2-9B and Mistral-7B) were rescored in the same stack. Both Gemma 4 models were scored under deviation D-B1, which moves the start check comparing two attention implementations (eager against SDPA) from bf16 to float32, because in bf16 rounding alone made them disagree; scoring itself is unchanged (bf16, SDPA). The final analysis (`families_waveb_analysis`, CPU job 7370332, at tag `families-waveb-deviation-attn-float32-2026-11-25`) replaced the interim reading of 2026-11-25, which had been made at the user's request with the Gemma 4 tests entered at p = 1; no verdict, reading or prediction outcome changed. The wave B rows of every Section 4 table come from these runs, except the two Gemma 4 models, whose score files are not in the local archive copy.
+**Design.** Ministral-3-8B-Instruct, Qwen3.5-9B (in its chat template and in a plain-text format), Qwen3.5-9B-Base (plain text), Gemma-4-E4B-Instruct, Qwen3.8-27B and Gemma-4-31B-Instruct, scored in a newer software stack (transformers 5.23); the older comparison models (Qwen3-8B, Llama-3.1-8B, Qwen3-32B, Gemma-2-9B and Mistral-7B) were rescored in the same stack. Both Gemma 4 models were scored under deviation D-B1, which moves the start check comparing two attention implementations (eager against SDPA) from bf16 to float32, because in bf16 rounding alone made them disagree; scoring itself is unchanged (bf16, SDPA). The final analysis (`families_waveb_analysis`, CPU job 7370332, at tag `families-waveb-deviation-attn-float32-2026-11-25`) replaced the interim reading of 2026-11-25, which had been made at the user's request with the Gemma 4 tests entered at p = 1; no verdict, reading or prediction outcome changed. The wave B rows of every Section 4 table come from these runs, the two Gemma 4 models included (runs `family_score_gemma4-e4b-it` and `family_score_gemma4-31b-it`, scored at that tag's commit `0ef4672`).
 
-**Headline numbers** (`notes/families_waveb_results.md`, `notes/families_waveb_metrics_2026-11-26.json`; final). Every scored model passes the competence rule, and the share is supported for all six (Holm-corrected over the family of 16 tests): Ministral-3-8B 0.791, Qwen3.5-9B 0.895, Qwen3.5-9B-Base 0.900, Gemma-4-E4B 0.706, Qwen3.8-27B 0.652 and Gemma-4-31B 0.730. Ministral-3 moves 8.8 points fewer failures than Mistral-7B ("differs"); Qwen3.5-9B matches Qwen3-8B within ±0.05; Qwen3.8-27B against Qwen3-32B (−0.055, Holm p 0.077) and Gemma-4-E4B against Gemma-2-9B (−0.038) are inconclusive; the base and instruct Qwen3.5 models match each other in plain text (0.900 against 0.906), so the effect is present in the base model as fully as in the instruct model. Qwen3.8-27B's yes/no effect is positive (0.41 nats) but its two-candidate effect is not (−0.02 [−0.08, +0.03], numerically fragile and format-dependent). Gemma-4-31B's effect is small in nats (0.32 on yes/no, standardized 0.20), but its share is still 0.73, so most items still lean toward Yes under the real task, by small amounts. The only number of the interim reading that moved is the Holm-adjusted p of the Qwen3.8-27B against Qwen3-32B test, from 0.099 to 0.077, still not supported. In the Section 4 tables, which show every wave B model except the two Gemma 4 models, the wave B effects are mostly small in nats (S12 is an exception), consistent with these models' smaller spread of scores.
+**Headline numbers** (`notes/families_waveb_results.md`, `notes/families_waveb_metrics_2026-11-26.json`; final). Every scored model passes the competence rule, and the share is supported for all six (Holm-corrected over the family of 16 tests): Ministral-3-8B 0.791, Qwen3.5-9B 0.895, Qwen3.5-9B-Base 0.900, Gemma-4-E4B 0.706, Qwen3.8-27B 0.652 and Gemma-4-31B 0.730. Ministral-3 moves 8.8 points fewer failures than Mistral-7B ("differs"); Qwen3.5-9B matches Qwen3-8B within ±0.05; Qwen3.8-27B against Qwen3-32B (−0.055, Holm p 0.077) and Gemma-4-E4B against Gemma-2-9B (−0.038) are inconclusive; the base and instruct Qwen3.5 models match each other in plain text (0.900 against 0.906), so the effect is present in the base model as fully as in the instruct model. Qwen3.8-27B's yes/no effect is positive (0.41 nats) but its two-candidate effect is not (−0.02 [−0.08, +0.03], numerically fragile and format-dependent). Gemma-4-31B's effect is small in nats (0.32 on yes/no, standardized 0.20), but its share is still 0.73, so most items still lean toward Yes under the real task, by small amounts. The only number of the interim reading that moved is the Holm-adjusted p of the Qwen3.8-27B against Qwen3-32B test, from 0.099 to 0.077, still not supported. In the Section 4 tables, the effects of the five other wave B runs are mostly small in nats (S12 is an exception), consistent with these models' smaller spread of scores; the two Gemma 4 models move by several nats on more items (for example S2 and S8 for Gemma-4-E4B, and S8 and S10 for Gemma-4-31B, S10 in the reverse direction).
 
 ### 5.14 Decision simulation, Stage 1a: fixed candidate menus
 

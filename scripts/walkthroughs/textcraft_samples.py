@@ -4,19 +4,22 @@ For each sample this script
 
 1. renders the query turn with the prompt builder of the commit the scores were produced at (round 1:
    ``wf/textcraft/prompts.py`` at 5a3702a; round-1 diagnostics: ``wf/textcraft/dx.py`` at f74c262; round 2:
-   ``wf/textcraft/r2.py`` at 4ccf84b; round 3: the same module at fae00b3);
+   ``wf/textcraft/r2.py`` at 4ccf84b; round 3: the same module at fae00b3, which is byte-identical at the other three
+   round-3 scoring commits);
 2. recomputes the item hash with that commit's own ``item_hash`` and checks it against the ``item_hash`` stored on
    every score record of the item (a mismatch means the prompt shown is not the prompt scored, and stops the script);
+   in round 3 the hash is recomputed separately with the checkout of each run's own scoring commit
+   (``textcraft_data.R3_RUNS``) and checked against that run's records only;
 3. prints the stored scores of every model under every condition, and the per-item effects.
 
 Nothing is rescored. Usage (CPU only, no model weights needed):
 
     python scripts/walkthroughs/textcraft_samples.py --runs RUNS_ROOT --trees TREES_ROOT > samples.md
 
-``TREES_ROOT`` holds one checkout per commit, named tc1 (5a3702a), tcdx (f74c262), tc2 (4ccf84b) and tc3 (fae00b3),
-for example made with ``git archive <commit> wf | tar -x -C TREES_ROOT/<name>``. ``RUNS_ROOT`` is laid out as
-described in textcraft_data.py; the round-1 diagnostics read ``textcraft_dx_objectgoal`` and
-``textcraft_dx_prompts`` as well.
+``TREES_ROOT`` holds one checkout per commit, named tc1 (5a3702a), tcdx (f74c262), tc2 (4ccf84b), tc3 (fae00b3),
+tc3_0d6f460, tc3_98dfbbf and tc3_f0ac203 (``textcraft_data.R3_TREES``), for example made with
+``git archive <commit> wf | tar -x -C TREES_ROOT/<name>``. ``RUNS_ROOT`` is laid out as described in
+textcraft_data.py; the round-1 diagnostics read ``textcraft_dx_objectgoal`` and ``textcraft_dx_prompts`` as well.
 """
 from __future__ import annotations
 
@@ -149,7 +152,24 @@ def diagnostics(args, items):
     print()
 
 
-def round23(args, tree: str, scores: dict[str, dict], names: dict[str, str], title: str, ids: tuple):
+def per_commit_hashes(args, ids: tuple, commits: dict[str, str]) -> dict[str, dict[str, str]]:
+    """{model: {item id: item hash}} recomputed with the checkout of each model's own scoring commit."""
+    out: dict[str, dict[str, str]] = {}
+    for c in sorted(set(commits.values())):
+        tree = T.R3_TREES[c]
+        use_tree(args.trees / tree)
+        R = importlib.import_module("wf.textcraft.r2")
+        P = importlib.import_module("wf.textcraft.prompts")
+        recs = T.items_by_id(args.trees / tree / "wf/textcraft/data/r2_items.jsonl")
+        shots = P.fewshot_examples()
+        hs = {tid: R.item_hash(recs[tid], shots) for tid in ids}
+        out.update({m: hs for m, cm in commits.items() if cm == c})
+    return out
+
+
+def round23(args, tree: str, scores: dict[str, dict], names: dict[str, str], title: str, ids: tuple,
+            commits: dict[str, str] | None = None):
+    own = per_commit_hashes(args, ids, commits) if commits else None
     use_tree(args.trees / tree)
     R = importlib.import_module("wf.textcraft.r2")
     P = importlib.import_module("wf.textcraft.prompts")
@@ -159,7 +179,14 @@ def round23(args, tree: str, scores: dict[str, dict], names: dict[str, str], tit
     for tid in ids:
         rec = recs[tid]
         h = R.item_hash(rec, shots)
-        n = check_hash(h, [r for sc in scores.values() for (t, _c), r in sc.items() if t == tid], tid)
+        if own is None:
+            n = check_hash(h, [r for sc in scores.values() for (t, _c), r in sc.items() if t == tid], tid)
+        else:
+            n = 0
+            for m, sc in scores.items():
+                n += check_hash(own[m][tid], [r for (t, _c), r in sc.items() if t == tid], f"{tid} {m}@{commits[m]}")
+            if any(own[m][tid] != h for m in scores):
+                raise SystemExit(f"STOP: {tid}: hash at a scoring commit differs from the shown prompt's commit")
         print(f"### {tid} ({rec['kind']}, role {rec['role']}, class {rec['failure_class']}); item hash {h} = stored "
               f"on {n} records\n")
         arms = ["ext_aligned", "ext_parent"] if rec["kind"] == "parent" else ["aligned", "both", "pad8_aligned"]
@@ -208,7 +235,8 @@ def main():
              (ROUND2_PARENT, ROUND2_MAIN))
     r3 = T.load_round3(args.runs)
     round23(args, "tc3", r3, {k: v[1] for k, v in T.R3_RUNS.items()},
-            "Round 3 samples (prompt of commit fae00b3)", (ROUND3_PARENT, ROUND2_PARENT, ROUND2_MAIN))
+            "Round 3 samples (prompt of commit fae00b3)", (ROUND3_PARENT, ROUND2_PARENT, ROUND2_MAIN),
+            commits={k: v[2] for k, v in T.R3_RUNS.items()})
     think_excerpt(args)
 
 
