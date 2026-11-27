@@ -1,5 +1,7 @@
 # Model families, wave B: INTERIM results (2026-11-25; both Gemma 4 models pending)
 
+**Superseded on 2026-11-26 by the final reading, `families_waveb_results.md`. No verdict changed.** This note is kept as the record of the interim reading.
+
 **INTERIM.** This reading was made at the user's request before every wave B model was scored. The request was recorded in `notes/deviations.md` before the analysis was run. The two Gemma 4 models (E4B and 31B) are not scored yet: their reruns under deviation D-B1 are queued. The frozen analysis therefore treats them as "waiting", and their four tests enter the 16-test family at p = 1, as the frozen design specifies.
 
 No rule was changed for this reading. The final analysis is run once, after the Gemma 4 reruns finish, and replaces this one. Any verdict that changes between the two will be reported as such.

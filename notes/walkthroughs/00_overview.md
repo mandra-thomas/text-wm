@@ -179,7 +179,7 @@ Each of these was logged in `notes/deviations.md` before its data and is reporte
 | Study | Models | What changes | Readouts | Standing, tag | Status | Headline | Read |
 |---|---|---|---|---|---|---|---|
 | Families, wave A | Gemma-2-9B-it, Mistral-7B-Instruct-v0.3, Llama-3.2-1B and 3B-Instruct, beside the two references | RQ2's aligned, swapped and neutral lines | Yes/no item share (primary), two-candidate | Exploratory, design fixed before data | Done | Effect in every competent model; shares toward Yes 0.75 to 0.90; Llama-3.2-1B not competent | `notes/families_results.md` |
-| Families, wave B | Ministral-3-8B, Qwen3.5-9B (chat and plain) and its base model, Qwen3.8-27B; Gemma-4-E4B and 31B | As wave A, in a newer software stack; base against instruct | Yes/no item share | Exploratory, re-frozen at `families-waveb-design-refrozen-2026-11-25`; deviation tag `families-waveb-deviation-attn-float32-2026-11-25` | Interim (Gemma 4 waiting); final analysis running | Item share supported for the four scored models; Qwen3.5 instruct matches base | `notes/families_waveb_results_interim.md` |
+| Families, wave B | Ministral-3-8B, Qwen3.5-9B (chat and plain) and its base model, Qwen3.8-27B, Gemma-4-E4B and 31B | As wave A, in a newer software stack; base against instruct | Yes/no item share | Exploratory, re-frozen at `families-waveb-design-refrozen-2026-11-25`; deviation D-B1 (`families-waveb-deviation-attn-float32-2026-11-25`) | Done (2026-11-26) | Item share toward Yes supported for all six new models (0.65 to 0.90); Ministral 3 moves fewer failures than Mistral 7B; Qwen3.5 9B matches Qwen3-8B; Qwen3.8 27B against Qwen3-32B and Gemma 4 E4B against Gemma 2 9B inconclusive; instruct matches base; no verdict changed from the interim | `notes/families_waveb_results.md` |
 
 ### 2.4 Decisions: does the effect change what an agent does?
 
@@ -222,7 +222,7 @@ Each of these was logged in `notes/deviations.md` before its data and is reporte
 
 The post-training pilot's Llama seven-example fallback is the only new study still running; part 1 of the pilot is in section 2.7. The natural bridge, the controlled Bayesian environment and the lexical-versus-semantic diagnostic are done (section 2.7).
 
-The final analyses of families wave B and TextCraft round 3 (rows above) are also running; their interim readings will be replaced.
+The final analysis of TextCraft round 3 (row above) is also running; its interim reading will be replaced.
 
 ---
 
