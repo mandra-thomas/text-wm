@@ -16,6 +16,31 @@ Changes made on `fix/audit-bugs` after the filing marker. No preregistered thres
 - **Operational, no effect on any score.** The first smoke submission (7328769) waited on "BadConstraints" and then refused to score because the copied build-verification record had been made at another commit; the items were rebuilt and verified at the tag (CPU job 7330380; all three pinned files reproduced) and the smoke run repeated (7330545). Scoring jobs were submitted with the partitions that hold L40S nodes and shorter time limits than `pace/tau_auth_score.sbatch`'s 4 hours, so they could start sooner. The smoke record was committed to the design note before the full run (`e55064e`).
 - **Outcome.** Both gates fail; both categories "inconclusive (gate)" (`tau_auth_results.md` §12).
 
+## Decided 2026-11-26: TextCraft round 3, deviation D-G2a (Gemma 4 31B's scoring under D-G2)
+
+- **Approved by the user and written before any Gemma 4 31B score existed.** Full explanation: [textcraft_r3_deviation_attention_float32.md](textcraft_r3_deviation_attention_float32.md), section "D-G2a". Tag: `textcraft-r3-deviation-g2a-2026-11-26`.
+- **What happened.** Gemma 4 31B's four scoring shards at the freeze tag (jobs 7314883–86) each stopped before writing any score. Each job checks five items of its own shard with two equivalent attention implementations, in bf16, and they disagreed beyond the limits:
+  - two-candidate means 0.42 to 0.81 nats, against a limit of 0.50;
+  - single scores up to 1.73 nats, against a limit of 1.0.
+
+  The smoke run had passed the same check (0.083) on other items.
+- **Why D-G2 missed it.** D-G2 reads this check in float32, but its list of runs allowed at its commit assumed 31B's queued shards would pass in bf16, as its smoke had.
+- **What D-G2a changes.**
+  - 31B's scoring may start at D-G2a's commit.
+  - The analysis accepts 31B's shards at D-G2's or D-G2a's commit.
+  - The failed bf16 records stay filed and are marked superseded.
+  - Scoring stays bf16 with SDPA on one A100 80 GB per shard, like every other model. Every other rule is unchanged.
+- **Impact.**
+  - 31B's 10 tests in the extension family A3x get real p-values, and A3x's family readings become computable.
+  - No reported verdict can be lost: Holm with a fixed family of 30 can only lower other tests' adjusted p when a padded p of 1 is replaced.
+  - About 6.5 GPU-hours on A100 80 GB, queued alongside wave B's 31B rerun.
+- **Numerical floor.** The bf16 disagreement measures a per-score rounding SD of about 0.72 nats for 31B (about 0.39 for Gemma 4 12B). The fragility allowances are fixed now:
+  - for 31B: 0.065 nats for Λ, 0.078 for P, 0.129 for Dn and Dc, and 0.22 for T;
+  - for 12B: about half these values.
+
+  A 31B or 12B reading whose deciding interval ends within its allowance of its boundary is labelled numerically fragile (`numerical_sensitivity.md`, Rule 3).
+- **Final analysis** (2026-11-27): `textcraft_r3_analysis_dg2`, run once from a clean checkout at `textcraft-r3-deviation-g2a-2026-11-26` after every arm was filed (ICE CPU job 7374476). It supersedes the interim reading; no interim verdict changed (`textcraft_r3_results.md`, section 8).
+
 ## Decided 2026-11-25: TextCraft round 3, interim reading
 
 - **Interim reading at the user's request,** under the five conditions the user approved on 2026-11-24:

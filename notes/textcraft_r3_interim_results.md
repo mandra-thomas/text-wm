@@ -1,5 +1,7 @@
 # TextCraft round 3: INTERIM results (2026-11-25)
 
+**Superseded (2026-11-27) by the final reading, [textcraft_r3_results.md](textcraft_r3_results.md).** Kept unchanged below as the record of the interim reading. No verdict reported here changed in the final run; section 8 of the final note lists what was added.
+
 **INTERIM.** This reading was made early, at the user's request, before every arm of round 3 was filed. It follows
 the five conditions the user approved on 2026-11-24, recorded in `notes/deviations.md` ("TextCraft round 3, interim
 reading", 2026-11-25):
