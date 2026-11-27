@@ -379,3 +379,13 @@ Recorded and tagged (`posttraining-deviation-dpt3-2026-11-27`) before any seven-
 3. If it passes, the other five checkpoints' seven-example arms and all six seven-example floor arms are scored, about 3.1 to 3.6 GPU-hours. The analysis then runs once more, with the seven-example arms in place, under the same frozen code and rules. The pilot total would then be about 12 GPU-hours, beyond the 7.5 to 9 first approved; the user approved this staging.
 
 **Unchanged.** The gate and its 0.70 threshold, every decision rule, margin, floor rule, the Holm family of 35, and the analysis code. The seven-example arms are analysed exactly as the frozen code already provides (`SEVEN`, `resolve`); the Qwen readings are unaffected, since the Qwen base passed its gate.
+
+**Outcome of step 1 (2026-11-27).** The base's seven-example arm was scored at the D-PT3 tag (af96fc7) on an L40S in job 7369775. The run took 25 minutes, wrote 742 records and passed every token and loading check. Only its gate was read (CPU job 7372556, with the frozen `arm_gates`; record `notes/posttraining_gate_llama_base_plain7.json`). The base again fails the competence gate:
+
+- full two-candidate score: AUC 0.59;
+- first token: AUC 0.62;
+- the required threshold is 0.70;
+- the median first-token mass is 0.97;
+- it predicts success on 79% of the failures and on 71% of the successes.
+
+Under step 2, the Llama lineage is therefore **not interpretable in this format**. Nothing more is scored, and no other number from the seven-example arm is read. The other five seven-example arms and all floors were not run.

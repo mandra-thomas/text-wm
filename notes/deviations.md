@@ -774,3 +774,5 @@ Recorded and tagged (`posttraining-deviation-dpt3-2026-11-27`) before any seven-
 - **Frozen fallback.** Seven examples for every plain-format checkpoint of the lineage.
 - **User's staging.** The base is scored first (about 0.4 GPU-hours) and only its gate is read. If it fails, the lineage is "not interpretable in this format" and the study stops there. If it passes, the other five checkpoints and the floors are scored (about 3.1 to 3.6 GPU-hours, bringing the pilot to about 12), and the analysis is run once.
 - **Unchanged.** The gate, its 0.70 threshold, every decision rule and the analysis code.
+
+**D-PT3 outcome (2026-11-27).** With seven examples the Llama-3.1-8B base still fails the gate: AUC 0.59 on the full score and 0.62 on the first token, against the 0.70 threshold (job 7369775, gate read in CPU job 7372556). The Llama lineage is recorded as not interpretable in the shared plain format, and the study stops there. About 0.42 GPU-hours were used.
