@@ -765,3 +765,12 @@ Recorded and tagged (`posttraining-deviation-dpt2-2026-11-26`) before the jobs w
 - **Cost.** About 1.1 to 1.3 GPU-hours.
 - **Decision rules.** None change.
 - **Comparison with lexsem.** Once lexsem's scores exist, the shared cells are compared with them. This is a provenance check only and does not gate the analysis; every shared cell is expected to match bit for bit.
+
+## Post-training pilot, deviation D-PT3: the seven-example fallback for the Llama tree, staged (2026-11-27)
+
+Recorded and tagged (`posttraining-deviation-dpt3-2026-11-27`) before any seven-example arm was scored. The full text is in `notes/posttraining_design.md`, section 18.
+
+- **Trigger.** The Llama-3.1-8B base failed the competence gate in the three-example plain format (AUC 0.54 on the full score; 0.50 on the first token). Lexsem also found 0.50.
+- **Frozen fallback.** Seven examples for every plain-format checkpoint of the lineage.
+- **User's staging.** The base is scored first (about 0.4 GPU-hours) and only its gate is read. If it fails, the lineage is "not interpretable in this format" and the study stops there. If it passes, the other five checkpoints and the floors are scored (about 3.1 to 3.6 GPU-hours, bringing the pilot to about 12), and the analysis is run once.
+- **Unchanged.** The gate, its 0.70 threshold, every decision rule and the analysis code.

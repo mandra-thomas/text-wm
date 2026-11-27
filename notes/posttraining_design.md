@@ -363,3 +363,19 @@ Both studies use the same GPU type, stack, revision, unbatched path, prompt buil
 - *Expected only within the floor:* none. Any difference is reported as a provenance finding. A cell differing by less than the arm's measured floor would point to an unrecorded environment difference (for example a different node's software or driver), and a larger one to a different prompt or code path. Neither changes this pilot's readings, which use only its own scores.
 
 The comparison is reported in the results note, with counts of identical, within-floor and larger differences per arm and readout.
+
+## 18. Deviation D-PT3: the seven-example fallback for the Llama tree, staged (2026-11-27)
+
+Recorded and tagged (`posttraining-deviation-dpt3-2026-11-27`) before any seven-example arm was scored.
+
+**Trigger.** In the frozen analysis (job 7364918, at 26d5ac1), the Llama-3.1-8B base failed the competence gate in the three-example plain format. The gate requires that, under the neutral task, the model separate the determined successes from the later-step failures. The base's area under the ROC curve was 0.54 on the full two-candidate score, against the required 0.70, and 0.50 on the first token. Lexsem independently found 0.50 for the same base.
+
+**Frozen fallback** (section 5). Every plain-format checkpoint of the lineage is rescored with seven few-shot examples (sets 1 and 2), and only those arms are read for the lineage's plain-format comparisons.
+
+**Staging, chosen by the user.** The fallback is run in two steps; the rule is unchanged.
+
+1. The base's seven-example arm (`llama-base_plain7`) is scored first: about 0.4 GPU-hours on an L40S, from a clean checkout at this tag. Only its competence gate, its AUC values and its format checks (mass, degeneracy, the token and loading checks) are read.
+2. If the base fails the gate again, the Llama lineage is recorded as "not interpretable in this format" and nothing more is scored.
+3. If it passes, the other five checkpoints' seven-example arms and all six seven-example floor arms are scored, about 3.1 to 3.6 GPU-hours. The analysis then runs once more, with the seven-example arms in place, under the same frozen code and rules. The pilot total would then be about 12 GPU-hours, beyond the 7.5 to 9 first approved; the user approved this staging.
+
+**Unchanged.** The gate and its 0.70 threshold, every decision rule, margin, floor rule, the Holm family of 35, and the analysis code. The seven-example arms are analysed exactly as the frozen code already provides (`SEVEN`, `resolve`); the Qwen readings are unaffected, since the Qwen base passed its gate.
