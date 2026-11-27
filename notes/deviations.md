@@ -786,3 +786,14 @@ Recorded and tagged (`posttraining-deviation-dpt2-2026-11-26`) before the jobs w
   - *Pre-registered additions:* a 300-item check of Qwen3.8 27B with `preserve_thinking=False` (its template otherwise writes empty think blocks into the examples), read by the one-fifth rule; B3's readout on the two-candidate item share if the base model fails only the yes/no coverage criterion; the run order (environment check, the four small models, Qwen3.8 with its check, Gemma 4 31B last).
   - *Wording:* generation pairs carry the Qwen3 size spread of the share (0.49 / 0.89 / 0.70 / 0.71 at 4B / 8B / 14B / 32B), and a "differs" is not read as a generation effect; B2 can fail only on a clear negative difference; the outcome table says "goal-congruent shift" and does not read the share as separating wishful prediction from task relevance.
   - *Gemma pair kept as designed.* Gemma-4-12B-it exists and fits the GPU tier, but uses the 31B template (an empty thought channel ends its generation prompt) and another architecture, so Gemma 4 E4B stays, with its size confound stated.
+
+## Post-training pilot, deviation D-PT3: the seven-example fallback for the Llama tree, staged (2026-11-27)
+
+Recorded and tagged (`posttraining-deviation-dpt3-2026-11-27`) before any seven-example arm was scored. The full text is in `notes/posttraining_design.md`, section 18.
+
+- **Trigger.** The Llama-3.1-8B base failed the competence gate in the three-example plain format (AUC 0.54 on the full score; 0.50 on the first token). Lexsem also found 0.50.
+- **Frozen fallback.** Seven examples for every plain-format checkpoint of the lineage.
+- **User's staging.** The base is scored first (about 0.4 GPU-hours) and only its gate is read. If it fails, the lineage is "not interpretable in this format" and the study stops there. If it passes, the other five checkpoints and the floors are scored (about 3.1 to 3.6 GPU-hours, bringing the pilot to about 12), and the analysis is run once.
+- **Unchanged.** The gate, its 0.70 threshold, every decision rule and the analysis code.
+
+**D-PT3 outcome (2026-11-27).** With seven examples the Llama-3.1-8B base still fails the gate: AUC 0.59 on the full score and 0.62 on the first token, against the 0.70 threshold (job 7369775, gate read in CPU job 7372556). The Llama lineage is recorded as not interpretable in the shared plain format, and the study stops there. About 0.42 GPU-hours were used.

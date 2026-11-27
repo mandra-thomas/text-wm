@@ -1,0 +1,53 @@
+{
+ "arm": "llama-base_plain7",
+ "status": "# STATUS \u2014 posttrain/llama-base_plain7 \u2014 PASS",
+ "commit": "af96fc7693c4c3647b15b2bc3da3c635250a3dea",
+ "env": {
+  "dtype": "bfloat16",
+  "gpu": "NVIDIA L40S",
+  "mode": "plain",
+  "model": "meta-llama/Llama-3.1-8B",
+  "python": "3.11.18",
+  "revision": "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b",
+  "torch": "2.14.1+cu126",
+  "transformers": "5.23.0",
+  "unbatched": true
+ },
+ "n_failures": 450,
+ "n_successes": 292,
+ "arm_ok": false,
+ "read": {
+  "full": false,
+  "cont": false,
+  "first": false,
+  "yn": false
+ },
+ "gates": {
+  "first": {
+   "auc": 0.6232990867579908,
+   "share_failures_positive": 0.68,
+   "share_successes_positive": 0.6917808219178082,
+   "median_mass": 0.9706834530031699,
+   "n_failures": 300,
+   "n_successes": 292,
+   "ok_auc": false,
+   "ok_degenerate": true,
+   "ok_mass": true,
+   "ok": false,
+   "auc_step0_descriptive": 0.4491324200913242
+  },
+  "full": {
+   "auc": 0.5941780821917808,
+   "share_failures_positive": 0.7866666666666666,
+   "share_successes_positive": 0.708904109589041,
+   "median_mass": 0.9706834530031699,
+   "n_failures": 300,
+   "n_successes": 292,
+   "ok_auc": false,
+   "ok_degenerate": true,
+   "ok_mass": true,
+   "ok": false,
+   "auc_step0_descriptive": 0.4502739726027397
+  }
+ }
+}

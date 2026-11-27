@@ -1,8 +1,8 @@
-# Post-training pilot: results (2026-11-26)
+# Post-training pilot: results (2026-11-26, completed 2026-11-27)
 
-**Status.** Exploratory, with a frozen procedure. The design is `notes/posttraining_design.md`: frozen at tag `posttraining-design-frozen-2026-11-26`, with deviations D-PT1 and D-PT2 recorded before any score was read. The analysis ran once (CPU job 7364918), from a clean checkout at tag `posttraining-deviation-dpt2-2026-11-26` (26d5ac1). It wrote `notes/posttraining_metrics.json` (sha256 57bd41ff4f080c0dd26a8cdb1e303139f40e38c5e5635a982331a3899b167252). The environment check found no problems: one stack, L40S for every main and bridge arm, A40 for every floor arm, pinned revisions, identical token ids across each lineage, and identical scorer files at every arm's commit.
+**Status.** Exploratory, with a frozen procedure. The design is `notes/posttraining_design.md`: frozen at tag `posttraining-design-frozen-2026-11-26`, with deviations D-PT1 and D-PT2 recorded before any score was read, and D-PT3 (the staged seven-example fallback) recorded before its one arm was scored. The analysis ran once (CPU job 7364918), from a clean checkout at tag `posttraining-deviation-dpt2-2026-11-26` (26d5ac1). It wrote `notes/posttraining_metrics.json` (sha256 57bd41ff4f080c0dd26a8cdb1e303139f40e38c5e5635a982331a3899b167252). The environment check found no problems: one stack, L40S for every main and bridge arm, A40 for every floor arm, pinned revisions, identical token ids across each lineage, and identical scorer files at every arm's commit.
 
-**The Llama lineage's base model failed its competence gate.** The frozen rules therefore apply the seven-example fallback to the Llama tree, and the design says to stop and report before running it, so this note reports the first part of the study. The Llama-tree stage comparisons in the shared plain-text format are **not read**: they would have to come from the fallback's seven-example arms, which have not been scored. The numbers the analysis computed for them from the three-example arms are in the metrics file but are not readings. The Qwen pair, the chat-template comparisons among the post-trained Llama-tree checkpoints, and the Word2World-format bridge are reported below. The bridge and the template comparisons are descriptive by design.
+**The Llama lineage's base model failed its competence gate.** The frozen rules therefore apply the seven-example fallback to the Llama tree. The user approved a staged run of it (deviation D-PT3, section 6). With seven examples the base fails again (AUC 0.59), so the Llama lineage is **not interpretable in the shared plain format**, and the study stops there. The Llama-tree stage comparisons in the shared plain-text format are **not read**. The numbers the analysis computed for them from the three-example arms are in the metrics file but are not readings. The Qwen pair, the chat-template comparisons among the post-trained Llama-tree checkpoints, and the Word2World-format bridge are reported below. The bridge and the template comparisons are descriptive by design.
 
 ## 1. What was done, and what it asks
 
@@ -147,7 +147,17 @@ In the full-state format the Word2World model was trained on, every checkpoint d
 
 So, in this one format, the base predicts the dynamics without a goal effect on its decision. General post-training (both AI2's and Meta's) introduces a decision-token goal effect. Domain SFT on ALFWorld transitions does not, and shows a small reversal, as `rq1_score` found earlier. This format has no few-shot examples, and these readings carry no pre-specified rule.
 
-## 6. What is not yet known, and the fallback
+## 6. The fallback, and what is not known
+
+**Outcome (2026-11-27, deviation D-PT3).** Following the user's staging, only the base's seven-example arm was scored (job 7369775, at tag `posttraining-deviation-dpt3-2026-11-27`), and only its gate was read. The base fails again:
+
+- AUC on the full two-candidate score is 0.59 and on the first token 0.62, against the 0.70 threshold;
+- it predicts success on 79% of failures and on 71% of successes;
+- the median first-token mass is 0.97.
+
+So the Llama-3.1-8B base does not use the history to tell working from failing actions in this few-shot plain format, with three or with seven examples. The Llama lineage's stage comparisons in the shared format are recorded as **not interpretable**. The other five seven-example arms were not run. This is not evidence about whether the base's predictions depend on the task line. It means the shared-format design cannot place the Llama base in the comparison.
+
+Earlier plan, kept for the record:
 
 **The Llama tree in the shared plain format.** This was the core question, base → SFT → DPO → RL and the sibling recipes. It is not answered, because the base cannot do the task with three examples. The fixed fallback rescores the six plain-format Llama-tree checkpoints with seven examples (sets 1 and 2), with their floor rescorings. At the smoke's measured rates, with the longer prompts, that is about 2.0 L40S-hours plus about 1.3 A40-hours for floors plus loading: **about 3.5 to 4 GPU-hours.** The pilot has used about 8.7 GPU-hours (section 7), so this would exceed the approved 7.5–9. The design says to stop and report here.
 
@@ -157,7 +167,17 @@ A cheaper staged route, if it is approved, keeps the frozen rule unchanged:
 2. If the base fails its gate again, the lineage is "not interpretable in this format" and nothing more is run.
 3. If it passes, score the other five checkpoints and the floors.
 
-**Provenance comparison with lexsem.** It is fixed in design section 17 (every shared cell is expected to match bit for bit), and it waits for lexsem's scores (queued). It does not gate anything here.
+**Provenance comparison with lexsem** (fixed in design section 17 before either side's scores were read; it does not gate anything). It was run after lexsem finished (CPU job 7369782; record `notes/posttraining_provenance_lexsem.json`; script `scripts/posttrain/provenance_lexsem.py`). Every cell scored by both studies is **bit-identical**: 40,768 cells over the five pairs of arms.
+
+| Lexsem arm | Pilot arm | Cells compared | Identical |
+|---|---|---|---|
+| Llama base, plain | Llama base, plain | 9,584 | 9,584 |
+| Qwen base, plain | Qwen base, plain | 9,584 | 9,584 |
+| Qwen3-8B, plain | Qwen3-8B, plain | 8,100 | 8,100 |
+| Qwen3-8B, think block | Qwen3-8B, think block | 9,000 | 9,000 |
+| Llama-Instruct, chat template (yes/no) | Llama-Instruct, chat template | 4,500 | 4,500 |
+
+Each cell is one sequence, with its readout-token and continuation log-probabilities as both studies store them. The compared cells cover the failures' success-text, failure-text and yes/no sequences, plus the base arms' successes under the neutral task. The environment records match on GPU type, stack, Python, revision, dtype, batching and prompt mode. The same environment reproduced the same bits across two independent scoring runs, as `notes/numerical_sensitivity.md` §4.1 found for earlier pairs. Lexsem also found the Llama base at AUC 0.50 on its competence set.
 
 ## 7. Compute
 
@@ -169,7 +189,8 @@ All jobs ran in the serve2 stack.
 | Main and bridge scoring, L40S (9 jobs, 7349816–7349824) | 4.32 |
 | Floors, A40 (8 jobs, 7349825–7349832) | 2.28 |
 | D-PT2 rescoring of the five reuse arms, L40S (7358803, 7358804, 7358806, 7358808) | 1.77 |
-| **Total** | **about 8.7** |
+| D-PT3, the base's seven-example arm, L40S (7369775) | 0.42 |
+| **Total** | **about 9.1** |
 
 D-PT2 cost more than its 1.1–1.3 estimate because the Qwen job scored both of its arms in full.
 

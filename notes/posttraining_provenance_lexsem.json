@@ -1,0 +1,93 @@
+{
+ "llama8b_base_plain vs llama-base_plain": {
+  "environment_differences": {},
+  "counts": {
+   "cell not scored by pilot": 23101,
+   "failure|fail|cells": 4050,
+   "failure|fail|identical": 4050,
+   "failure|obs|cells": 4950,
+   "failure|obs|identical": 4950,
+   "success|fail|cells": 292,
+   "success|fail|identical": 292,
+   "success|obs|cells": 292,
+   "success|obs|identical": 292
+  },
+  "max_abs_diff": {},
+  "examples": [],
+  "pilot_floor_nats": {
+   "first": 0.006975178317477992,
+   "cont": 0.013082950359788204,
+   "full": 0.013967303484524974
+  }
+ },
+ "qwen8b_base_plain vs qwen-base_plain": {
+  "environment_differences": {},
+  "counts": {
+   "cell not scored by pilot": 23101,
+   "failure|fail|cells": 4050,
+   "failure|fail|identical": 4050,
+   "failure|obs|cells": 4950,
+   "failure|obs|identical": 4950,
+   "success|fail|cells": 292,
+   "success|fail|identical": 292,
+   "success|obs|cells": 292,
+   "success|obs|identical": 292
+  },
+  "max_abs_diff": {},
+  "examples": [],
+  "pilot_floor_nats": {
+   "first": 0.023621475672947225,
+   "cont": 0.024742977499135368,
+   "full": 0.026872681707462102
+  }
+ },
+ "qwen_plain vs qwen_plain": {
+  "environment_differences": {},
+  "counts": {
+   "cell not scored by pilot": 22359,
+   "failure|fail|cells": 3600,
+   "failure|fail|identical": 3600,
+   "failure|obs|cells": 4500,
+   "failure|obs|identical": 4500
+  },
+  "max_abs_diff": {},
+  "examples": [],
+  "pilot_floor_nats": {
+   "first": 0.024074656893319227,
+   "cont": 0.029367608348459442,
+   "full": 0.04080688060606888
+  }
+ },
+ "qwen_block vs qwen_native": {
+  "environment_differences": {},
+  "counts": {
+   "cell not scored by pilot": 900,
+   "failure|obs|cells": 4500,
+   "failure|obs|identical": 4500,
+   "failure|yn|cells": 4500,
+   "failure|yn|identical": 4500
+  },
+  "max_abs_diff": {},
+  "examples": [],
+  "pilot_floor_nats": {
+   "first": 0.026159659268098163,
+   "cont": 0.02664028443636003,
+   "full": 0.035563828409537195
+  }
+ },
+ "llama_chat vs llama-instruct_native": {
+  "environment_differences": {},
+  "counts": {
+   "cell not scored by pilot": 2250,
+   "failure|yn|cells": 4500,
+   "failure|yn|identical": 4500
+  },
+  "max_abs_diff": {},
+  "examples": [],
+  "pilot_floor_nats": {
+   "first": 0.009585041493717758,
+   "cont": 0.011023044162121638,
+   "full": 0.013336052474717119
+  }
+ }
+}
